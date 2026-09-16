@@ -18,6 +18,29 @@ jobs:
       # plugin/plugin.expect.json. Exits non-zero on a broken plugin.
       - run: node tools/verify-plugin.mjs plugin/plugin.js
 
+  tests:
+    name: tests (unit suite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # The suite is stdlib-only by design: the study store, the chat bridge, the chart bridge and
+      # the push channel are all covered without a browser, a network, or the app — so this step
+      # installs nothing at all.
+      - name: unit suite (no dependencies)
+        run: python -m unittest discover -s console/backend/tests -t console/backend/tests -v
+      # The MCP wrapper is the one piece that needs a library (fastmcp). REQUIRE_MCP makes a missing
+      # fastmcp a failure instead of a silent skip, so the layer can never go untested by accident.
+      - name: MCP tool layer, against a stub console
+        env:
+          TRADER_CHART_REQUIRE_MCP: '1'
+        run: |
+          pip install fastmcp
+          python -m unittest discover -s console/backend/tests -t console/backend/tests \
+            -p 'test_mcp_server.py' -v
+
   backend:
     name: backend (compile + boot)
     runs-on: ubuntu-latest

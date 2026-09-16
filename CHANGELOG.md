@@ -6,6 +6,12 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Tests, and a CI job that runs them.** `console/backend/tests/` — 63 tests, stdlib-only apart from
+  the MCP layer: the study store, the chat bridge, the chart bridge, the push channel (what counts as
+  a push, matching a result back to its command, and the honest case where no view is attached), and
+  the MCP tool layer against a stub console (no hanging, no claiming a view answered, a dead console
+  becoming a sentence). New `tests` job in CI; its MCP step installs `fastmcp` and sets
+  `TRADER_CHART_REQUIRE_MCP=1`, so those tests cannot silently skip.
 - **Push channel (SSE).** The chart page now holds one long-lived `/api/chart/stream` connection, so
   commands land the moment they are queued instead of waiting for the 2-second poll: measured 37-156 ms
   on the wire for `add` / `market` / `apply` and ~65-80 ms for a capture, versus ~1.0 s before.

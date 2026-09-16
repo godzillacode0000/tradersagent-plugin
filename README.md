@@ -212,15 +212,24 @@ install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/
 ## Development
 
 ```bash
-node tools/verify-plugin.mjs plugin/plugin.js                    # plugin harness (same check CI runs)
-python3 console/backend/server.py --port 8899 --no-mcp           # console without the MCP backend
-python3 -m compileall console/backend                            # syntax pass
+node tools/verify-plugin.mjs plugin/plugin.js                                      # plugin harness (same check CI runs)
+python3 -m unittest discover -s console/backend/tests -t console/backend/tests -v   # the unit suite (no dependencies)
+uv run --with fastmcp python -m unittest discover \
+    -s console/backend/tests -t console/backend/tests -p 'test_mcp_server.py' -v     # the MCP tool layer
+python3 console/backend/server.py --port 8899 --no-mcp                             # console without the MCP backend
+python3 -m compileall console/backend                                              # syntax pass
 ```
 
-CI (`.github/workflows/ci.yml`) runs the harness on Node 20 and 22, compiles the backend and boots it
-for a `/api/health` smoke test. Workflow when editing: change the repo, run `./install.sh` to deploy;
-the app re-registers the plugin about 3 seconds after `plugin.js` changes. Console-only changes need
-the frame remounted (switch session and back).
+The suite is stdlib-only on purpose — the study store, the chat bridge, the chart bridge and the push
+channel are covered without a browser, a network, or the app — and the MCP tool layer runs against a
+stub console. 63 tests; the 15 MCP ones skip themselves when `fastmcp` is absent (CI sets
+`TRADER_CHART_REQUIRE_MCP=1` so they cannot silently skip there).
+
+CI (`.github/workflows/ci.yml`) has three jobs: the plugin harness (Node 20), the backend (compile,
+boot and a `/api/health` smoke test on Python 3.11), and the unit suite (the MCP step installs
+`fastmcp`). Workflow when editing: change the repo, run `./install.sh` to deploy; the app
+re-registers the plugin about 3 seconds after `plugin.js` changes. Console-only changes need the
+frame remounted (switch session and back).
 
 ## Troubleshooting
 

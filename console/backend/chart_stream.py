@@ -135,10 +135,12 @@ class ChartStream:
     def stats(self) -> dict:
         with self._lock:
             views = len(self._clients)
+            tracking = len(self._pushed_at)
         return {
             "views": views,
             "pushes": self.pushes,
             "dropped": self.dropped,
+            "tracking": tracking,          # in-flight commands still awaiting a result
             "last_push_ms": self.last_push_ms,
             "keepalive_s": self._keepalive,
         }
