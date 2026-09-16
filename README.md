@@ -98,6 +98,7 @@ systemctl --user enable --now traders-agent.service
 | Left sidebar → **Trader's Agent** | opens the console (the row *is* the navigation — one click) |
 | Status bar → **Trader's Agent** chip | same, from anywhere in the app |
 | `Ctrl+K` → **Trading: open Trader's Agent** | same, from the palette |
+| `Ctrl+K` → **Trading: open console in browser ↗** | opens `127.0.0.1:8787` in your real browser (the page above the chart is chart-only, so the escape hatch lives here) |
 | `Ctrl+K` → **Trading: toggle chart reveal on launch** | stop the console opening by itself at app start |
 | Top bar → `☰ Library` | the Library panel: search 800+ concepts and indicators |
 | Top bar → `▤ Details` | the selected item: write-up, **full Pine source**, licence badge, **Run PineTS** |

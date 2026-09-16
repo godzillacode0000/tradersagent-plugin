@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **One bar above the chart.** The plugin's own title row (and its "Open in browser" button) is gone:
+  the page is the console frame alone, so the console's top row is the only chrome and the chart
+  gains that full row. Opening the console in a browser moved to the palette
+  (**Trading: open console in browser ↗**), and the console's top row slimmed from 40px to 34px.
+
 ## [1.0.0] — 2026-09-16
 
 First tagged release: the plugin and its console are feature-complete for daily use.
