@@ -145,6 +145,10 @@
   --lx-row-h-dense:    36px;
   --lx-scrollbar:      10px;
   --lx-panel-head-h:   40px;
+  /* The console's own top row. Chart-first (operator's call, 16 Sep): this is the ONLY bar above
+     the chart — the plugin's separate title row was removed — so it stays slimmer than a panel
+     head and its buttons are sized to match. */
+  --lx-topbar-h:       34px;
   --lx-chart-head-h:   28px;
 }
 
@@ -351,8 +355,8 @@ input:focus-visible, textarea:focus-visible {
 /* ── Layer 5b — topbar / statusbar ───────────────────────────────────────── */
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
-  gap: var(--lx-space-3); height: var(--lx-panel-head-h);
-  padding: 0 var(--lx-space-3);
+  gap: var(--lx-space-3); height: var(--lx-topbar-h);
+  padding: 0 var(--lx-space-25);
   background: var(--lx-surface-1);
   border-bottom: 1px solid var(--lx-border);
 }
@@ -361,6 +365,8 @@ input:focus-visible, textarea:focus-visible {
 .brand__name { font-weight: var(--lx-fw-semibold); font-size: var(--lx-fs-lg); letter-spacing: var(--lx-ls-tight); }
 .brand__sub { color: var(--lx-fg-muted); font-size: var(--lx-fs-sm); }
 .topbar__right { display: flex; align-items: center; gap: var(--lx-space-2); }
+/* Inside the slim topbar the controls shrink with it, so nothing pokes out of the 34px row. */
+.topbar .btn { height: 26px; padding: 0 var(--lx-space-2); }
 
 .pill {
   display: inline-flex; align-items: center; gap: var(--lx-space-1);

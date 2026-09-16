@@ -55,15 +55,6 @@ const REVEAL_DELAY_MS = 1500
 
 const S = {
   page: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 },
-  bar: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
-    padding: '6px 12px',
-    borderBottom: '1px solid var(--ui-bg-quaternary, rgba(128,128,128,0.25))'
-  },
-  h1: { margin: 0, fontSize: '13px', fontWeight: 600, letterSpacing: '-0.01em' },
   meta: { fontSize: '11px', opacity: 0.65 },
   frameWrap: { position: 'relative', flex: 1, minHeight: 0, background: 'var(--ui-bg-card, transparent)' },
   frame: { border: 0, width: '100%', height: '100%', display: 'block' },
@@ -78,16 +69,6 @@ const S = {
     fontSize: '12px',
     opacity: 0.75,
     pointerEvents: 'none'
-  },
-  btn: {
-    font: 'inherit',
-    fontSize: '12px',
-    padding: '4px 10px',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    color: 'inherit',
-    border: '1px solid var(--ui-bg-quaternary, rgba(128,128,128,0.35))',
-    background: 'var(--ui-bg-input, transparent)'
   },
   chip: {
     font: 'inherit',
@@ -124,39 +105,20 @@ function openConsole() {
 }
 
 /**
- * The console: one iframe on its own origin, under a small honest "starting" overlay that only the
- * frame's own load event clears. A plugin cannot probe a cross-origin server, and inventing a guess
- * would be a lie — so it reports "starting", never "broken".
+ * The console: one iframe on its own origin, filling the whole pane, under a small honest "starting"
+ * overlay that only the frame's own load event clears. A plugin cannot probe a cross-origin server,
+ * and inventing a guess would be a lie — so it reports "starting", never "broken".
+ *
+ * No title bar here on purpose (operator's call, 16 Sep): the console brings its own top row, and a
+ * second row above it only stole height from the chart. Opening the console in a real browser moved
+ * to the palette ("Trading: open console in browser").
  */
 function TradersDeskPage() {
   const [loaded, setLoaded] = useState(false)
 
-  const openExternal = () => {
-    haptic()
-    Promise.resolve(ctx_os_open(CONSOLE_ORIGIN))
-  }
-
   return jsxs('div', {
     style: S.page,
     children: [
-      jsxs('div', {
-        style: S.bar,
-        children: [
-          jsxs('div', {
-            style: { display: 'flex', alignItems: 'baseline', gap: '10px' },
-            children: [
-              jsx('h1', { style: S.h1, children: "Trader's Agent" }),
-              jsx('span', { style: S.meta, children: 'Vela · LuxAlgo MCP' })
-            ]
-          }),
-          jsx('button', {
-            type: 'button',
-            style: S.btn,
-            onClick: openExternal,
-            children: 'Open in browser ↗'
-          })
-        ]
-      }),
       jsxs('div', {
         style: S.frameWrap,
         children: [
@@ -273,11 +235,26 @@ export default {
             })
           }
         }
+      },
+      {
+        /* The page itself is chart-only now, so the escape hatch to a real browser window lives
+           here instead of in a header row above the chart. */
+        id: 'openInBrowser',
+        area: PALETTE_AREA,
+        data: {
+          id: 'tradingDesk.browser',
+          label: 'Trading: open console in browser ↗',
+          keywords: ['trading', 'trader', 'browser', 'external', 'console', 'chrome', 'firefox'],
+          run: () => {
+            haptic()
+            return Promise.resolve(ctx_os_open(CONSOLE_ORIGIN))
+          }
+        }
       }
     ])
 
     /* A load beacon (proves a save reaches the running app): console.error reaches ~/.hermes/logs/desktop.log (console.log does not), so a
        plugin the app silently skipped is distinguishable from one that actually loaded. */
-    console.error('[traders-desk] loaded — 5 contributions registered')
+    console.error('[traders-desk] loaded — 6 contributions registered')
   }
 }

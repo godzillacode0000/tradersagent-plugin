@@ -10,9 +10,8 @@
     {
       "area": "routes",
       "contains": [
-        "Trader's Agent",
-        "127.0.0.1:8787",
-        "Starting the local console"
+        "Starting the local console",
+        "127.0.0.1:8787"
       ]
     },
     {
