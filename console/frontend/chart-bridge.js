@@ -18,8 +18,13 @@
 
   const STATE_EVERY = 4000;
   const COMMAND_EVERY = 2000;
+  const POLL_FAST = COMMAND_EVERY;   // no push channel: keep asking on the original schedule
+  const POLL_SLOW = 15000;           // push channel is live: polling is only a safety net
   let lastCommandId = 0;
   let seeded = false;
+  let stream = null;                 // the EventSource behind the push channel
+  let pollDelay = POLL_FAST;
+  const seen = new Set();            // ids already executed (a pushed command must not re-run on poll)
 
   const api = async (path, body) => {
     const res = await fetch(path, body
@@ -164,6 +169,8 @@
     return out;
   }
 
+  /* Polling is the fallback now: it seeds past the backlog on load and catches anything a dropped
+     stream missed. While the push channel is healthy it only ticks every 15s. */
   async function poll() {
     try {
       if (!seeded) {
@@ -178,16 +185,63 @@
       }
       const data = await api('/api/chart/commands?since=' + lastCommandId);
       for (const command of data.commands || []) {
+        const id = Number(command.id) || 0;
+        lastCommandId = Math.max(lastCommandId, id);
+        if (seen.has(id)) continue;
+        seen.add(id);
         await run(command);
-        lastCommandId = Math.max(lastCommandId, Number(command.id) || 0);
       }
     } catch (err) {
       /* the console is restarting; the next tick retries */
     }
   }
 
+  /* The push channel: the backend holds this response open and sends each command the moment it is
+     queued, so an agent command no longer waits for a poll tick (the 1-2s that used to be pure
+     overhead). If the stream drops, EventSource reconnects by itself and polling speeds back up. */
+  function connectStream() {
+    try {
+      stream = new EventSource('/api/chart/stream');
+    } catch (err) {
+      return;                        // no EventSource: the poll path still does the job
+    }
+    stream.onopen = () => {
+      pollDelay = POLL_SLOW;
+      if (window.ChartBridge) window.ChartBridge.pushed = true;
+    };
+    stream.onerror = () => {
+      pollDelay = POLL_FAST;
+      if (window.ChartBridge) window.ChartBridge.pushed = false;
+    };
+    stream.onmessage = async (event) => {
+      let payload = null;
+      try {
+        payload = JSON.parse(event.data);
+      } catch (err) {
+        return;
+      }
+      if (!payload || payload.type !== 'command' || !payload.command) return;
+      const id = Number(payload.command.id) || 0;
+      if (seen.has(id)) return;
+      seen.add(id);
+      lastCommandId = Math.max(lastCommandId, id);
+      await run(payload.command);
+    };
+  }
+
   heartbeat();
   setInterval(heartbeat, STATE_EVERY);
-  setInterval(poll, COMMAND_EVERY);
-  window.ChartBridge = { run, capture, heartbeat, poll };
+  async function tick() {
+    await poll();
+    setTimeout(tick, pollDelay);
+  }
+  setTimeout(tick, POLL_FAST);
+  connectStream();
+  window.ChartBridge = {
+    run, capture, heartbeat, poll,
+    streamState: () => ({
+      connected: !!stream && stream.readyState === 1,
+      pollDelay, lastId: lastCommandId
+    })
+  };
 })();

@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- **Push channel (SSE).** The chart page now holds one long-lived `/api/chart/stream` connection, so
+  commands land the moment they are queued instead of waiting for the 2-second poll: measured 37-156 ms
+  on the wire for `add` / `market` / `apply` and ~65-80 ms for a capture, versus ~1.0 s before.
+  Polling stays on as a safety net (15 s healthy / 2 s if the stream drops), the file bridge is
+  untouched, and a command with no view attached fails fast with "no chart view attached".
+  New: `GET /api/chart/stream` (SSE) and `GET /api/chart/stream/status`.
+- **`trader-chart-mcp`** (`console/mcp/server.py`) — the chart as MCP tools for Hermes: `chart_views`,
+  `chart_state`, `chart_shot` (returns the image), `chart_apply_pine`, `chart_add_indicator`,
+  `chart_set_market`, `library_search`, `library_indicator`.
+
 ### Changed
 
 - **One bar above the chart.** The plugin's own title row (and its "Open in browser" button) is gone:

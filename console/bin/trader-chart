@@ -30,6 +30,7 @@ import urllib.request
 
 BASE = os.environ.get("LUXALGO_CONSOLE", "http://127.0.0.1:8787").rstrip("/")
 TIMEOUT = float(os.environ.get("LUXALGO_CHART_TIMEOUT", "45"))
+INLINE_WAIT = float(os.environ.get("LUXALGO_CHART_INLINE_WAIT", "8"))
 POLL = 1.0
 
 
@@ -97,9 +98,24 @@ def wait(command_id: int, timeout: float = TIMEOUT) -> dict:
 
 def send(args, command: dict) -> dict:
     require_open(args)
-    queued = post("/api/chart/command", command)
-    rid = queued["command"]["id"]
-    result = wait(rid)
+    # The console holds the request open (`wait`): with a view on the push channel the result comes
+    # back in the same round trip — tens of milliseconds instead of waiting for the page's poll tick.
+    queued = post("/api/chart/command", {**command, "wait": INLINE_WAIT})
+    if not queued.get("pushed"):
+        die("no chart view is attached — open the console (the sidebar row, or the browser tab) and "
+            "retry. The command was queued but nothing is listening for it.", 2)
+    result = queued.get("result")
+    if result is None:
+        # The view took longer than our window. Before waiting the full timeout, check that one is
+        # still attached at all — a view that died mid-command should fail fast and say so.
+        try:
+            live = get("/api/chart/stream/status")
+        except SystemExit:
+            live = {}
+        if live and not live.get("views"):
+            die(f"the chart view disconnected while command {queued['command']['id']} was in flight "
+                f"— open the console again and retry", 1)
+        result = wait(int(queued["command"]["id"]))   # slow path: the view is just slow
     args._payload = result
     return result
 

@@ -111,7 +111,27 @@ experimental — the app reports what actually happened rather than pretending.
 
 ### Letting your agent drive the chart
 
-The console exposes a tiny file bridge. The agent (Hermes, or anything that can run a command) uses:
+Two ways in, and they share one path underneath. **Preferred: the MCP server** — Hermes (or any MCP
+client) gets the chart as real tools:
+
+```bash
+hermes mcp add traders-chart --command /home/godzillaton/.hermes/bin/uvx \
+    --args fastmcp run /home/godzillaton/Projects/tradersagent-plugin/console/mcp/server.py
+hermes mcp test traders-chart          # start a new session afterwards
+```
+
+| Tool | What it does |
+|---|---|
+| `chart_views` | is a view attached to push into? (0 = the console is not open) |
+| `chart_state` | symbol, timeframe, last price, bars, indicators on the chart |
+| `chart_shot` | one PNG of the chart (returned as an image, plus the path) |
+| `chart_apply_pine` | run Pine over the chart's live bars and paint a matching native |
+| `chart_add_indicator` | add a Vela native (`ema`, `supertrend`, `donchian-channels`, …) |
+| `chart_set_market` | switch symbol / timeframe |
+| `library_search` | search the LuxAlgo Library |
+| `library_indicator` | one indicator's write-up, licence and Pine source |
+
+**Or the CLIs**, if you would rather shell out:
 
 ```bash
 console/bin/trader-chart state                      # symbol, timeframe, price, bars, indicators on
@@ -120,8 +140,12 @@ console/bin/trader-chart apply script.pine           # run Pine over the chart's
 console/bin/library-indicator "killzone"             # fetch an indicator's Pine source
 ```
 
-The chart page polls the bridge, so a command lands within a couple of seconds — and only when the
-console page is actually mounted (the bridge is not a headless renderer).
+Both paths go through the console's **push channel** (Server-Sent Events): the chart page holds one
+long-lived connection open, so a command lands in tens of milliseconds instead of waiting for a poll
+tick — measured 37-156 ms on the wire for `add` / `market` / `apply`, ~65-80 ms for a capture, against
+~1.0 s on the old 2-second poll. Polling stays on as a safety net (every 15 s while the stream is
+healthy, 2 s if it drops) and the file bridge is untouched, so an older view still works. The bridge
+is still not a headless renderer: with no view attached, commands fail fast and say so.
 
 ## Screenshots
 
@@ -151,7 +175,8 @@ Nothing else is written outside the repo; `console/agents/` holds the runtime st
 ```
 plugin/            the Hermes Desktop plugin: plugin.js + its harness expectations
 console/frontend/  the web app: Vela chart, Library panel, detail panel, PineTS paint layer
-console/backend/   one stdlib HTTP server proxying LuxAlgo's MCP + the chart bridge + study store
+console/backend/   one stdlib HTTP server proxying LuxAlgo's MCP + the chart bridge + the push channel
+console/mcp/       trader-chart-mcp — the chart as MCP tools (stdio, FastMCP)
 console/bin/       agent-side CLIs (trader-chart, library-indicator)
 tools/             verify-plugin.mjs — runs a plugin in Node against SDK stubs (used by CI)
 install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/
@@ -165,6 +190,7 @@ install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/
 | `PORT` | `8787` | console port — the plugin's frame points at `http://127.0.0.1:8787/` |
 | `LUXALGO_AGENTS_DIR` | `console/agents` | runtime state: chart bridge files, study threads, shots |
 | `HERMES_CLI` | `hermes` on `PATH` | CLI the in-app study bridge shells out to |
+| `LUXALGO_CHART_INLINE_WAIT` | `8` | seconds a command holds its request open waiting for the chart's pushed answer |
 | `--mcp-url` | `https://mcp.luxalgo.com/mcp` | point at a different (or local) MCP server |
 
 ## Limits
@@ -173,8 +199,9 @@ install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/
   says so instead of pretending. Anything heavier only runs in TradingView's own Pine engine.
 - **"Add to chart" is experimental.** It hands the script to Vela's Pine engine; some scripts paint
   nothing. **Run PineTS** is the reliable path.
-- **The bridge is not a headless renderer.** `trader-chart` only takes effect while the console page
-  is mounted in the app; commands land in a couple of seconds (polling, not push).
+- **The bridge is not a headless renderer.** `trader-chart` and the MCP tools only take effect while
+  a chart view is mounted (the Hermes pane or a browser tab); with none attached they fail fast with
+  "no chart view attached" rather than hanging. Commands are pushed, so a view answers in tens of ms.
 - **One console per machine** on one port. No order placement, no account, no positions — it is
   read-only market data plus rendering.
 - **The Library is non-commercial.** Its content is CC BY-NC-SA 4.0 — fine to read and cite here, not

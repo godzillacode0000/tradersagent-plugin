@@ -10,11 +10,11 @@ It also serves the static frontend directory, so the browser can load ES
 modules from the same origin as the API.
 
 Run:
-    python3 server.py --port 8787 --frontend ../frontend
+    /home/godzillaton/.hermes/hermes-agent/venv/bin/python server.py \
+        --port 8787 --frontend ../frontend
 
-The only non-stdlib import is the `mcp` client package (`pip install mcp`,
-or use a venv that has it). Everything else — HTTP, static serving, caching and
-JSON — is Python 3.11 stdlib.
+The only non-stdlib import is the `mcp` client package, which lives in the
+Hermes venv at /home/godzillaton/.hermes/hermes-agent/venv.
 
 Design notes
 ------------
@@ -41,7 +41,6 @@ import concurrent.futures
 import json
 import os
 import re
-import shutil
 import socketserver
 import sys
 import threading
@@ -70,11 +69,17 @@ from chart_bridge import (save_state as save_chart_state, load_state as load_cha
                           enqueue as enqueue_chart_command,
                           commands_since as chart_commands_since,
                           record_result as record_chart_result, get_result as get_chart_result)
+from chart_stream import ChartStream
+
+# The push channel: chart views attach to /api/chart/stream and commands are pushed down it, so an
+# agent command no longer waits for the page's 2s poll (see chart_stream.py).
+STREAM = ChartStream()
+CHART_INLINE_WAIT_MAX = 30.0
 
 AGENTS_ROOT = os.path.abspath(os.environ.get(
     "LUXALGO_AGENTS_DIR",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agents")))
-CHAT_CLI = os.environ.get("HERMES_CLI") or shutil.which("hermes") or "hermes"
+CHAT_CLI = os.environ.get("HERMES_CLI") or "/home/godzillaton/.hermes/hermes-agent/venv/bin/hermes"
 DEFAULT_PORT = 8787
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_FRONTEND = "../frontend"
@@ -958,7 +963,17 @@ def ep_chart_result(params: dict) -> dict:
     found = get_chart_result(AGENTS_ROOT, rid)
     if found is None:
         return {"id": rid, "pending": True}
-    return {**found, "pending": False}
+    out = {**found, "pending": False}
+    # The file copy cannot know about the push channel; the in-memory one stamped the latency.
+    live = STREAM.result_for(rid)
+    if live and live.get("stream_ms") is not None and out.get("stream_ms") is None:
+        out["stream_ms"] = live["stream_ms"]
+    return out
+
+
+def ep_chart_stream_status(params: dict) -> dict:
+    """How many chart views are attached to the push channel. 0 = nothing to push to."""
+    return STREAM.stats()
 
 
 ROUTES = {
@@ -967,6 +982,7 @@ ROUTES = {
     "/api/chart/state": (ep_chart_state, 0.0),
     "/api/chart/commands": (ep_chart_commands, 0.0),
     "/api/chart/result": (ep_chart_result, 0.0),
+    "/api/chart/stream/status": (ep_chart_stream_status, 0.0),
     "/api/search": (ep_search, TTL["search"]),
     "/api/indicators": (ep_indicators, TTL["indicators"]),
     "/api/indicator": (ep_indicator, TTL["indicator"]),
@@ -1214,10 +1230,19 @@ class Handler(BaseHTTPRequestHandler):
                     self._fail(f"unknown chart action '{action}'", HTTPStatus.BAD_REQUEST,
                                "unknown_action", {"supported": sorted(CHART_ACTIONS)})
                     return
-                self._ok({"command": enqueue_chart_command(AGENTS_ROOT, payload)})
+                command = enqueue_chart_command(AGENTS_ROOT, payload)
+                pushed = STREAM.publish({"type": "command", "command": command},
+                                        command_id=command.get("id") if isinstance(command, dict) else None)
+                inline = self._await_chart_result(command, payload) if pushed else None
+                self._ok({"command": command, "views": STREAM.client_count(),
+                          "pushed": pushed, "result": inline})
                 return
             if path == "/api/chart/result":
-                self._ok({"result": record_chart_result(AGENTS_ROOT, payload)})
+                recorded = record_chart_result(AGENTS_ROOT, payload)
+                if isinstance(recorded, dict):
+                    # resolves whoever is waiting on this command (the push path's fast answer)
+                    recorded = STREAM.deliver_result(recorded)
+                self._ok({"result": recorded})
                 return
             self._fail(f"Unknown endpoint '{path}'", HTTPStatus.NOT_FOUND, "unknown_endpoint")
         except ApiError as exc:
@@ -1279,6 +1304,57 @@ class Handler(BaseHTTPRequestHandler):
         record_run(AGENTS_ROOT, agent_id, "run")
         self._ok({"agent": agent_id, "resumed": bool(agent.get("session_id")), **result})
 
+    def _chart_stream(self):
+        """Hold one response open and push queued commands down it (SSE).
+
+        The chart page attaches here on load; every command the agent queues is written as a `data:`
+        line the instant it exists, instead of waiting for the page's next poll. A comment line every
+        keepalive interval keeps the socket warm (and tells us the client is still there).
+        """
+        cid, inbox = STREAM.attach()
+        log(f"chart stream: view {cid} attached ({STREAM.client_count()} attached)")
+        try:
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store")
+            self.send_header("X-Accel-Buffering", "no")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.close_connection = True
+            hello = json.dumps({"type": "hello", "views": STREAM.client_count()},
+                               separators=(",", ":"))
+            self.wfile.write(f"data: {hello}\n\n".encode("utf-8"))
+            self.wfile.flush()
+            while True:
+                blob = STREAM.next_event(inbox, STREAM.keepalive())
+                if blob is None:
+                    self.wfile.write(b": keepalive\n\n")
+                else:
+                    self.wfile.write(f"data: {blob}\n\n".encode("utf-8"))
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # the view went away mid-stream; that is normal, not an error
+        except OSError as exc:
+            log(f"chart stream: view {cid} dropped ({exc})")
+        finally:
+            STREAM.detach(cid)
+            log(f"chart stream: view {cid} detached ({STREAM.client_count()} attached)")
+
+    def _await_chart_result(self, command: dict, payload: dict) -> dict | None:
+        """Keep the caller's request open briefly so the push path can answer it in one round trip.
+
+        The caller opts in with `wait` (seconds). Without it, behaviour is exactly what it was: the
+        command is queued and the caller reads the result when it feels like it.
+        """
+        try:
+            wait_s = float(payload.get("wait") or 0)
+        except (TypeError, ValueError):
+            wait_s = 0.0
+        rid = command.get("id")
+        if wait_s <= 0 or rid is None:
+            return None
+        return STREAM.wait_for_result(int(rid), min(wait_s, CHART_INLINE_WAIT_MAX))
+
     def do_GET(self):  # noqa: N802
         self._handle(head_only=False)
 
@@ -1290,6 +1366,15 @@ class Handler(BaseHTTPRequestHandler):
 
             if path == "/api":
                 self._ok(API_INDEX, head_only=head_only)
+                return
+
+            if path == "/api/chart/stream":
+                # The push channel: a long-lived response the chart page keeps open. HEAD cannot
+                # stream, so it gets the address back instead of an endless body.
+                if head_only:
+                    self._ok({"stream": "/api/chart/stream", "views": STREAM.client_count()})
+                    return
+                self._chart_stream()
                 return
 
             route = ROUTES.get(path)
