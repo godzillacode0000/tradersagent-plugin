@@ -1,0 +1,22 @@
+# Plugin-catalog entry — ready to submit, deliberately not submitted.
+#
+# Why it is not live: the catalog's submission bar (Hermes docs,
+# user-guide/features/plugin-catalog.md) requires a PUBLIC repository, real
+# releases/tags, passing validation, and no self-updating. This repo is private
+# and personal for now, so the entry sits here until that changes.
+#
+# To submit: make the repo public, then open a PR against the catalog repo with
+# this object, `sha` set to the tagged release commit.
+name: tradersagent-plugin
+repo: https://github.com/godzillacode0000/tradersagent-plugin
+sha: THE-V1.0.0-TAG-COMMIT-SHA
+description: Chart-first Vela console with the LuxAlgo Library, as a Hermes Desktop sidebar page.
+maintainer: godzillacode0000
+tier: community
+category: desktop
+docs_url: https://github.com/godzillacode0000/tradersagent-plugin#readme
+capabilities:
+  provides_tools: []
+  provides_hooks: []
+  provides_middleware: []
+  requires_env: []

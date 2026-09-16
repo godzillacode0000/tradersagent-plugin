@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="320" viewBox="0 0 1280 320" role="img" aria-label="Trader's Agent — a Hermes Desktop plugin">
+  <title>Trader's Agent — a Hermes Desktop plugin</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101013"/>
+      <stop offset="1" stop-color="#0b0b0e"/>
+    </linearGradient>
+    <linearGradient id="leftFade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0e0e11" stop-opacity="1"/>
+      <stop offset="1" stop-color="#0e0e11" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="amberline" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f2a83b" stop-opacity="1"/>
+      <stop offset="0.28" stop-color="#f2a83b" stop-opacity="0.85"/>
+      <stop offset="0.72" stop-color="#ffcf7a" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#ffcf7a" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="candleFade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#34353b"/>
+      <stop offset="1" stop-color="#1b1b20"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="320" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1280" height="2.5" fill="url(#amberline)"/>
+
+  <!-- chart motif: abstract candles, kept right of the wordmark, two in amber -->
+  <g>
+    <rect x="880"  y="236" width="14" height="84"  rx="4" fill="url(#candleFade)"/>
+    <rect x="906"  y="208" width="14" height="112" rx="4" fill="url(#candleFade)"/>
+    <rect x="932"  y="248" width="14" height="72"  rx="4" fill="#2a2b31"/>
+    <rect x="958"  y="176" width="14" height="144" rx="4" fill="url(#candleFade)"/>
+    <rect x="984"  y="212" width="14" height="108" rx="4" fill="url(#candleFade)"/>
+    <rect x="1010" y="140" width="14" height="180" rx="4" fill="#2a2b31"/>
+    <rect x="1036" y="184" width="14" height="136" rx="4" fill="url(#candleFade)"/>
+    <rect x="1062" y="112" width="14" height="208" rx="4" fill="#8a6524" opacity="0.9"/>
+    <rect x="1088" y="152" width="14" height="168" rx="4" fill="url(#candleFade)"/>
+    <rect x="1114" y="76"  width="14" height="244" rx="4" fill="#f2a83b"/>
+    <rect x="1140" y="128" width="14" height="192" rx="4" fill="url(#candleFade)"/>
+    <rect x="1166" y="168" width="14" height="152" rx="4" fill="url(#candleFade)"/>
+    <rect x="1192" y="204" width="14" height="116" rx="4" fill="#2a2b31"/>
+  </g>
+  <!-- soften the motif's left edge so it never fights the wordmark -->
+  <rect x="820" y="0" width="260" height="320" fill="url(#leftFade)"/>
+
+  <!-- amber baseline -->
+  <rect x="0" y="317.5" width="1280" height="2.5" fill="#1b1b20"/>
+
+  <!-- wordmark -->
+  <text x="72" y="146" font-family="Inter, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif"
+        font-size="62" font-weight="600" letter-spacing="-1.8" fill="#f4f4f4">Trader's Agent</text>
+  <text x="74" y="188" font-family="Inter, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif"
+        font-size="21" fill="#9c9ca6">A Hermes Desktop plugin — a chart-first Vela console with the LuxAlgo Library.</text>
+
+  <!-- pills -->
+  <g font-family="Inter, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="13.5">
+    <rect x="74" y="216" width="196" height="30" rx="15" fill="#f2a83b" fill-opacity="0.12" stroke="#f2a83b" stroke-opacity="0.55"/>
+    <text x="94" y="236" fill="#ffcf7a">Hermes Desktop plugin</text>
+
+    <rect x="282" y="216" width="112" height="30" rx="15" fill="none" stroke="#34353b"/>
+    <text x="302" y="236" fill="#9c9ca6">Vela chart</text>
+
+    <rect x="406" y="216" width="132" height="30" rx="15" fill="none" stroke="#34353b"/>
+    <text x="426" y="236" fill="#9c9ca6">LuxAlgo MCP</text>
+
+    <rect x="550" y="216" width="112" height="30" rx="15" fill="none" stroke="#34353b"/>
+    <text x="570" y="236" fill="#9c9ca6">PineTS</text>
+  </g>
+
+  <text x="74" y="284" font-family="Inter, 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif"
+        font-size="12.5" fill="#6b6b74">MIT · unofficial · not affiliated with LuxAlgo</text>
+</svg>

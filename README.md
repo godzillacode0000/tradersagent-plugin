@@ -1,10 +1,21 @@
-# Trader's Agent — a plugin for Hermes Desktop
+<div align="center">
 
-A sidebar entry in [Hermes Desktop](https://hermes-agent.nousresearch.com/docs) that opens a full
-trading console in the main zone: **Vela**-rendered candlesticks and the **LuxAlgo Library**
-(800+ concepts and indicators, served by LuxAlgo's own MCP server) in one local web app.
+<img src="docs/banner.svg" alt="Trader's Agent — a Hermes Desktop plugin" width="100%">
 
-![chart-first console](docs/screenshot.png)
+**A Hermes Desktop plugin that opens a chart-first trading console: Vela-rendered candlesticks, and the LuxAlgo Library on top of them.**
+
+![licence: MIT](https://img.shields.io/badge/licence-MIT-3da639?style=flat-square)
+![python: 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white)
+![hermes desktop: 0.21.3+](https://img.shields.io/badge/hermes%20desktop-%E2%89%A50.21.3-6b6b74?style=flat-square)
+![kind: desktop plugin](https://img.shields.io/badge/hermes%20plugin-desktop-f2a83b?style=flat-square)
+
+<img src="docs/screenshot.png" alt="The console, chart-first: Vela candlesticks filling the pane" width="100%">
+
+</div>
+
+A sidebar entry that opens a full trading console in the main zone: **Vela**-rendered candlesticks and
+the **LuxAlgo Library** (800+ concepts and indicators, served live by LuxAlgo's own MCP server) in one
+local web app.
 
 - **Chart-first by design.** Vela gets the whole pane. The Library and the item detail panel are two
   small toggles in the top bar, never permanent columns.
@@ -31,7 +42,7 @@ trading console in the main zone: **Vela**-rendered candlesticks and the **LuxAl
 ## Install
 
 ```bash
-git clone https://github.com/<you>/tradersagent-plugin
+git clone https://github.com/godzillacode0000/tradersagent-plugin
 cd tradersagent-plugin
 
 ./console/start.sh        # terminal 1 — the console on http://127.0.0.1:8787/
@@ -46,6 +57,18 @@ Then in Hermes Desktop:
 
 `./install.sh --vendor` additionally fetches LuxAlgo's pinned browser builds into
 `console/frontend/vendor/` for offline use (see the licence note in `THIRD-PARTY.md`).
+
+### Verify it worked
+
+```bash
+curl -s localhost:8787/api/health                    # {"ok": true, "data": {"status": "ok", ...}}
+node tools/verify-plugin.mjs plugin/plugin.js        # OK — 5 contributions
+console/bin/trader-chart state                       # symbol, timeframe, price, bars, indicators on
+```
+
+Then, in the app: the **Trader's Agent** row is in the left sidebar, the console frame shows Vela
+bars with the `▲` mark, and the status-bar chip reads **Trader's Agent**. If the frame is blank, the
+console process is not running — start it again.
 
 ### Run the console as a service (optional)
 
@@ -99,6 +122,29 @@ console/bin/library-indicator "killzone"             # fetch an indicator's Pine
 The chart page polls the bridge, so a command lands within a couple of seconds — and only when the
 console page is actually mounted (the bridge is not a headless renderer).
 
+## Screenshots
+
+| | |
+|---|---|
+| ![in Hermes Desktop](docs/shots/app-in-hermes.png) | ![chart-first](docs/shots/console-chart-first.png) |
+| **In Hermes Desktop** — the sidebar row and the console in the main zone | **Chart-first** — Vela gets the whole pane; panels are opt-in |
+| ![Library open](docs/shots/console-library.png) | ![detail panel](docs/shots/detail-panel.png) |
+| **Library open** — search across the LuxAlgo Library | **Detail panel** — write-up, licence badge, **Run PineTS** / **Add to chart** |
+
+Library text and Pine sources shown in these screenshots are LuxAlgo's — *Source: LuxAlgo Library*.
+
+## Update / Uninstall
+
+```bash
+cd tradersagent-plugin && git pull     # update
+./install.sh                           # redeploy the plugin (hot-reloads in ~3 s)
+systemctl --user restart traders-agent.service   # only if you run the console as a service
+```
+
+Uninstall: delete `~/.hermes/desktop-plugins/traders-desk/` in Hermes Desktop (**Capabilities →
+Plugins**), then remove the console's service (`systemctl --user disable --now traders-agent.service`).
+Nothing else is written outside the repo; `console/agents/` holds the runtime state you can delete.
+
 ## Repository layout
 
 ```
@@ -119,6 +165,34 @@ install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/
 | `LUXALGO_AGENTS_DIR` | `console/agents` | runtime state: chart bridge files, study threads, shots |
 | `HERMES_CLI` | `hermes` on `PATH` | CLI the in-app study bridge shells out to |
 | `--mcp-url` | `https://mcp.luxalgo.com/mcp` | point at a different (or local) MCP server |
+
+## Limits
+
+- **PineTS is a subset of Pine.** `import`, `while` and `for…in` are not implemented; the detail panel
+  says so instead of pretending. Anything heavier only runs in TradingView's own Pine engine.
+- **"Add to chart" is experimental.** It hands the script to Vela's Pine engine; some scripts paint
+  nothing. **Run PineTS** is the reliable path.
+- **The bridge is not a headless renderer.** `trader-chart` only takes effect while the console page
+  is mounted in the app; commands land in a couple of seconds (polling, not push).
+- **One console per machine** on one port. No order placement, no account, no positions — it is
+  read-only market data plus rendering.
+- **The Library is non-commercial.** Its content is CC BY-NC-SA 4.0 — fine to read and cite here, not
+  to resell or ship inside a paid product.
+- **Untested outside Linux.** It is a stdlib Python server and an Electron plugin, so it should
+  travel, but only Arch/Hyprland is verified.
+
+## Development
+
+```bash
+node tools/verify-plugin.mjs plugin/plugin.js                    # plugin harness (same check CI runs)
+python3 console/backend/server.py --port 8899 --no-mcp           # console without the MCP backend
+python3 -m compileall console/backend                            # syntax pass
+```
+
+CI (`.github/workflows/ci.yml`) runs the harness on Node 20 and 22, compiles the backend and boots it
+for a `/api/health` smoke test. Workflow when editing: change the repo, run `./install.sh` to deploy;
+the app re-registers the plugin about 3 seconds after `plugin.js` changes. Console-only changes need
+the frame remounted (switch session and back).
 
 ## Troubleshooting
 
