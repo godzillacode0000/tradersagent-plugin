@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  plugin:
+    name: plugin (harness)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # Runs the plugin in plain Node against stubs of the three modules a plugin may import,
+      # records what register() contributes, renders each contribution and checks it against
+      # plugin/plugin.expect.json. Exits non-zero on a broken plugin.
+      - run: node tools/verify-plugin.mjs plugin/plugin.js
+
+  backend:
+    name: backend (compile + boot)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: the one non-stdlib dependency
+        run: pip install 'mcp>=1,<2'
+      - name: syntax
+        run: python -m compileall -q console/backend
+      - name: boots and answers /api/health without an MCP session
+        run: |
+          cd console/backend
+          python server.py --port 8899 --frontend ../frontend --no-mcp &
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8899/api/health > /tmp/health.json; then break; fi
+            sleep 0.5
+          done
+          cat /tmp/health.json
+          kill %1

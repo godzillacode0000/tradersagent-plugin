@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""library-indicator — fetch one LuxAlgo Library indicator's Pine source by search query.
+
+    library-indicator "killzone" [--index N] [--out FILE] [--json]
+
+Searches the local console's Library (which proxies the hosted MCP), takes the Nth indicator result,
+writes its Pine v6 source to FILE and prints:  slug ⇥ title ⇥ path ⇥ lines
+
+Exit codes: 0 fetched · 1 no result / no source · 2 the console is unreachable.
+Library sources are CC BY-NC-SA 4.0: fine to run locally, never to ship in a build.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+CONSOLE = os.environ.get("LUXALGO_CONSOLE", "http://127.0.0.1:8787").rstrip("/")
+
+
+def api(path: str) -> dict:
+    try:
+        with urllib.request.urlopen(CONSOLE + path, timeout=60) as res:
+            body = json.loads(res.read().decode("utf-8"))
+    except urllib.error.URLError as exc:
+        print(f"library-indicator: cannot reach the console at {CONSOLE} ({exc.reason})", file=sys.stderr)
+        raise SystemExit(2)
+    if isinstance(body, dict) and body.get("ok") is False:
+        print(f"library-indicator: {body.get('error')}", file=sys.stderr)
+        raise SystemExit(1)
+    return body.get("data") if isinstance(body, dict) and "data" in body else body
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog="library-indicator", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("query")
+    ap.add_argument("--index", type=int, default=0, help="which result (0 = first)")
+    ap.add_argument("--out", help="where to write the .pine (default /tmp/library-<slug>.pine)")
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args(argv)
+
+    found = api("/api/search?type=indicators&limit=20&q=" + urllib.parse.quote(args.query))
+    results = found.get("results") or []
+    if not results:
+        print(f"library-indicator: nothing for '{args.query}'", file=sys.stderr)
+        return 1
+    if args.index >= len(results):
+        print(f"library-indicator: only {len(results)} result(s) for '{args.query}'", file=sys.stderr)
+        return 1
+    hit = results[args.index]
+    slug = hit.get("slug") or hit.get("key") or hit.get("id")
+    title = hit.get("title") or hit.get("name") or slug
+    if not slug:
+        print(f"library-indicator: no slug in {json.dumps(hit)[:200]}", file=sys.stderr)
+        return 1
+
+    payload = api("/api/source?slug=" + urllib.parse.quote(str(slug)))
+    source = payload.get("source") or ""
+    if not source.strip():
+        print(f"library-indicator: '{title}' publishes no source", file=sys.stderr)
+        return 1
+
+    out = Path(args.out) if args.out else Path(f"/tmp/library-{slug}.pine")
+    out.write_text(source, "utf-8")
+    lines = source.count("\n") + 1
+
+    if args.json:
+        print(json.dumps({"slug": slug, "title": title, "path": str(out), "lines": lines}, indent=2))
+    else:
+        print(f"{slug}\t{title}\t{out}\t{lines}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

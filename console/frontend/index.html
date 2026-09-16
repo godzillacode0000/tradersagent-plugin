@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LuxAlgo Library × Vela — MVP</title>
+<!-- One system-first stack (Inter / IBM Plex Sans → system-ui). No webfont is
+     fetched: this box is a 2016 Pavilion, and the brief's stack is deliberately
+     system-first so first paint never waits on a font request. -->
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand__mark" title="tools by luxalgo-mcp-server · chart by Vela · Pine engine vela-pinets">▲</span>
+      <span class="brand__name">LuxAlgo Library</span>
+      <span class="brand__sub">× Vela chart</span>
+    </div>
+    <div class="topbar__right">
+      <!-- Chart-first (operator's call, 16 Sep): the library and the detail panel are opt-in from
+           these two toggles, so the Vela chart owns the whole pane by default. -->
+      <button type="button" class="btn btn--ghost btn--toggle" id="library-open"
+              aria-pressed="false" title="Show the indicator Library">☰ Library</button>
+      <button type="button" class="btn btn--ghost btn--toggle" id="detail-open"
+              aria-pressed="false" title="Show the Pine source / write-up panel">▤ Details</button>
+      <span id="mcp-status" class="pill pill--wait" title="LuxAlgo MCP backend">MCP: checking…</span>
+      <span id="bars-status" class="pill pill--wait" title="Where the candles come from">bars: loading…</span>
+      <span id="indicator-count" class="pill" title="Indicators that actually executed on the chart — a mount that silently did nothing is never counted">0 indicators</span>
+      <button type="button" class="btn btn--ghost" id="theme-toggle" title="Switch light / dark" aria-label="Switch theme">◐</button>
+    </div>
+  </header>
+
+  <main class="main">
+    <!-- LEFT: the library — hidden until its topbar toggle asks for it -->
+    <section class="panel panel--left">
+      <div class="view" id="view-library">
+      <form class="search" id="search-form" autocomplete="off">
+        <label class="search__label" for="q">Search the Library</label>
+        <div class="search__row">
+          <input id="q" name="q" type="search" placeholder="order block, liquidity sweep, FVG…" />
+          <button type="submit" class="btn btn--primary" id="search-btn">Search</button>
+          <button type="button" class="btn btn--ghost" id="library-toggle" aria-expanded="false"
+                  title="Show filters, shortcuts and results">⌄</button>
+        </div>
+        <div class="search__filters">
+          <select id="type" aria-label="Result type">
+            <option value="all">all</option>
+            <option value="indicators">indicators</option>
+            <option value="concepts">concepts</option>
+          </select>
+          <select id="family" aria-label="Family">
+            <option value="">any family</option>
+            <option value="smc-ict">smc-ict</option>
+            <option value="trend">trend</option>
+            <option value="momentum">momentum</option>
+            <option value="volatility">volatility</option>
+            <option value="volume-orderflow">volume-orderflow</option>
+            <option value="market-structure">market-structure</option>
+            <option value="patterns">patterns</option>
+            <option value="levels">levels</option>
+            <option value="time-seasonality">time-seasonality</option>
+            <option value="statistics">statistics</option>
+          </select>
+        </div>
+        <div class="chips" id="chips">
+          <button type="button" class="chip" data-q="order block">order block</button>
+          <button type="button" class="chip" data-q="liquidity sweep">liquidity sweep</button>
+          <button type="button" class="chip" data-q="fair value gap">FVG</button>
+          <button type="button" class="chip" data-q="supertrend">supertrend</button>
+        </div>
+      </form>
+
+      <div class="results" id="results" aria-live="polite">
+        <div class="empty">
+          <p><strong>Start here.</strong> Search the LuxAlgo Library — the same 800+ concepts and
+          indicators the MCP server serves — then read the write-up, or copy an indicator's Pine
+          source.</p>
+          <p class="muted"><strong>Run PineTS</strong> is the reliable path: the script is executed
+          by LuxAlgo's own PineTS runtime over the chart's bars and painted as native series, and it
+          says so when a script uses something PineTS has not implemented yet (<em>import</em>,
+          <em>while</em>, <em>for…in</em>).</p>
+          <p class="muted"><strong>Add to chart</strong> additionally hands the script to Vela's own
+          Pine engine, which is experimental here — it often stays silent, and the app reports that
+          rather than pretending. Charts, bars and every other panel are unaffected.</p>
+          <p class="muted">Try a chip above, or type “ict killzones”.</p>
+        </div>
+      </div>
+      </div><!-- /view-library -->
+
+    </section>
+
+    <!-- CENTER: the chart -->
+    <section class="panel panel--chart">
+      <div class="chart-head">
+        <span class="chart-title">BTCUSDT · 1h</span>
+        <span class="muted" id="chart-origin">provider: none yet</span>
+      </div>
+      <div id="chart" class="chart"></div>
+      <!-- Not furniture: the log line says something only while it has something to say. -->
+      <div class="chart-foot muted" id="chart-log" aria-live="polite"></div>
+    </section>
+
+    <!-- RIGHT: detail / source -->
+    <section class="panel panel--right">
+      <div class="detail" id="detail">
+        <h2 class="detail__title">Nothing selected</h2>
+        <p class="muted">Pick a result on the left. Indicators show their Pine source and can be
+        mounted on the chart; concepts show the Library write-up.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="statusbar">
+    <span id="toast" class="toast" role="status"></span>
+  </footer>
+</div>
+
+<!-- LuxAlgo's own browser builds, straight from their published packages -->
+<script src="https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.7.3/dist/vela.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@luxalgo/vela-pinets@0.2.12/dist/vela-pinets.global.min.js"></script>
+
+<!-- PineTS execution + its paint layer. Classic scripts, loaded BEFORE the workspace
+     module builds a chart, because Vela reads its renderer-layer registry at
+     construction. pinets itself is imported lazily, on the first Run PineTS. -->
+<script src="./pinets-layer.js"></script>
+<script src="./pinets-runner.js"></script>
+<script src="./chart-bridge.js"></script>
+
+<!-- The FULL Vela application. The workspace is absent from the root global build
+     above (window.Vela.VelaWorkspace === undefined), so it comes in as ES modules
+     through an import map — still no bundler. workspace.js builds the shell and
+     hands its active chart to app.js; if it fails, app.js uses the bare chart. -->
+<script type="importmap">
+{
+  "imports": {
+    "@luxalgo/vela": "https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.7.3/+esm",
+    "@luxalgo/vela/plugin": "https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.7.3/plugin/+esm",
+    "@luxalgo/vela/workspace": "https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.7.3/workspace/+esm",
+    "@luxalgo/vela/providers/binance": "https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.7.3/providers/binance/+esm",
+    "@luxalgo/vela-pinets": "https://cdn.jsdelivr.net/npm/@luxalgo/vela-pinets@0.2.12/+esm",
+    "pinets": "https://cdn.jsdelivr.net/npm/pinets@0.9.33/+esm"
+  }
+}
+</script>
+<script type="module" src="./workspace.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

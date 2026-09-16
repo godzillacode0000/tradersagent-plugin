@@ -1,0 +1,221 @@
+#!/usr/bin/env python3
+"""trader-chart — the agent's hands on the live Vela chart.
+
+The chart runs in a browser tab; this talks to the console's chart bridge (backend/chart_bridge.py),
+which relays the request to that tab and brings the answer back. So the agent can read what the chart
+is showing and put something on it without any UI of its own — the operator types into Hermes's own
+composer, not a second one.
+
+    trader-chart state                     what the chart shows: symbol, timeframe, price, natives, bars
+    trader-chart shot [--out FILE]         capture the chart now and save the PNG (for vision)
+    trader-chart apply FILE|-              run Pine over the chart's bars and paint a matching native
+    trader-chart add NATIVE                add one of Vela's native indicators
+    trader-chart market SYMBOL TIMEFRAME   switch the chart's market
+    trader-chart wait ID                   wait for one earlier command's outcome
+
+Exit codes: 0 = it worked · 1 = the chart refused or failed · 2 = no chart is open right now.
+`--json` prints the raw payload instead of prose.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import sys
+import time
+import urllib.error
+import urllib.request
+
+BASE = os.environ.get("LUXALGO_CONSOLE", "http://127.0.0.1:8787").rstrip("/")
+TIMEOUT = float(os.environ.get("LUXALGO_CHART_TIMEOUT", "45"))
+POLL = 1.0
+
+
+def _request(path: str, payload: dict | None = None) -> dict:
+    url = BASE + path
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(
+        url, data=data,
+        headers={"content-type": "application/json"} if data else {},
+        method="POST" if data else "GET")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as res:
+            body = json.loads(res.read().decode("utf-8"))
+    except urllib.error.URLError as exc:
+        die(f"cannot reach the console at {BASE} ({exc.reason}) — is luxalgo-web running?", 2)
+    except ValueError as exc:
+        die(f"the console sent something unreadable: {exc}", 1)
+    if not body.get("ok", False):
+        die(f"console error: {body.get('error') or body}", 1)
+    return body.get("data") or {}
+
+
+def get(path: str) -> dict:
+    return _request(path)
+
+
+def post(path: str, payload: dict) -> dict:
+    return _request(path, payload)
+
+
+def die(message: str, code: int) -> None:
+    print(f"trader-chart: {message}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+def out(args) -> None:
+    """Print either the raw payload or nothing (the caller prints the prose)."""
+    if getattr(args, "json", False):
+        print(json.dumps(getattr(args, "_payload", {}), indent=2, ensure_ascii=False))
+
+
+def chart_state(args) -> dict:
+    state = get("/api/chart/state")
+    args._payload = state
+    return state
+
+
+def require_open(args) -> dict:
+    state = chart_state(args)
+    if not state.get("open"):
+        die(state.get("reason") or "no chart is open", 2)
+    return state
+
+
+def wait(command_id: int, timeout: float = TIMEOUT) -> dict:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        result = get(f"/api/chart/result?id={command_id}")
+        if not result.get("pending"):
+            return result
+        time.sleep(POLL)
+    die(f"the chart did not answer command {command_id} within {timeout:.0f}s "
+        f"(is the chart page still open?)", 1)
+
+
+def send(args, command: dict) -> dict:
+    require_open(args)
+    queued = post("/api/chart/command", command)
+    rid = queued["command"]["id"]
+    result = wait(rid)
+    args._payload = result
+    return result
+
+
+def cmd_state(args) -> int:
+    state = require_open(args)
+    if args.json:
+        print(json.dumps(state, indent=2, ensure_ascii=False))
+        return 0
+    last = state.get("last")
+    print(f"chart: {state.get('symbol')} {state.get('timeframe')} · "
+          f"last {last:,.2f}" if isinstance(last, (int, float)) else
+          f"chart: {state.get('symbol')} {state.get('timeframe')} · last unknown")
+    print(f"  painted natives: {', '.join(state.get('natives') or []) or 'none'}")
+    print(f"  series {state.get('series')} · drawings {state.get('drawings')} · bars {state.get('bars')}")
+    print(f"  reported {state.get('age_s')}s ago"
+          + (f" · picture on the heartbeat: {state['shot']}"
+             if state.get("shot") else " · no picture on the heartbeat (ask for one with `shot`)"))
+    return 0
+
+
+def cmd_shot(args) -> int:
+    result = send(args, {"action": "shot"})
+    if not result.get("ok") or not result.get("shot"):
+        die(f"no picture: {result.get('detail') or 'unknown reason'}", 1)
+    dest = args.out or f"/tmp/chart-{int(time.time())}.png"
+    shutil.copy(result["shot"], dest)
+    if args.json:
+        print(json.dumps({**result, "copied_to": dest}, indent=2, ensure_ascii=False))
+    else:
+        print(dest)
+    return 0
+
+
+def cmd_apply(args) -> int:
+    if args.pine == "-":
+        pine = sys.stdin.read()
+    else:
+        with open(args.pine, "r", encoding="utf-8") as fh:
+            pine = fh.read()
+    if not pine.strip():
+        die("no Pine source given", 1)
+    result = send(args, {"action": "apply", "pine": pine})
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
+def cmd_add(args) -> int:
+    result = send(args, {"action": "add", "native": args.native})
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
+def cmd_market(args) -> int:
+    result = send(args, {"action": "market", "symbol": args.symbol, "timeframe": args.timeframe})
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
+def cmd_wait(args) -> int:
+    args._payload = {}
+    result = wait(args.id, timeout=args.timeout)
+    args._payload = result
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="trader-chart", description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--json", action="store_true", help="print the raw payload")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    s = sub.add_parser("state", help="what the live chart is showing")
+    s.set_defaults(func=cmd_state)
+
+    s = sub.add_parser("shot", help="capture the chart and save the PNG")
+    s.add_argument("--out", help="where to write it (default /tmp/chart-<ts>.png)")
+    s.set_defaults(func=cmd_shot)
+
+    s = sub.add_parser("apply", help="run Pine on the chart and paint a matching native")
+    s.add_argument("pine", help="a .pine file, or - to read stdin")
+    s.set_defaults(func=cmd_apply)
+
+    s = sub.add_parser("add", help="add a Vela native indicator")
+    s.add_argument("native", help="e.g. ema, supertrend, donchian-channels")
+    s.set_defaults(func=cmd_add)
+
+    s = sub.add_parser("market", help="switch the chart")
+    s.add_argument("symbol")
+    s.add_argument("timeframe")
+    s.set_defaults(func=cmd_market)
+
+    s = sub.add_parser("wait", help="wait for an earlier command's outcome")
+    s.add_argument("id", type=int)
+    s.add_argument("--timeout", type=float, default=TIMEOUT)
+    s.set_defaults(func=cmd_wait)
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

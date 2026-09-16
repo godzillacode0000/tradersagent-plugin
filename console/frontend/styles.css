@@ -1,0 +1,583 @@
+/* ============================================================================
+   LuxAlgo Library × Vela — stylesheet.
+
+   Structure (from design/brief.md, which derived it from LuxAlgo's own
+   trade-journal globals.css and Vela's src/core/tokens.ts):
+
+     Layer 1  :root            our palette (--lx-*). Dark is the default.
+     Layer 2  :root[data-theme="light"]   same names, tj's light values.
+     Layer 3  .chart           Vela's chrome (--vela-*) mapped onto layer 1.
+     Layer 4  base sheet       resets, focus, scrollbars, motion guard.
+     Layer 5  components       this app's panels, rows, cards, toasts.
+
+   Rules that matter:
+   - One palette. Never invent a second blue, border grey or font.
+   - Override Vela's surface/border/ink/accent tokens only. Its *state* washes
+     (--vela-hover / active / focus) must stay Vela's own, or the hover→active
+     ladder jumps: hovering darkens, pressing lightens.
+   ========================================================================= */
+
+/* ── Layer 1 — DARK (default) ───────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+
+  /* surfaces: the plot is the darkest surface, so panels read as lifted */
+  --lx-canvas:          #08080a;   /* app background AND the chart plot */
+  --lx-surface-1:       #101013;   /* panels, cards, panel headers */
+  --lx-surface-2:       #131317;   /* popovers, menus, toasts */
+  --lx-surface-3:       #1b1b20;   /* raised rows, chips, hovered cards */
+  --lx-field-bg:        #08080a;   /* inputs read as cut INTO the panel */
+  --lx-backdrop:        rgba(0, 0, 0, .45);
+
+  --lx-border:          #222228;
+  --lx-border-soft:     #1e1e24;
+  --lx-border-strong:   #34353b;
+  --lx-border-faint:    rgba(244, 244, 244, .08);
+
+  --lx-fg:              #f4f4f4;
+  --lx-fg-muted:        #9c9ca6;
+  --lx-fg-faint:        #6b6b74;
+  --lx-fg-bright:       #f0f3fa;
+  --lx-chart-ink:       #d1d4dc;
+  --lx-fg-on-fill:      #ffffff;
+
+  /* exactly one accent (trade-journal's dark brand blue) */
+  --lx-accent:          #1197e2;
+  --lx-accent-hover:    #34a9ee;
+  --lx-accent-soft:     rgba(17, 151, 226, .14);
+  --lx-accent-line:     #1197e2;
+  --lx-accent-ink:      #6cc6f5;
+
+  /* P&L / direction — the same pair trade-journal hands to Vela, so
+     candles and chips agree */
+  --lx-profit:          #0ca30c;
+  --lx-loss:            #d03b3b;
+  --lx-profit-soft:     rgba(12, 163, 12, .14);
+  --lx-loss-soft:       rgba(208, 59, 59, .14);
+  --lx-neutral:         #8b8b95;
+
+  --lx-info:            #5b9cf6;
+  --lx-warn:            #e0b400;
+  --lx-danger:          var(--lx-loss);
+  --lx-info-soft:       rgba(91, 156, 246, .14);
+  --lx-warn-soft:       rgba(224, 180, 0, .14);
+
+  /* state washes: MUST equal Vela's own, so a panel row and a chart menu
+     item tint identically */
+  --lx-bg-hover:        rgba(255, 255, 255, .06);
+  --lx-bg-active:       rgba(255, 255, 255, .10);
+  --lx-bg-hover-strong: rgba(255, 255, 255, .16);
+
+  --lx-focus-ring:      2px solid var(--lx-accent);
+  --lx-focus-ring-off:  2px;
+  --lx-focus-halo:      0 0 0 3px rgba(17, 151, 226, .16);
+  --lx-focus-inset:     -3px;
+
+  --lx-font-ui:   Inter, "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --lx-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --lx-fs-2xs: 10px;   --lx-lh-2xs: 1.2;
+  --lx-fs-xs:  11px;   --lx-lh-xs:  1.3;
+  --lx-fs-sm:  12px;   --lx-lh-sm:  1.4;
+  --lx-fs-md:  13px;   --lx-lh-md:  1.35;
+  --lx-fs-lg:  14px;   --lx-lh-lg:  1.3;
+  --lx-fs-xl:  16px;   --lx-lh-xl:  1.25;
+  --lx-fs-2xl: 20px;   --lx-lh-2xl: 1.15;
+
+  --lx-fw-regular:  400;
+  --lx-fw-medium:   500;
+  --lx-fw-semibold: 600;
+  --lx-fw-bold:     700;
+
+  --lx-ls-tight: -0.01em;
+  --lx-ls-wide:   0.08em;
+  --lx-ls-data:   0.01em;
+
+  --lx-space-05: 2px;
+  --lx-space-1:  4px;
+  --lx-space-15: 6px;
+  --lx-space-2:  8px;
+  --lx-space-25: 10px;
+  --lx-space-3:  12px;
+  --lx-space-4:  16px;
+  --lx-space-5:  20px;
+  --lx-space-6:  24px;
+  --lx-space-8:  32px;
+
+  --lx-radius-xs:   2px;
+  --lx-radius-sm:   4px;
+  --lx-radius-md:   6px;
+  --lx-radius-lg:   8px;
+  --lx-radius-xl:   10px;
+  --lx-radius-2xl:  12px;
+  --lx-radius-pill: 999px;
+
+  --lx-shadow-1:      0 1px 3px rgba(0, 0, 0, .24);
+  --lx-shadow-2:      0 8px 30px rgba(0, 0, 0, .50);
+  --lx-shadow-3:      0 12px 36px rgba(0, 0, 0, .18),
+                      0 3px 8px rgba(0, 0, 0, .08),
+                      inset 0 1px 0 rgba(244, 244, 244, .04);
+  --lx-shadow-4:      0 20px 60px rgba(0, 0, 0, .50);
+  --lx-shadow-sheen:  inset 0 1px 0 rgba(255, 255, 255, .04),
+                      0 1px 2px rgba(0, 0, 0, .25);
+
+  --lx-ease:      cubic-bezier(0.22, 1, 0.36, 1);
+  --lx-ease-out:  cubic-bezier(0, 0, .2, 1);
+  --lx-ease-in:   cubic-bezier(.4, 0, 1, 1);
+  --lx-dur-90:    90ms;
+  --lx-dur-120:   120ms;
+  --lx-dur-150:   150ms;
+  --lx-dur-160:   160ms;
+  --lx-dur-180:   180ms;
+  --lx-dur-240:   240ms;
+  --lx-dur-280:   280ms;
+  --lx-dur-320:   320ms;
+
+  --lx-z-base:    0;
+  --lx-z-sticky:  10;
+  --lx-z-overlay: 30;    /* under vela --vela-z-dialog (40) */
+  --lx-z-toast:   60;    /* = vela --vela-z-tooltip */
+  --lx-z-modal:   70;
+
+  --lx-control-h:      34px;   /* Vela's md form-field height */
+  --lx-control-h-sm:   26px;
+  --lx-row-h:          44px;
+  --lx-row-h-dense:    36px;
+  --lx-scrollbar:      10px;
+  --lx-panel-head-h:   40px;
+  --lx-chart-head-h:   28px;
+}
+
+/* ── Layer 2 — LIGHT (only colour changes) ──────────────────────────────── */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --lx-canvas:        #f9f9f7;
+  --lx-surface-1:     #fcfcfb;
+  --lx-surface-2:     #fcfcfb;
+  --lx-surface-3:     #f0efec;
+  --lx-field-bg:      #f9f9f7;
+  --lx-backdrop:      rgba(0, 0, 0, .28);
+
+  --lx-border:        #e1e0d9;
+  --lx-border-soft:   #e1e0d9;
+  --lx-border-strong: #c3c2b7;
+  --lx-border-faint:  rgba(11, 11, 11, .07);
+
+  --lx-fg:            #0b0b0b;
+  --lx-fg-muted:      #52514e;
+  --lx-fg-faint:      #686760;
+  --lx-fg-bright:     #000000;
+  --lx-chart-ink:     #0b0b0b;
+  --lx-fg-on-fill:    #ffffff;
+
+  --lx-accent:        #0b7cbd;
+  --lx-accent-hover:  #0a6ba3;
+  --lx-accent-soft:   rgba(11, 124, 189, .10);
+  --lx-accent-line:   #0b7cbd;
+  --lx-accent-ink:    #0b6ba3;
+
+  --lx-profit:        #006300;
+  --lx-loss:          #d03b3b;
+  --lx-profit-soft:   rgba(0, 99, 0, .10);
+  --lx-loss-soft:     rgba(208, 59, 59, .10);
+  --lx-neutral:       #686760;
+
+  --lx-info:          #0b7cbd;
+  --lx-warn:          #a37800;
+  --lx-info-soft:     rgba(11, 124, 189, .10);
+  --lx-warn-soft:     rgba(163, 120, 0, .12);
+
+  --lx-bg-hover:        rgba(11, 11, 11, .08);
+  --lx-bg-active:       rgba(11, 11, 11, .12);
+  --lx-bg-hover-strong: rgba(11, 11, 11, .18);
+
+  --lx-shadow-1:    0 1px 3px rgba(0, 0, 0, .06);
+  --lx-shadow-2:    0 4px 14px rgba(0, 0, 0, .08);
+  --lx-shadow-3:    0 12px 32px rgba(0, 0, 0, .10),
+                    0 2px 8px rgba(0, 0, 0, .06);
+  --lx-shadow-4:    0 18px 60px rgba(0, 0, 0, .16),
+                    0 4px 12px rgba(0, 0, 0, .08);
+  --lx-shadow-sheen: inset 0 1px 0 rgba(255, 255, 255, .80),
+                     0 1px 2px rgba(0, 0, 0, .05);
+}
+
+/* ── Layer 3 — VELA MAPPING (on the chart region, not :root) ─────────────── */
+.chart {
+  --vela-bg:               var(--lx-canvas);
+  --vela-surface:          var(--lx-canvas);
+  --vela-surface-sunken:   var(--lx-field-bg);
+  --vela-surface-elev:     var(--lx-surface-1);
+  --vela-surface-overlay:  var(--lx-surface-2);
+
+  --vela-border:           var(--lx-border);
+  --vela-border-soft:      var(--lx-border-soft);
+  --vela-border-strong:    var(--lx-border-strong);
+  --vela-border-faint:     var(--lx-border-faint);
+
+  --vela-fg:               var(--lx-chart-ink);
+  --vela-fg-muted:         var(--lx-fg-muted);
+  --vela-fg-bright:        var(--lx-fg-bright);
+  --vela-fg-on-fill:       var(--lx-fg-on-fill);
+
+  --vela-font:             var(--lx-font-ui);
+  --vela-accent:           var(--lx-accent);
+  --vela-accent-bright:    var(--lx-accent-hover);
+  --vela-highlight:        var(--lx-warn);
+
+  --vela-up:               var(--lx-profit);
+  --vela-down:             var(--lx-loss);
+  --vela-danger:           var(--lx-loss);
+
+  --vela-shadow:           var(--lx-shadow-2);
+  --vela-shadow-dialog:    var(--lx-shadow-4);
+  --vela-backdrop:         var(--lx-backdrop);
+
+  /* deliberately NOT set: --vela-hover, --vela-active, --vela-hover-strong,
+     --vela-focus, --vela-focus-soft, --vela-selected-*, --vela-space-*,
+     --vela-radius-*, --vela-z-*, --vela-dur-*, --vela-ease.
+     Vela derives those from its own theme; overriding half the ladder makes
+     hover and press disagree. Our --lx-bg-* already carry the same values. */
+}
+
+/* ── Layer 4 — base sheet ───────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--lx-canvas);
+  color: var(--lx-fg);
+  font-family: var(--lx-font-ui);
+  font-size: var(--lx-fs-md);
+  line-height: var(--lx-lh-md);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* every number in this app aligns in a column */
+.num, table, .pill, .toast, .result__meta, .skeleton, .stat__value, .firm__row {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.truncate-anywhere { overflow-wrap: anywhere; word-break: break-word; }
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: var(--lx-focus-ring);
+  outline-offset: var(--lx-focus-ring-off);
+  box-shadow: var(--lx-focus-halo);
+}
+input:focus-visible, textarea:focus-visible {
+  outline: none;
+  border-color: var(--lx-accent);
+  box-shadow: var(--lx-focus-halo);
+}
+.panel:has(:focus-visible) { outline: 2px solid var(--lx-accent); outline-offset: var(--lx-focus-inset); }
+
+* { scrollbar-width: thin; scrollbar-color: var(--lx-border-strong) transparent; }
+::-webkit-scrollbar { width: var(--lx-scrollbar); height: var(--lx-scrollbar); }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--lx-border); border-radius: var(--lx-radius-xs);
+  border: 2px solid transparent; background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--lx-border-strong); background-clip: content-box; }
+
+::selection { background: var(--lx-accent-soft); }
+
+.results, pre, .detail { overscroll-behavior: contain; }
+
+@media (pointer: coarse) {
+  input, select, textarea { font-size: max(16px, 1em); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ── Layer 5a — app shell + the four region tracks ───────────────────────
+   Vela swaps to its PHONE chrome when the chart's *container* is under
+   ~640px, not the viewport. Every track below keeps the centre column
+   ≥ 640px: 1440−300−380=760 · 1280−280−340=660 · 1100−260=840 (detail
+   overlays, so it costs the chart nothing). 1240px — not 1100 — is where
+   three tracks must break, because 1240−280−340=620 < 640.            */
+.app { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100dvh; }
+
+/* Chart-first (operator's call, 16 Sep): one column is the chart. The library and the detail panel
+   are opt-in, from the two small toggles in the topbar — no permanent side columns, so Vela gets
+   the whole pane until he asks for something else. */
+.main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+  gap: 1px;
+  background: var(--lx-border-soft);
+}
+.main[data-library="on"] { grid-template-columns: 300px minmax(0, 1fr); }
+.main[data-detail="on"]  { grid-template-columns: minmax(0, 1fr) 380px; }
+.main[data-library="on"][data-detail="on"] { grid-template-columns: 300px minmax(0, 1fr) 380px; }
+
+@media (max-width: 1439px) {
+  .main[data-library="on"] { grid-template-columns: 280px minmax(0, 1fr); }
+  .main[data-detail="on"]  { grid-template-columns: minmax(0, 1fr) 340px; }
+  .main[data-library="on"][data-detail="on"] { grid-template-columns: 280px minmax(0, 1fr) 340px; }
+}
+@media (max-width: 1239px) {
+  .main[data-library="on"] { grid-template-columns: 260px minmax(0, 1fr); }
+  /* The detail panel overlays here, so it costs the chart nothing. */
+  .main[data-detail="on"] { grid-template-columns: minmax(0, 1fr); }
+  .panel--right {
+    position: fixed; inset-block: 0; inset-inline-end: 0;
+    width: min(420px, 46vw);
+    box-shadow: var(--lx-shadow-4);
+    z-index: var(--lx-z-overlay);
+    transform: translateX(100%);
+    transition: transform var(--lx-dur-240) var(--lx-ease);
+  }
+  .main[data-detail="on"] .panel--right { transform: none; }
+}
+@media (max-width: 1099px) {
+  /* The chart keeps the height (operator's call, 15 Sep): the app stays viewport-tall and the
+     stacked main grid hands the chart every row that is left, instead of sizing to content. */
+  .app { grid-template-rows: auto minmax(0, 1fr) auto; height: 100dvh; }
+  .main,
+  .main[data-library="on"],
+  .main[data-detail="on"],
+  .main[data-library="on"][data-detail="on"] { grid-template-columns: minmax(0, 1fr); }
+  .panel--left { max-height: 38dvh; }
+  .panel--chart { min-height: 360px; }
+  .panel--right { position: static; width: auto; max-height: 40dvh; box-shadow: none; transform: none; }
+}
+
+/* ── Layer 5b — topbar / statusbar ───────────────────────────────────────── */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--lx-space-3); height: var(--lx-panel-head-h);
+  padding: 0 var(--lx-space-3);
+  background: var(--lx-surface-1);
+  border-bottom: 1px solid var(--lx-border);
+}
+.brand { display: flex; align-items: baseline; gap: var(--lx-space-15); }
+.brand__mark { color: var(--lx-accent-ink); font-size: var(--lx-fs-sm); }
+.brand__name { font-weight: var(--lx-fw-semibold); font-size: var(--lx-fs-lg); letter-spacing: var(--lx-ls-tight); }
+.brand__sub { color: var(--lx-fg-muted); font-size: var(--lx-fs-sm); }
+.topbar__right { display: flex; align-items: center; gap: var(--lx-space-2); }
+
+.pill {
+  display: inline-flex; align-items: center; gap: var(--lx-space-1);
+  padding: 2px var(--lx-space-2); border-radius: var(--lx-radius-pill);
+  border: 1px solid var(--lx-border-strong); color: var(--lx-fg-muted);
+  font-size: var(--lx-fs-xs); white-space: nowrap;
+}
+.pill--ok   { color: var(--lx-profit); border-color: rgba(12, 163, 12, .45); background: var(--lx-profit-soft); }
+.pill--bad  { color: var(--lx-loss);   border-color: rgba(208, 59, 59, .45); background: var(--lx-loss-soft); }
+.pill--wait { color: var(--lx-warn);   border-color: rgba(224, 180, 0, .40); background: var(--lx-warn-soft); }
+
+.statusbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--lx-space-3); padding: var(--lx-space-1) var(--lx-space-3);
+  background: var(--lx-surface-1); border-top: 1px solid var(--lx-border);
+  font-size: var(--lx-fs-xs); color: var(--lx-fg-muted);
+}
+.statusbar a { color: var(--lx-accent-ink); text-decoration: none; }
+.statusbar a:hover { text-decoration: underline; }
+.toast { color: var(--lx-fg); }
+.toast--bad { color: var(--lx-loss); }
+
+/* ── Layer 5c — panels, tabs, views ──────────────────────────────────────── */
+.panel { background: var(--lx-surface-1); min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+/* An unopened panel is not painted at all — cheaper than a zero-width track, and the chart's resize
+   observer stays quiet. Declared AFTER `.panel` on purpose: same specificity, later wins. */
+.main:not([data-library="on"]) .panel--left,
+.main:not([data-detail="on"]) .panel--right { display: none; }
+.panel--left { border-right: 1px solid var(--lx-border); }
+
+/* ── Layer 5g — the library folds to one row (operator's call, 15 Sep) ────── */
+/* In the stacked layout the search block sat in a 38dvh band above the chart. Folded, it is
+   the input row only; a search expands it again, and the caret toggles it by hand. */
+.panel--left.is-collapsed { max-height: none; }
+.panel--left.is-collapsed .search__label,
+.panel--left.is-collapsed .search__filters,
+.panel--left.is-collapsed .chips,
+.panel--left.is-collapsed .results { display: none; }
+.panel--left.is-collapsed .search { padding: var(--lx-space-2) var(--lx-space-3); }
+#library-toggle { flex: 0 0 auto; width: var(--lx-control-h); padding: 0; font-size: var(--lx-fs-lg); }
+.panel--right { border-left: 1px solid var(--lx-border); background: var(--lx-canvas); }
+
+.tabs {
+  display: flex; gap: var(--lx-space-05); padding: var(--lx-space-2) var(--lx-space-2) 0;
+  border-bottom: 1px solid var(--lx-border-soft);
+}
+.tab {
+  flex: 1; padding: 6px var(--lx-space-2); font: inherit; font-size: var(--lx-fs-sm);
+  cursor: pointer; color: var(--lx-fg-muted); background: transparent;
+  border: 1px solid transparent; border-bottom: 0;
+  border-radius: var(--lx-radius-sm) var(--lx-radius-sm) 0 0;
+  transition: color var(--lx-dur-90) var(--lx-ease), background var(--lx-dur-90) var(--lx-ease);
+}
+.tab:hover { color: var(--lx-fg-bright); background: var(--lx-bg-hover); }
+.tab--active { color: var(--lx-fg); background: var(--lx-surface-3); border-color: var(--lx-border); }
+
+.view { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.view--hidden { display: none; }
+
+/* ── Layer 5d — search + results (34px controls, 44px rows) ─────────────── */
+.search { padding: var(--lx-space-3); display: flex; flex-direction: column; gap: var(--lx-space-2); }
+.search__label {
+  font-size: var(--lx-fs-2xs); text-transform: uppercase; letter-spacing: var(--lx-ls-wide);
+  color: var(--lx-fg-muted);
+}
+.search__row { display: flex; gap: var(--lx-space-2); }
+.search__filters { display: flex; gap: var(--lx-space-2); }
+
+input[type="search"], select {
+  width: 100%; height: var(--lx-control-h);
+  padding: 0 var(--lx-space-25);
+  background: var(--lx-field-bg); color: var(--lx-fg);
+  border: 1px solid var(--lx-border); border-radius: var(--lx-radius-md);
+  font: inherit; font-size: var(--lx-fs-md);
+  transition: border-color var(--lx-dur-150) var(--lx-ease), box-shadow var(--lx-dur-150) var(--lx-ease);
+}
+input[type="search"]:hover, select:hover { border-color: var(--lx-border-strong); }
+input::placeholder { color: var(--lx-fg-faint); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--lx-space-1);
+  height: var(--lx-control-h); padding: 0 var(--lx-space-3);
+  font: inherit; font-size: var(--lx-fs-md); font-weight: var(--lx-fw-medium);
+  cursor: pointer; color: var(--lx-fg); background: var(--lx-surface-3);
+  border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-md);
+  transition: background var(--lx-dur-90) var(--lx-ease), border-color var(--lx-dur-90) var(--lx-ease);
+}
+.btn:hover { background: var(--lx-bg-hover-strong); }
+.btn--primary { background: var(--lx-accent); border-color: var(--lx-accent); color: var(--lx-fg-on-fill); }
+.btn--primary:hover { background: var(--lx-accent-hover); border-color: var(--lx-accent-hover); }
+.btn--ghost { background: transparent; }
+/* Topbar panel toggles: a notch smaller than a form button, so the bar stays a bar. */
+.btn--toggle { height: var(--lx-control-h-sm); padding: 0 var(--lx-space-2); font-size: var(--lx-fs-xs); color: var(--lx-fg-muted); }
+.btn--toggle:hover { color: var(--lx-fg-bright); }
+.btn--toggle[aria-pressed="true"] { color: var(--lx-fg); border-color: var(--lx-border-strong); background: var(--lx-surface-3); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+.chips { display: flex; flex-wrap: wrap; gap: var(--lx-space-1); }
+.chip {
+  padding: 3px var(--lx-space-2); font: inherit; font-size: var(--lx-fs-xs); cursor: pointer;
+  color: var(--lx-fg-muted); background: var(--lx-surface-3);
+  border: 1px solid var(--lx-border); border-radius: var(--lx-radius-pill);
+  transition: color var(--lx-dur-90) var(--lx-ease), border-color var(--lx-dur-90) var(--lx-ease);
+}
+.chip:hover { color: var(--lx-fg-bright); border-color: var(--lx-border-strong); }
+.chip--ok { color: var(--lx-profit); border-color: rgba(12, 163, 12, .45); }
+.chip--bad { color: var(--lx-loss); border-color: rgba(208, 59, 59, .45); }
+
+.results { flex: 1; min-height: 0; overflow: auto; padding: var(--lx-space-2); }
+.results__head {
+  padding: var(--lx-space-1) var(--lx-space-2) var(--lx-space-2);
+  font-size: var(--lx-fs-2xs); text-transform: uppercase; letter-spacing: var(--lx-ls-wide);
+  color: var(--lx-fg-muted);
+}
+
+.row {
+  display: flex; align-items: center; gap: var(--lx-space-2);
+  width: 100%; min-height: var(--lx-row-h); padding: var(--lx-space-2) var(--lx-space-25);
+  text-align: left; font: inherit; cursor: pointer;
+  color: var(--lx-fg); background: transparent;
+  border: 0; border-left: 2px solid transparent; border-radius: var(--lx-radius-sm);
+  transition: background var(--lx-dur-120) var(--lx-ease);
+}
+.row:hover { background: var(--lx-bg-hover); }
+/* selection = accent tint + 2px bar, a NON-colour cue, not Vela's filled chip */
+.row--active { background: var(--lx-accent-soft); border-left-color: var(--lx-accent-line); }
+.row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.row__name { font-size: var(--lx-fs-md); font-weight: var(--lx-fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row__meta { font-size: var(--lx-fs-xs); color: var(--lx-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row__kind {
+  flex: 0 0 auto; padding: 1px var(--lx-space-1); border-radius: var(--lx-radius-xs);
+  border: 1px solid var(--lx-border-strong); color: var(--lx-fg-muted);
+  font-size: var(--lx-fs-2xs); text-transform: uppercase; letter-spacing: var(--lx-ls-wide);
+}
+.row__kind--indicator { color: var(--lx-accent-ink); border-color: rgba(17, 151, 226, .45); }
+
+.empty, .error { padding: var(--lx-space-4); color: var(--lx-fg-muted); font-size: var(--lx-fs-sm); }
+.empty strong, .error strong { color: var(--lx-fg); font-size: var(--lx-fs-lg); }
+.error strong { color: var(--lx-loss); }
+.muted { color: var(--lx-fg-muted); }
+
+.skeleton {
+  height: var(--lx-row-h); margin-bottom: var(--lx-space-1); border-radius: var(--lx-radius-md);
+  background: linear-gradient(90deg, var(--lx-surface-3) 0%, var(--lx-bg-hover) 50%, var(--lx-surface-3) 100%);
+  animation: shimmer 1.4s var(--lx-ease) infinite;
+}
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+/* ── Layer 5e — chart region ─────────────────────────────────────────────── */
+.panel--chart { background: var(--lx-canvas); }
+.chart-head {
+  display: flex; align-items: center; justify-content: space-between;
+  height: var(--lx-chart-head-h); padding: 0 var(--lx-space-3);
+  border-bottom: 1px solid var(--lx-border-soft);
+  font-size: var(--lx-fs-xs);
+}
+.chart-title { font-weight: var(--lx-fw-medium); letter-spacing: var(--lx-ls-data); }
+.chart { flex: 1; min-height: 360px; min-width: 0; }
+/* The full workspace brings its own topbar (symbol / timeframe / style / layout /
+   alerts), so our extra header would be a second, worse copy of it. */
+body.has-workspace .chart-head { display: none; }
+.chart-foot {
+  padding: var(--lx-space-1) var(--lx-space-3);
+  border-top: 1px solid var(--lx-border-soft);
+  font-size: var(--lx-fs-xs); color: var(--lx-fg-muted);
+  max-height: 4.6em; overflow: auto;
+}
+/* Boot chatter and the credit strip were permanent furniture he does not want (operator's call,
+   16 Sep). The log line appears only while it has something to say; the footer only while a toast
+   is on screen. The credits live in the brand mark's tooltip. */
+.chart-foot { display: none; }
+.chart-foot.is-live { display: block; }
+.statusbar { display: none; }
+.statusbar.is-live { display: flex; }
+
+/* ── Layer 5f — detail panel ─────────────────────────────────────────────── */
+.detail { flex: 1; min-height: 0; overflow: auto; padding: var(--lx-space-3); display: flex; flex-direction: column; gap: var(--lx-space-3); }
+.detail__title { margin: 0; font-size: var(--lx-fs-xl); line-height: var(--lx-lh-xl); font-weight: var(--lx-fw-semibold); letter-spacing: var(--lx-ls-tight); }
+.detail__meta { display: flex; flex-wrap: wrap; gap: var(--lx-space-1); }
+.detail__actions { display: flex; gap: var(--lx-space-2); }
+
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 1px var(--lx-space-15); border-radius: var(--lx-radius-xs);
+  border: 1px solid var(--lx-border-strong); color: var(--lx-fg-muted);
+  font-size: var(--lx-fs-xs); text-decoration: none;
+}
+.badge--ok  { color: var(--lx-profit); border-color: rgba(12, 163, 12, .45); }
+.badge--lic { color: var(--lx-warn);   border-color: rgba(224, 180, 0, .40); }
+
+pre {
+  margin: 0; padding: var(--lx-space-3);
+  background: var(--lx-field-bg); border: 1px solid var(--lx-border-soft);
+  border-radius: var(--lx-radius-md);
+  font: var(--lx-fs-xs)/1.5 var(--lx-font-mono); color: var(--lx-fg);
+  white-space: pre; overflow: auto; max-height: 60vh;
+}
+
+/* ── Layer 5g — stats (edge panel) + firm cards ──────────────────────────── */
+.stat {
+  padding: var(--lx-space-3); margin-bottom: var(--lx-space-2);
+  background: var(--lx-surface-2); border: 1px solid var(--lx-border-soft);
+  border-radius: var(--lx-radius-lg);
+}
+.stat__label { font-size: var(--lx-fs-2xs); text-transform: uppercase; letter-spacing: var(--lx-ls-wide); color: var(--lx-fg-muted); }
+.stat__value { font: var(--lx-fw-semibold) var(--lx-fs-2xl)/var(--lx-lh-2xl) var(--lx-font-mono); margin: var(--lx-space-1) 0; }
+.stat__sub { font-size: var(--lx-fs-sm); color: var(--lx-fg-muted); }
+.chipsline { display: flex; flex-wrap: wrap; gap: var(--lx-space-1); margin-top: var(--lx-space-15); }
+
+.firm {
+  padding: var(--lx-space-3); margin-bottom: var(--lx-space-2);
+  background: var(--lx-surface-2); border: 1px solid var(--lx-border-soft);
+  border-radius: var(--lx-radius-lg);
+}
+.firm__name { font-weight: var(--lx-fw-semibold); }
+.firm__row { display: flex; justify-content: space-between; gap: var(--lx-space-2); font-size: var(--lx-fs-sm); color: var(--lx-fg-muted); margin-top: var(--lx-space-1); }
+.offer { color: var(--lx-accent-ink); }
+
+/* the Vela attribution mark must stay visible (licence requirement) */
+.vela-mark-note { font-size: var(--lx-fs-2xs); color: var(--lx-fg-faint); }

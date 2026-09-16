@@ -1,0 +1,25 @@
+{
+  "id": "traders-desk",
+  "areas": [
+    "routes",
+    "sidebar.nav",
+    "palette",
+    "statusBar.right"
+  ],
+  "renders": [
+    {
+      "area": "routes",
+      "contains": [
+        "Trader's Agent",
+        "127.0.0.1:8787",
+        "Starting the local console"
+      ]
+    },
+    {
+      "area": "statusBar.right",
+      "contains": [
+        "Trader's Agent"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+# runtime state — chart bridge files, study threads, screenshots
+console/agents/
+# offline copy fetched by ./install.sh --vendor (LuxAlgo's builds, not redistributed here)
+console/frontend/vendor/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# editors / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# local scratch
+*.log
+/tmp/
