@@ -150,6 +150,29 @@ def cmd_shot(args) -> int:
     return 0
 
 
+def cmd_draw(args) -> int:
+    """Run a Library script and paint what it built (boxes/lines/labels) on our own overlay."""
+    import sys as _sys
+    pine = _sys.stdin.read() if args.pine == "-" else open(args.pine, "r", encoding="utf-8").read()
+    if not pine.strip():
+        die("no Pine source given", 1)
+    result = send(args, {"action": "draw", "pine": pine})
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
+def cmd_clear(args) -> int:
+    result = send(args, {"action": "clear"})
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
 def cmd_apply(args) -> int:
     if args.pine == "-":
         pine = sys.stdin.read()
@@ -220,6 +243,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("symbol")
     s.add_argument("timeframe")
     s.set_defaults(func=cmd_market)
+
+    s = sub.add_parser("draw", help="run a Library script and draw its boxes/lines on the overlay")
+    s.add_argument("pine", help="a .pine file, or - to read stdin")
+    s.set_defaults(func=cmd_draw)
+
+    s = sub.add_parser("clear", help="clear the overlay and the natives our paint layer added")
+    s.set_defaults(func=cmd_clear)
 
     s = sub.add_parser("wait", help="wait for an earlier command's outcome")
     s.add_argument("id", type=int)

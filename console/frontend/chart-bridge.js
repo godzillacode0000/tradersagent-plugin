@@ -153,6 +153,48 @@
           out.detail = 'added Vela native "' + command.native + '"';
           break;
         }
+        case 'draw': {
+          // Run a Library script and paint the geometry it BUILT (boxes/lines/labels) on our overlay.
+          const pine = String(command.pine || '');
+          if (!pine.trim()) throw new Error('no Pine source in the command');
+          if (!window.ChartOverlay) throw new Error('no overlay on this page — reload the console');
+          const bars = await window.chartBars();
+          const res = await window.PineTSRunner.run(pine, bars, { name: 'agent-draw' });
+          if (!res.ok) { out.detail = 'not runnable: ' + (res.reason || 'unknown'); break; }
+          const plots = (res.raw && res.raw.plots) || {};
+          const flatten = (key) => {
+            const node = plots[key];
+            const rows = node && Array.isArray(node.data) ? node.data : [];
+            const vals = [];
+            for (const row of rows) {
+              const v = row && row.value;
+              if (Array.isArray(v)) vals.push(...v);
+            }
+            return vals.filter((x) => x && typeof x === 'object' && !x._deleted);
+          };
+          const boxes = flatten('__boxes__').filter((b) => b.xloc !== 'bt');
+          const lines = flatten('__lines__');
+          const labels = flatten('__labels__');
+          if (!boxes.length && !lines.length && !labels.length) {
+            out.detail = 'ran in ' + res.ms + ' ms but the script built no boxes/lines/labels to draw';
+            break;
+          }
+          const drawn = await window.ChartOverlay.apply({ boxes, lines, labels }, command.opts || {});
+          out.ok = !!drawn.ok;
+          out.detail = 'ran in ' + res.ms + ' ms · overlay drew ' + (drawn.boxes || 0) + ' box(es), ' +
+            (drawn.lines || 0) + ' line(s), ' + (drawn.labels || 0) + ' label(s)' +
+            (drawn.reason ? ' · ' + drawn.reason : '') +
+            (drawn.mapping ? ' · window bars ' + drawn.mapping.i0 + '+' + drawn.mapping.n + ' of ' + drawn.mapping.bars +
+              ', price ' + Math.round(drawn.mapping.lo) + '-' + Math.round(drawn.mapping.hi) : '');
+          break;
+        }
+        case 'clear': {
+          const n = window.ChartOverlay ? window.ChartOverlay.clear() : 0;
+          const removed = (window.PineTSPaint && window.PineTSPaint.clear) ? window.PineTSPaint.clear() : 0;
+          out.ok = true;
+          out.detail = 'overlay cleared (' + n + ') · painted natives removed: ' + removed;
+          break;
+        }
         case 'probe': {
           // Diagnostics only: what this page can actually see and what the handles expose.
           const c = chart();
