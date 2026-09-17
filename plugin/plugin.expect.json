@@ -1,14 +1,15 @@
 {
   "id": "traders-desk",
   "areas": [
-    "routes",
+    "panes",
+    "layouts",
     "sidebar.nav",
     "palette",
     "statusBar.right"
   ],
   "renders": [
     {
-      "area": "routes",
+      "area": "panes",
       "contains": [
         "Starting the local console",
         "127.0.0.1:8787"

@@ -176,7 +176,7 @@ for (const reg of registrations) {
   // status/title-bar items are plain descriptors. Only component areas must
   // supply render() or an actionable data.run — demanding one of them from a
   // nav row reported every correct plugin as broken.
-  const DATA_ONLY_AREAS = new Set(['sidebar.nav', 'keybinds', 'themes', 'transcriptDirective'])
+  const DATA_ONLY_AREAS = new Set(['sidebar.nav', 'keybinds', 'themes', 'transcriptDirective', 'layouts'])
   const isDataOnly = (r) =>
     DATA_ONLY_AREAS.has(r?.area) || /^(statusBar|titleBar|composer)\./.test(r?.area ?? '')
   if (typeof reg?.render !== 'function') {

@@ -1,44 +1,41 @@
 /**
  * traders-desk — the Trader's Agent view inside Hermes Desktop.
  *
- * One sidebar row, and what it opens is the chart: the full Vela console that runs locally on port
- * 8787 (LuxAlgo MCP proxy + the Vela workspace shell). The other twelve LuxAlgo projects stay
- * agent-side, invoked on request — nothing here lists them.
+ * The arrangement he asked for (17 Sep): the chart sits BESIDE Hermes's own chat, never instead of
+ * it. The console (the full Vela shell on port 8787) is contributed as a **pane** docked to the
+ * right edge of the app's `workspace` pane — the pane that holds the conversation and its composer —
+ * so clicking Trader's Agent lands on: chat on the left, chart on the right, chart stretching to the
+ * window edge. When the app's session sidebar is open the chart simply gets narrower; it never
+ * stops reaching the edge, and the composer keeps its own minimum.
  *
  * Contributions:
- *   ROUTES_AREA       the console page — this IS the chart, and the row's click lands on it
- *   SIDEBAR_NAV_AREA  the row itself
- *   PALETTE_AREA      commands: open the console · toggle the reveal on launch
- *   STATUSBAR_AREAS   a chip that opens the console on click, and does the launch reveal
+ *   PANES_AREA        the console itself — one iframe, docked right of the chat pane
+ *   SIDEBAR_NAV_AREA  the row: navigates to the chat, where the chart pane is already beside it
+ *   PALETTE_AREA      show/hide the chart pane · toggle the reveal on launch · open in browser
+ *   STATUSBAR_AREAS   a chip that brings the chart back if the pane was closed
  *
- * One surface per view: the console lives in the PAGE and nothing else renders it. Every trigger
- * (sidebar row, status chip, palette command, launch reveal) NAVIGATES to /trading-desk, which is
- * the app's own way of putting a view in front — landing on that route mounts this page, so one
- * click is enough.
+ * One surface per view: the console lives in the PANE and nothing else renders it. Every trigger
+ * (sidebar row, status chip, palette command, launch reveal) either reveals that pane or navigates
+ * to the chat — no second frame, no second bridge loop, and a command relayed to a hidden copy can
+ * never happen.
  *
- * What that replaced, and why: the previous revision docked a *second* view through
- * `host.openWorkspace` and left the page as a placeholder. That call still reported success after
- * the app updated to v0.21.3 while the view stayed behind the route — the operator clicked the row
- * and got an empty page ("why didnt show anything"). The console was mounted, just never fronted.
- * One page, one frame, one bridge poll loop.
- *
- * The launch reveal navigates **once per app run**, delayed past boot, so the chart is what the app
- * opens on (he asked for exactly that); he can turn it off with the palette command, and switch away
- * freely afterwards — nothing re-fronts itself later.
+ * What this replaced: the console used to be a ROUTES_AREA page, which took the whole window and
+ * left no composer beside it. A page cannot host the app's own chat, so the arrangement has to be
+ * made of panes — the app's chat pane plus ours.
  *
  * A plugin may not import a chart library, so the console arrives as an iframe on its own origin —
  * same-origin fetches, its own storage, no CORS involved. The id MUST equal this folder name or the
  * loader refuses the plugin, and the file is never compiled, so it uses jsx() calls — never JSX
  * syntax. Colours come from theme vars only, so a skin change cannot break this.
  *
- * Deliberately not on this page: the app's wordmark, any repo catalogue, the killzone list
+ * Deliberately not in here: the app's wordmark, any repo catalogue, the killzone list
  * (killzones/plugin.js owns that), and no chat composer of its own — the operator types into
  * Hermes's own composer and the agent drives the chart through bin/trader-chart.
  */
 import {
   host,
   haptic,
-  ROUTES_AREA,
+  PANES_AREA,
   SIDEBAR_NAV_AREA,
   PALETTE_AREA,
   STATUSBAR_AREAS
@@ -50,8 +47,35 @@ const CONSOLE_ORIGIN = 'http://127.0.0.1:8787/'
 /* The console is served without cache validators, so an embedded refresh can keep the previous
    CSS/JS. A stamp per plugin load (i.e. per app start) makes the frame fetch the current files. */
 const APP_URL = `${CONSOLE_ORIGIN}?v=${Date.now().toString(36)}`
-const ROUTE = '/trading-desk'
+const PANE_ID = 'chart'
+const PANE_VIEW = `traders-desk:${PANE_ID}`
+/* The app's own chat workspace. Landing here puts the composer on screen with our pane beside it. */
+const CHAT_ROUTE = '/'
 const REVEAL_DELAY_MS = 1500
+
+/**
+ * The workspace layout that puts the chart beside the chat.
+ *
+ * Measured in the app bundle: a layout is a tree of split nodes
+ * `{ id, kind: 'row' | 'column', weights, children }` whose leaves are zones
+ * `{ id, panes: [paneId, …] }`, and layouts are contributed through the `layouts` area — the same
+ * registry the app's own Default / Focus / Terminal deck / Quad presets use. A layout is the only
+ * thing that can put the app's chat pane and a plugin pane side by side: contributing a pane alone
+ * leaves it unplaced (a registration with no zone never renders, even across a restart, and the
+ * Layouts dialog has no tray for unplaced panes).
+ *
+ * Weights are flex ratios, so the chart keeps the larger share and still shrinks when the session
+ * sidebar opens — the chat keeps its own 22vw floor.
+ */
+const DESK_LAYOUT = {
+  id: 'td-root',
+  kind: 'row',
+  weights: [1, 2.2],
+  children: [
+    { id: 'td-chat', panes: ['workspace'] },
+    { id: 'td-chart', panes: [PANE_VIEW] }
+  ]
+}
 
 const S = {
   page: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 },
@@ -89,11 +113,42 @@ let ctx_storage = null
 let autoRevealOn = true
 let reveal_attempted = false
 
-/** Put the console in front: the app's own navigation, so the page mounts and is shown. */
-function openConsole() {
+/**
+ * The app's visibility store for one pane, or null when this build has no such API.
+ * Shape (measured in the app bundle): a nanostore — `.get()`, `.set(value)`, `.listen(fn)`.
+ */
+function paneStore(view = PANE_VIEW) {
   try {
-    host.navigate(ROUTE)
-    return true
+    if (typeof host.paneVisibility === 'function') return host.paneVisibility(view)
+  } catch (err) {
+    /* fall through: reported as "no store", never faked */
+  }
+  return null
+}
+
+/** Show (or hide) the chart pane. Returns false when the app cannot do it — the caller says so. */
+function setChartVisible(visible) {
+  const store = paneStore()
+  if (store && typeof store.set === 'function') {
+    try {
+      store.set(!!visible)
+      return true
+    } catch (err) {
+      /* fall through */
+    }
+  }
+  return false
+}
+
+/**
+ * Bring the desk in front: reveal the chart pane, then navigate to the chat so the composer is on
+ * screen next to it. The navigation is the app's own mechanism — there is no second way in.
+ */
+function openDesk() {
+  const revealed = setChartVisible(true)
+  try {
+    host.navigate(CHAT_ROUTE)
+    return revealed
   } catch (err) {
     host.notify({
       kind: 'error',
@@ -105,41 +160,38 @@ function openConsole() {
 }
 
 /**
- * The console: one iframe on its own origin, filling the whole pane, under a small honest "starting"
+ * The console: one iframe on its own origin, filling the pane, under a small honest "starting"
  * overlay that only the frame's own load event clears. A plugin cannot probe a cross-origin server,
  * and inventing a guess would be a lie — so it reports "starting", never "broken".
  *
- * No title bar here on purpose (operator's call, 16 Sep): the console brings its own top row, and a
- * second row above it only stole height from the chart. Opening the console in a real browser moved
- * to the palette ("Trading: open console in browser").
+ * No title bar, no credit strip: the console brings its own top row, and furniture above the chart
+ * only steals height from it.
  */
-function TradersDeskPage() {
+function ChartPane() {
   const [loaded, setLoaded] = useState(false)
 
-  return jsxs('div', {
+  return jsx('div', {
     style: S.page,
-    children: [
-      jsxs('div', {
-        style: S.frameWrap,
-        children: [
-          jsx('iframe', {
-            src: APP_URL,
-            title: "Trader's Agent chart console",
-            style: S.frame,
-            onLoad: () => setLoaded(true)
-          }),
-          loaded
-            ? null
-            : jsxs('div', {
-                style: S.overlay,
-                children: [
-                  jsx('span', { children: 'Starting the local console…' }),
-                  jsx('span', { style: S.meta, children: CONSOLE_ORIGIN })
-                ]
-              })
-        ]
-      })
-    ]
+    children: jsxs('div', {
+      style: S.frameWrap,
+      children: [
+        jsx('iframe', {
+          src: APP_URL,
+          title: "Trader's Agent chart console",
+          style: S.frame,
+          onLoad: () => setLoaded(true)
+        }),
+        loaded
+          ? null
+          : jsxs('div', {
+              style: S.overlay,
+              children: [
+                jsx('span', { children: 'Starting the local console…' }),
+                jsx('span', { style: S.meta, children: CONSOLE_ORIGIN })
+              ]
+            })
+      ]
+    })
   })
 }
 
@@ -151,7 +203,7 @@ function DeskChip() {
     reveal_attempted = true
     if (!autoRevealOn) return undefined
     const timer = setTimeout(() => {
-      if (autoRevealOn && openConsole()) setFronted(true)
+      if (autoRevealOn && openDesk()) setFronted(true)
     }, REVEAL_DELAY_MS)
     return () => clearTimeout(timer)
   }, [])
@@ -159,10 +211,10 @@ function DeskChip() {
   return jsx('button', {
     type: 'button',
     style: S.chip,
-    title: 'Open the Trader’s Agent chart',
+    title: 'Open the Trader’s Agent chart beside the chat',
     onClick: () => {
       haptic()
-      if (openConsole()) setFronted(true)
+      if (openDesk()) setFronted(true)
     },
     children: fronted ? "Trader's Agent ●" : "Trader's Agent"
   })
@@ -185,21 +237,41 @@ export default {
 
     ctx.registerMany([
       {
-        /* The row's route, and the console itself: landing here IS seeing the chart. */
-        id: 'page',
-        area: ROUTES_AREA,
-        data: { path: ROUTE },
-        render: () => jsx(TradersDeskPage, {})
+        /* The console, docked to the right of the chat pane: `workspace` is where the conversation
+           and its composer live, and `pos: 'right'` puts the chart immediately beside it. Width is
+           a fraction, so the chart keeps reaching the window's right edge; the chat keeps its own
+           minimum (22vw, the app's own floor) and the two re-split when the sidebar opens. */
+        id: PANE_ID,
+        area: PANES_AREA,
+        title: "Trader's Agent chart",
+        data: {
+          placement: 'right',
+          dock: { pane: 'workspace', pos: 'right', enforce: true },
+          width: '58vw',
+          minWidth: '24vw',
+          collapsible: true
+        },
+        render: () => jsx(ChartPane, {})
       },
       {
+        /* A workspace preset the Layouts dialog offers as a card: chat left, chart right. Applying
+           it once is what makes the arrangement — and the app remembers the applied layout. */
+        id: 'layout',
+        area: 'layouts',
+        title: "Trader's Agent",
+        order: 5,
+        data: DESK_LAYOUT
+      },
+      {
+        /* The chat route: the click lands on the composer with the chart pane already beside it. */
         id: 'nav',
         area: SIDEBAR_NAV_AREA,
         order: 40,
-        data: { path: ROUTE, label: "Trader's Agent", codicon: 'graph' }
+        data: { path: CHAT_ROUTE, label: "Trader's Agent", codicon: 'graph' }
       },
       {
         /* Renders at boot, before anything is fronted — so the launch reveal lives here, and it
-           doubles as the click-to-open affordance. */
+           doubles as the way back when the chart pane has been closed. */
         id: 'chip',
         area: STATUSBAR_AREAS.right,
         render: () => jsx(DeskChip, {})
@@ -209,9 +281,29 @@ export default {
         area: PALETTE_AREA,
         data: {
           id: 'tradingDesk.open',
-          label: "Trading: open Trader's Agent",
-          keywords: ['trading', 'trader', 'vela', 'chart', 'luxalgo', 'desk'],
-          run: () => openConsole()
+          label: "Trading: show the chart beside the chat",
+          keywords: ['trading', 'trader', 'vela', 'chart', 'luxalgo', 'desk', 'pane'],
+          run: () => openDesk()
+        }
+      },
+      {
+        id: 'hide',
+        area: PALETTE_AREA,
+        data: {
+          id: 'tradingDesk.hide',
+          label: 'Trading: hide the chart pane',
+          keywords: ['trading', 'trader', 'chart', 'hide', 'close', 'pane'],
+          run: () => {
+            const hidden = setChartVisible(false)
+            if (!hidden) {
+              host.notify({
+                kind: 'warning',
+                title: "Trader's Agent",
+                message: 'This build has no pane-visibility API — close the pane with its own ✕.'
+              })
+            }
+            return hidden
+          }
         }
       },
       {
@@ -230,15 +322,14 @@ export default {
               kind: 'info',
               title: "Trader's Agent",
               message: autoRevealOn
-                ? 'The console will open by itself when the app starts.'
-                : 'Launch reveal is off — the row and the chip still open the console.'
+                ? 'The chart pane will open beside the chat when the app starts.'
+                : 'Launch reveal is off — the row, the chip and ⌘K still open it.'
             })
           }
         }
       },
       {
-        /* The page itself is chart-only now, so the escape hatch to a real browser window lives
-           here instead of in a header row above the chart. */
+        /* The pane is chart-only, so the escape hatch to a real browser window lives here. */
         id: 'openInBrowser',
         area: PALETTE_AREA,
         data: {
@@ -255,6 +346,6 @@ export default {
 
     /* A load beacon (proves a save reaches the running app): console.error reaches ~/.hermes/logs/desktop.log (console.log does not), so a
        plugin the app silently skipped is distinguishable from one that actually loaded. */
-    console.error('[traders-desk] loaded — 6 contributions registered')
+    console.error('[traders-desk] loaded — 8 contributions registered')
   }
 }
