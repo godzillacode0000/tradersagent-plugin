@@ -589,62 +589,8 @@ pre {
 .vela-mark-note { font-size: var(--lx-fs-2xs); color: var(--lx-fg-faint); }
 
 
-/* ── Chart mode / Script mode (operator's call, 17 Sep — Quant has both surfaces too) ───────────
-   Script mode shows the Pine the engine is actually given, and runs it on this chart. The hide
-   rule is declared here, AFTER `.panel { display: flex }`, because same-specificity means the
-   later rule wins — written above it, the panel would paint stacked instead of hidden. */
-.modes { display: inline-flex; gap: 2px; padding: 1px; border: 1px solid var(--lx-border-soft); border-radius: 6px; }
-.modes .btn.is-on { background: var(--lx-surface-2, rgba(255, 255, 255, 0.08)); }
-
-.main[data-mode="script"] { grid-template-columns: 440px minmax(0, 1fr); }
-.main[data-mode="script"][data-detail="on"] { grid-template-columns: 440px minmax(0, 1fr) 340px; }
-.main[data-mode="script"] .panel--left { display: none; }
-.main:not([data-mode="script"]) .panel--script { display: none; }
-.panel--script { border-right: 1px solid var(--lx-border); }
-
-.scr { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-.scr__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
-             padding: 10px 12px; border-bottom: 1px solid var(--lx-border-soft); }
-.scr__title { font-weight: 600; font-size: 13px; }
-/* The wrap toggle sits with the engine line, not pushed to the far edge: the title and the engine
-   note stay the header's left/right pair, and this is a third, optional control. */
-#scr-wrap { margin-left: auto; font-size: 11px; padding: 2px 8px; }
-#scr-source.is-wrap { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: hidden; }
-.scr__load { display: flex; gap: 6px; padding: 10px 12px 0; }
-.scr__load input { flex: 1 1 auto; min-width: 0; }
-.scr__hits { max-height: 140px; overflow-y: auto; padding: 6px 12px 0; }
-.scr__hits button { display: block; width: 100%; text-align: left; font-size: 12px; padding: 4px 6px;
-                    border: 1px solid transparent; border-radius: 4px; background: none;
-                    color: inherit; cursor: pointer; }
-.scr__hits button:hover { border-color: var(--lx-border-soft); }
-/* The editor is a code surface, not prose: no soft wrap (see wrap="off" in the markup), a real
-   monospace stack, and horizontal scrolling for the long `indicator(...)` / licence lines. `pre`
-   also keeps the leading spaces a Pine block is written with, which pre-wrap silently reflowed. */
-#scr-source { flex: 1 1 auto; min-height: 180px; margin: 10px 12px; padding: 10px 12px; resize: none;
-              font: var(--lx-fs-sm)/1.5 var(--lx-font-mono);
-              white-space: pre; overflow: auto; tab-size: 4;
-              background: var(--lx-surface-2, rgba(255, 255, 255, 0.03)); color: inherit;
-              border: 1px solid var(--lx-border); border-radius: 6px; }
-.scr__actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px; }
-/* Because the editor does not wrap, the sideways bar is the only hint that a long `indicator(...)`
-   line continues past the edge. The global thumb is a hairline in the dark — too easy to miss here. */
-#scr-source { scrollbar-color: var(--lx-border-strong) var(--lx-surface-3); }
-#scr-source::-webkit-scrollbar { height: 12px; width: 12px; }
-#scr-source::-webkit-scrollbar-track { background: var(--lx-surface-3); border-radius: 6px; }
-#scr-source::-webkit-scrollbar-thumb { background: var(--lx-border-strong); border-radius: 6px;
-                                       border: 3px solid transparent; background-clip: content-box; }
-#scr-source::-webkit-scrollbar-thumb:hover { background: var(--lx-fg-muted); background-clip: content-box; }
-.scr__out { border-top: 1px solid var(--lx-border-soft); padding: 10px 12px; overflow-y: auto;
-            max-height: 38%; font-size: 12px; line-height: 1.5; }
-.scr__line { white-space: pre-wrap; word-break: break-word; margin-bottom: 4px; opacity: 0.9; }
-.scr__line--ok { color: #089981; }
-.scr__line--err { color: #f23645; }
-.scr__line--warn { color: #f0a020; }
-
-@media (max-width: 1099px) {
-  .main[data-mode="script"], .main[data-mode="script"][data-detail="on"] { grid-template-columns: minmax(0, 1fr); }
-  /* Stacked (what the plugin's own pane gets): the editor keeps a workable block and the chart keeps
-     the rest — 60dvh of editor above a chart is not chart-first. */
-  .main[data-mode="script"] .panel--script { max-height: 45dvh; }
-  .main[data-mode="script"] .panel--chart { min-height: 320px; }
-}
+/* ── Script surface (removed on the operator's call, 17 Sep) ─────────────────────────────────
+   The Pine editor that used to live here (and the Chart | Script mode switch) is gone: the
+   console is the chart, the Library and the detail panel. Scripts still run — the detail
+   panel's Run PineTS, console/bin/trader-chart, and the trader-chart MCP tools — they just do
+   not get a text box of their own. The editor and its styles are in git history (b30222c). */

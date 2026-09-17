@@ -24,12 +24,6 @@
               aria-pressed="false" title="Show the indicator Library">☰ Library</button>
       <button type="button" class="btn btn--ghost btn--toggle" id="detail-open"
               aria-pressed="false" title="Show the Pine source / write-up panel">▤ Details</button>
-      <!-- Chart mode / Script mode: Quant has the same two surfaces. Script mode shows the Pine that
-           PineTS is actually given, and runs it on this chart. -->
-      <span class="modes" role="group" aria-label="Chart or script mode">
-        <button type="button" class="btn btn--ghost is-on" id="mode-chart" aria-pressed="true">Chart</button>
-        <button type="button" class="btn btn--ghost" id="mode-script" aria-pressed="false">Script</button>
-      </span>
       <span id="mcp-status" class="pill pill--wait" title="LuxAlgo MCP backend">MCP: checking…</span>
       <span id="bars-status" class="pill pill--wait" title="Where the candles come from">bars: loading…</span>
       <span id="indicator-count" class="pill" title="Indicators that actually executed on the chart — a mount that silently did nothing is never counted">0 indicators</span>
@@ -96,40 +90,11 @@
 
     </section>
 
-    <!-- LEFT (Script mode): the editor. Whatever is in here is what PineTS is given, and the
-         report underneath says what the engine did with it — series, painted natives, or the
-         typed failure code (NOT_RUNNABLE[while], RUNTIME_CRASH[pinets-get_v], …). -->
-    <section class="panel panel--script">
-      <div class="scr" id="scr">
-        <header class="scr__head">
-          <span class="scr__title">PineTS script</span>
-          <span class="muted" id="scr-engine">engine: PineTS · this chart's bars</span>
-          <!-- Long `indicator(...)` lines do not wrap by default (a soft wrap breaks them mid-token,
-               which is what made this pane look crooked). This flips it for anyone who would rather
-               read wrapped code than scroll sideways; the choice sticks. -->
-          <button type="button" class="btn btn--ghost btn--toggle" id="scr-wrap" aria-pressed="false"
-                  title="Wrap long lines instead of scrolling sideways">↵ wrap</button>
-        </header>
-        <div class="scr__load">
-          <input id="scr-query" type="search" placeholder="load from the Library — e.g. order block">
-          <button type="button" class="btn btn--ghost" id="scr-load">Load</button>
-        </div>
-        <div class="scr__hits" id="scr-hits"></div>
-        <!-- wrap="off": Pine is written in lines, and a soft wrap breaks long statements mid-token —
-             which is exactly what made this pane look crooked. Long lines scroll sideways instead,
-             like the TradingView editor. -->
-        <textarea id="scr-source" spellcheck="false" wrap="off" aria-label="Pine source"
-placeholder="//@version=6
-indicator(&quot;my script&quot;, overlay=true)
-plot(ta.ema(close, 20), &quot;ema&quot;)"></textarea>
-        <div class="scr__actions">
-          <button type="button" class="btn btn--primary" id="scr-run">Run on chart</button>
-          <button type="button" class="btn btn--ghost" id="scr-native">Run as native</button>
-          <button type="button" class="btn btn--ghost" id="scr-clear">Clear chart</button>
-        </div>
-        <div class="scr__out" id="scr-out" aria-live="polite"></div>
-      </div>
-    </section>
+    <!-- The Pine script surface (Script mode) used to sit here. Removed on the operator's call
+         (17 Sep): the console is the chart, the Library and the detail panel. Scripts still run —
+         through the detail panel's Run PineTS, the CLI, or the MCP tools — they just do not get a
+         text box of their own. The editor lives in git history (commit b30222c) if it is ever wanted
+         back. -->
 
     <!-- CENTER: the chart -->
     <section class="panel panel--chart">
@@ -168,8 +133,6 @@ plot(ta.ema(close, 20), &quot;ema&quot;)"></textarea>
 <script src="./pinets-runner.js"></script>
 <script src="./overlay.js"></script>
 <script src="./chart-bridge.js"></script>
-<!-- Script mode: the Pine editor surface (it queues the same commands the CLI uses). -->
-<script src="./script-panel.js"></script>
 
 <!-- The FULL Vela application. The workspace is absent from the root global build
      above (window.Vela.VelaWorkspace === undefined), so it comes in as ES modules

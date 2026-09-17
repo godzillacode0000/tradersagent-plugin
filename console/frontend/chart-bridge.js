@@ -288,44 +288,17 @@
           break;
         }
         case 'script': {
-          /* Script mode, driven: load a script into the editor, run what is in it, or read it back.
-             `command.mode`: 'show' | 'draw' | 'native' | 'clear'. This is what makes the editor a
-             surface the agent can use instead of a text box only a human clicks. */
-          const panel = window.ScriptPanel;
-          if (!panel) { out.detail = 'this page has no script panel — reload the console and retry'; break; }
-          const what = String(command.mode || 'show').toLowerCase();
-          if (typeof command.source === 'string' && command.source.trim()) {
-            panel.setSource(command.source);
-            out.loaded = command.source.length;
-          }
-          if (what === 'show') {
-            panel.setMode('script');
-            out.ok = true;
-            out.detail = 'editor holds ' + panel.getSource().split('\n').length + ' line(s)' +
-              (command.source ? ' (replaced)' : '');
-            break;
-          }
-          if (what === 'clear') { await window.ChartBridge.run({ action: 'clear' }); out.ok = true;
-            out.detail = 'chart cleared'; break; }
-          out.ok = true;
-          out.detail = 'running the editor\'s script (' + what + ')';
-          try { await api('/api/chart/result', out); } catch (err) { /* run anyway */ }
-          void panel.runNow(what === 'native' ? 'apply' : 'draw');
-          return out;
+          /* The Pine editor surface was removed on the operator's call (17 Sep): this build has no
+             script panel, so the command answers honestly instead of pretending to load it. Scripts
+             still run through `apply` (PineTS over the live bars) — that is the path to use. */
+          out.detail = 'this build has no script panel (the Pine editor was removed, 17 Sep) — ' +
+            'send {\"action\":\"apply\",\"pine\":\"…\"} to run a script over the chart instead';
+          break;
         }
         case 'mode': {
-          /* Which surface the console shows: the chart, or the Pine script PineTS is given. The page
-             owns this state, so the agent asks for it instead of hunting for a button. */
-          const wanted = String(command.value || 'script').toLowerCase();
-          const panel = window.ScriptPanel;
-          if (!panel || typeof panel.setMode !== 'function') {
-            out.detail = 'this page has no script panel — reload the console and retry';
-            break;
-          }
-          panel.setMode(wanted === 'chart' ? 'chart' : 'script');
-          out.ok = true;
-          out.mode = wanted;
-          out.detail = 'console is in ' + wanted + ' mode';
+          /* Likewise gone with the editor: the console only has the chart surface now. */
+          out.detail = 'this build has no script panel (the Pine editor was removed, 17 Sep) — ' +
+            'the console shows the chart, the Library and the detail panel';
           break;
         }
         case 'reload': {
