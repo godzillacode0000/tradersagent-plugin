@@ -192,25 +192,91 @@
   }
 
   /**
+   * Every failure carries a stable code, not just prose.
+   *
+   * A caller (the CLI, the MCP tool, the agent reading the README) should be able to branch on
+   * `code` instead of regex-matching a sentence — and the README can then document the closed set.
+   * `reason` stays for humans; `error` is the contract. Codes:
+   *
+   *   NOT_RUNNABLE       the engine cannot execute this construct (feature: while | for-in | import)
+   *   RUNTIME_CRASH      PineTS threw while running (kind: pinets-get_v | pinets-ticker | pinets-runtime)
+   *   TOO_FEW_BARS       the chart has too little history loaded
+   *   ENGINE_UNAVAILABLE the PineTS module could not be fetched
+   *   TIMEOUT            the run exceeded the time budget
+   */
+  const ERROR_HINTS = {
+    NOT_RUNNABLE: 'PineTS cannot run this construct — it needs a full TradingView engine.',
+    RUNTIME_CRASH: 'PineTS threw mid-run; the engine (not the call) is at fault. Try a simpler script.',
+    TOO_FEW_BARS: 'Not enough history on the chart; widen the range or scroll back, then retry.',
+    ENGINE_UNAVAILABLE: 'PineTS could not be fetched (offline/CDN). Retry when online.',
+    TIMEOUT: 'The run exceeded its time budget. Retry, or run it on a shorter history.',
+    NO_SOURCE: 'Pass the script source: a LuxAlgo Library slug or a .pine file.',
+  };
+
+  /** Which construct the engine refused, named the way the docs name it. */
+  function refusedFeature(msg) {
+    if (/while/i.test(msg)) return 'while';
+    if (/import/i.test(msg)) return 'import';
+    if (/for\s*(\.\.|in)/i.test(msg)) return 'for-in';
+    return null;
+  }
+
+  /** `… at line 42 …` / `line 42` in an engine error → the line number when one is quoted. */
+  function quotedLine(msg) {
+    const m = String(msg).match(/line[^0-9]{0,4}([0-9]{1,6})/i);
+    return m ? Number(m[1]) : null;
+  }
+
+  function classify(msg, fallbackCode) {
+    const text = String(msg || '');
+    if (/did not finish within/i.test(text)) {
+      return { code: 'TIMEOUT', message: text, retryable: true, hint: ERROR_HINTS.TIMEOUT };
+    }
+    const feature = /unimplemented|not supported|unsupported/i.test(text) ? refusedFeature(text) : null;
+    if (feature) {
+      return { code: 'NOT_RUNNABLE', feature, message: text, retryable: false, hint: ERROR_HINTS.NOT_RUNNABLE };
+    }
+    if (/TOO_FEW_BARS|only [0-9]+ bars/i.test(text)) {
+      return { code: 'TOO_FEW_BARS', message: text, retryable: true, hint: ERROR_HINTS.TOO_FEW_BARS };
+    }
+    if (/PineTS unavailable/i.test(text)) {
+      return { code: 'ENGINE_UNAVAILABLE', message: text, retryable: true, hint: ERROR_HINTS.ENGINE_UNAVAILABLE };
+    }
+    if (/is not defined|Cannot read propert|undefined \(reading/i.test(text)) {
+      const kind = /get_v/.test(text) ? 'pinets-get_v'
+        : (/ticker|syminfo/i.test(text) ? 'pinets-ticker' : 'pinets-runtime');
+      return { code: 'RUNTIME_CRASH', kind, message: text, line: quotedLine(text), retryable: false,
+               hint: ERROR_HINTS.RUNTIME_CRASH };
+    }
+    const code = fallbackCode || 'RUNTIME_CRASH';
+    return { code, message: text, line: quotedLine(text), retryable: false, hint: ERROR_HINTS[code] || null };
+  }
+
+  /**
    * Run `source` over `bars` with PineTS.
    * Resolves `{ ok: true, ms, series, strategy }` or `{ ok: false, reason }` —
    * never throws, so the caller can always render something truthful.
    */
   async function run(source, bars, options) {
     const opts = options || {};
+    if (!String(source || '').trim()) {
+      return { ok: false, reason: 'no Pine source given', error: classify('no Pine source given', 'NO_SOURCE') };
+    }
     const reason = runnable(source);
-    if (reason) return { ok: false, reason };
+    if (reason) return { ok: false, reason, error: classify(reason) };
 
     const count = Array.isArray(bars) ? bars.length : 0;
     if (count < 30) {
-      return { ok: false, reason: `not runnable: only ${count} bars available (need at least 30)` };
+      const why = `only ${count} bars available (need at least 30)`;
+      return { ok: false, reason: 'not runnable: ' + why, error: classify(why, 'TOO_FEW_BARS') };
     }
 
     let mod;
     try {
       mod = await loadPineTS();
     } catch (err) {
-      return { ok: false, reason: 'PineTS unavailable: ' + ((err && err.message) || err) };
+      const why = 'PineTS unavailable: ' + ((err && err.message) || err);
+      return { ok: false, reason: why, error: classify(why, 'ENGINE_UNAVAILABLE') };
     }
 
     const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
@@ -234,7 +300,8 @@
                drawings: out && out.plots ? Object.keys(out.plots).filter((k) => k.startsWith('__')) : [],
                ctor: built.ctor, context: built.context, raw: out };
     } catch (err) {
-      return { ok: false, reason: 'PineTS error: ' + ((err && err.message) || err),
+      const why = String((err && err.message) || err);
+      return { ok: false, reason: 'PineTS error: ' + why, error: classify(why),
                ctor: built.ctor, context: built.context };
     }
   }

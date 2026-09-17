@@ -87,6 +87,15 @@ def save_state(root: str | Path, payload: dict) -> dict:
         "series": payload.get("series"),
         "bars": payload.get("bars"),
         "layout": payload.get("layout"),
+        # The page publishes what IT can execute (frontend/chart-bridge.js). The server validates
+        # commands against this list, because a whitelist living only in the backend drifted from the
+        # page once already: an action passed validation, reached a page with no such case, and the
+        # command came back "unknown action" with nothing done. Sanitised here — it decides what may
+        # be executed later, and it arrives from a page.
+        "actions": ([str(a).strip().lower() for a in payload.get("actions")
+                     if isinstance(a, (str, bytes)) and str(a).strip()]
+                    if isinstance(payload.get("actions"), (list, tuple)) else []),
+        "timeframe_reported": payload.get("timeframe_reported"),
     }
     if payload.get("shot"):
         path = _decode_shot(root, f"hb-{int(state['at'])}", str(payload["shot"]))
@@ -142,6 +151,12 @@ def record_result(root: str | Path, payload: dict) -> dict:
         "series": payload.get("series"),
         "added": payload.get("added"),
         "ms": payload.get("ms"),
+        # The page's evidence for a mutation: the stable failure code + hint (pinets-runner.js) and
+        # what the surface looked like AFTER the call. Dropping these here is invisible in the page
+        # and reads as "the tool reported nothing" to the agent, so they are carried through as-is.
+        "error": payload.get("error"),
+        "onCanvas": payload.get("onCanvas"),
+        "natives": payload.get("natives"),
     }
     if payload.get("shot"):
         path = _decode_shot(root, f"shot-{rid}", str(payload["shot"]))

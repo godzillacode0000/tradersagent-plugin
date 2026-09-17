@@ -26,6 +26,12 @@
   let pollDelay = POLL_FAST;
   const seen = new Set();            // ids already executed (a pushed command must not re-run on poll)
 
+  /* What THIS page can execute. The server keeps its own whitelist, and the two drifted apart once
+     already (an action passed the server, reached the page, and came back "unknown action" — HTTP
+     200 with nothing done). So the page publishes its real list in every heartbeat and the server
+     validates against that instead of trusting a constant. */
+  const ACTIONS = ['apply', 'add', 'draw', 'clear', 'probe', 'market', 'shot'];
+
   const api = async (path, body) => {
     const res = await fetch(path, body
       ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
@@ -104,6 +110,7 @@
         series: inspect().series,
         drawings: inspect().drawings,
         bars: barsList.length || null,
+        actions: ACTIONS,          // what this page can actually do (see ACTIONS above)
         layout: 'workspace',
       });
     } catch (err) {
@@ -123,7 +130,11 @@
           if (!c || typeof window.chartBars !== 'function') throw new Error('no chart on this page');
           const bars = await window.chartBars();
           const res = await window.PineTSRunner.run(pine, bars, { name: 'agent' });
-          if (!res.ok) { out.detail = 'not runnable: ' + (res.reason || 'unknown'); break; }
+          if (!res.ok) {
+            out.detail = 'not runnable: ' + (res.reason || 'unknown');
+            out.error = res.error || null;             // stable code + hint, not just prose
+            break;
+          }
           const paint = await window.PineTSPaint.paintNative(pine);
           const partial = paint.added && res.series.length > 1
             ? ' · ' + (res.series.length - 1) + ' other plot(s) not drawn (no exact Vela native)'
@@ -153,10 +164,18 @@
         }
         case 'add': {
           if (!c || typeof c.addNativeIndicator !== 'function') throw new Error('no chart on this page');
+          const before = (typeof c.presentNativeIndicators === 'function') ? c.presentNativeIndicators() : [];
           c.addNativeIndicator(command.native);
-          out.ok = true;
-          out.added = command.native;
-          out.detail = 'added Vela native "' + command.native + '"';
+          /* Read the chart back instead of echoing the request: the handle accepts the call even
+             when the study never lands, and "ok" from a request is not evidence of a painted pane. */
+          const after = (typeof c.presentNativeIndicators === 'function') ? c.presentNativeIndicators() : [];
+          const gained = after.filter((n) => !before.includes(n));
+          out.ok = gained.length > 0 || after.includes(command.native);
+          out.added = out.ok ? command.native : null;
+          out.natives = after;
+          out.detail = out.ok
+            ? 'added Vela native "' + command.native + '" · chart now carries: ' + (after.join(', ') || 'none')
+            : 'asked for "' + command.native + '" but the chart still carries: ' + (after.join(', ') || 'none');
           break;
         }
         case 'draw': {
@@ -166,7 +185,11 @@
           if (!window.ChartOverlay) throw new Error('no overlay on this page — reload the console');
           const bars = await window.chartBars();
           const res = await window.PineTSRunner.run(pine, bars, { name: 'agent-draw' });
-          if (!res.ok) { out.detail = 'not runnable: ' + (res.reason || 'unknown'); break; }
+          if (!res.ok) {
+            out.detail = 'not runnable: ' + (res.reason || 'unknown');
+            out.error = res.error || null;             // same contract as `apply`
+            break;
+          }
           const plots = (res.raw && res.raw.plots) || {};
           const flatten = (key) => {
             const node = plots[key];
@@ -186,19 +209,34 @@
             break;
           }
           const drawn = await window.ChartOverlay.apply({ boxes, lines, labels }, command.opts || {});
-          out.ok = !!drawn.ok;
+          /* What is on the canvas NOW, not what the script asked for. apply() may drop objects it
+             cannot map, and a silent drop reads to the operator as an empty chart. */
+          const onCanvas = (window.ChartOverlay.state ? window.ChartOverlay.state() : null);
+          out.ok = !!drawn.ok && !!onCanvas &&
+            (onCanvas.boxes + onCanvas.lines + onCanvas.labels) > 0;
+          out.onCanvas = onCanvas;
           out.detail = 'ran in ' + res.ms + ' ms · overlay drew ' + (drawn.boxes || 0) + ' box(es), ' +
             (drawn.lines || 0) + ' line(s), ' + (drawn.labels || 0) + ' label(s)' +
+            (onCanvas ? ' · verified on canvas: ' + onCanvas.boxes + '/' + onCanvas.lines + '/' + onCanvas.labels : '') +
             (drawn.reason ? ' · ' + drawn.reason : '') +
             (drawn.mapping ? ' · window bars ' + drawn.mapping.i0 + '+' + drawn.mapping.n + ' of ' + drawn.mapping.bars +
               ', price ' + Math.round(drawn.mapping.lo) + '-' + Math.round(drawn.mapping.hi) : '');
           break;
         }
         case 'clear': {
-          const n = window.ChartOverlay ? window.ChartOverlay.clear() : 0;
+          if (window.ChartOverlay) window.ChartOverlay.clear();
           const removed = (window.PineTSPaint && window.PineTSPaint.clear) ? window.PineTSPaint.clear() : 0;
-          out.ok = true;
-          out.detail = 'overlay cleared (' + n + ') · painted natives removed: ' + removed;
+          /* Same rule as every other mutation: report the state after the call, not the intent. */
+          const left = window.ChartOverlay && window.ChartOverlay.state ? window.ChartOverlay.state() : null;
+          const stillPainted = (window.PineTSPaint && window.PineTSPaint.added) ? window.PineTSPaint.added : [];
+          const onChart = (c && typeof c.presentNativeIndicators === 'function') ? c.presentNativeIndicators() : null;
+          out.ok = (!left || (left.boxes + left.lines + left.labels) === 0) && stillPainted.length === 0;
+          out.natives = onChart;
+          out.detail = 'painted natives removed: ' + removed +
+            ' · overlay now: ' + (left ? left.boxes + '/' + left.lines + '/' + left.labels : 'unknown') +
+            // `clear` removes the overlay + what OUR paint layer added — an indicator the agent added
+            // with `add` (or the operator added by hand) is not ours to remove, and the answer says so.
+            ' · chart still carries: ' + (onChart ? (onChart.join(', ') || 'nothing') : 'unknown');
           break;
         }
         case 'probe': {

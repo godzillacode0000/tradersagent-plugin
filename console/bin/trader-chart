@@ -120,6 +120,41 @@ def send(args, command: dict) -> dict:
     return result
 
 
+def error_line(result: dict) -> str:
+    """One line for a structured failure: `CODE[feature/kind]: message (hint)`.
+
+    Mirrors the page's contract (console/frontend/pinets-runner.js): a stable code, an optional
+    feature/kind, a line number when the engine quoted one, and a hint that says what to do next.
+    """
+    err = result.get("error") if isinstance(result, dict) else None
+    if not isinstance(err, dict):
+        return ""
+    bits = [str(err.get("code") or "UNKNOWN")]
+    if err.get("feature") or err.get("kind"):
+        bits.append(str(err.get("feature") or err.get("kind")))
+    head = bits[0] + ("[" + "/".join(bits[1:]) + "]" if len(bits) > 1 else "")
+    line = f" (line {err['line']})" if err.get("line") else ""
+    tail = f" — {err['hint']}" if err.get("hint") else ""
+    return f"  {head}{line}: {err.get('message')}{tail}"
+
+
+def cmd_caps(args) -> int:
+    """What the attached page can actually execute, as published in its own heartbeat."""
+    state = require_open(args)
+    actions = state.get("actions") or []
+    if args.json:
+        print(json.dumps({"actions": sorted(actions) if actions else [],
+                          "reported_age_s": state.get("age_s")}, indent=2, ensure_ascii=False))
+        return 0 if actions else 1
+    if not actions:
+        print("the page has not published its action list — it is running an older console build, "
+              "or no page is attached. The server will fall back to its built-in list.")
+        return 1
+    print("page can execute: " + ", ".join(sorted(actions)))
+    print(f"  reported {state.get('age_s')}s ago · {state.get('symbol')} {state.get('timeframe')}")
+    return 0
+
+
 def cmd_state(args) -> int:
     state = require_open(args)
     if args.json:
@@ -161,6 +196,9 @@ def cmd_draw(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
+        extra = error_line(result)
+        if extra:
+            print(extra)
     return 0 if result.get("ok") else 1
 
 
@@ -186,6 +224,9 @@ def cmd_apply(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
+        extra = error_line(result)
+        if extra:
+            print(extra)
     return 0 if result.get("ok") else 1
 
 
@@ -250,6 +291,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("clear", help="clear the overlay and the natives our paint layer added")
     s.set_defaults(func=cmd_clear)
+
+    s = sub.add_parser("caps", help="what the attached page can execute (from its heartbeat)")
+    s.set_defaults(func=cmd_caps)
 
     s = sub.add_parser("wait", help="wait for an earlier command's outcome")
     s.add_argument("id", type=int)

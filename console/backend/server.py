@@ -943,7 +943,27 @@ def ep_agents(params: dict) -> dict:
     return {"agents": studies}
 
 
-CHART_ACTIONS = {"apply", "add", "market", "shot", "draw", "clear", "overlay", "probe"}
+# Fallback ONLY. The live page publishes its real action list in every heartbeat (`actions`), and a
+# command is validated against THAT while a page is attached. This constant drifted from the page once
+# already — "overlay" sat here with no matching case in frontend/chart-bridge.js, so the command
+# passed this check, got an HTTP 200, and the page replied "unknown action" with nothing done.
+CHART_ACTIONS_FALLBACK = {"apply", "add", "market", "shot", "draw", "clear", "probe"}
+
+
+def chart_actions() -> set:
+    """The actions the attached page can actually execute.
+
+    The page is the authority (it ships the code that runs them); the constant above is only used when
+    no page has ever checked in. Read from the same state the heartbeat writes.
+    """
+    try:
+        state = load_chart_state(AGENTS_ROOT) or {}
+    except Exception:  # noqa: BLE001 — a missing/!dict state must not break command validation
+        state = {}
+    published = state.get("actions") if isinstance(state, dict) else None
+    if isinstance(published, list) and published:
+        return {str(a).strip().lower() for a in published if str(a).strip()}
+    return set(CHART_ACTIONS_FALLBACK)
 
 
 def ep_chart_state(params: dict) -> dict:
@@ -1226,9 +1246,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/chart/command":
                 action = str(payload.get("action", "")).strip().lower()
-                if action not in CHART_ACTIONS:
+                supported = chart_actions()
+                if action not in supported:
                     self._fail(f"unknown chart action '{action}'", HTTPStatus.BAD_REQUEST,
-                               "unknown_action", {"supported": sorted(CHART_ACTIONS)})
+                               "unknown_action",
+                               {"supported": sorted(supported),
+                                "source": "page heartbeat" if supported != CHART_ACTIONS_FALLBACK else "built-in fallback"})
                     return
                 command = enqueue_chart_command(AGENTS_ROOT, payload)
                 pushed = STREAM.publish({"type": "command", "command": command},

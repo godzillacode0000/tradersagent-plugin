@@ -6,6 +6,40 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Capability handshake: the page publishes what it can execute.** Every heartbeat now carries the
+  page's real action list (`frontend/chart-bridge.js`), the backend validates commands against *that*
+  (`backend/server.py` → `chart_actions()`, falling back to a constant only when no page has ever
+  checked in), and `bin/trader-chart caps` prints it. This closes a measured silent failure: `overlay`
+  sat in the backend whitelist while the page had no case for it, so the command passed validation, the
+  console answered HTTP 200 and the page replied "unknown action" — nothing done, no error.
+- **Every mutation reports what actually changed.** `add` re-reads the chart's native indicators and
+  reports the list it finds (not the request), `draw` reports what is *verified on canvas* plus the
+  live overlay counts, and `clear` says what the chart still carries afterwards. Request-echoed `ok`
+  is gone: a handle that accepts a call without painting no longer reads as success.
+- **Structured failure codes.** The runner returns `error: {code, message, line?, hint, retryable}`
+  beside the prose: `NOT_RUNNABLE[while|for-in|import]`, `RUNTIME_CRASH[pinets-get_v|pinets-ticker|
+  pinets-runtime]`, `TOO_FEW_BARS`, `ENGINE_UNAVAILABLE`, `TIMEOUT`. The CLI and the MCP tools print
+  them, so a caller branches on a code instead of matching a sentence.
+- **MCP tool annotations** on all ten tools (title, `readOnlyHint`, `destructiveHint`,
+  `openWorldHint`), plus `chart_draw` and `chart_clear` so the MCP surface mirrors the CLI. New tests
+  pin the contract: every tool declares a title and an explicit read-only flag, the mutating ones say
+  so, and the Library tools are marked as leaving the machine.
+- **A skill for the agent** (`skills/trading-desk/SKILL.md`): the tool order, the one-indicator-at-a-
+  time rule, how to react to each failure code, and what the engine cannot do — so a fresh agent does
+  not have to rediscover it.
+- Tests for the above: `console/backend/tests/test_chart_caps.py` (validation follows the page, the
+  fallback never lists an unimplemented action, garbage payloads cannot smuggle actions past the state
+  boundary) and `test_mcp_tool_annotations.py`.
+
+### Fixed
+
+- **`save_state` and `record_result` dropped fields.** Both whitelist what they persist, and both were
+  silently discarding the new evidence (`actions` in the state; `error`, `onCanvas`, `natives` in a
+  result) — the page reported correctly and the agent saw nothing. Field lists updated, with the
+  boundaries sanitised (a non-list `actions` is refused, not iterated character by character).
+- **`chart_add_indicator` claimed success on a request echo** and `chart_clear` claimed the chart was
+  empty without looking — both now read the chart back.
+
 - **Tests, and a CI job that runs them.** `console/backend/tests/` — 63 tests, stdlib-only apart from
   the MCP layer: the study store, the chat bridge, the chart bridge, the push channel (what counts as
   a push, matching a result back to its command, and the honest case where no view is attached), and

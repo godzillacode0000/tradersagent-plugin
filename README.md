@@ -128,8 +128,16 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_apply_pine` | run Pine over the chart's live bars and paint a matching native |
 | `chart_add_indicator` | add a Vela native (`ema`, `supertrend`, `donchian-channels`, …) |
 | `chart_set_market` | switch symbol / timeframe |
+| `chart_draw` | run Pine and paint the boxes/lines/labels it builds on the chart overlay |
+| `chart_clear` | clear the overlay and the indicators our paint layer added (then report what is left) |
 | `library_search` | search the LuxAlgo Library |
 | `library_indicator` | one indicator's write-up, licence and Pine source |
+
+Every tool carries MCP annotations (title, `readOnlyHint`, `destructiveHint`, `openWorldHint`), and the
+mutating ones answer with what the chart looks like *after* the call — a request echoed back is not a
+painted pane. Failures come back as a code beside the prose
+(`NOT_RUNNABLE[while]`, `RUNTIME_CRASH[pinets-get_v]`, `TOO_FEW_BARS`, `ENGINE_UNAVAILABLE`, `TIMEOUT`),
+so a caller can branch without regex-matching a sentence.
 
 **Or the CLIs**, if you would rather shell out:
 

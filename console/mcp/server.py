@@ -40,11 +40,22 @@ import urllib.request
 
 try:
     from fastmcp import FastMCP
-except ImportError:  # pragma: no cover - a helpful message beats a stack trace
-    raise SystemExit(
-        "fastmcp is not installed. Run this server with `uvx fastmcp run server.py`, "
-        "or `uv pip install fastmcp` first."
-    )
+except ImportError:  # the MCP SDK ships the same FastMCP class; prefer it over failing
+    try:
+        from mcp.server.fastmcp import FastMCP
+    except ImportError:  # pragma: no cover - a helpful message beats a stack trace
+        raise SystemExit(
+            "neither `fastmcp` nor `mcp` is installed. Run this server with "
+            "`uvx fastmcp run server.py`, or `uv pip install fastmcp` first."
+        )
+
+try:
+    from mcp.types import ToolAnnotations
+except ImportError:  # pragma: no cover - older/!!fastmcp-only installs
+    try:
+        from fastmcp import ToolAnnotations  # type: ignore
+    except ImportError:
+        ToolAnnotations = None
 
 try:  # FastMCP's image helper: lets chart_shot return the picture itself, not just a path
     from fastmcp import Image as MCPImage
@@ -56,6 +67,20 @@ INLINE_WAIT = float(os.environ.get("LUXALGO_CHART_INLINE_WAIT", "8"))
 SHOT_DIR = os.environ.get("LUXALGO_SHOT_DIR", "/tmp")
 
 mcp = FastMCP("trader-chart")
+
+
+def _ann(title: str, read_only: bool = False, destructive: bool | None = None,
+         open_world: bool = False):
+    """Tool annotations — the machine-readable contract a client's review/consent UI reads.
+
+    `read_only` tools never change the chart; the chart-mutating tools say so instead of leaving it
+    to be discovered; `open_world` marks the ones that leave this machine (the LuxAlgo Library).
+    Returns None on a build whose SDK has no ToolAnnotations, so the server still starts.
+    """
+    if ToolAnnotations is None:
+        return None
+    return ToolAnnotations(title=title, readOnlyHint=read_only, destructiveHint=destructive,
+                           openWorldHint=open_world)
 
 
 # ── plumbing ────────────────────────────────────────────────────────────────────────────────────
@@ -102,11 +127,24 @@ def _command(action: str, timeout: float = INLINE_WAIT + 8.0, **fields) -> str:
     stamp = result.get("stream_ms")
     ms = f" · {stamp:.0f} ms on the wire" if isinstance(stamp, (int, float)) else ""
     mark = "✓" if result.get("ok") else "✗"
-    return f"{mark} {result.get('detail') or 'no detail'}{ms}"
+    line = f"{mark} {result.get('detail') or 'no detail'}{ms}"
+    err = result.get("error")
+    if isinstance(err, dict) and err.get("code"):
+        # The page's structured failure (see console/frontend/pinets-runner.js): keep the code and the
+        # hint in the answer, so a client can branch and a human knows what to do next.
+        bits = [str(err["code"])]
+        if err.get("feature") or err.get("kind"):
+            bits.append(str(err.get("feature") or err.get("kind")))
+        where = f" (line {err['line']})" if err.get("line") else ""
+        head = bits[0] + (f"[{'/'.join(bits[1:])}]" if len(bits) > 1 else "")
+        line += f"\n  {head}{where}: {err.get('message')}"
+        if err.get("hint"):
+            line += f"\n  → {err['hint']}"
+    return line
 
 
 # ── chart tools ─────────────────────────────────────────────────────────────────────────────────
-@mcp.tool
+@mcp.tool(annotations=_ann("Chart views attached", read_only=True))
 def chart_views() -> str:
     """Is a chart view attached right now? Every command tool needs one (the chart is not headless)."""
     try:
@@ -121,7 +159,7 @@ def chart_views() -> str:
             f"keepalive {stats.get('keepalive_s')}s")
 
 
-@mcp.tool
+@mcp.tool(annotations=_ann("Chart state", read_only=True))
 def chart_state() -> str:
     """What the live chart is showing: symbol, timeframe, last price, bars and the indicators on it."""
     try:
@@ -139,7 +177,7 @@ def chart_state() -> str:
     return "\n".join(lines)
 
 
-@mcp.tool
+@mcp.tool(annotations=_ann("Capture the chart", read_only=True))
 def chart_shot(name: str = ""):
     """Capture the chart as a PNG. Returns the image (when the client takes images) and its path."""
     try:
@@ -176,7 +214,7 @@ def chart_shot(name: str = ""):
     return [text, MCPImage(path=path)]
 
 
-@mcp.tool
+@mcp.tool(annotations=_ann("Run Pine on the chart", destructive=True))
 def chart_apply_pine(pine: str) -> str:
     """Run Pine source over the chart's live bars (LuxAlgo PineTS) and paint a matching native.
 
@@ -188,7 +226,27 @@ def chart_apply_pine(pine: str) -> str:
     return _command("apply", pine=pine)
 
 
-@mcp.tool
+@mcp.tool(annotations=_ann("Draw a script's levels", destructive=True))
+def chart_draw(pine: str) -> str:
+    """Run Pine source and paint the geometry it BUILDS — boxes, lines and labels — on the chart.
+
+    Use this for the scripts that compute levels instead of plotting a line (most Smart-Money /
+    liquidity models): the console runs them and paints their objects on its own overlay, because
+    the charting engine has no drawing surface of its own.
+    """
+    return _command("draw", pine=pine)
+
+
+@mcp.tool(annotations=_ann("Clear drawings and painted indicators", destructive=True))
+def chart_clear() -> str:
+    """Clear the overlay drawings and remove the Vela indicators our paint layer added.
+
+    Reports what is left on the chart afterwards, so a silent no-op is visible.
+    """
+    return _command("clear")
+
+
+@mcp.tool(annotations=_ann("Add a Vela indicator", destructive=True))
 def chart_add_indicator(native: str) -> str:
     """Add a Vela native indicator to the chart, by name (ema, supertrend, donchian-channels, …)."""
     if not native.strip():
@@ -196,7 +254,7 @@ def chart_add_indicator(native: str) -> str:
     return _command("add", native=native.strip())
 
 
-@mcp.tool
+@mcp.tool(annotations=_ann("Switch symbol/timeframe", destructive=True))
 def chart_set_market(symbol: str, timeframe: str) -> str:
     """Switch the chart to another symbol/timeframe (e.g. BTCUSDT, 1h)."""
     if not symbol.strip() or not timeframe.strip():
@@ -205,7 +263,7 @@ def chart_set_market(symbol: str, timeframe: str) -> str:
 
 
 # ── LuxAlgo Library tools ───────────────────────────────────────────────────────────────────────
-@mcp.tool
+@mcp.tool(annotations=_ann("Search the LuxAlgo Library", read_only=True, open_world=True))
 def library_search(query: str, kind: str = "", limit: int = 8) -> str:
     """Search the LuxAlgo Library (concepts and indicators). `kind` may be concept or indicator."""
     if not query.strip():
@@ -227,7 +285,7 @@ def library_search(query: str, kind: str = "", limit: int = 8) -> str:
     return "\n".join(out)
 
 
-@mcp.tool
+@mcp.tool(annotations=_ann("Read one Library indicator", read_only=True, open_world=True))
 def library_indicator(query: str) -> str:
     """One Library indicator by name or slug: what it is, its licence, and its full Pine source."""
     if not query.strip():

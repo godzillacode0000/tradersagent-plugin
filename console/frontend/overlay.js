@@ -218,7 +218,7 @@
   }
 
   function clear() {
-    lastSpec = null;
+    lastSpec = null;                               // state() reads this back as "nothing painted"
     if (!canvas) return 0;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -227,6 +227,7 @@
 
   /** Draw a spec of boxes/lines/labels given in bar-index + price space. */
   async function apply(spec, opts) {
+    const O2 = Object.assign({}, DEFAULTS, opts || {});
     const cv = ensureCanvas();
     if (!cv) return { ok: false, reason: 'no chart container to draw over' };
     const m = await mapping(opts);
@@ -243,11 +244,11 @@
       // Faithful to the script's colours, but with a visible floor: Library scripts often emit
       // 1px borders and ~50% alpha fills, which vanish on a dark chart. `emphasise` (default on)
       // raises only the minimum — it never changes a colour's hue.
-      ctx.fillStyle = emphasiseColour(b.bgcolor || 'rgba(33,87,243,0.35)', O.emphasise !== false, 0.30);
+      ctx.fillStyle = emphasiseColour(b.bgcolor || 'rgba(33,87,243,0.35)', O2.emphasise !== false, 0.30);
       ctx.fillRect(x, yy, w, h);
       if (b.border_color) {
         ctx.strokeStyle = b.border_color;
-        ctx.lineWidth = Math.max(b.border_width || 1, O.emphasise !== false ? 1.6 : 1);
+        ctx.lineWidth = Math.max(b.border_width || 1, O2.emphasise !== false ? 1.6 : 1);
         ctx.strokeRect(x, yy, w, h);
       }
       boxes += 1;
@@ -255,7 +256,7 @@
 
     for (const l of (spec.lines || [])) {
       ctx.strokeStyle = l.color || '#2157f3';
-      ctx.lineWidth = Math.max(l.width || 1, O.emphasise !== false ? 1.8 : 1);
+      ctx.lineWidth = Math.max(l.width || 1, O2.emphasise !== false ? 1.8 : 1);
       ctx.setLineDash(l.style && /dash/i.test(l.style) ? [5, 4] : []);
       let x1 = m.x(+l.x1), x2 = m.x(+l.x2);
       const y1 = m.y(+l.y1), y2 = m.y(+l.y2);
@@ -277,12 +278,37 @@
       labels += 1;
     }
 
-    lastSpec = { spec, opts, map: { i0: m.i0, n: m.n, lo: m.lo, hi: m.hi, bars: m.bars } };
+    lastSpec = { spec, opts, map: { i0: m.i0, n: m.n, lo: m.lo, hi: m.hi, bars: m.bars },
+                 drawn: { boxes, lines, labels } };
     return { ok: true, boxes, lines, labels, mapping: lastSpec.map, pad: m.pad };
   }
 
+  /**
+   * What is actually on the canvas right now.
+   *
+   * The counts are the overlay's own record of what it painted, and `ink` is a read-back of the
+   * canvas pixels (we own this 2D canvas, so unlike the chart's WebGL surface it IS readable) —
+   * a coarse "is anything painted at all" check that catches a silently cleared or clipped layer.
+   */
+  function state() {
+    const d = (lastSpec && lastSpec.drawn) || { boxes: 0, lines: 0, labels: 0 };
+    let ink = -1;
+    try {
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        ink = 0;
+        for (let i = 3; i < img.length; i += 4 * 97) if (img[i] > 8) ink += 1;
+      }
+    } catch (err) {
+      ink = -1;                                  // reported as unknown, never as "empty"
+    }
+    return { boxes: d.boxes, lines: d.lines, labels: d.labels, ink, has: ink > 0,
+             canvas: canvas ? canvas.width + 'x' + canvas.height : null };
+  }
+
   window.ChartOverlay = {
-    apply, clear,
+    apply, clear, state,
     get drawn() { return lastSpec; },
     debug: async (opts) => mapping(opts),
     calibrate: async (maxAgeMs) => pixelExtremes(maxAgeMs),
