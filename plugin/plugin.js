@@ -39,6 +39,7 @@ import {
   host,
   haptic,
   ROUTES_AREA,
+  PANES_AREA,
   SIDEBAR_NAV_AREA,
   PALETTE_AREA,
   STATUSBAR_AREAS
@@ -55,6 +56,15 @@ const REVEAL_DELAY_MS = 1500
 
 const S = {
   page: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 },
+  pane: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0,
+          background: 'var(--ui-bg-card, transparent)' },
+  notice: { display: 'flex', flexDirection: 'column', gap: '10px', padding: '18px',
+            maxWidth: '460px', height: '100%', justifyContent: 'center' },
+  noticeTitle: { fontSize: '14px', fontWeight: 600 },
+  noticeText: { fontSize: '12px', opacity: 0.75, lineHeight: 1.5 },
+  noticeBtn: { alignSelf: 'flex-start', fontSize: '12px', padding: '6px 10px', cursor: 'pointer',
+               borderRadius: '6px', border: '1px solid var(--ui-border, #444)',
+               background: 'var(--ui-bg-card, transparent)', color: 'var(--ui-text, inherit)' },
   meta: { fontSize: '11px', opacity: 0.65 },
   frameWrap: { position: 'relative', flex: 1, minHeight: 0, background: 'var(--ui-bg-card, transparent)' },
   frame: { border: 0, width: '100%', height: '100%', display: 'block' },
@@ -89,6 +99,24 @@ let ctx_storage = null
 let autoRevealOn = true
 let reveal_attempted = false
 
+/* ONE console, ONE view.
+   Two attached views would each run every queued chart command (`add ema` twice), so the console is
+   claimed by whichever surface mounts first. The pane is contributed docked to the right of the
+   conversation and therefore mounts at boot, which is also the arrangement he asked for: composer on
+   the left, chart on the right. The page stays as a working fallback for when the pane is not there. */
+let paneMounted = false
+const paneSubs = new Set()
+
+function usePaneMounted() {
+  const [mounted, setMounted] = useState(paneMounted)
+  useEffect(() => {
+    paneSubs.add(setMounted)
+    setMounted(paneMounted)
+    return () => paneSubs.delete(setMounted)
+  }, [])
+  return mounted
+}
+
 /** Put the console in front: the app's own navigation, so the page mounts and is shown. */
 function openConsole() {
   try {
@@ -115,6 +143,9 @@ function openConsole() {
  */
 function TradersDeskPage() {
   const [loaded, setLoaded] = useState(false)
+  const paneUp = usePaneMounted()
+
+  if (paneUp) return jsx(PaneNotice, {})
 
   return jsxs('div', {
     style: S.page,
@@ -138,6 +169,77 @@ function TradersDeskPage() {
                 ]
               })
         ]
+      })
+    ]
+  })
+}
+
+/**
+ * The chart pane: the same console frame, docked to the RIGHT of the conversation.
+ *
+ * A pane is a tile in the layout tree, so `dock: { pane: 'workspace', pos: 'right' }` is what makes
+ * "composer on the left, chart on the right" true — the app's own composer keeps the left, and the
+ * chart reads on the right (the arrangement LuxAlgo's console uses, and the operator asked for).
+ * The frame reports its own load, so the overlay never claims a chart that is not up yet.
+ */
+function TradersDeskPane() {
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    paneMounted = true
+    paneSubs.forEach((fn) => fn(true))
+    return () => {
+      paneMounted = false
+      paneSubs.forEach((fn) => fn(false))
+    }
+  }, [])
+
+  return jsxs('div', {
+    style: S.pane,
+    children: [
+      jsxs('div', {
+        style: S.frameWrap,
+        children: [
+          jsx('iframe', {
+            src: APP_URL,
+            title: "Trader's Agent chart",
+            style: S.frame,
+            onLoad: () => setLoaded(true)
+          }),
+          loaded
+            ? null
+            : jsxs('div', {
+                style: S.overlay,
+                children: [
+                  jsx('span', { children: 'Starting the local console…' }),
+                  jsx('span', { style: S.meta, children: CONSOLE_ORIGIN })
+                ]
+              })
+        ]
+      })
+    ]
+  })
+}
+
+/** What the page shows while the pane owns the console — a control card, never a second frame. */
+function PaneNotice() {
+  return jsxs('div', {
+    style: S.notice,
+    children: [
+      jsx('div', { style: S.noticeTitle, children: 'The chart is in the pane on the right' }),
+      jsx('div', {
+        style: S.noticeText,
+        children: 'Ask in the composer on the left — the agent drives that chart with bin/trader-chart. ' +
+          'This page stays as the full-page view for when the pane is closed.'
+      }),
+      jsx('button', {
+        type: 'button',
+        style: S.noticeBtn,
+        onClick: () => {
+          haptic()
+          ctx_os_open(CONSOLE_ORIGIN)
+        },
+        children: 'Open the console in a browser'
       })
     ]
   })
@@ -190,6 +292,14 @@ export default {
         area: ROUTES_AREA,
         data: { path: ROUTE },
         render: () => jsx(TradersDeskPage, {})
+      },
+      {
+        /* The chart beside the conversation: composer on the left, chart on the right. */
+        id: 'pane',
+        area: PANES_AREA,
+        title: "Trader's Agent",
+        data: { placement: 'right', dock: { pane: 'workspace', pos: 'right' }, width: '620px' },
+        render: () => jsx(TradersDeskPane, {})
       },
       {
         id: 'nav',

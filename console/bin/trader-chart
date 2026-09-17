@@ -211,6 +211,44 @@ def cmd_clear(args) -> int:
     return 0 if result.get("ok") else 1
 
 
+def cmd_script(args) -> int:
+    """Drive Script mode: load a .pine into the editor, run what is in it, or read it back."""
+    command = {"action": "script", "mode": args.what}
+    if getattr(args, "pine", None):
+        with open(args.pine, "r", encoding="utf-8") as fh:
+            command["source"] = fh.read()
+    result = send(args, command)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
+def cmd_mode(args) -> int:
+    """Ask the console to show the chart, or the Pine script mode (the source PineTS is given)."""
+    result = send(args, {"action": "mode", "value": args.value})
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
+def cmd_reload(args) -> int:
+    """Reload the console page — picks up changed frontend files without restarting the app.
+
+    The console's static assets are served `no-store`, so a document reload really does fetch the new
+    overlay.js/chart-bridge.js. The page reports the command first, then reloads.
+    """
+    result = send(args, {"action": "reload"})
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
 def cmd_apply(args) -> int:
     if args.pine == "-":
         pine = sys.stdin.read()
@@ -291,6 +329,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("clear", help="clear the overlay and the natives our paint layer added")
     s.set_defaults(func=cmd_clear)
+
+    s = sub.add_parser("script", help="drive Script mode: show / draw / native / clear, optionally loading a .pine")
+    s.add_argument("what", choices=["show", "draw", "native", "clear"])
+    s.add_argument("--pine", help="a .pine file to load into the editor first")
+    s.set_defaults(func=cmd_script)
+
+    s = sub.add_parser("mode", help="show the chart, or the Pine script the engine is given")
+    s.add_argument("value", choices=["chart", "script"])
+    s.set_defaults(func=cmd_mode)
+
+    s = sub.add_parser("reload", help="reload the console page (changed frontend files, no app restart)")
+    s.set_defaults(func=cmd_reload)
 
     s = sub.add_parser("caps", help="what the attached page can execute (from its heartbeat)")
     s.set_defaults(func=cmd_caps)

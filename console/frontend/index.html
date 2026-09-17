@@ -24,6 +24,12 @@
               aria-pressed="false" title="Show the indicator Library">☰ Library</button>
       <button type="button" class="btn btn--ghost btn--toggle" id="detail-open"
               aria-pressed="false" title="Show the Pine source / write-up panel">▤ Details</button>
+      <!-- Chart mode / Script mode: Quant has the same two surfaces. Script mode shows the Pine that
+           PineTS is actually given, and runs it on this chart. -->
+      <span class="modes" role="group" aria-label="Chart or script mode">
+        <button type="button" class="btn btn--ghost is-on" id="mode-chart" aria-pressed="true">Chart</button>
+        <button type="button" class="btn btn--ghost" id="mode-script" aria-pressed="false">Script</button>
+      </span>
       <span id="mcp-status" class="pill pill--wait" title="LuxAlgo MCP backend">MCP: checking…</span>
       <span id="bars-status" class="pill pill--wait" title="Where the candles come from">bars: loading…</span>
       <span id="indicator-count" class="pill" title="Indicators that actually executed on the chart — a mount that silently did nothing is never counted">0 indicators</span>
@@ -90,6 +96,33 @@
 
     </section>
 
+    <!-- LEFT (Script mode): the editor. Whatever is in here is what PineTS is given, and the
+         report underneath says what the engine did with it — series, painted natives, or the
+         typed failure code (NOT_RUNNABLE[while], RUNTIME_CRASH[pinets-get_v], …). -->
+    <section class="panel panel--script">
+      <div class="scr" id="scr">
+        <header class="scr__head">
+          <span class="scr__title">PineTS script</span>
+          <span class="muted" id="scr-engine">engine: PineTS · this chart's bars</span>
+        </header>
+        <div class="scr__load">
+          <input id="scr-query" type="search" placeholder="load from the Library — e.g. order block">
+          <button type="button" class="btn btn--ghost" id="scr-load">Load</button>
+        </div>
+        <div class="scr__hits" id="scr-hits"></div>
+        <textarea id="scr-source" spellcheck="false" aria-label="Pine source"
+placeholder="//@version=6
+indicator(&quot;my script&quot;, overlay=true)
+plot(ta.ema(close, 20), &quot;ema&quot;)"></textarea>
+        <div class="scr__actions">
+          <button type="button" class="btn btn--primary" id="scr-run">Run on chart</button>
+          <button type="button" class="btn btn--ghost" id="scr-native">Run as native</button>
+          <button type="button" class="btn btn--ghost" id="scr-clear">Clear chart</button>
+        </div>
+        <div class="scr__out" id="scr-out" aria-live="polite"></div>
+      </div>
+    </section>
+
     <!-- CENTER: the chart -->
     <section class="panel panel--chart">
       <div class="chart-head">
@@ -127,6 +160,8 @@
 <script src="./pinets-runner.js"></script>
 <script src="./overlay.js"></script>
 <script src="./chart-bridge.js"></script>
+<!-- Script mode: the Pine editor surface (it queues the same commands the CLI uses). -->
+<script src="./script-panel.js"></script>
 
 <!-- The FULL Vela application. The workspace is absent from the root global build
      above (window.Vela.VelaWorkspace === undefined), so it comes in as ES modules

@@ -30,7 +30,8 @@
      already (an action passed the server, reached the page, and came back "unknown action" — HTTP
      200 with nothing done). So the page publishes its real list in every heartbeat and the server
      validates against that instead of trusting a constant. */
-  const ACTIONS = ['apply', 'add', 'draw', 'clear', 'probe', 'market', 'shot', 'reload'];
+  const ACTIONS = ['apply', 'add', 'draw', 'clear', 'probe', 'market', 'shot', 'reload', 'mode',
+                   'script'];
 
   const api = async (path, body) => {
     const res = await fetch(path, body
@@ -286,6 +287,47 @@
           out.detail = 'captured ' + Math.round(dataUrl.length / 1024) + ' KB';
           break;
         }
+        case 'script': {
+          /* Script mode, driven: load a script into the editor, run what is in it, or read it back.
+             `command.mode`: 'show' | 'draw' | 'native' | 'clear'. This is what makes the editor a
+             surface the agent can use instead of a text box only a human clicks. */
+          const panel = window.ScriptPanel;
+          if (!panel) { out.detail = 'this page has no script panel — reload the console and retry'; break; }
+          const what = String(command.mode || 'show').toLowerCase();
+          if (typeof command.source === 'string' && command.source.trim()) {
+            panel.setSource(command.source);
+            out.loaded = command.source.length;
+          }
+          if (what === 'show') {
+            panel.setMode('script');
+            out.ok = true;
+            out.detail = 'editor holds ' + panel.getSource().split('\n').length + ' line(s)' +
+              (command.source ? ' (replaced)' : '');
+            break;
+          }
+          if (what === 'clear') { await window.ChartBridge.run({ action: 'clear' }); out.ok = true;
+            out.detail = 'chart cleared'; break; }
+          out.ok = true;
+          out.detail = 'running the editor\'s script (' + what + ')';
+          try { await api('/api/chart/result', out); } catch (err) { /* run anyway */ }
+          void panel.runNow(what === 'native' ? 'apply' : 'draw');
+          return out;
+        }
+        case 'mode': {
+          /* Which surface the console shows: the chart, or the Pine script PineTS is given. The page
+             owns this state, so the agent asks for it instead of hunting for a button. */
+          const wanted = String(command.value || 'script').toLowerCase();
+          const panel = window.ScriptPanel;
+          if (!panel || typeof panel.setMode !== 'function') {
+            out.detail = 'this page has no script panel — reload the console and retry';
+            break;
+          }
+          panel.setMode(wanted === 'chart' ? 'chart' : 'script');
+          out.ok = true;
+          out.mode = wanted;
+          out.detail = 'console is in ' + wanted + ' mode';
+          break;
+        }
         case 'reload': {
           /* The console's static files are served `no-cache`, so a document reload really does pick up
              a changed overlay.js/chart-bridge.js. This is the op that makes a frontend change live
@@ -294,7 +336,9 @@
           out.ok = true;
           out.reloading = true;
           out.detail = 'reloading the console page to pick up changed frontend files';
-          await api('/api/chart/result', out);          // report BEFORE the page goes away
+          // Report first — but a failed report must NOT cancel the reload: that is the whole point
+          // of this op, and an unreported reload still lands the new frontend files.
+          try { await api('/api/chart/result', out); } catch (err) { /* reload anyway */ }
           setTimeout(() => location.reload(), 300);
           return out;
         }
