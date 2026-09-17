@@ -565,10 +565,13 @@ async function checkHealth() {
 }
 
 async function main() {
-  // Chart-first: the panels start where he left them (both off unless he turned them on).
+  /* Chart-first: the LIBRARY starts where he left it. The DETAIL panel deliberately never restores
+     open: nothing is selected at load time, so it would paint an empty "Nothing selected" column
+     over the chart — the operator's complaint of 17 Sep. It opens when a result is picked, or from
+     the toggle if he asks for it. (setPanel persists, so a stale `detail: true` is cleaned up here.) */
   const panelPrefs = readPanelPrefs();
   setPanel('library', panelPrefs.library === true);
-  setPanel('detail', panelPrefs.detail === true);
+  setPanel('detail', false);
   el.libraryOpen.addEventListener('click', () => togglePanel('library'));
   el.detailOpen.addEventListener('click', () => togglePanel('detail'));
 
