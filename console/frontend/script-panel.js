@@ -20,6 +20,7 @@
 
   const LS_SRC = 'lx.script.src';
   const LS_MODE = 'lx.script.mode';
+  const LS_WRAP = 'lx.script.wrap';
   const el = (id) => document.getElementById(id);
 
   async function api(path, body) {
@@ -126,6 +127,8 @@
     if (!src) { say('the Library lists ' + slug + ' with no source (a platform page)', 'err'); return; }
     const box = el('scr-source');
     box.value = src;
+    box.scrollTop = 0;          // a fresh script starts at line 1, not where the last one was left
+    box.scrollLeft = 0;
     try { localStorage.setItem(LS_SRC + ':' + slug, src); } catch (err) { /* ignore */ }
     say('loaded ' + (name || slug) + ' — ' + src.split('\n').length + ' lines, verbatim from the Library');
   }
@@ -171,6 +174,21 @@
 
     const clearBtn = el('scr-clear');
     if (clearBtn) clearBtn.addEventListener('click', () => void run('clear', null));
+
+    /* Long lines do not wrap by default (see the markup note); this is the escape hatch, and it
+       sticks because reading wrapped code is a preference, not a one-off. */
+    const wrapBtn = el('scr-wrap');
+    const applyWrap = (on) => {
+      box.classList.toggle('is-wrap', on);
+      if (wrapBtn) wrapBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      try { localStorage.setItem(LS_WRAP, on ? '1' : '0'); } catch (err) { /* ignore */ }
+    };
+    if (wrapBtn) {
+      wrapBtn.addEventListener('click', () => applyWrap(!box.classList.contains('is-wrap')));
+    }
+    let wrapSaved = false;
+    try { wrapSaved = localStorage.getItem(LS_WRAP) === '1'; } catch (err) { /* ignore */ }
+    applyWrap(wrapSaved);
 
     say('Run on chart = the engine runs it and the overlay draws what it built. ' +
         'Run as native = the engine runs it and the closest Vela study is mounted instead. ' +
