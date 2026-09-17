@@ -23,7 +23,26 @@
 (function () {
   'use strict';
 
-  const DEFAULTS = { pricePad: 0.02, barOffset: 0, font: '11px system-ui, sans-serif', calibMaxAgeMs: 15000 };
+  const DEFAULTS = { pricePad: 0.02, barOffset: 0, font: '11px system-ui, sans-serif',
+                     calibMaxAgeMs: 15000, emphasise: true };
+
+  /** Raise a colour's alpha to at least `min` so a thin script line stays visible. Hue untouched. */
+  function emphasiseColour(colour, on, min) {
+    if (!on || !colour) return colour;
+    let r, g, b, a = 1;
+    const m = String(colour).replace(/\s+/g, '').match(/^rgba?\(([^)]+)\)$/i);
+    if (m) {
+      const parts = m[1].split(',').map(Number);
+      r = parts[0]; g = parts[1]; b = parts[2];
+      a = parts.length > 3 ? parts[3] : 1;
+    } else if (/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(colour)) {
+      const h = String(colour).slice(1);
+      r = parseInt(h.slice(0, 2), 16); g = parseInt(h.slice(2, 4), 16); b = parseInt(h.slice(4, 6), 16);
+      a = h.length === 8 ? parseInt(h.slice(6, 8), 16) / 255 : 1;
+    } else return colour;
+    if (a >= min) return colour;
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + min + ')';
+  }
   let canvas = null;
   let host = null;
   let lastSpec = null;
@@ -221,11 +240,14 @@
       const y1 = m.y(+b.top), y2 = m.y(+b.bottom);
       const x = Math.min(x1, x2), w = Math.max(2, Math.abs(x2 - x1));
       const yy = Math.min(y1, y2), h = Math.max(2, Math.abs(y2 - y1));
-      ctx.fillStyle = b.bgcolor || 'rgba(33,87,243,0.35)';
+      // Faithful to the script's colours, but with a visible floor: Library scripts often emit
+      // 1px borders and ~50% alpha fills, which vanish on a dark chart. `emphasise` (default on)
+      // raises only the minimum — it never changes a colour's hue.
+      ctx.fillStyle = emphasiseColour(b.bgcolor || 'rgba(33,87,243,0.35)', O.emphasise !== false, 0.30);
       ctx.fillRect(x, yy, w, h);
       if (b.border_color) {
         ctx.strokeStyle = b.border_color;
-        ctx.lineWidth = b.border_width || 1;
+        ctx.lineWidth = Math.max(b.border_width || 1, O.emphasise !== false ? 1.6 : 1);
         ctx.strokeRect(x, yy, w, h);
       }
       boxes += 1;
@@ -233,7 +255,7 @@
 
     for (const l of (spec.lines || [])) {
       ctx.strokeStyle = l.color || '#2157f3';
-      ctx.lineWidth = l.width || 1;
+      ctx.lineWidth = Math.max(l.width || 1, O.emphasise !== false ? 1.8 : 1);
       ctx.setLineDash(l.style && /dash/i.test(l.style) ? [5, 4] : []);
       let x1 = m.x(+l.x1), x2 = m.x(+l.x2);
       const y1 = m.y(+l.y1), y2 = m.y(+l.y2);

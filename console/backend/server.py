@@ -943,7 +943,7 @@ def ep_agents(params: dict) -> dict:
     return {"agents": studies}
 
 
-CHART_ACTIONS = {"apply", "add", "market", "shot"}
+CHART_ACTIONS = {"apply", "add", "market", "shot", "draw", "clear", "overlay", "probe"}
 
 
 def ep_chart_state(params: dict) -> dict:

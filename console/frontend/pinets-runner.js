@@ -61,14 +61,44 @@
     return ctorPromise;
   }
 
+  const INTERVALS = [[60000, '1m'], [180000, '3m'], [300000, '5m'], [900000, '15m'], [1800000, '30m'],
+                     [3600000, '1h'], [7200000, '2h'], [14400000, '4h'], [28800000, '8h'], [86400000, '1d']];
+
+  /**
+   * The VISIBLE timeframe, taken from the bars themselves.
+   *
+   * `chart.market.timeframe` is not trustworthy here: on the live pane it reported "4h" while the
+   * chart was rendering 15m, and the provider then fetched 4h candles — so every price the script
+   * computed belonged to a different series than the one on screen. The median gap between the
+   * chart's own bars cannot lie about what is drawn.
+   */
+  function timeframeFromBars(bars) {
+    if (!Array.isArray(bars) || bars.length < 3) return null;
+    const gaps = [];
+    for (let i = 1; i < bars.length && gaps.length < 60; i++) {
+      const a = bars[i - 1].time != null ? bars[i - 1].time : bars[i - 1].openTime;
+      const b = bars[i].time != null ? bars[i].time : bars[i].openTime;
+      if (a == null || b == null) continue;
+      const d = Number(b) - Number(a);
+      if (d > 0) gaps.push(d);
+    }
+    if (!gaps.length) return null;
+    gaps.sort((x, y) => x - y);
+    const med = gaps[Math.floor(gaps.length / 2)];
+    let best = null;
+    for (const [ms, name] of INTERVALS) if (!best || Math.abs(ms - med) < Math.abs(best[0] - med)) best = [ms, name];
+    return best ? best[1] : null;
+  }
+
   /** The chart's own market, so scripts that read syminfo/tickerid have somewhere to read it from. */
-  function marketContext() {
+  function marketContext(bars) {
     const m = (window.__consoleChart && window.__consoleChart.market) || {};
     const symbol = m.symbol || 'BTCUSDT';
-    let tf = m.timeframe || '15';
-    // the chart reports minutes ("15", "60"); the provider wants the same spelling it lists.
+    const fromBars = timeframeFromBars(bars);
+    let tf = fromBars || m.timeframe || '15';
     if (/^\d+$/.test(String(tf))) tf = String(tf);
-    return { symbol, timeframe: tf };
+    return { symbol: symbol, timeframe: tf, source: fromBars ? 'bars' : 'market',
+             reported: m.timeframe ? String(m.timeframe) : null };
   }
 
   /**
@@ -82,7 +112,7 @@
    * it is the default and custom bars stay as the offline fallback.
    */
   function newEngine(mod, bars) {
-    const ctx = marketContext();
+    const ctx = marketContext(bars);
     const Provider = mod.Provider || {};
     if (Provider.Binance) {
       try {

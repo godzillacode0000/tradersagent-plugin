@@ -90,14 +90,20 @@
         const bars = await window.chartBars();
         if (bars && bars.length) last = bars[bars.length - 1].close;
       }
+      // chart.market.timeframe is stale in this build (says 4h on a 15m chart), so the heartbeat
+      // reports the timeframe the bars actually have; the raw field rides along for diagnostics.
+      const barsList = typeof window.chartBars === 'function' ? await window.chartBars() : [];
+      const inferred = (window.PineTSRunner && window.PineTSRunner.marketContext)
+        ? window.PineTSRunner.marketContext(barsList) : null;
       await api('/api/chart/state', {
         symbol: market.symbol,
-        timeframe: market.timeframe,
+        timeframe: inferred ? inferred.timeframe : market.timeframe,
+        timeframe_reported: market.timeframe,
         last: last,
         natives: c && typeof c.presentNativeIndicators === 'function' ? c.presentNativeIndicators() : [],
         series: inspect().series,
         drawings: inspect().drawings,
-        bars: typeof window.chartBars === 'function' ? (await window.chartBars()).length : null,
+        bars: barsList.length || null,
         layout: 'workspace',
       });
     } catch (err) {
