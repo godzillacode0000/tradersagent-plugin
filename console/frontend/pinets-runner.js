@@ -54,11 +54,45 @@
           if (typeof Ctor !== 'function') {
             throw new Error('the pinets build exposes no PineTS export — check the CDN entry');
           }
-          return Ctor;
+          return Object.assign({}, mod, { PineTS: Ctor });      // keep Provider too
         })
         .catch((err) => { ctorPromise = null; throw err; });   // allow a retry
     }
     return ctorPromise;
+  }
+
+  /** The chart's own market, so scripts that read syminfo/tickerid have somewhere to read it from. */
+  function marketContext() {
+    const m = (window.__consoleChart && window.__consoleChart.market) || {};
+    const symbol = m.symbol || 'BTCUSDT';
+    let tf = m.timeframe || '15';
+    // the chart reports minutes ("15", "60"); the provider wants the same spelling it lists.
+    if (/^\d+$/.test(String(tf))) tf = String(tf);
+    return { symbol, timeframe: tf };
+  }
+
+  /**
+   * PineTS has TWO documented constructors:
+   *   new PineTS(Provider.Binance, symbol, timeframe, limit)   // market context present
+   *   new PineTS(candles)                                      // your own OHLCV, NO context
+   * Only the first defines syminfo/tickerid, so any Library script that touches them throws
+   * "Cannot read properties of undefined (reading 'ticker')" on the second — measured on
+   * buyside-sellside-liquidity and liquidity-swings. The provider form returns the same bars
+   * from the same exchange (verified: 500 bars, last close within 4 cents of the chart's), so
+   * it is the default and custom bars stay as the offline fallback.
+   */
+  function newEngine(mod, bars) {
+    const ctx = marketContext();
+    const Provider = mod.Provider || {};
+    if (Provider.Binance) {
+      try {
+        const engine = new mod.PineTS(Provider.Binance, ctx.symbol, ctx.timeframe, Math.max(30, bars.length));
+        return { engine, ctor: 'provider', context: ctx.symbol + '@' + ctx.timeframe };
+      } catch (err) {
+        /* fall through to custom bars */
+      }
+    }
+    return { engine: new mod.PineTS(bars), ctor: 'custom-bars', context: null };
   }
 
   function withTimeout(promise, ms, label) {
@@ -142,28 +176,39 @@
       return { ok: false, reason: `not runnable: only ${count} bars available (need at least 30)` };
     }
 
-    let PineTS;
+    let mod;
     try {
-      PineTS = await loadPineTS();
+      mod = await loadPineTS();
     } catch (err) {
       return { ok: false, reason: 'PineTS unavailable: ' + ((err && err.message) || err) };
     }
 
     const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
     const t0 = performance.now();
+    const label = 'PineTS' + (opts.name ? ` (${opts.name})` : '');
+    let built = newEngine(mod, bars);
     try {
-      const out = await withTimeout(
-        new PineTS(bars).run(source),
-        timeoutMs,
-        'PineTS' + (opts.name ? ` (${opts.name})` : '')
-      );
+      let out;
+      try {
+        out = await withTimeout(built.engine.run(source), timeoutMs, label);
+      } catch (err) {
+        // A script that needs market context fails on custom bars with the ticker/syminfo error.
+        // Retry the documented provider form before reporting a failure.
+        const msg = String((err && err.message) || err);
+        if (built.ctor === 'custom-bars' || !/ticker|syminfo/i.test(msg)) throw err;
+        built = { engine: new mod.PineTS(bars), ctor: 'custom-bars', context: null };
+        out = await withTimeout(built.engine.run(source), timeoutMs, label);
+      }
       const ms = Math.round(performance.now() - t0);
-      return { ok: true, ms, series: toSeries(out), strategy: toStrategy(out), raw: out };
+      return { ok: true, ms, series: toSeries(out), strategy: toStrategy(out),
+               drawings: out && out.plots ? Object.keys(out.plots).filter((k) => k.startsWith('__')) : [],
+               ctor: built.ctor, context: built.context, raw: out };
     } catch (err) {
-      return { ok: false, reason: 'PineTS error: ' + ((err && err.message) || err) };
+      return { ok: false, reason: 'PineTS error: ' + ((err && err.message) || err),
+               ctor: built.ctor, context: built.context };
     }
   }
 
-  window.PineTSRunner = { run, runnable, loadPineTS, toSeries };
+  window.PineTSRunner = { run, runnable, loadPineTS, toSeries, marketContext, newEngine };
   console.log('[pinets-runner] ready — PineTS loads on first run (independent of Vela’s Pine engine)');
 })();

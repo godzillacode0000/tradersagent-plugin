@@ -127,16 +127,22 @@
           out.added = paint.added ? paint.added.title : null;
           out.ms = res.ms;
           out.strategy = res.strategy || null;          // a strategy() script's own metrics
+          out.ctor = res.ctor || null;                  // which PineTS constructor ran (context matters)
           const s = res.strategy;
           const strat = s
             ? ' · strategy: net ' + s.netprofit + ' over ' + s.closedtrades + ' closed trades (' +
               s.wintrades + 'W/' + s.losstrades + 'L), max DD ' + s.max_drawdown +
               ', Sharpe ' + s.sharpe + ', CAGR ' + s.cagr + (s.truncated ? ' [partial]' : '')
             : '';
+          const drawParts = (res.drawings || []).map((d) => d.replace(/__/g, ''));
+          const drawable = drawParts.length
+            ? ' · script drew ' + drawParts.join('/') + ' (no render surface in this build — overlay needed)'
+            : '';
           out.detail = 'ran in ' + res.ms + ' ms over ' + bars.length + ' bars · ' +
             res.series.length + ' series · ' + (paint.added
               ? 'drawn with Vela native "' + paint.added.title + '"' + partial
-              : 'not drawn: ' + paint.reason) + strat;
+              : 'not drawn: ' + paint.reason) + strat + drawable +
+            (res.ctor ? ' · engine context: ' + res.ctor + (res.context ? ' (' + res.context + ')' : '') : '');
           break;
         }
         case 'add': {
