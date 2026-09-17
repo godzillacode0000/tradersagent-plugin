@@ -31,10 +31,18 @@
     [/\bfor\s+\w+\s+in\b/, 'not runnable: `for … in` is unimplemented in PineTS']
   ];
 
+  /** Strip comments so a construct NAMED in prose never blocks a file that does not use it. */
+  function stripComments(source) {
+    return String(source)
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')      // block comments
+      .replace(/(^|[^:])\/\/.*$/gm, '$1 ');       // line comments (leave URLs alone)
+  }
+
   /** '' when the source looks runnable, otherwise the reason it cannot run. */
   function runnable(source) {
     if (!source || !source.trim()) return 'not runnable: empty source';
-    for (const [re, reason] of GAPS) if (re.test(source)) return reason;
+    const code = stripComments(source);
+    for (const [re, reason] of GAPS) if (re.test(code)) return reason;
     return '';
   }
 
@@ -114,7 +122,8 @@
       losstrades: s.losstrades,
       max_drawdown: s.max_drawdown,
       sharpe: s.sharpe_ratio,
-      cagr: s.cagr
+      cagr: s.cagr,
+      open_trades: Array.isArray(s.opentrades) ? s.opentrades.length : null
     };
   }
 

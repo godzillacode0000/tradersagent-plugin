@@ -126,10 +126,17 @@
           out.series = res.series.length;
           out.added = paint.added ? paint.added.title : null;
           out.ms = res.ms;
+          out.strategy = res.strategy || null;          // a strategy() script's own metrics
+          const s = res.strategy;
+          const strat = s
+            ? ' · strategy: net ' + s.netprofit + ' over ' + s.closedtrades + ' closed trades (' +
+              s.wintrades + 'W/' + s.losstrades + 'L), max DD ' + s.max_drawdown +
+              ', Sharpe ' + s.sharpe + ', CAGR ' + s.cagr + (s.truncated ? ' [partial]' : '')
+            : '';
           out.detail = 'ran in ' + res.ms + ' ms over ' + bars.length + ' bars · ' +
             res.series.length + ' series · ' + (paint.added
               ? 'drawn with Vela native "' + paint.added.title + '"' + partial
-              : 'not drawn: ' + paint.reason);
+              : 'not drawn: ' + paint.reason) + strat;
           break;
         }
         case 'add': {
@@ -138,6 +145,34 @@
           out.ok = true;
           out.added = command.native;
           out.detail = 'added Vela native "' + command.native + '"';
+          break;
+        }
+        case 'probe': {
+          // Diagnostics only: what this page can actually see and what the handles expose.
+          const c = chart();
+          const names = (o) => {
+            if (!o) return null;
+            const out2 = new Set();
+            try { Object.keys(o).forEach((k) => out2.add(k)); } catch { /* ignore */ }
+            try { Object.getOwnPropertyNames(Object.getPrototypeOf(o)).forEach((k) => out2.add(k)); } catch { /* ignore */ }
+            return Array.from(out2).sort();
+          };
+          const domSample = [];
+          const host = document.getElementById('chart') || document.body;
+          host.querySelectorAll('button, span, div').forEach((el) => {
+            if (el.children.length) return;
+            const t = (el.textContent || '').trim();
+            if (t && t.length <= 16) domSample.push(t);
+          });
+          out.ok = true;
+          out.detail = JSON.stringify({
+            market: marketFromDom(),
+            chartNames: names(c),
+            wsNames: window.__ws ? names(window.__ws) : null,
+            appKeys: window.__wsApp ? Object.keys(window.__wsApp) : null,
+            hasChartBars: typeof window.chartBars === 'function',
+            domSample: domSample.slice(0, 70),
+          });
           break;
         }
         case 'market': {
