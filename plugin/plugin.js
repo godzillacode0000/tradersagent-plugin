@@ -63,7 +63,7 @@ const S = {
   noticeTitle: { fontSize: '14px', fontWeight: 600 },
   noticeText: { fontSize: '12px', opacity: 0.75, lineHeight: 1.5 },
   noticeBtn: { alignSelf: 'flex-start', fontSize: '12px', padding: '6px 10px', cursor: 'pointer',
-               borderRadius: '6px', border: '1px solid var(--ui-border, #444)',
+               borderRadius: '6px', border: '1px solid var(--ui-border, rgba(128,128,128,0.35))',
                background: 'var(--ui-bg-card, transparent)', color: 'var(--ui-text, inherit)' },
   meta: { fontSize: '11px', opacity: 0.65 },
   frameWrap: { position: 'relative', flex: 1, minHeight: 0, background: 'var(--ui-bg-card, transparent)' },
