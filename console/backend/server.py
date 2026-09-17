@@ -947,7 +947,7 @@ def ep_agents(params: dict) -> dict:
 # command is validated against THAT while a page is attached. This constant drifted from the page once
 # already — "overlay" sat here with no matching case in frontend/chart-bridge.js, so the command
 # passed this check, got an HTTP 200, and the page replied "unknown action" with nothing done.
-CHART_ACTIONS_FALLBACK = {"apply", "add", "market", "shot", "draw", "clear", "probe"}
+CHART_ACTIONS_FALLBACK = {"apply", "add", "market", "shot", "draw", "clear", "probe", "reload"}
 
 
 def chart_actions() -> set:
@@ -1466,7 +1466,7 @@ class Handler(BaseHTTPRequestHandler):
         except OSError as exc:
             self._fail(f"Could not read {target}: {exc}", 500, "io_error", head_only=head_only)
             return
-        self._send(200, body, ctype, {"Cache-Control": "no-cache"}, head_only)
+        self._send(200, body, ctype, {"Cache-Control": "no-store"}, head_only)
 
 
 class Server(ThreadingHTTPServer):

@@ -30,7 +30,7 @@
      already (an action passed the server, reached the page, and came back "unknown action" — HTTP
      200 with nothing done). So the page publishes its real list in every heartbeat and the server
      validates against that instead of trusting a constant. */
-  const ACTIONS = ['apply', 'add', 'draw', 'clear', 'probe', 'market', 'shot'];
+  const ACTIONS = ['apply', 'add', 'draw', 'clear', 'probe', 'market', 'shot', 'reload'];
 
   const api = async (path, body) => {
     const res = await fetch(path, body
@@ -131,7 +131,7 @@
           const bars = await window.chartBars();
           const res = await window.PineTSRunner.run(pine, bars, { name: 'agent' });
           if (!res.ok) {
-            out.detail = 'not runnable: ' + (res.reason || 'unknown');
+            out.detail = res.reason || 'not runnable: unknown';
             out.error = res.error || null;             // stable code + hint, not just prose
             break;
           }
@@ -186,7 +186,7 @@
           const bars = await window.chartBars();
           const res = await window.PineTSRunner.run(pine, bars, { name: 'agent-draw' });
           if (!res.ok) {
-            out.detail = 'not runnable: ' + (res.reason || 'unknown');
+            out.detail = res.reason || 'not runnable: unknown';
             out.error = res.error || null;             // same contract as `apply`
             break;
           }
@@ -204,20 +204,24 @@
           const boxes = flatten('__boxes__').filter((b) => b.xloc !== 'bt');
           const lines = flatten('__lines__');
           const labels = flatten('__labels__');
-          if (!boxes.length && !lines.length && !labels.length) {
-            out.detail = 'ran in ' + res.ms + ' ms but the script built no boxes/lines/labels to draw';
+          /* A backtester's whole output is a dashboard `table`; the overlay renders it as a DOM layer. */
+          const tables = flatten('__tables__');
+          if (!boxes.length && !lines.length && !labels.length && !tables.length) {
+            out.detail = 'ran in ' + res.ms + ' ms but the script built no boxes/lines/labels/tables to draw';
             break;
           }
-          const drawn = await window.ChartOverlay.apply({ boxes, lines, labels }, command.opts || {});
+          const drawn = await window.ChartOverlay.apply({ boxes, lines, labels, tables }, command.opts || {});
           /* What is on the canvas NOW, not what the script asked for. apply() may drop objects it
              cannot map, and a silent drop reads to the operator as an empty chart. */
           const onCanvas = (window.ChartOverlay.state ? window.ChartOverlay.state() : null);
           out.ok = !!drawn.ok && !!onCanvas &&
-            (onCanvas.boxes + onCanvas.lines + onCanvas.labels) > 0;
+            (onCanvas.boxes + onCanvas.lines + onCanvas.labels + (onCanvas.tables || 0)) > 0;
           out.onCanvas = onCanvas;
           out.detail = 'ran in ' + res.ms + ' ms · overlay drew ' + (drawn.boxes || 0) + ' box(es), ' +
-            (drawn.lines || 0) + ' line(s), ' + (drawn.labels || 0) + ' label(s)' +
-            (onCanvas ? ' · verified on canvas: ' + onCanvas.boxes + '/' + onCanvas.lines + '/' + onCanvas.labels : '') +
+            (drawn.lines || 0) + ' line(s), ' + (drawn.labels || 0) + ' label(s), ' +
+            (drawn.tables || 0) + ' table(s)' +
+            (onCanvas ? ' · verified: ' + onCanvas.boxes + ' box / ' + onCanvas.lines + ' line / ' +
+              onCanvas.labels + ' label / ' + (onCanvas.tables || 0) + ' table on screen' : '') +
             (drawn.reason ? ' · ' + drawn.reason : '') +
             (drawn.mapping ? ' · window bars ' + drawn.mapping.i0 + '+' + drawn.mapping.n + ' of ' + drawn.mapping.bars +
               ', price ' + Math.round(drawn.mapping.lo) + '-' + Math.round(drawn.mapping.hi) : '');
@@ -281,6 +285,18 @@
           out.shot = dataUrl;
           out.detail = 'captured ' + Math.round(dataUrl.length / 1024) + ' KB';
           break;
+        }
+        case 'reload': {
+          /* The console's static files are served `no-cache`, so a document reload really does pick up
+             a changed overlay.js/chart-bridge.js. This is the op that makes a frontend change live
+             without restarting the app (the only other way needs a fresh iframe stamp). */
+          if (window.ChartOverlay) window.ChartOverlay.clear();
+          out.ok = true;
+          out.reloading = true;
+          out.detail = 'reloading the console page to pick up changed frontend files';
+          await api('/api/chart/result', out);          // report BEFORE the page goes away
+          setTimeout(() => location.reload(), 300);
+          return out;
         }
         default:
           out.detail = 'unknown action "' + command.action + '" — nothing done';

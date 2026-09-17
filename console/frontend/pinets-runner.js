@@ -26,9 +26,9 @@
   /* What PineTS genuinely cannot run today, each with the exact reason the UI shows.
      Keep this list honest: a wrong "runnable" here is reported to the user as success. */
   const GAPS = [
-    [/^\s*import\s/m, 'not runnable: `import` (LuxAlgo libraries) is unimplemented in PineTS'],
-    [/\bwhile\b/, 'not runnable: `while` loops are unimplemented in PineTS'],
-    [/\bfor\s+\w+\s+in\b/, 'not runnable: `for … in` is unimplemented in PineTS']
+    [/^\s*import\s/m, '`import` (LuxAlgo libraries) is unimplemented in PineTS'],
+    [/\bwhile\b/, '`while` loops are unimplemented in PineTS'],
+    [/\bfor\s+\w+\s+in\b/, '`for \u2026 in` is unimplemented in PineTS']
   ];
 
   /** Strip comments so a construct NAMED in prose never blocks a file that does not use it. */
@@ -40,7 +40,7 @@
 
   /** '' when the source looks runnable, otherwise the reason it cannot run. */
   function runnable(source) {
-    if (!source || !source.trim()) return 'not runnable: empty source';
+    if (!source || !source.trim()) return 'empty source';
     const code = stripComments(source);
     for (const [re, reason] of GAPS) if (re.test(code)) return reason;
     return '';
@@ -217,7 +217,7 @@
   function refusedFeature(msg) {
     if (/while/i.test(msg)) return 'while';
     if (/import/i.test(msg)) return 'import';
-    if (/for\s*(\.\.|in)/i.test(msg)) return 'for-in';
+    if (/for\s*(\u2026|\.\.|in)/i.test(msg)) return 'for-in';
     return null;
   }
 
@@ -263,7 +263,7 @@
       return { ok: false, reason: 'no Pine source given', error: classify('no Pine source given', 'NO_SOURCE') };
     }
     const reason = runnable(source);
-    if (reason) return { ok: false, reason, error: classify(reason) };
+    if (reason) return { ok: false, reason: 'not runnable: ' + reason, error: classify(reason) };
 
     const count = Array.isArray(bars) ? bars.length : 0;
     if (count < 30) {

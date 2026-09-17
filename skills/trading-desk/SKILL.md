@@ -33,6 +33,8 @@ pane. There is no headless mode: nothing works while no view is attached. You dr
 2. Pick **one** script:
    - draws levels/boxes/lines → `chart_draw` (paint on the overlay), or
    - plots a line → `chart_apply_pine` (paint a matching Vela native).
+   `chart_draw` also renders a **dashboard `table`** — a backtester's whole output is one table, and it
+   is drawn as an HTML layer positioned where the script asked.
 3. Screenshot it: `chart_shot`.
 4. Only then move to the next script.
 
@@ -46,6 +48,20 @@ stacked mess cannot be told apart from a working one.
 - `chart_draw` reports what is **verified on canvas** (`onCanvas`), not what the script asked for.
 - `chart_apply_pine` / `chart_add` report the natives the chart carries **after** the call.
 - If a mutation reports `ok: false`, the chart did not change — report that, never "done".
+
+## When a script is refused, one marked edit can make it run
+
+`NOT_RUNNABLE[for-in]` is the cheapest refusal to repair, and the repair does not change what the
+indicator computes: PineTS refuses `for … in`, but it runs an indexed loop over the same array.
+
+1. Keep the library's source **verbatim** and mark the edit — the caller must be able to see that this is
+   the Library's script with one compatibility edit, not a hand-written lookalike. Record the slug, the
+   source's sha256, and the line you touched, above the source.
+2. `for p in arr` + `arr` element inside the body becomes `for _i = 0 to array.size(arr) - 1` with
+   `array.get(arr, _i)` in the body. Nothing else.
+3. Re-run it. Measured on `universal-signal-backtester`: refused verbatim → after that single edit it runs
+   in ~1.1 s over 500 bars (16 series, 161 lines, 184 labels, 1 table).
+4. Report the edit and the before/after run times; never present the ported file as untouched Library code.
 
 ## When a script fails
 
@@ -76,4 +92,8 @@ The runner returns a stable code beside the prose. React to the code, not the se
   instead, and the answer says when only part of it could be drawn.
 - Market context (`syminfo`, `tickerid`) comes from the provider form of the engine; a script that reads
   it works, and the run reports which constructor ran (`ctor: provider`).
+- `while` and `for … in` are the only hard refusals worth porting; UDTs, `method` calls and helper
+  functions fail later, at run time — run a candidate before recommending it.
 - Replay is not available in this build.
+- A **changed frontend file** (overlay/bridge) needs `bin/trader-chart reload`, not an app restart: the
+  page reloads itself and picks the new JS up. `bin/trader-chart caps` confirms the action list.

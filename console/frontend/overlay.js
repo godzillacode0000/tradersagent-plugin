@@ -46,6 +46,108 @@
   let canvas = null;
   let host = null;
   let lastSpec = null;
+  let tablesHost = null;
+
+  /* A script's dashboard (Sharpe, profit factor, heatmap) is a Pine `table`, and Pine paints it into a
+     corner of the pane. A canvas cannot hold a table, so the dashboard gets its own DOM layer over the
+     chart: an HTML <table> positioned where the script asked, cells coloured as the script asked. */
+  const TABLE_POS = {
+    top_left:      { top: 8, left: 8 },
+    top_center:    { top: 8, left: '50%', cx: true },
+    top_right:     { top: 8, right: 8 },
+    middle_left:   { top: '50%', left: 8, cy: true },
+    middle_center: { top: '50%', left: '50%', cx: true, cy: true },
+    middle_right:  { top: '50%', right: 8, cy: true },
+    bottom_left:   { bottom: 8, left: 8 },
+    bottom_center: { bottom: 8, left: '50%', cx: true },
+    bottom_right:  { bottom: 8, right: 8 }
+  };
+  const TABLE_SIZE = { tiny: '10px', small: '11px', normal: '12px', large: '14px', huge: '16px' };
+  const TABLE_ALIGN = { left: 'left', center: 'center', right: 'right' };
+
+  function ensureTables() {
+    const target = chartEl();
+    if (!target) return null;
+    if (tablesHost && tablesHost.isConnected && tablesHost.parentElement === target) return tablesHost;
+    if (getComputedStyle(target).position === 'static') target.style.position = 'relative';
+    tablesHost = document.createElement('div');
+    tablesHost.id = 'chart-tables';
+    Object.assign(tablesHost.style, { position: 'absolute', left: '0', top: '0', right: '0',
+                                      bottom: '0', zIndex: '7', pointerEvents: 'none' });
+    target.appendChild(tablesHost);
+    return tablesHost;
+  }
+
+  /** Pine marks a covered cell `_merged` with `_merge_parent: [r0,c0]` — that parent owns the span. */
+  function spanFor(cells, r, c) {
+    const key = String((cells[r][c] || {})._merge_parent);
+    const isChild = (rr, cc) => {
+      const x = cells[rr] && cells[rr][cc];
+      return !!(x && x._merged && String(x._merge_parent) === key);
+    };
+    let colspan = 1;
+    while (c + colspan < (cells[r] || []).length && isChild(r, c + colspan)) colspan += 1;
+    let rowspan = 1;
+    while (r + rowspan < cells.length && isChild(r + rowspan, c)) rowspan += 1;
+    return { colspan, rowspan };
+  }
+
+  function paintTables(tables, rect) {
+    const hostEl = ensureTables();
+    if (!hostEl) return 0;
+    hostEl.innerHTML = '';
+    let painted = 0;
+    for (const t of (tables || [])) {
+      const cells = Array.isArray(t.cells) ? t.cells : [];
+      if (!cells.length) continue;
+      const where = TABLE_POS[String(t.position || 'top_right')] || TABLE_POS.top_right;
+      const wrap = document.createElement('div');
+      Object.assign(wrap.style, {
+        position: 'absolute',
+        background: t.bgcolor || 'rgba(18,18,18,0.92)',
+        border: Math.max(1, Number(t.frame_width) || 1) + 'px solid ' + (t.frame_color || 'rgba(120,120,120,0.65)'),
+        borderRadius: '4px', padding: '2px', fontFamily: 'system-ui, sans-serif',
+        maxWidth: Math.max(140, (rect ? rect.w : 700) - 24) + 'px', overflow: 'hidden',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.35)'
+      });
+      const shift = [];
+      for (const k of ['top', 'bottom', 'left', 'right']) if (where[k] != null) wrap.style[k] = where[k] + 'px';
+      if (where.left === '50%') wrap.style.left = '50%';
+      if (where.top === '50%') wrap.style.top = '50%';
+      if (where.cx) shift.push('translateX(-50%)');
+      if (where.cy) shift.push('translateY(-50%)');
+      if (shift.length) wrap.style.transform = shift.join(' ');
+      const tbl = document.createElement('table');
+      Object.assign(tbl.style, { borderCollapse: 'collapse', fontSize: '11px' });
+      for (let r = 0; r < cells.length; r++) {
+        const row = cells[r] || [];
+        const tr = document.createElement('tr');
+        for (let c = 0; c < row.length; c++) {
+          const cell = row[c] || {};
+          if (cell._merged) continue;                       // covered by its parent's span
+          const sp = spanFor(cells, r, c);
+          const td = document.createElement('td');
+          td.colSpan = sp.colspan;
+          td.rowSpan = sp.rowspan;
+          Object.assign(td.style, {
+            color: cell.text_color || '#dbdbdb',
+            background: cell.bgcolor || 'transparent',
+            fontSize: TABLE_SIZE[String(cell.text_size || 'small')] || '11px',
+            textAlign: TABLE_ALIGN[String(cell.text_halign || 'center')] || 'center',
+            padding: '3px 6px', whiteSpace: 'nowrap', lineHeight: '1.25',
+            border: Math.max(0, Number(t.border_width) || 0) + 'px solid ' + (t.border_color || 'transparent')
+          });
+          td.textContent = String(cell.text == null ? '' : cell.text);
+          tr.appendChild(td);
+        }
+        tbl.appendChild(tr);
+      }
+      wrap.appendChild(tbl);
+      hostEl.appendChild(wrap);
+      painted += 1;
+    }
+    return painted;
+  }
 
   function chartEl() {
     return document.getElementById('chart') || document.body;
@@ -219,6 +321,7 @@
 
   function clear() {
     lastSpec = null;                               // state() reads this back as "nothing painted"
+    if (tablesHost) tablesHost.innerHTML = '';
     if (!canvas) return 0;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -278,9 +381,11 @@
       labels += 1;
     }
 
+    const tables = paintTables(spec.tables, m.rect);
+
     lastSpec = { spec, opts, map: { i0: m.i0, n: m.n, lo: m.lo, hi: m.hi, bars: m.bars },
-                 drawn: { boxes, lines, labels } };
-    return { ok: true, boxes, lines, labels, mapping: lastSpec.map, pad: m.pad };
+                 drawn: { boxes, lines, labels, tables } };
+    return { ok: true, boxes, lines, labels, tables, mapping: lastSpec.map, pad: m.pad };
   }
 
   /**
@@ -291,7 +396,7 @@
    * a coarse "is anything painted at all" check that catches a silently cleared or clipped layer.
    */
   function state() {
-    const d = (lastSpec && lastSpec.drawn) || { boxes: 0, lines: 0, labels: 0 };
+    const d = (lastSpec && lastSpec.drawn) || { boxes: 0, lines: 0, labels: 0, tables: 0 };
     let ink = -1;
     try {
       if (canvas) {
@@ -303,7 +408,9 @@
     } catch (err) {
       ink = -1;                                  // reported as unknown, never as "empty"
     }
-    return { boxes: d.boxes, lines: d.lines, labels: d.labels, ink, has: ink > 0,
+    const tables = (tablesHost && tablesHost.childElementCount) || 0;   // read the DOM, not the wish
+    return { boxes: d.boxes, lines: d.lines, labels: d.labels, tables, ink,
+             has: ink > 0 || tables > 0,
              canvas: canvas ? canvas.width + 'x' + canvas.height : null };
   }
 

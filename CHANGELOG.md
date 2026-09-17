@@ -30,6 +30,19 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 - Tests for the above: `console/backend/tests/test_chart_caps.py` (validation follows the page, the
   fallback never lists an unimplemented action, garbage payloads cannot smuggle actions past the state
   boundary) and `test_mcp_tool_annotations.py`.
+- **Dashboards are drawn, not dropped.** A backtester's entire output is one Pine `table`, and the
+  overlay had no surface for it: `frontend/overlay.js` now renders tables as a DOM layer positioned
+  like Pine's (`top_right`, `middle_center`, …), with spans derived from `_merge_parent` and per-cell
+  colour/size/alignment, and `draw` forwards `__tables__` beside boxes/lines/labels. The read-back
+  reports all four counts (`0 box / 161 line / 184 label / 1 table on screen`).
+- **`reload`: changed frontend files without restarting the app.** A new page action plus
+  `bin/trader-chart reload`: the page reports the command, then reloads itself, and the console serves
+  its static assets `Cache-Control: no-store` so a document reload really does fetch the new JS. Before
+  this, a frontend fix needed a fresh iframe stamp, i.e. a full app restart (and a crash toast).
+- Measured live: **Universal Signal Backtester** (LuxAlgo `universal-signal-backtester`) over BTCUSDT —
+  verbatim source is refused (`for … in`); replacing that single loop with an indexed `for` makes it run
+  in ~1.1 s over 500 bars, yielding 16 series, 161 trade lines, 184 labels and the dashboard table on
+  the chart.
 
 ### Fixed
 
@@ -37,6 +50,10 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   silently discarding the new evidence (`actions` in the state; `error`, `onCanvas`, `natives` in a
   result) — the page reported correctly and the agent saw nothing. Field lists updated, with the
   boundaries sanitised (a non-list `actions` is refused, not iterated character by character).
+- **A refusal was reported twice, and with the wrong code.** `GAPS` carried its own `not runnable:`
+  prefix while the callers prefixed it again (`not runnable: not runnable: …`), and `refusedFeature()`
+  matched `for ..` / `in` but not Pine's ellipsis — so a `for … in` refusal was classified
+  `RUNTIME_CRASH` instead of `NOT_RUNNABLE[for-in]`. Both fixed; the message and the code now agree.
 - **`chart_add_indicator` claimed success on a request echo** and `chart_clear` claimed the chart was
   empty without looking — both now read the chart back.
 
