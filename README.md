@@ -95,14 +95,26 @@ systemctl --user enable --now traders-agent.service
 
 | Where | What it does |
 |---|---|
-| Left sidebar → **Trader's Agent** | opens the console (the row *is* the navigation — one click) |
+| Left sidebar → **Trader's Agent** | reveals the chart pane and brings the desk chat to the front — one click, both surfaces |
 | Status bar → **Trader's Agent** chip | same, from anywhere in the app |
 | `Ctrl+K` → **Trading: open Trader's Agent** | same, from the palette |
-| `Ctrl+K` → **Trading: open console in browser ↗** | opens `127.0.0.1:8787` in your real browser (the page above the chart is chart-only, so the escape hatch lives here) |
+| `Ctrl+K` → **Trading: open console in browser ↗** | opens `127.0.0.1:8787` in your real browser |
 | `Ctrl+K` → **Trading: toggle chart reveal on launch** | stop the console opening by itself at app start |
 | Top bar → `☰ Library` | the Library panel: search 800+ concepts and indicators |
 | Top bar → `▤ Details` | the selected item: write-up, **full Pine source**, licence badge, **Run PineTS** |
 | The chart's own bottom bar | Vela's range buttons, timezone clock and settings (not ours) |
+
+### Chat beside the chart
+
+The chart is a **pane docked to the right of the conversation** (`traders-desk:chart`, 620px, open by
+default), so the app's own composer keeps the left and the chart reads on the right — drag the divider
+to re-balance, or collapse the pane with the app's own control. Clicking the sidebar row re-opens it
+(`host.revealPane`, the app's door for "an explicit user action happened") and opens the **desk chat**
+— the session whose context carries the study's learnings. Any session can drive the chart through the
+tools; the desk one also remembers what we have already looked at.
+
+That chat is the "connected, sees, understands" part, and it needs no bespoke composer: the tools
+below answer over the console's push channel, so the round trip is local.
 
 **Run PineTS** executes the script over the chart's live bars with LuxAlgo's PineTS runtime and paints
 it as a native series; it says plainly when a script uses something PineTS has not implemented

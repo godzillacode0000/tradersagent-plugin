@@ -368,6 +368,25 @@ input:focus-visible, textarea:focus-visible {
 /* Inside the slim topbar the controls shrink with it, so nothing pokes out of the 34px row. */
 .topbar .btn { height: 26px; padding: 0 var(--lx-space-2); }
 
+/* ── The narrow topbar (the plugin's chart pane is ~620px) ───────────────────────────────────────
+   The first version wrapped the brand onto a second line inside a 34px row, which clips text — that
+   IS the misalignment. At this width nothing wraps: the sub-label goes, the pills and buttons tighten,
+   the gaps come in, and the row may grow instead of hiding content. The chart keeps the rest. */
+@media (max-width: 780px) {
+  .topbar {
+    height: auto; min-height: var(--lx-topbar-h);
+    flex-wrap: nowrap; gap: var(--lx-space-2);
+    padding: 5px var(--lx-space-2);
+  }
+  .brand, .topbar__right { flex-wrap: nowrap; min-width: 0; }
+  .brand { gap: var(--lx-space-1); }
+  .brand__name { white-space: nowrap; }
+  .brand__sub { display: none; }            /* "× Vela chart" is the first thing to go */
+  .topbar__right { gap: 4px; }
+  .topbar .btn { font-size: var(--lx-fs-xs); padding: 0 7px; white-space: nowrap; }
+  .topbar .pill { font-size: 10.5px; padding: 1px 6px; white-space: nowrap; }
+}
+
 .pill {
   display: inline-flex; align-items: center; gap: var(--lx-space-1);
   padding: 2px var(--lx-space-2); border-radius: var(--lx-radius-pill);

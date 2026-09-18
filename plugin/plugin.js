@@ -57,8 +57,11 @@ const REVEAL_DELAY_MS = 1500
    one is the chart itself: docked to the RIGHT of the conversation, so the app's own chat keeps the
    left — which is the arrangement the operator asked for on 18 Sep ("left pane = Hermes chat, chart
    on the right"). The desk chat is the session that can actually read the chart: the traders-chart
-   MCP tools answer in tens of milliseconds over the console's push channel. */
-const PANE_ID = 'traders-desk:console'
+   MCP tools answer in tens of milliseconds over the console's push channel.
+   The id is `chart` and not `console` on purpose: the app remembers a pane's collapsed state by id
+   in the renderer's localStorage, and the old id carried a "collapsed" left over from the dock the
+   operator rejected on 17 Sep — a fresh id is a fresh placement (and this one opens by default). */
+const PANE_ID = 'traders-desk:chart'
 const DESK_TITLE = /trader'?s agent/i
 /* The desk study's Hermes session (console/agents/desk/index.json) — the chat whose context and
    tool list are built for this chart. A shortcut for navigation only: if it is gone, the title
@@ -366,13 +369,14 @@ export default {
       },
       {
         /* The chart beside the conversation: the app's chat keeps the left, the chart reads on the
-           right. `defaultCollapsed: true` means boot is never taken over — the sidebar row (or the
-           chip / palette) reveals it, and that click is the explicit user action the app asks for. */
-        id: 'console',
+           right. Open by default (operator's call, 18 Sep): the point is to see the chart while
+           talking, and the app's own pane control collapses it. `revealPane` on the row's landing
+           re-opens it for anyone who dismissed it. */
+        id: 'chart',
         area: PANES_AREA,
         title: "Trader's Agent",
         data: { placement: 'right', dock: { pane: 'workspace', pos: 'right' },
-                width: '620px', defaultCollapsed: true },
+                width: '620px', defaultCollapsed: false },
         render: () => jsx(ConsolePane, {})
       },
       {
