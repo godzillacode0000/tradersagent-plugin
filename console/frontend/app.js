@@ -153,6 +153,17 @@ function newChart(host, options) {
   return instance;
 }
 
+/* The bars pill is the longest thing in the top row, and the pane the plugin docks is ~620px wide —
+   at that width the row has almost no slack left. So at narrow widths the pill shows its short form
+   and the detail moves into the tooltip; wide windows keep the full sentence. Everything the pill
+   knows is still in `title`, so nothing is actually lost. */
+function setBars(text, detail) {
+  const full = detail ? text + ' · ' + detail : text;
+  const narrow = typeof window !== 'undefined' && window.innerWidth <= 780;
+  el.bars.textContent = narrow && detail ? text : full;
+  el.bars.title = full;
+}
+
 async function bootChart() {
   const host = $('#chart');
   el.bars.textContent = 'bars: loading…';
@@ -170,7 +181,7 @@ async function bootChart() {
         // Registered as the workspace `engines: { pine }` option — but whether a
         // script actually executes is still verified per mount, never assumed.
         pineReady = !!window.__wsApp.pineRegistered;
-        el.bars.textContent = 'bars: live · workspace cell';
+        setBars('bars: live', 'workspace cell');
         el.bars.className = 'pill pill--ok';
         el.chartOrigin.textContent = 'full Vela workspace · binance provider';
         document.body.classList.add('has-workspace');   // hides our redundant chart header
@@ -193,7 +204,7 @@ async function bootChart() {
       chart.data.registerProvider('binance', new Binance());
       const ready = typeof chart.ready === 'function' ? chart.ready() : Promise.resolve();
       await Promise.race([ready, new Promise((_, rej) => setTimeout(() => rej(new Error('provider timeout')), 12000))]);
-      el.bars.textContent = 'bars: live · Binance BTCUSDT 1h';
+      setBars('bars: live', 'Binance BTCUSDT 1h');
       el.bars.className = 'pill pill--ok';
       el.chartOrigin.textContent = 'provider: binance (live public data)';
       log('Live bars via Vela’s BinanceProvider. Pine engine: ' + (pineReady ? 'ready' : 'missing'));
