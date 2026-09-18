@@ -6,21 +6,21 @@
  * agent-side, invoked on request — nothing here lists them.
  *
  * Contributions:
- *   ROUTES_AREA       the console page — this IS the chart, and the row's click lands on it
+ *   PLUGIN_PAGE       the landing the row opens: reveals the chart pane, opens the desk chat
+ *   PANES_AREA        the chart itself, docked to the right of the conversation
  *   SIDEBAR_NAV_AREA  the row itself
- *   PALETTE_AREA      commands: open the console · toggle the reveal on launch
+ *   PALETTE_AREA      commands: open the console · toggle the reveal on launch · open in a browser
  *   STATUSBAR_AREAS   a chip that opens the console on click, and does the launch reveal
  *
- * One surface per view: the console lives in the PAGE and nothing else renders it. Every trigger
- * (sidebar row, status chip, palette command, launch reveal) NAVIGATES to /trading-desk, which is
- * the app's own way of putting a view in front — landing on that route mounts this page, so one
- * click is enough.
+ * One console, one view: when the chart pane is on screen the page shows a short status card instead
+ * of a second frame — two frames would each poll the bridge and could run a chart command twice. And
+ * the page renders the console itself whenever the pane is hidden, so a click on the row can never
+ * land on an empty page (the 17 Sep failure was a pane that mounted collapsed while the page deferred
+ * to it: "nothing shown directly — where is my chart?").
  *
- * What that replaced, and why: the previous revision docked a *second* view through
- * `host.openWorkspace` and left the page as a placeholder. That call still reported success after
- * the app updated to v0.21.3 while the view stayed behind the route — the operator clicked the row
- * and got an empty page ("why didnt show anything"). The console was mounted, just never fronted.
- * One page, one frame, one bridge poll loop.
+ * The chat on the left is the app's own composer on a real Hermes session (the desk chat), and that
+ * session reads and drives the chart through the traders-chart MCP tools — not a second composer
+ * bolted into this plugin (he removed one of those on 16 Sep).
  *
  * The launch reveal navigates **once per app run**, delayed past boot, so the chart is what the app
  * opens on (he asked for exactly that); he can turn it off with the palette command, and switch away
@@ -39,6 +39,7 @@ import {
   host,
   haptic,
   ROUTES_AREA,
+  PANES_AREA,
   SIDEBAR_NAV_AREA,
   PALETTE_AREA,
   STATUSBAR_AREAS
@@ -52,9 +53,31 @@ const CONSOLE_ORIGIN = 'http://127.0.0.1:8787/'
 const APP_URL = `${CONSOLE_ORIGIN}?v=${Date.now().toString(36)}`
 const ROUTE = '/trading-desk'
 const REVEAL_DELAY_MS = 1500
+/* Panes are addressed as `<pluginId>:<contributionId>` (the app prefixes the plugin id), and this
+   one is the chart itself: docked to the RIGHT of the conversation, so the app's own chat keeps the
+   left — which is the arrangement the operator asked for on 18 Sep ("left pane = Hermes chat, chart
+   on the right"). The desk chat is the session that can actually read the chart: the traders-chart
+   MCP tools answer in tens of milliseconds over the console's push channel. */
+const PANE_ID = 'traders-desk:console'
+const DESK_TITLE = /trader'?s agent/i
+/* The desk study's Hermes session (console/agents/desk/index.json) — the chat whose context and
+   tool list are built for this chart. A shortcut for navigation only: if it is gone, the title
+   search and then a fresh chat take over. */
+const DESK_SESSION_ID = '20260915_141502_527bcc'
 
 const S = {
   page: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 },
+  pane: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0,
+          background: 'var(--ui-bg-card, transparent)' },
+  card: { display: 'flex', flexDirection: 'column', gap: '10px', padding: '18px',
+          maxWidth: '520px', height: '100%', justifyContent: 'center' },
+  cardTitle: { fontSize: '14px', fontWeight: 600 },
+  cardText: { fontSize: '12px', opacity: 0.75, lineHeight: 1.55 },
+  cardNote: { fontSize: '11px', opacity: 0.55 },
+  cardActions: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
+  cardBtn: { alignSelf: 'flex-start', fontSize: '12px', padding: '6px 10px', cursor: 'pointer',
+             borderRadius: '6px', border: '1px solid var(--ui-border, rgba(128,128,128,0.35))',
+             background: 'var(--ui-bg-card, transparent)', color: 'var(--ui-text, inherit)' },
   meta: { fontSize: '11px', opacity: 0.65 },
   frameWrap: { position: 'relative', flex: 1, minHeight: 0, background: 'var(--ui-bg-card, transparent)' },
   frame: { border: 0, width: '100%', height: '100%', display: 'block' },
@@ -112,38 +135,181 @@ function openConsole() {
 }
 
 /**
- * The console: one iframe on its own origin, filling the whole pane, under a small honest "starting"
- * overlay that only the frame's own load event clears. A plugin cannot probe a cross-origin server,
- * and inventing a guess would be a lie — so it reports "starting", never "broken".
+ * The console frame: one iframe on its own origin, under a small honest "starting" overlay that only
+ * the frame's own load event clears. A plugin cannot probe a cross-origin server, and inventing a
+ * guess would be a lie — so it reports "starting", never "broken".
  *
- * No title bar here on purpose (operator's call, 16 Sep): the console brings its own top row, and a
- * second row above it only stole height from the chart. Opening the console in a real browser moved
- * to the palette ("Trading: open console in browser").
+ * No title bar (operator's call, 16 Sep): the console brings its own top row, and a second row above
+ * it only stole height from the chart. Opening the console in a real browser lives in the palette.
  */
-function TradersDeskPage() {
+function ConsoleFrame({ title }) {
   const [loaded, setLoaded] = useState(false)
 
   return jsxs('div', {
-    style: S.page,
+    style: S.frameWrap,
     children: [
+      jsx('iframe', {
+        src: APP_URL,
+        title: title || "Trader's Agent chart console",
+        style: S.frame,
+        onLoad: () => setLoaded(true)
+      }),
+      loaded
+        ? null
+        : jsxs('div', {
+            style: S.overlay,
+            children: [
+              jsx('span', { children: 'Starting the local console…' }),
+              jsx('span', { style: S.meta, children: CONSOLE_ORIGIN })
+            ]
+          })
+    ]
+  })
+}
+
+/** The chart, as a pane docked to the right of the conversation. */
+function ConsolePane() {
+  return jsxs('div', {
+    style: S.pane,
+    children: [jsx(ConsoleFrame, { title: "Trader's Agent chart" })]
+  })
+}
+
+/** Is the chart pane on screen right now? Guarded — an older build may not have the pane door. */
+function paneVisible() {
+  try {
+    const atom = host.paneVisibility ? host.paneVisibility(PANE_ID) : null
+    return Boolean(atom && typeof atom.get === 'function' && atom.get())
+  } catch (err) {
+    return false
+  }
+}
+
+function watchPane(setVisible) {
+  try {
+    const atom = host.paneVisibility ? host.paneVisibility(PANE_ID) : null
+    if (!atom || typeof atom.listen !== 'function') return null
+    return atom.listen((visible) => setVisible(Boolean(visible)))
+  } catch (err) {
+    return null
+  }
+}
+
+/** Reveal the chart. Called from the page's mount (a user click got us here) and its button. */
+function revealChart() {
+  try {
+    if (typeof host.revealPane === 'function') host.revealPane(PANE_ID)
+  } catch (err) {
+    /* no pane door on this build: the page falls back to the console frame itself */
+  }
+}
+
+/**
+ * Put the chart-aware chat in front.
+ *
+ * The desk session is the one that carries the study's context and can call the chart tools, so the
+ * row opens THAT chat rather than a blank one. Resolution ladder: the study's own session id (a
+ * navigation shortcut with a fallback, never an identity claim — a stale id cannot dangle), then a
+ * title search in the session list, then a fresh chat.
+ */
+async function openDeskChat() {
+  const failures = []
+
+  if (DESK_SESSION_ID) {
+    try {
+      await host.openSession(DESK_SESSION_ID)
+      return 'desk chat in front'
+    } catch (err) {
+      failures.push('id')
+    }
+  }
+
+  try {
+    const profile = (host.state && host.state.profile && host.state.profile.get && host.state.profile.get()) || 'default'
+    const page = await host.listPersistedSessions(null, { profile, limit: 60 })
+    const rows = (page && page.sessions) || []
+    const desk = rows.find((row) => row && DESK_TITLE.test(String(row.title || '')))
+    if (desk && desk.id) {
+      await host.openSession(desk.id)
+      return 'desk chat in front'
+    }
+    failures.push('title')
+  } catch (err) {
+    failures.push('list')
+  }
+
+  try {
+    host.newChat()
+    return 'a fresh chat is in front'
+  } catch (err) {
+    return 'chat unchanged (' + failures.join(', ') + ')'
+  }
+}
+
+/**
+ * The page — where the sidebar row, the status chip and the palette command land.
+ *
+ * Two things, in order: reveal the chart pane (this click IS the explicit user action that justifies
+ * it), and put the desk chat in front. If the pane cannot be shown, the page renders the console
+ * itself — so a click never lands on an empty page (which is exactly how the 17 Sep version failed).
+ */
+function TradersDeskPage() {
+  const [paneUp, setPaneUp] = useState(paneVisible)
+  const [note, setNote] = useState('opening the desk chat…')
+
+  useEffect(() => {
+    let live = true
+    const stop = watchPane(setPaneUp)
+    revealChart()
+    openDeskChat()
+      .then((text) => {
+        if (live) setNote(text)
+      })
+      .catch(() => {})
+    return () => {
+      live = false
+      if (typeof stop === 'function') stop()
+    }
+  }, [])
+
+  if (!paneUp) return jsx('div', { style: S.page, children: jsx(ConsoleFrame, {}) })
+  return jsx(ChartDocked, { note })
+}
+
+/** Shown when the chart is already docked right: the chat owns the left, and this says so. */
+function ChartDocked({ note }) {
+  return jsxs('div', {
+    style: S.card,
+    children: [
+      jsx('div', { style: S.cardTitle, children: 'Chart docked on the right' }),
+      jsx('div', {
+        style: S.cardText,
+        children: 'The Vela console is in the pane beside this chat. Ask here — the agent reads the ' +
+          'chart with the traders-chart tools (chart_state, chart_shot, chart_apply_pine, ' +
+          'library_search) and commands land in tens of milliseconds.'
+      }),
+      jsx('div', { style: S.cardNote, children: note }),
       jsxs('div', {
-        style: S.frameWrap,
+        style: S.cardActions,
         children: [
-          jsx('iframe', {
-            src: APP_URL,
-            title: "Trader's Agent chart console",
-            style: S.frame,
-            onLoad: () => setLoaded(true)
+          jsx('button', {
+            type: 'button',
+            style: S.cardBtn,
+            onClick: () => {
+              haptic()
+              revealChart()
+            },
+            children: 'Show the chart pane'
           }),
-          loaded
-            ? null
-            : jsxs('div', {
-                style: S.overlay,
-                children: [
-                  jsx('span', { children: 'Starting the local console…' }),
-                  jsx('span', { style: S.meta, children: CONSOLE_ORIGIN })
-                ]
-              })
+          jsx('button', {
+            type: 'button',
+            style: S.cardBtn,
+            onClick: () => {
+              haptic()
+              ctx_os_open(CONSOLE_ORIGIN)
+            },
+            children: 'Open in a browser'
+          })
         ]
       })
     ]
@@ -197,6 +363,17 @@ export default {
         area: ROUTES_AREA,
         data: { path: ROUTE },
         render: () => jsx(TradersDeskPage, {})
+      },
+      {
+        /* The chart beside the conversation: the app's chat keeps the left, the chart reads on the
+           right. `defaultCollapsed: true` means boot is never taken over — the sidebar row (or the
+           chip / palette) reveals it, and that click is the explicit user action the app asks for. */
+        id: 'console',
+        area: PANES_AREA,
+        title: "Trader's Agent",
+        data: { placement: 'right', dock: { pane: 'workspace', pos: 'right' },
+                width: '620px', defaultCollapsed: true },
+        render: () => jsx(ConsolePane, {})
       },
       {
         id: 'nav',

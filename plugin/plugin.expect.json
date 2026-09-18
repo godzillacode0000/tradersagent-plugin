@@ -2,16 +2,24 @@
   "id": "traders-desk",
   "areas": [
     "routes",
+    "panes",
     "sidebar.nav",
     "palette",
     "statusBar.right"
   ],
   "renders": [
     {
-      "area": "routes",
+      "comment": "The pane owns the console (it is docked to the right of the conversation), so the console markers are checked HERE. With the pane on screen the route renders the short status card instead of a second frame — one console, one view.",
+      "area": "panes",
       "contains": [
         "Starting the local console",
         "127.0.0.1:8787"
+      ]
+    },
+    {
+      "area": "routes",
+      "contains": [
+        "Chart docked on the right"
       ]
     },
     {
