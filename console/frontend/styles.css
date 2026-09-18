@@ -387,6 +387,24 @@ input:focus-visible, textarea:focus-visible {
   .topbar .pill { font-size: 10.5px; padding: 1px 6px; white-space: nowrap; }
 }
 
+/* The app draws its own chrome around the pane, so the console can end up narrower than the 620px
+   the dock asks for — and a clipped pill is the misalignment the operator saw. Below 640px the
+   indicator count goes first (the chart's own legend carries it), and every control gets a hard
+   max-width with an ellipsis, so a longer label can never push a neighbour off the edge. */
+@media (max-width: 640px) {
+  #indicator-count { display: none; }
+  .topbar .btn, .topbar .pill { max-width: 132px; overflow: hidden; text-overflow: ellipsis; }
+}
+
+/* Nose-bleed widths get air instead of density: the attribution name shrinks (it must stay visible),
+   the controls tighten once more, and the gaps grow back a little so the row reads as a row. */
+@media (max-width: 560px) {
+  .topbar { gap: 6px; padding: 5px 8px; }
+  .topbar__right { gap: 6px; }
+  .brand__name { font-size: var(--lx-fs-md); }
+  .topbar .btn, .topbar .pill { font-size: 10px; padding: 1px 5px; }
+}
+
 .pill {
   display: inline-flex; align-items: center; gap: var(--lx-space-1);
   padding: 2px var(--lx-space-2); border-radius: var(--lx-radius-pill);
