@@ -33,10 +33,13 @@ class ChartStream:
         self._next = 1
         self._results: dict[int, tuple[float, dict]] = {}
         self._pushed_at: dict[int, float] = {}
+        self._claims: dict[int, str] = {}
         self._keepalive = keepalive
         self._result_ttl = result_ttl
         self.pushes = 0
         self.dropped = 0
+        self.claims_granted = 0
+        self.claims_refused = 0
         self.last_push_ms: float | None = None
 
     # ── page side ────────────────────────────────────────────────────────────
@@ -59,6 +62,35 @@ class ChartStream:
 
     def keepalive(self) -> float:
         return self._keepalive
+
+    # ── who executes a command ──────────────────────────────────────────────
+    def claim(self, command_id: int, viewer: str) -> bool:
+        """Exactly one console executes a command.
+
+        More than one console view can be alive at once (the Hermes pane, the HUD's pane, a browser
+        tab). Each receives the same push, so without this every `add ema` ran once per view. The
+        first claim wins; later claimants skip and report nothing (the answer is already on its way
+        from the winner).
+
+        Claiming is in-memory on purpose: it exists to break a same-instant race between live views,
+        and the bridge's result file is what tells a view the work is already done after a reload.
+        """
+        try:
+            cid = int(command_id)
+        except (TypeError, ValueError):
+            return True
+        who = str(viewer or "unknown")
+        with self._lock:
+            owner = self._claims.get(cid)
+            if owner is None:
+                self._claims[cid] = who
+                self.claims_granted += 1
+                if len(self._claims) > 500:
+                    for key in sorted(self._claims)[:-250]:
+                        self._claims.pop(key, None)
+                return True
+            self.claims_refused += 1
+            return owner == who
 
     @staticmethod
     def next_event(inbox: queue.Queue, timeout: float) -> str | None:
@@ -141,6 +173,8 @@ class ChartStream:
             "pushes": self.pushes,
             "dropped": self.dropped,
             "tracking": tracking,          # in-flight commands still awaiting a result
+            "claims_granted": self.claims_granted,
+            "claims_refused": self.claims_refused,
             "last_push_ms": self.last_push_ms,
             "keepalive_s": self._keepalive,
         }

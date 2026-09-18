@@ -1268,6 +1268,13 @@ class Handler(BaseHTTPRequestHandler):
                     recorded = STREAM.deliver_result(recorded)
                 self._ok({"result": recorded})
                 return
+            if path == "/api/chart/claim":
+                # Several consoles can be alive at once (the Hermes pane, the HUD's pane, a browser
+                # tab). They all get the same push, so one of them must win the right to execute it.
+                rid = payload.get("id")
+                viewer = str(payload.get("viewer") or "")
+                self._ok({"id": rid, "claimed": STREAM.claim(rid, viewer), "viewer": viewer})
+                return
             self._fail(f"Unknown endpoint '{path}'", HTTPStatus.NOT_FOUND, "unknown_endpoint")
         except ApiError as exc:
             self._fail(exc.message, exc.status, exc.code, exc.detail)

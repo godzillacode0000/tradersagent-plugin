@@ -18,6 +18,8 @@
 
   const STATE_EVERY = 4000;
   const COMMAND_EVERY = 2000;
+  /* This page's identity for the execute-once claim: two consoles must not both run `add ema`. */
+  const VIEWER = 'v' + Math.random().toString(36).slice(2, 10);
   const POLL_FAST = COMMAND_EVERY;   // no push channel: keep asking on the original schedule
   const POLL_SLOW = 15000;           // push channel is live: polling is only a safety net
   let lastCommandId = 0;
@@ -123,6 +125,21 @@
   async function run(command) {
     const c = chart();
     const out = { id: command.id, ok: false, detail: '' };
+
+    /* Several consoles can be alive at once (the Hermes pane, the HUD's pane, a browser tab), and
+       they all receive the same push — so one of them must win the right to run it. A refused claim
+       means another view is already doing the work: report nothing, because that view owns the
+       result. A claim that cannot be asked for (backend restarting, older build) must not block the
+       one honest view, hence the fail-open catch. */
+    try {
+      const claim = await api('/api/chart/claim', { id: command.id, viewer: VIEWER });
+      if (claim && claim.claimed === false) {
+        return { id: command.id, ok: false, skipped: 'another view is running it' };
+      }
+    } catch (err) {
+      /* fail open: this view runs it rather than nothing running it */
+    }
+
     try {
       switch (command.action) {
         case 'apply': {

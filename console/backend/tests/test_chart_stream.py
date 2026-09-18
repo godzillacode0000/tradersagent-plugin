@@ -109,6 +109,32 @@ class ChartStreamTest(unittest.TestCase):
         self.assertIsNotNone(stats["last_push_ms"])
         self.assertEqual(stats["keepalive_s"], self.stream.keepalive())
 
+    # ── one command, one executor ────────────────────────────────────────────────────────────────
+    # More than one console can be alive (the Hermes pane, the HUD's pane, a browser tab) and every
+    # one of them receives the same push. Without a claim, `add ema` added ema once per view.
+
+    def test_the_first_view_to_claim_a_command_runs_it_and_the_others_skip(self):
+        self.assertTrue(self.stream.claim(7, "vA"))
+        self.assertFalse(self.stream.claim(7, "vB"))
+        self.assertFalse(self.stream.claim(7, "vC"))
+        self.assertEqual(self.stream.stats()["claims_granted"], 1)
+        self.assertEqual(self.stream.stats()["claims_refused"], 2)
+
+    def test_a_view_may_ask_for_its_own_claim_again(self):
+        self.assertTrue(self.stream.claim(8, "vA"))
+        self.assertTrue(self.stream.claim(8, "vA"), "a retry from the same view is still its own work")
+
+    def test_a_command_with_no_usable_id_never_blocks_anyone(self):
+        self.assertTrue(self.stream.claim(None, "vA"))
+        self.assertTrue(self.stream.claim("not-a-number", "vA"))
+
+    def test_the_claim_map_does_not_grow_without_bound(self):
+        for cid in range(1, 700):
+            self.stream.claim(cid, "vX")
+        # the oldest ids have been pruned, so a different view can claim them again rather than
+        # being refused forever against a map that never shrinks
+        self.assertTrue(self.stream.claim(1, "vY"))
+
 
 if __name__ == "__main__":
     unittest.main()
