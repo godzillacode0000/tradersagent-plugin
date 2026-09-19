@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trader's Agent — architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #020617; --panel: #0b1220; --line: #1e293b; --ink: #e2e8f0; --dim: #94a3b8;
+    --cyan: #22d3ee; --emerald: #34d399; --violet: #a78bfa; --amber: #fbbf24; --rose: #fb7185;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 24px 40px; background: var(--bg); color: var(--ink);
+    font: 14px/1.55 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    background-image:
+      linear-gradient(to right, #1e293b 0.5px, transparent 0.5px),
+      linear-gradient(to bottom, #1e293b 0.5px, transparent 0.5px);
+    background-size: 40px 40px;
+  }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+  h1 { font-size: 19px; font-weight: 600; margin: 0; letter-spacing: 0.2px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--emerald); display: inline-block;
+         margin-right: 10px; box-shadow: 0 0 0 0 rgba(52,211,153,0.6); animation: pulse 2.4s infinite; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(52,211,153,0.55); }
+    70% { box-shadow: 0 0 0 9px rgba(52,211,153,0); }
+    100% { box-shadow: 0 0 0 0 rgba(52,211,153,0); }
+  }
+  .sub { color: var(--dim); font-size: 12px; margin: 0 0 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .mermaid { text-align: center; }
+  .mermaid svg { max-width: 100%; height: auto; }   /* fit the panel, never scroll sideways */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin-top: 18px; }
+  .card h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase; }
+  .card ul { margin: 0; padding-left: 0; list-style: none; color: var(--dim); font-size: 12px; }
+  .card li { margin: 3px 0; }
+  .card-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+  .cyan { background: var(--cyan); } .emerald { background: var(--emerald); }
+  .violet { background: var(--violet); } .amber { background: var(--amber); } .rose { background: var(--rose); }
+  .row { display: flex; align-items: center; }
+  pre.fallback { display: none; white-space: pre-wrap; color: var(--dim); font-size: 12px; }
+  footer { margin-top: 22px; color: var(--dim); font-size: 11px; }
+  code { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<header><h1><span class="dot"></span>Trader's Agent — what the system is right now</h1></header>
+<p class="sub">
+  Unofficial LuxAlgo × Vela desk · local console on <code>127.0.0.1:8787</code> · plugin <code>traders-desk</code> ·
+  private repo <code>godzillacode0000/tradersagent-plugin</code>
+</p>
+
+<div class="card">
+  <div class="mermaid" id="diagram">
+flowchart TB
+  subgraph SURFACE["Hermes Desktop — the operator's window"]
+    direction TB
+    ROW["Sidebar row · Trader's Agent<br/><i>sidebar.nav</i>"]
+    ROUTE["Route /trading-desk<br/>reveals the pane + opens the desk chat"]
+    PANE["Pane traders-desk:chart<br/>iframe → 127.0.0.1:8787/?v=stamp<br/>remounts when revealed again"]
+    CHIP["Status chip"]
+    PAL["Palette: open console · reload chart pane"]
+    CHAT["Desk chat — a real Hermes session<br/>reads and drives the chart"]
+  end
+
+  subgraph CONSOLE["Local console · 127.0.0.1:8787 · systemd user unit"]
+    API["HTTP API · server.py<br/>static page + /api/chart/* + /api/build"]
+    HUB["SSE push hub · chart_stream.py<br/>attach · publish · claim · keepalive 8s"]
+    FILES[("File bridge · agents/_chart/<br/>commands.json · results.json · state.json")]
+    PAGE["Console page · frontend/<br/>boot · run · claim · heartbeat"]
+    VELA["Vela chart + workspace shell<br/>its rendererConfig is the colours"]
+    PINETS["PineTS engine"]
+    DATA["Binance public data"]
+  end
+
+  subgraph AGENTS["Agent side"]
+    ME["Hermes agent (this chat)"]
+    CLI["CLI · bin/trader-chart<br/>state · shot · apply · add<br/>market · draw · reload · caps"]
+    MCP["MCP · traders-chart<br/>7 native chart tools"]
+    LUX["LuxAlgo MCP<br/>library · edge · prop-firm"]
+  end
+
+  REPO["Private repo · tradersagent-plugin<br/>install.sh → desktop-plugins/traders-desk"]
+
+  ROW --> ROUTE
+  ROUTE --> PANE
+  ROUTE --> CHAT
+  PAL --> PANE
+  CHIP --> ROUTE
+
+  ME --> CLI
+  ME --> MCP
+  CHAT --> MCP
+  CLI -->|"POST /api/chart/command"| API
+  MCP -->|"same API"| API
+
+  API --> HUB
+  API --- FILES
+  HUB -->|"SSE push · add ~37 ms · shot ~70 ms"| PAGE
+  PAGE -->|"POST /api/chart/result (inline wait)"| API
+  PAGE -->|"heartbeat 4s · symbol tf bars natives build viewer"| API
+  PAGE -->|"POST /api/chart/claim · one console executes"| API
+  PANE -.->|"iframe load · no-store"| PAGE
+
+  PAGE --- VELA
+  PAGE --- PINETS
+  VELA --> DATA
+  API -->|"library · edge · prop-firm"| LUX
+  REPO -.->|"deploy"| SURFACE
+
+  classDef ui fill:#08334466,stroke:#22d3ee,color:#e2e8f0
+  classDef back fill:#064e3b66,stroke:#34d399,color:#e2e8f0
+  classDef data fill:#4c1d9566,stroke:#a78bfa,color:#e2e8f0
+  classDef ext fill:#78350f4d,stroke:#fbbf24,color:#e2e8f0
+  classDef slate fill:#1e293b80,stroke:#94a3b8,color:#e2e8f0
+
+  class ROW,ROUTE,PANE,CHIP,PAL,CHAT ui
+  class API,HUB,PAGE back
+  class FILES data
+  class VELA,PINETS,DATA,LUX ext
+  class ME,CLI,MCP,REPO slate
+  </div>
+  <pre class="fallback" id="fallback"></pre>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <div class="row"><span class="card-dot cyan"></span><h3>What runs where</h3></div>
+    <ul>
+      <li>• Desktop app = surface only (row, route, pane, palette, chip)</li>
+      <li>• Console = Python stdlib server + the chart page, one systemd unit</li>
+      <li>• Chart = Vela + PineTS from CDN, Binance public data</li>
+      <li>• Nothing runs in the cloud for you: no accounts, no telemetry</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="row"><span class="card-dot emerald"></span><h3>The fast path</h3></div>
+    <ul>
+      <li>• Agent → CLI/MCP → <code>/api/chart/command</code> → SSE push → page runs it</li>
+      <li>• Result comes back on the same round trip (inline wait)</li>
+      <li>• add indicator ~37 ms · market switch ~150 ms · screenshot ~70 ms</li>
+      <li>• Fallback: the file bridge + 2 s polling if the stream drops</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="row"><span class="card-dot violet"></span><h3>Two rules that keep it sane</h3></div>
+    <ul>
+      <li>• <b>One claim per command</b> — several consoles can be alive; only one executes</li>
+      <li>• <b>Build + viewer in every heartbeat</b> — a stale frame is visible, not mysterious</li>
+      <li>• <code>reload</code> is once-per-view, so a stale frame cannot stay stale</li>
+      <li>• Theme: console theme → <code>ChartPalette.enforce</code> → Vela rendererConfig</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="row"><span class="card-dot amber"></span><h3>Honest limits</h3></div>
+    <ul>
+      <li>• Pine runs through <b>PineTS</b> (subset): no import, no while, no for…in</li>
+      <li>• Vela's own Pine engine is a paid feature — not used here</li>
+      <li>• Needs the local service + CDN; offline = no chart</li>
+      <li>• No trading: reads, styles, draws, computes — no orders, ever</li>
+    </ul>
+  </div>
+</div>
+
+<footer>
+  Unofficial and not affiliated with LuxAlgo · MIT for this plugin's code · Vela loaded from CDN, never vendored ·
+  diagram source: <code>docs/architecture.mmd</code>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"
+        onerror="document.getElementById('fallback').style.display='block';
+                 document.getElementById('fallback').textContent='mermaid could not load. Source:\\n\\n'+document.getElementById('diagram').textContent"></script>
+<script>
+  (async function () {
+    const box = document.getElementById('diagram');
+    const fallback = document.getElementById('fallback');
+    if (!window.mermaid) { return; }        // the onerror handler above already spoke
+    try {
+      window.mermaid.initialize({
+        startOnLoad: false,
+        theme: 'base',
+        fontFamily: '"JetBrains Mono", ui-monospace, monospace',
+        themeVariables: {
+          darkMode: true,
+          background: '#0b1220', primaryColor: '#0b1220', primaryTextColor: '#e2e8f0',
+          primaryBorderColor: '#334155', lineColor: '#94a3b8',
+          secondaryColor: '#111c2e', tertiaryColor: '#111c2e',
+          clusterBkg: '#070d19', clusterBorder: '#1e293b',
+          titleColor: '#cbd5e1', edgeLabelBackground: '#0b1220', fontSize: '16px'
+        }
+      });
+      const { svg } = await window.mermaid.render('arch', box.textContent);
+      box.innerHTML = svg;                  // only now: a failed parse leaves the source in place
+    } catch (err) {
+      fallback.style.display = 'block';
+      fallback.textContent = 'mermaid could not draw this (' + err + '). Source:\n\n' + box.textContent;
+    }
+  })();
+</script>
+</body>
+</html>
