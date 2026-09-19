@@ -108,7 +108,46 @@
     }
   }
 
-  window.ChartPalette = { KEY, PALETTES, KNOWN_UP, parked, isHandMade, parkStored, apply };
+  /* Does the live config already match the theme we want? Compared on the fields the palettes own,
+   * so a matching config is never re-applied — which is what keeps a change-watcher from looping. */
+  function matches(theme) {
+    const rc = window.__consoleChart?.rendererControl;
+    if (!rc || typeof rc.getConfig !== 'function') return false;
+    let cfg;
+    try { cfg = rc.getConfig(); } catch (err) { return false; }
+    if (!cfg || !cfg.layout) return false;
+    const saved = theme === 'light' ? parked() : null;
+    const wantBg = String((saved?.layout?.background) || PALETTES[theme]?.background || '').toLowerCase();
+    const wantUp = String((saved?.candles?.upColor) || PALETTES[theme]?.up || '').toLowerCase();
+    return String(cfg.layout.background || '').toLowerCase() === wantBg &&
+           String(cfg.candles?.upColor || '').toLowerCase() === wantUp;
+  }
+
+  /** Apply only when the live palette has drifted from the theme. Idempotent by construction. */
+  function enforce(theme) {
+    if (matches(theme)) return { ok: true, skipped: true };
+    return apply(theme);
+  }
+
+  /**
+   * Vela restores its stored palette at moments we do not control — the first layout pass, a resize,
+   * a frame becoming visible again — so a single assertion at boot can be undone a second later.
+   * The palette is therefore re-asserted a few bounded times after boot and whenever the page comes
+   * back into view. Bounded on purpose: a later, deliberate change made in Vela's own settings is the
+   * operator's business and is not fought.
+   */
+  function armAfterBoot(theme, options) {
+    const delays = (options && options.delays) || [0, 1500, 6000, 20000, 60000];
+    const timers = delays.map((ms) => setTimeout(() => enforce(theme), ms));
+    try {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') enforce(theme);
+      });
+    } catch (err) { /* a document without a visibility API */ }
+    return timers.length;
+  }
+
+  window.ChartPalette = { KEY, PALETTES, KNOWN_UP, parked, isHandMade, parkStored, apply, matches, enforce, armAfterBoot };
 
   /* Park right here, at script load: Vela rewrites its stored state while its modules are being
    * imported, so this is the last moment the operator's own palette is still readable. A second

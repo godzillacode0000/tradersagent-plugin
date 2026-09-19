@@ -25,8 +25,6 @@
      stamp in the heartbeat, "this view runs build X, the server serves Y" is visible from the
      agent's side instead of looking like a broken feature. */
   let BUILD = 'pending';
-  api('/api/build').then((info) => { if (info && info.build) BUILD = String(info.build); })
-    .catch(() => { BUILD = 'unknown'; });
   const POLL_FAST = COMMAND_EVERY;   // no push channel: keep asking on the original schedule
   const POLL_SLOW = 15000;           // push channel is live: polling is only a safety net
   let lastCommandId = 0;
@@ -40,7 +38,7 @@
      200 with nothing done). So the page publishes its real list in every heartbeat and the server
      validates against that instead of trusting a constant. */
   const ACTIONS = ['apply', 'add', 'draw', 'clear', 'probe', 'market', 'shot', 'reload', 'mode',
-                   'script'];
+                   'script', 'palette'];
 
   const api = async (path, body) => {
     const res = await fetch(path, body
@@ -54,12 +52,29 @@
     return payload && typeof payload === 'object' && 'data' in payload ? payload.data : payload;
   };
 
+  /* After `api` exists: reading the build stamp BEFORE the helper was defined killed the whole
+     bridge with a TDZ ReferenceError (no heartbeat, no poll — the agent saw "no chart open" while
+     the chart was right there on screen). */
+  api('/api/build').then((info) => { if (info && info.build) BUILD = String(info.build); })
+    .catch(() => { BUILD = 'unknown'; });
+
   function chart() {
     return window.__consoleChart || null;
   }
 
-  /** Vela does not expose the market as a plain object on every build, so read the pickers. */
+  /** Vela does not expose the market as a plain object on every build, so read the pickers.
+   *  app.js owns the reading now (`window.chartMarket`) and the bars accessor uses the same one —
+   *  two scrapes drifted once already (the heartbeat said 30m, the bars said 1h, and a stale copy
+   *  reported another market's price). The local scan stays only for an older page build. */
   function marketFromDom() {
+    if (typeof window.chartMarket === 'function') {
+      try {
+        const m = window.chartMarket();
+        if (m && (m.symbol || m.timeframe || m.interval)) {
+          return { symbol: m.symbol || null, timeframe: m.interval || m.timeframe || null };
+        }
+      } catch (err) { /* fall through to the local scan */ }
+    }
     const host = document.getElementById('chart') || document.body;
     const texts = [];
     host.querySelectorAll('button, span, div').forEach((el) => {
@@ -303,6 +318,64 @@
           await c.setMarket({ symbol: command.symbol, timeframe: command.timeframe });
           out.ok = true;
           out.detail = 'switched to ' + command.symbol + ' ' + (command.timeframe || '');
+          break;
+        }
+        case 'palette': {
+          /* What colours the chart is actually wearing. Read-only, and the honest answer to a
+             question that cost an hour once: the console's theme string does not rewrite a renderer
+             config that already holds explicit colours, so "is the frame wearing our palette?" has to
+             be answered by the frame, not inferred from a screenshot.
+             With `try: true` it also *attempts* the console's palette and reports what the renderer
+             said and what the config reads afterwards — because "apply() returned ok" and "the pane
+             is dark" are two different claims and only the second one matters. */
+          const rc = window.__consoleChart?.rendererControl;
+          const read = () => {
+            const cfg = rc && typeof rc.getConfig === 'function' ? rc.getConfig() : null;
+            if (!cfg || !cfg.layout) return null;
+            return { background: cfg.layout.background, text: cfg.layout.textColor,
+                     grid: cfg.grid?.horzLines?.color, up: cfg.candles?.upColor,
+                     down: cfg.candles?.downColor };
+          };
+          const before = read();
+          if (!before) { out.detail = 'this page has no renderer config'; break; }
+          const parked = !!(window.ChartPalette && window.ChartPalette.parked && window.ChartPalette.parked());
+          const theme = document.documentElement.dataset.theme || '';
+          let attempt = null;
+          let after = before;
+          let note = '';
+          if (command.try) {
+            // What the console *thinks* its theme is, what our dark palette wants, whether the live
+            // config is judged to match, and what an explicit apply leaves behind — the whole chain,
+            // because "enforced and skipped" reading as "already dark" is only true if the target
+            // really is our dark palette.
+            const cp = window.ChartPalette;
+            const want = (cp && cp.PALETTES && cp.PALETTES.dark) || {};
+            const parkedCfg = (cp && cp.parked && cp.parked()) || null;
+            attempt = cp ? cp.enforce(theme || 'dark') : 'no ChartPalette here';
+            await new Promise((r) => setTimeout(r, 300));
+            after = read() || before;
+            const matchesDark = cp && cp.matches ? cp.matches('dark') : 'n/a';
+            const direct = cp && cp.apply ? cp.apply('dark') : 'n/a';
+            await new Promise((r) => setTimeout(r, 300));
+            const afterDirect = read() || before;
+            note = ' · [theme=' + (theme || 'unset') + ' · wantBg=' + (want.background || '?') +
+                   ' · wantUp=' + (want.up || '?') + ' · matchesDark=' + matchesDark +
+                   ' · enforce=' + JSON.stringify(attempt) + ' · afterEnforce=' + after.background +
+                   ' · applyDark=' + JSON.stringify(direct) + ' · afterApply=' + afterDirect.background +
+                   ' · parkedBg=' + ((parkedCfg && parkedCfg.layout && parkedCfg.layout.background) || 'none') +
+                   ' · pageBg=' + getComputedStyle(document.body).backgroundColor +
+                   ' · storedTheme=' + (localStorage.getItem('luxalgo-web:theme') || 'unset') +
+                   ' · topRowBg=' + (document.querySelector('.topbar, .top, header') ?
+                                     getComputedStyle(document.querySelector('.topbar, .top, header')).backgroundColor : 'n/a') + ']';
+          }
+          out.ok = true;
+          out.palette = { before, after, attempt, parked, theme,
+                          hasChartPalette: !!window.ChartPalette,
+                          hasRendererControl: !!rc,
+                          canApply: typeof rc?.applyConfig === 'function' };
+          out.detail = 'background ' + after.background + ' · up ' + after.up + ' · down ' + after.down +
+                       (command.try ? ' · enforced (' + JSON.stringify(attempt) + ')' : '') +
+                       (parked ? ' · a hand-made palette is parked (light restores it)' : '') + note;
           break;
         }
         case 'shot': {

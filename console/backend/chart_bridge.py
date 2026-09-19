@@ -29,6 +29,8 @@ MAX_SHOTS = 12          # keep the last handful of pictures; this box has a smal
 MAX_RESULTS = 60        # the agent only ever reads the newest results
 STALE_AFTER = 30.0      # a state older than this means "no chart is open"
 MIN_SHOT_BYTES = 256    # a real chart capture is tens of KB; anything this small is a placeholder
+DEFAULT_CANVAS_W = 300  # the browser's default canvas size — the shape a non-painting capture has
+DEFAULT_CANVAS_H = 150
 
 DATA_URL = re.compile(r"^data:image/(png|jpeg|jpg|webp);base64,(?P<body>[A-Za-z0-9+/=\s]+)$", re.S)
 
@@ -64,12 +66,37 @@ def _decode_shot(root: str | Path, name: str, data_url: str) -> str | None:
         return None
     if len(raw) < MIN_SHOT_BYTES:   # a 1x1 placeholder is not a chart
         return None
+    if _is_default_canvas(raw):
+        # A renderer that is not painting answers a capture with an untitled 300x150 canvas. It is
+        # 1.6 KB of blank PNG — big enough to pass a byte check, and a picture of nothing handed to
+        # the agent reads as "the chart is empty". Refuse it instead: no picture is the honest answer.
+        return None
     out = _chart_dir(root) / "shots" / f"{name}.png"
     out.write_bytes(raw)
-    shots = sorted((_chart_dir(root) / "shots").glob("*.png"))
+    # Prune by AGE, never by filename: as strings "shot-126" sorts BEFORE "shot-55", so a name sort
+    # deleted the picture that had just been written and kept week-old ones — the CLI then reported
+    # "captured 10 KB" and handed the caller a path that did not exist.
+    shots = sorted((_chart_dir(root) / "shots").glob("*.png"), key=_shot_mtime)
     for old in shots[:-MAX_SHOTS]:
         old.unlink(missing_ok=True)
     return str(out)
+
+
+def _is_default_canvas(raw: bytes) -> bool:
+    """True for the blank 300x150 canvas an unattached/occluded renderer returns to `toDataURL()`."""
+    if len(raw) < 24 or raw[:8] != b"\x89PNG\r\n\x1a\n" or raw[12:16] != b"IHDR":
+        return False
+    width = int.from_bytes(raw[16:20], "big")
+    height = int.from_bytes(raw[20:24], "big")
+    return width == DEFAULT_CANVAS_W and height == DEFAULT_CANVAS_H
+
+
+def _shot_mtime(path: Path) -> float:
+    """Sort key for the shot sweep; a file that vanished mid-glob must not raise."""
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 def save_state(root: str | Path, payload: dict) -> dict:
@@ -87,6 +114,11 @@ def save_state(root: str | Path, payload: dict) -> dict:
         "series": payload.get("series"),
         "bars": payload.get("bars"),
         "layout": payload.get("layout"),
+        # Which console instance wrote this heartbeat, and which build of the frontend it loaded. The
+        # server's own stamp is /api/build; when the two disagree that view is a stale frame — the
+        # condition that once turned "it should have refreshed by now" into guesswork.
+        "build": str(payload.get("build") or ""),
+        "viewer": str(payload.get("viewer") or ""),
         # The page publishes what IT can execute (frontend/chart-bridge.js). The server validates
         # commands against this list, because a whitelist living only in the backend drifted from the
         # page once already: an action passed validation, reached a page with no such case, and the

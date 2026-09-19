@@ -204,12 +204,13 @@ async function bootChart() {
         log('Workspace active: cell chart adopted. Pine mounting remains experimental.');
         unblockPineEngine();
         markChartReady(); exposeChart();
-        /* The chart's stored palette is not the console's (Vela restores whatever it last saved, and
-           a theme string does not rewrite explicit colours), so the console's palette is asserted
-           here and once more a beat later, after Vela's own restore has run. Switching the console
-           to light restores the chart's original palette from the parked copy. */
+        /* The chart's stored palette is not the console's: Vela restores whatever it last saved, and a
+           theme string does not rewrite explicit colours. So the console asserts its palette now, and
+           a few more times over the next minute, because Vela re-applies its own at moments we do not
+           control (first layout, resize, the frame becoming visible again). Switching the console to
+           light restores the chart's original palette from the parked copy — see chart-palette.js. */
         syncChartPalette(currentTheme());
-        setTimeout(() => syncChartPalette(currentTheme()), 1500);
+        window.ChartPalette?.armAfterBoot?.(currentTheme());
         return;
       }
       log('Workspace loaded but exposed no active chart — falling back to the bare chart.');
@@ -269,9 +270,43 @@ function seriesCount() {
 function exposeChart() { window.__consoleChart = chart; }
 
 /**
+ * The market the chart is showing, read off its own pickers.
+ *
+ * Vela exposes no plain market object on this build, and the picker row lists every choice
+ * (30m · 4h · 1D · 1W …) beside the active one — so a "first match wins" scan reads 30m on a 1h
+ * chart. Prefer whatever the page has marked active, then fall back to the old scan.
+ *
+ * Exposed as `window.chartMarket` so the bridge and this file agree on one reading instead of
+ * keeping two scrapes that drift.
+ */
+function marketFromDom() {
+  const host = document.getElementById('chart') || document.body;
+  const texts = [];
+  const active = [];
+  const read = (list, el) => {
+    const t = (el.textContent || '').trim();
+    if (t && t.length <= 16) list.push(t);
+  };
+  try {
+    host.querySelectorAll('button, span, div').forEach((el) => {
+      if (el.children.length) return;
+      read(texts, el);
+    });
+    host.querySelectorAll('[aria-current], [aria-pressed="true"], [aria-selected="true"], [class*="active"], [class*="selected"]')
+      .forEach((el) => read(active, el));
+  } catch (err) { /* a DOM that vanished mid-read is not a reason to fail a heartbeat */ }
+  const sym = (t) => /^[A-Z0-9]{4,14}$/.test(t) && /(USDT|USD|USDC|BTC|ETH)$/.test(t);
+  const tf = (t) => /^\d{1,3}[mhdwM]$/.test(t);
+  return {
+    symbol: active.find(sym) || texts.find(sym) || null,
+    interval: active.find(tf) || texts.find(tf) || null,
+  };
+}
+
+/**
  * The bars PineTS runs over. Vela does not document one public bars getter across
  * builds, so try each accessor that exists and fall back to the venue's own public
- * endpoint — the same market the chart is showing, so the series line up by time.
+ * endpoint — for the market the chart is actually showing, so the series line up by time.
  */
 async function chartBars() {
   const c = chart;
@@ -285,11 +320,19 @@ async function chartBars() {
   } catch {}
   try {
     const d = c.data;
-    const b = pick(typeof d?.bars === 'function' ? d.bars() : d?.bars);
+    const b = pick(typeof d?.bars === 'function' ? d.bars() : null) || pick(d?.bars);
     if (b) return b;
   } catch {}
   try {
-    const res = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=500');
+    // NEVER a hardcoded symbol here: this fallback used to fetch BTCUSDT regardless of the chart,
+    // so every study and every reported number was computed on a different market than the one on
+    // screen (a SOLUSDT chart reporting 81,305 as its last price — read off a bridge that believed
+    // the chart). Ask the chart what it is showing; no bars is an honest answer.
+    const m = (typeof window.chartMarket === 'function') ? window.chartMarket() : marketFromDom();
+    const symbol = m && m.symbol;
+    const interval = (m && m.interval) || '1h';
+    if (!symbol) return [];
+    const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=500`);
     const rows = await res.json();
     if (Array.isArray(rows) && rows.length) {
       return rows.map(([t, o, h, l, cl, v]) => ({
@@ -302,6 +345,7 @@ async function chartBars() {
 
 /* The agent desk (agent-dock.js) runs the same scripts through the same bars — one accessor, not two. */
 window.chartBars = chartBars;
+window.chartMarket = marketFromDom;
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
