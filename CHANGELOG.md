@@ -1,3 +1,9 @@
+## Unreleased
+
+- Document the Hermes Desktop collapsed-pane interaction: `defaultCollapsed: true` panes are adopted
+  with a minimized layout group that `revealPane()` does not clear, so the row falls back to rendering
+  the console in the main zone. Includes the store evidence and the recovery steps.
+
 # Changelog
 
 All notable changes to this project are documented here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [SemVer](https://semver.org/).

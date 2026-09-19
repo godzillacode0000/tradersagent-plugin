@@ -275,3 +275,23 @@ and **pinets** (AGPL-3.0, loaded from the CDN, not redistributed), the **LuxAlgo
 luxalgo.com/library/…`). Full details, quotes and links: [`THIRD-PARTY.md`](THIRD-PARTY.md).
 
 Charts are not financial advice; the Library is an encyclopedia, not a signal service.
+
+## Known Hermes Desktop interaction: a collapsed pane can stay hidden
+
+A pane contributed with `defaultCollapsed: true` is adopted into a layout group carrying
+`"minimized": true` (persisted under `hermes.desktop.layoutTree.v2`). On Hermes Desktop 0.17.0
+`revealPane()` — the documented call for an explicit user action — reveals the pane and its zone
+but does **not** clear that group flag, so after a layout reset the sidebar row can land with the
+pane still hidden: the route page then renders the console itself in the main zone instead of
+docking the chart beside the chat.
+
+Measured 19 Sep 2026 on Omarchy + Hermes Desktop 0.17.0: after Layouts -> Reset, the row's
+`revealPane` call left `{"id":"g-...","panes":["traders-desk:chart"],"minimized":true}` in the
+store and the chart opened as the main page. Clearing the flag and reloading the window docks the
+pane beside the chat as intended.
+
+Recovery for a user who hits it: un-minimize the pane's group in `hermes.desktop.layoutTree.v2`
+(DevTools / a CDP session on `--remote-debugging-port`) or pick a layout template that re-adopts
+contributed panes, then reload the window. The plugin asks for the documented reveal first and
+cannot clear the flag itself — the renderer's layout atoms own that state.
+
