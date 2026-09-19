@@ -18,6 +18,13 @@ mkdir -p "$DST"
 cp "$HERE/plugin/plugin.js" "$HERE/plugin/plugin.expect.json" "$DST/"
 echo "plugin installed -> $DST"
 
+# The desk skill: the tool order, the one-indicator-at-a-time rule, and how to read the engine's
+# failure codes. The desk study loads it by name (console/backend/agents_store.py).
+SKILL_DST="$HERMES_HOME/skills/trading/trader-desk"
+mkdir -p "$SKILL_DST"
+cp "$HERE/skills/trader-desk/SKILL.md" "$SKILL_DST/SKILL.md"
+echo "desk skill       -> $SKILL_DST"
+
 if [[ "${1:-}" == "--vendor" ]]; then
   V="$HERE/console/frontend/vendor"
   mkdir -p "$V"

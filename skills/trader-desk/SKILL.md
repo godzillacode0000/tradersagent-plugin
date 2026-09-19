@@ -1,5 +1,5 @@
 ---
-name: trading-desk
+name: trader-desk
 description: Use when driving the Trader's Agent chart (Vela/LuxAlgo) — analyse a chart, run a LuxAlgo Library indicator on it, or check what the live chart is showing. Covers the tool order, the one-indicator-at-a-time rule, and what the engine cannot do.
 ---
 

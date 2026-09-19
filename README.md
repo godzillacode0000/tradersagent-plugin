@@ -37,7 +37,7 @@ local web app.
 | **Hermes Desktop** | v0.21.3 or newer (the plugin uses the `sidebar.nav` + `routes` contribution areas) |
 | **Python** | 3.11+ with the `mcp` client: `pip install mcp` (a venv is fine — point `PY=` at it) |
 | **Network** | for LuxAlgo's MCP endpoint and the jsDelivr builds; the chart falls back to synthetic bars when the data provider is unreachable |
-| **OS** | any (it is a plain local HTTP server plus an Electron-side plugin; developed on Arch/Hyprland) |
+| **OS** | Linux — built and verified on Omarchy (Arch + Hyprland). macOS and Windows are out of scope. |
 
 ## Install
 
@@ -46,7 +46,8 @@ git clone https://github.com/godzillacode0000/tradersagent-plugin
 cd tradersagent-plugin
 
 ./console/start.sh        # terminal 1 — the console on http://127.0.0.1:8787/
-./install.sh              # copies the plugin into ~/.hermes/desktop-plugins/traders-desk/
+./install.sh              # the plugin -> ~/.hermes/desktop-plugins/traders-desk/
+                          #   and the desk skill -> ~/.hermes/skills/trading/trader-desk/
 ```
 
 Then in Hermes Desktop:

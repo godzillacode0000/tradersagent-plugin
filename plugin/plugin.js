@@ -114,7 +114,7 @@ const S = {
    the context through props. Same for the auto-reveal setting. */
 let ctx_os_open = () => Promise.resolve(false)
 let ctx_storage = null
-let autoRevealOn = true
+let autoRevealOn = false      /* off by default: the pane opens on a click, not at boot */
 let reveal_attempted = false
 
 /* ONE console, ONE view — and it lives in the PAGE.
@@ -442,14 +442,14 @@ export default {
       },
       {
         /* The chart beside the conversation: the app's chat keeps the left, the chart reads on the
-           right. Open by default (operator's call, 18 Sep): the point is to see the chart while
-           talking, and the app's own pane control collapses it. `revealPane` on the row's landing
-           re-opens it for anyone who dismissed it. */
+           right. Closed until the operator asks for it (his call, 19 Sep): the pane used to open with
+           the app, and "only show when I click Trader's Agent" is the behaviour he wants. The row's
+           landing (`revealPane` below) is the way in, and the app remembers the state after that. */
         id: 'chart',
         area: PANES_AREA,
         title: "Trader's Agent",
         data: { placement: 'right', dock: { pane: 'workspace', pos: 'right' },
-                width: '620px', defaultCollapsed: false },
+                width: '620px', defaultCollapsed: true },
         render: () => jsx(ConsolePane, {})
       },
       {

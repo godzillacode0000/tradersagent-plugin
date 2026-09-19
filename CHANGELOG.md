@@ -99,6 +99,16 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Changed
 
+- **The chart pane opens when asked for, not with the app.** The pane contribution is
+  `defaultCollapsed: true` and the launch auto-reveal is off by default: clicking **Trader's Agent** in
+  the sidebar is what puts the chart on screen, which is the behaviour the operator asked for. The
+  palette command still toggles the auto-reveal for anyone who wants the old "always up" desk.
+- **The desk chat is wired to the chart.** The study seeds `skills: [trader-desk, luxalgo-mcp]` (the
+  repo's skill now installs to `~/.hermes/skills/trading/trader-desk/` and is no longer shipped but
+  never installed) and its instruction names the chart tools, so a fresh desk chat reads the chart
+  before it reasons and drives it afterwards. `chat.py` already injects the live chart state into
+  every prompt, so there is one seam: the chat's own composer, talking to the console.
+
 - **One bar above the chart.** The plugin's own title row (and its "Open in browser" button) is gone:
   the page is the console frame alone, so the console's top row is the only chrome and the chart
   gains that full row. Opening the console in a browser moved to the palette
