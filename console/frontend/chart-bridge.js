@@ -366,7 +366,21 @@
                    ' · pageBg=' + getComputedStyle(document.body).backgroundColor +
                    ' · storedTheme=' + (localStorage.getItem('luxalgo-web:theme') || 'unset') +
                    ' · topRowBg=' + (document.querySelector('.topbar, .top, header') ?
-                                     getComputedStyle(document.querySelector('.topbar, .top, header')).backgroundColor : 'n/a') + ']';
+                                     getComputedStyle(document.querySelector('.topbar, .top, header')).backgroundColor : 'n/a') +
+                   // Vela's own chrome is a second, separate theme: ours hands it the same string, so
+                   // a light console should mean light chrome. Reported, not assumed.
+                   ' · velaTheme=' + (() => {
+                     try {
+                       const api = (window.__wsApp || {}).ws || null;
+                       if (!api) return 'no ws handle';
+                       if (typeof api.getTheme === 'function') return String(api.getTheme());
+                       return 'prop:' + String(api.theme);
+                     } catch (err) { return 'err'; }
+                   })() +
+                   ' · velaChromeBg=' + (() => {
+                     const el = document.querySelector('[class*="toolbar"], [class*="Toolbar"], [class*="header"]');
+                     return el ? getComputedStyle(el).backgroundColor : 'no chrome found';
+                   })() + ']';
           }
           out.ok = true;
           out.palette = { before, after, attempt, parked, theme,
