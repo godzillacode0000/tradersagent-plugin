@@ -241,7 +241,7 @@ def cmd_reload(args) -> int:
     The console's static assets are served `no-store`, so a document reload really does fetch the new
     overlay.js/chart-bridge.js. The page reports the command first, then reloads.
     """
-    result = send(args, {"action": "reload"})
+    result = send(args, {"action": "reload", "once_per_view": True})
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:

@@ -133,6 +133,9 @@
 <script src="./pinets-runner.js"></script>
 <script src="./overlay.js"></script>
 <script src="./chart-bridge.js"></script>
+<!-- chart-palette before workspace.js: it parks a hand-made chart palette BEFORE the workspace is
+     constructed, since Vela replaces the renderer config during creation. -->
+<script src="./chart-palette.js"></script>
 
 <!-- The FULL Vela application. The workspace is absent from the root global build
      above (window.Vela.VelaWorkspace === undefined), so it comes in as ES modules

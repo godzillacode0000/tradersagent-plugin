@@ -49,6 +49,7 @@ import traceback
 from collections import OrderedDict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 # --------------------------------------------------------------------------
@@ -997,8 +998,34 @@ def ep_chart_stream_status(params: dict) -> dict:
     return STREAM.stats()
 
 
+def frontend_build() -> str:
+    """A stamp for the frontend files being served right now.
+
+    The page reports it in every heartbeat, which is how a *stale frame* becomes visible instead of
+    mysterious: a renderer keeps its last painted frame while occluded, so a pane can sit on code
+    from hours ago and no amount of reloading from the page side reaches it. With the stamp in the
+    heartbeat, "this view is running build X while the server serves Y" is a fact, not a guess.
+    """
+    frontend = Path(DEFAULT_FRONTEND)
+    try:
+        js_files = list(frontend.glob("*.js"))
+        newest = max((f.stat().st_mtime for f in js_files), default=0.0)
+        html = frontend / "index.html"
+        if html.exists():
+            newest = max(newest, html.stat().st_mtime)
+        return f"{int(newest)}"
+    except OSError:
+        return "unknown"
+
+
+def ep_build(params: dict) -> dict:
+    """What the server is serving — the page stamps this into its heartbeat."""
+    return {"build": frontend_build(), "server_version": SERVER_VERSION}
+
+
 ROUTES = {
     "/api/health": (ep_health, 0.0),
+    "/api/build": (ep_build, 0.0),
     "/api/agents": (ep_agents, 0.0),
     "/api/chart/state": (ep_chart_state, 0.0),
     "/api/chart/commands": (ep_chart_commands, 0.0),
@@ -1273,7 +1300,7 @@ class Handler(BaseHTTPRequestHandler):
                 # tab). They all get the same push, so one of them must win the right to execute it.
                 rid = payload.get("id")
                 viewer = str(payload.get("viewer") or "")
-                self._ok({"id": rid, "claimed": STREAM.claim(rid, viewer), "viewer": viewer})
+                self._ok({"id": rid, "claimed": STREAM.claim(rid, viewer, once=STREAM.is_once(rid)), "viewer": viewer})
                 return
             self._fail(f"Unknown endpoint '{path}'", HTTPStatus.NOT_FOUND, "unknown_endpoint")
         except ApiError as exc:

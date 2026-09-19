@@ -33,7 +33,8 @@ class ChartStream:
         self._next = 1
         self._results: dict[int, tuple[float, dict]] = {}
         self._pushed_at: dict[int, float] = {}
-        self._claims: dict[int, str] = {}
+        self._claims: dict[int, set[str]] = {}
+        self._once_ids: set[int] = set()      # commands meant for every view (a reload), not one
         self._keepalive = keepalive
         self._result_ttl = result_ttl
         self.pushes = 0
@@ -64,13 +65,18 @@ class ChartStream:
         return self._keepalive
 
     # ── who executes a command ──────────────────────────────────────────────
-    def claim(self, command_id: int, viewer: str) -> bool:
-        """Exactly one console executes a command.
+    def claim(self, command_id: int, viewer: str, once: bool = False) -> bool:
+        """Exactly one console executes a command — unless the command is meant for *every* console.
 
         More than one console view can be alive at once (the Hermes pane, the HUD's pane, a browser
         tab). Each receives the same push, so without this every `add ema` ran once per view. The
         first claim wins; later claimants skip and report nothing (the answer is already on its way
         from the winner).
+
+        `once=True` inverts that for the commands that *are* per-view — a `reload` must land in every
+        console, or a stale frame stays stale because the freshly reloaded view keeps claiming the
+        follow-up reloads first. Each view may run such a command once, and a repeat from the same
+        view is its own retry.
 
         Claiming is in-memory on purpose: it exists to break a same-instant race between live views,
         and the bridge's result file is what tells a view the work is already done after a reload.
@@ -81,16 +87,29 @@ class ChartStream:
             return True
         who = str(viewer or "unknown")
         with self._lock:
-            owner = self._claims.get(cid)
-            if owner is None:
-                self._claims[cid] = who
-                self.claims_granted += 1
+            owners = self._claims.get(cid)
+            if owners is None:
+                owners = self._claims[cid] = set()
                 if len(self._claims) > 500:
                     for key in sorted(self._claims)[:-250]:
                         self._claims.pop(key, None)
-                return True
-            self.claims_refused += 1
-            return owner == who
+            if who in owners:
+                return True                      # its own retry, or its own `once` command again
+            if not once and owners:
+                self.claims_refused += 1
+                return False
+            owners.add(who)
+            self.claims_granted += 1
+            return True
+
+    def is_once(self, command_id: int | None) -> bool:
+        """Was this command published for every view (a reload), rather than for one executor?"""
+        try:
+            cid = int(command_id)
+        except (TypeError, ValueError):
+            return False
+        with self._lock:
+            return cid in self._once_ids
 
     @staticmethod
     def next_event(inbox: queue.Queue, timeout: float) -> str | None:
@@ -105,6 +124,10 @@ class ChartStream:
         blob = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         with self._lock:
             targets = list(self._clients.values())
+            if command_id is not None and payload.get("once_per_view"):
+                self._once_ids.add(int(command_id))
+                if len(self._once_ids) > 200:
+                    self._once_ids = set(sorted(self._once_ids)[-100:])
         sent = 0
         for inbox in targets:
             try:

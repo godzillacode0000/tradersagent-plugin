@@ -20,6 +20,13 @@
   const COMMAND_EVERY = 2000;
   /* This page's identity for the execute-once claim: two consoles must not both run `add ema`. */
   const VIEWER = 'v' + Math.random().toString(36).slice(2, 10);
+  /* The build this frame loaded. A renderer keeps its last painted frame while it is occluded, so a
+     pane can sit on hours-old code and never act on the console's own reload command — with the
+     stamp in the heartbeat, "this view runs build X, the server serves Y" is visible from the
+     agent's side instead of looking like a broken feature. */
+  let BUILD = 'pending';
+  api('/api/build').then((info) => { if (info && info.build) BUILD = String(info.build); })
+    .catch(() => { BUILD = 'unknown'; });
   const POLL_FAST = COMMAND_EVERY;   // no push channel: keep asking on the original schedule
   const POLL_SLOW = 15000;           // push channel is live: polling is only a safety net
   let lastCommandId = 0;
@@ -115,6 +122,8 @@
         bars: barsList.length || null,
         actions: ACTIONS,          // what this page can actually do (see ACTIONS above)
         layout: 'workspace',
+        build: BUILD,              // the frontend files this frame loaded (see /api/build)
+        viewer: VIEWER,            // which console instance this is — a stale frame says so
       });
     } catch (err) {
       /* a failed heartbeat means "no chart open" on the agent's side, which is the truth */

@@ -110,10 +110,23 @@ function syntheticBars(n = 400) {
 
 /* ------------------------------------------------------------------- theme */
 /* Two systems, one user action (brief §5.4): set data-theme on <html> for our
- * --lx-* palette AND hand the same string to Vela. Passing theme *strings* and
- * letting Vela derive its own ink is the deliberate choice — a hand-written
- * light theme object would recolour the candles on top of our palette. */
+ * --lx-* palette AND hand the same string to Vela for its own shell. The chart's *colours*, though,
+ * come from chart-palette.js — a theme string does not touch a renderer config that already holds
+ * explicit colours. */
 const THEME_KEY = 'luxalgo-web:theme';
+/* The palette rules live in chart-palette.js: it parks a hand-made palette BEFORE the workspace is
+ * constructed (Vela replaces the renderer config during creation), paints one of our palettes with
+ * applyConfig — a theme string does not touch a config that already holds explicit colours — and
+ * restores the parked copy when the console goes back to light. Here we only call it and say what
+ * happened. */
+function syncChartPalette(theme) {
+  const cp = window.ChartPalette;
+  if (!cp) return false;
+  const result = cp.apply(theme);
+  if (!result.ok) console.warn('[theme] chart palette not applied:', result.why);
+  else if (result.restored) console.info('[theme] chart palette restored from the parked copy');
+  return !!result.ok;
+}
 
 function currentTheme() {
   try { return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'; } catch { return 'dark'; }
@@ -126,7 +139,10 @@ function applyTheme(next) {
   // full workspace owns the chart, it drives its own shell theme.
   const viaWs = window.__wsApp?.setTheme ? window.__wsApp.setTheme(next) : false;
   if (!viaWs) { try { chart?.setTheme?.(next); } catch (err) { console.warn('[theme] chart.setTheme failed:', err); } }
-  log('Theme: ' + next + ' (palette' + (viaWs ? ' + workspace shell' : ' + chart') + ')');
+  // …and the palette itself, because a config that already holds colours ignores the string.
+  const viaPalette = syncChartPalette(next);
+  log('Theme: ' + next + ' (palette' + (viaWs ? ' + workspace shell' : ' + chart') +
+      (viaPalette ? ' + explicit chart palette' : '') + ')');
 }
 
 /* ------------------------------------------------------------------- chart */
@@ -188,6 +204,12 @@ async function bootChart() {
         log('Workspace active: cell chart adopted. Pine mounting remains experimental.');
         unblockPineEngine();
         markChartReady(); exposeChart();
+        /* The chart's stored palette is not the console's (Vela restores whatever it last saved, and
+           a theme string does not rewrite explicit colours), so the console's palette is asserted
+           here and once more a beat later, after Vela's own restore has run. Switching the console
+           to light restores the chart's original palette from the parked copy. */
+        syncChartPalette(currentTheme());
+        setTimeout(() => syncChartPalette(currentTheme()), 1500);
         return;
       }
       log('Workspace loaded but exposed no active chart — falling back to the bare chart.');

@@ -60,6 +60,12 @@ state.ready = (async () => {
   const Engine = pinets.PineWorkerEngine || pinets.PineEngine;
   window.__wsApp.pineRegistered = typeof Engine === 'function';
 
+  // Park the palette the workspace is about to load, before Vela can replace it: this is the only
+  // moment the operator's own colours are still readable (see chart-palette.js).
+  if (window.ChartPalette?.parkStored?.()) {
+    console.info('[workspace] chart palette parked — switching the console to light restores it');
+  }
+
   const ws = new VelaWorkspace('#chart', {
     layout: false,                                   // single chart, no layout picker
     symbol: 'BTCUSDT',

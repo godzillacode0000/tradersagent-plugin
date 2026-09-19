@@ -9,7 +9,8 @@
  *   PLUGIN_PAGE       the landing the row opens: reveals the chart pane, opens the desk chat
  *   PANES_AREA        the chart itself, docked to the right of the conversation
  *   SIDEBAR_NAV_AREA  the row itself
- *   PALETTE_AREA      commands: open the console · toggle the reveal on launch · open in a browser
+ *   PALETTE_AREA      commands: open the console · reload the chart pane · toggle the reveal on
+ *                     launch · open in a browser
  *   STATUSBAR_AREAS   a chip that opens the console on click, and does the launch reveal
  *
  * One console, one view: when the chart pane is on screen the page shows a short status card instead
@@ -170,11 +171,68 @@ function ConsoleFrame({ title }) {
   })
 }
 
+/**
+ * The docked frame can go stale behind our back.
+ *
+ * A renderer keeps the last painted frame while the view is occluded — and a page that nothing is
+ * executing cannot act on the console's own reload command, so the pane can sit on hours-old code
+ * while the agent believes it refreshed. (Measured 18 Sep: the pane kept a light chart palette and
+ * an old build through six reloads; the backend's heartbeat now carries the build stamp that makes
+ * that visible.) So the pane remounts itself: when it is revealed again after being hidden, and on
+ * demand from the palette. The chart re-boots in about a second and Vela restores its own workspace.
+ */
+const paneReloaders = new Set()
+let paneWasHidden = false
+
+function reloadChartPane() {
+  let bumped = 0
+  for (const bump of paneReloaders) {
+    try {
+      bump()
+      bumped += 1
+    } catch (err) {
+      /* a listener from a torn-down pane */
+    }
+  }
+  return bumped
+}
+
 /** The chart, as a pane docked to the right of the conversation. */
 function ConsolePane() {
+  const [generation, setGeneration] = useState(0)
+
+  useEffect(() => {
+    const bump = () => setGeneration((n) => n + 1)
+    paneReloaders.add(bump)
+    return () => {
+      paneReloaders.delete(bump)
+    }
+  }, [])
+
+  // Hidden → visible: hand the operator a frame that is actually running. Quick pane-hopping is not
+  // a reason to re-boot the chart, so only a frame that *was* out of sight is replaced.
+  useEffect(() => {
+    const stop = watchPane((visible) => {
+      if (!visible) {
+        paneWasHidden = true
+        return
+      }
+      if (!paneWasHidden) return
+      paneWasHidden = false
+      setGeneration((n) => n + 1)
+    })
+    return () => {
+      try {
+        if (stop) stop()
+      } catch (err) {
+        /* the atom went away with the pane */
+      }
+    }
+  }, [])
+
   return jsxs('div', {
     style: S.pane,
-    children: [jsx(ConsoleFrame, { title: "Trader's Agent chart" })]
+    children: [jsx(ConsoleFrame, { key: 'frame-' + generation, title: "Trader's Agent chart" })]
   })
 }
 
@@ -400,6 +458,25 @@ export default {
           label: "Trading: open Trader's Agent",
           keywords: ['trading', 'trader', 'vela', 'chart', 'luxalgo', 'desk'],
           run: () => openConsole()
+        }
+      },
+      {
+        id: 'reloadPane',
+        area: PALETTE_AREA,
+        data: {
+          id: 'tradingDesk.reloadPane',
+          label: 'Trading: reload the chart pane',
+          keywords: ['trading', 'trader', 'chart', 'reload', 'refresh', 'pane', 'stale', 'frame'],
+          run: () => {
+            const bumped = reloadChartPane()
+            host.notify({
+              kind: bumped ? 'info' : 'error',
+              title: "Trader's Agent",
+              message: bumped
+                ? 'Chart pane reloading — the console boots in a second.'
+                : 'No chart pane is mounted right now; open Trader’s Agent first.'
+            })
+          }
         }
       },
       {

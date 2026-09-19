@@ -135,6 +135,23 @@ class ChartStreamTest(unittest.TestCase):
         # being refused forever against a map that never shrinks
         self.assertTrue(self.stream.claim(1, "vY"))
 
+    def test_a_once_per_view_command_runs_once_in_every_view(self):
+        # a `reload` must reach every console: the freshly reloaded view re-attaches first and would
+        # otherwise claim the follow-up reloads too, leaving a stale frame stale forever
+        for viewer in ("vA", "vB", "vC"):
+            self.assertTrue(self.stream.claim(11, viewer, once=True))
+        self.assertTrue(self.stream.claim(11, "vA", once=True), "a repeat from the same view is its own retry")
+        self.assertEqual(self.stream.stats()["claims_granted"], 3)
+        self.assertEqual(self.stream.stats()["claims_refused"], 0)
+
+    def test_a_once_command_is_recognised_from_its_payload(self):
+        self.stream.publish({"action": "reload", "once_per_view": True}, command_id=12)
+        self.stream.publish({"action": "add"}, command_id=13)
+        self.assertTrue(self.stream.is_once(12))
+        self.assertFalse(self.stream.is_once(13))
+        self.assertFalse(self.stream.is_once(None))
+        self.assertFalse(self.stream.is_once("not-a-number"))
+
 
 if __name__ == "__main__":
     unittest.main()
