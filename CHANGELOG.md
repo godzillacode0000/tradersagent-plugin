@@ -61,6 +61,10 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 - **The pane no longer says only "starting" forever.** A plugin cannot probe a cross-origin server, so
   after six seconds the overlay adds the one command that fixes a dead frame (`./console/start.sh`)
   instead of leaving it unexplained.
+- **Scope is now stated instead of hedged.** The README's "untested outside Linux" becomes "Linux
+  only, on purpose" (Omarchy/Arch + Hermes Desktop), and the catalog entry declares `platforms:
+  [linux]`. The operator runs this on the machine it was built for; a macOS/Windows ops story is not
+  on the roadmap.
 - **The README's verification line was wrong** — it promised `5 contributions` while the harness
   registers 8 — and the desk session id is documented as a per-install shortcut rather than a
   requirement (any other install fails that lookup harmlessly and lands on the title search).

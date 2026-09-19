@@ -227,8 +227,9 @@ install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/
   read-only market data plus rendering.
 - **The Library is non-commercial.** Its content is CC BY-NC-SA 4.0 — fine to read and cite here, not
   to resell or ship inside a paid product.
-- **Untested outside Linux.** It is a stdlib Python server and an Electron plugin, so it should
-  travel, but only Arch/Hyprland is verified.
+- **Linux only, on purpose.** Built and verified on Omarchy (Arch + Hyprland) with Hermes Desktop.
+  macOS and Windows are out of scope, not merely untested: the ops story here is a systemd user unit
+  and a shell script, and the machine this desk was built for is the one running it.
 
 ## Development
 

@@ -14,6 +14,9 @@ description: Chart-first Vela console with the LuxAlgo Library, as a Hermes Desk
 maintainer: godzillacode0000
 tier: community
 category: desktop
+# Honest scope: a systemd user unit and a shell script are the ops story. No macOS/Windows build.
+platforms:
+  - linux
 docs_url: https://github.com/godzillacode0000/tradersagent-plugin#readme
 capabilities:
   # The MCP server's tools (console/mcp/server.py) — kept in step by
