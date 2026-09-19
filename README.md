@@ -62,7 +62,7 @@ Then in Hermes Desktop:
 
 ```bash
 curl -s localhost:8787/api/health                    # {"ok": true, "data": {"status": "ok", ...}}
-node tools/verify-plugin.mjs plugin/plugin.js        # OK — 5 contributions
+node tools/verify-plugin.mjs plugin/plugin.js        # OK — 8 contributions
 console/bin/trader-chart state                       # symbol, timeframe, price, bars, indicators on
 ```
 
@@ -127,14 +127,15 @@ Two ways in, and they share one path underneath. **Preferred: the MCP server** �
 client) gets the chart as real tools:
 
 ```bash
-hermes mcp add traders-chart --command /home/godzillaton/.hermes/bin/uvx \
-    --args fastmcp run /home/godzillaton/Projects/tradersagent-plugin/console/mcp/server.py
+hermes mcp add traders-chart --command "$HOME/.hermes/bin/uvx" \
+    --args fastmcp run "$PWD/console/mcp/server.py"      # run this from the repo root
 hermes mcp test traders-chart          # start a new session afterwards
 ```
 
 | Tool | What it does |
 |---|---|
 | `chart_views` | is a view attached to push into? (0 = the console is not open) |
+| `chart_caps` | what the attached page will actually execute — read it before drawing |
 | `chart_state` | symbol, timeframe, last price, bars, indicators on the chart |
 | `chart_shot` | one PNG of the chart (returned as an image, plus the path) |
 | `chart_apply_pine` | run Pine over the chart's live bars and paint a matching native |

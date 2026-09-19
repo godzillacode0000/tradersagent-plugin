@@ -65,8 +65,9 @@ const REVEAL_DELAY_MS = 1500
 const PANE_ID = 'traders-desk:chart'
 const DESK_TITLE = /trader'?s agent/i
 /* The desk study's Hermes session (console/agents/desk/index.json) — the chat whose context and
-   tool list are built for this chart. A shortcut for navigation only: if it is gone, the title
-   search and then a fresh chat take over. */
+   tool list are built for this chart. A shortcut for navigation only: on any other install this id
+   simply does not exist, the openSession below fails harmlessly, and the title search then a fresh
+   chat take over — so nothing machine-specific is required for the plugin to work. */
 const DESK_SESSION_ID = '20260915_141502_527bcc'
 
 const S = {
@@ -148,6 +149,15 @@ function openConsole() {
  */
 function ConsoleFrame({ title }) {
   const [loaded, setLoaded] = useState(false)
+  const [waiting, setWaiting] = useState(false)
+
+  useEffect(() => {
+    if (loaded) return undefined
+    /* A plugin cannot probe a cross-origin server, so this is a wait and not a verdict: after a few
+       seconds we stop saying only "starting" and hand over the one command that fixes it. */
+    const timer = setTimeout(() => setWaiting(true), 6000)
+    return () => clearTimeout(timer)
+  }, [loaded])
 
   return jsxs('div', {
     style: S.frameWrap,
@@ -163,8 +173,13 @@ function ConsoleFrame({ title }) {
         : jsxs('div', {
             style: S.overlay,
             children: [
-              jsx('span', { children: 'Starting the local console…' }),
-              jsx('span', { style: S.meta, children: CONSOLE_ORIGIN })
+              jsx('span', { children: waiting
+                ? 'The local console has not answered yet…'
+                : 'Starting the local console…' }),
+              jsx('span', { style: S.meta, children: CONSOLE_ORIGIN }),
+              waiting
+                ? jsx('span', { style: S.cardNote, children: "Still nothing? Start it once in a terminal: ./console/start.sh — then reload this pane from the palette." })
+                : null
             ]
           })
     ]

@@ -16,7 +16,20 @@ tier: community
 category: desktop
 docs_url: https://github.com/godzillacode0000/tradersagent-plugin#readme
 capabilities:
-  provides_tools: []
+  # The MCP server's tools (console/mcp/server.py) — kept in step by
+  # console/backend/tests/test_docs_drift.py.
+  provides_tools:
+    - chart_views
+    - chart_caps
+    - chart_state
+    - chart_shot
+    - chart_apply_pine
+    - chart_draw
+    - chart_clear
+    - chart_add_indicator
+    - chart_set_market
+    - library_search
+    - library_indicator
   provides_hooks: []
   provides_middleware: []
   requires_env: []

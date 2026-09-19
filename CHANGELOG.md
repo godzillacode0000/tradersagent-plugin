@@ -6,6 +6,15 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **`chart_caps` in the MCP surface.** The CLI had it and the skill tells an agent to read it before
+  drawing, but the MCP server never exposed it — an agent working only through MCP drew blind against
+  whatever action list the build happened to have. It now reports the page's own heartbeat list
+  (measured: `page can execute: add, apply, clear, draw, market, mode, palette, probe, reload, script,
+  shot`).
+- **The docs cannot silently drift from the tools.** `console/backend/tests/test_docs_drift.py` reads
+  the README's tool table, the MCP decorators and the catalog entry, and fails when the three
+  disagree: a tool that exists but is undocumented (nobody calls it) or a row for a tool that was
+  renamed away (a stranger calls a tool that does not exist).
 - **Capability handshake: the page publishes what it can execute.** Every heartbeat now carries the
   page's real action list (`frontend/chart-bridge.js`), the backend validates commands against *that*
   (`backend/server.py` → `chart_actions()`, falling back to a constant only when no page has ever
@@ -46,6 +55,17 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Fixed
 
+- **The install instructions no longer carry this machine's paths.** The README and the MCP server's
+  own docstring pointed at `/home/godzillaton/...`; they now use `"$HOME/.hermes/bin/uvx"` and
+  `"$PWD/console/mcp/server.py"`, so copy-paste installs work on someone else's machine.
+- **The pane no longer says only "starting" forever.** A plugin cannot probe a cross-origin server, so
+  after six seconds the overlay adds the one command that fixes a dead frame (`./console/start.sh`)
+  instead of leaving it unexplained.
+- **The README's verification line was wrong** — it promised `5 contributions` while the harness
+  registers 8 — and the desk session id is documented as a per-install shortcut rather than a
+  requirement (any other install fails that lookup harmlessly and lands on the title search).
+- `docs/plugin-catalog-entry.yaml` lists the real `provides_tools` (11) instead of an empty stub,
+  which is what a catalog reviewer reads before enabling the plugin.
 - **`save_state` and `record_result` dropped fields.** Both whitelist what they persist, and both were
   silently discarding the new evidence (`actions` in the state; `error`, `onCanvas`, `natives` in a
   result) — the page reported correctly and the agent saw nothing. Field lists updated, with the

@@ -4,12 +4,15 @@ trader-chart-mcp — the Trader's Agent chart as Hermes tools.
 The console already exposes everything over HTTP on 127.0.0.1:8787; this file is the thin MCP
 wrapper that turns those endpoints into tools an agent can call directly, with no shell in between:
 
+    chart_views            is anything attached to push commands to? (0 = the console is not open)
+    chart_caps             what the attached page will actually execute (its own heartbeat)
     chart_state            what the live chart is showing right now
     chart_shot             one PNG of the chart (returned as an image, plus the path)
     chart_apply_pine       run Pine over the chart's live bars and paint a matching native
+    chart_draw             run Pine and paint the boxes/lines/labels it builds on the overlay
+    chart_clear            clear our overlay and painted natives, then report what is left
     chart_add_indicator    add a Vela native (ema, supertrend, donchian-channels, …)
     chart_set_market       switch symbol / timeframe
-    chart_views            is anything attached to push commands to? (0 = the console is not open)
     library_search         search the LuxAlgo Library (concepts + indicators)
     library_indicator      one indicator: metadata, licence and its Pine source
 
@@ -20,8 +23,8 @@ instead of hanging — the chart is not a headless renderer.
 Run it (stdio transport, what Hermes expects):
 
     uvx fastmcp run server.py                       # framework run
-    hermes mcp add traders-chart --command /home/godzillaton/.hermes/bin/uvx \
-        --args fastmcp run /home/godzillaton/Projects/tradersagent-plugin/console/mcp/server.py
+    hermes mcp add traders-chart --command "$HOME/.hermes/bin/uvx" \
+        --args fastmcp run "$PWD/console/mcp/server.py"          # run it from the repo root
     hermes mcp test traders-chart
 
 Env: LUXALGO_CONSOLE (default http://127.0.0.1:8787), LUXALGO_CHART_INLINE_WAIT (default 8).
@@ -157,6 +160,24 @@ def chart_views() -> str:
                 "before using the chart tools.")
     return (f"✓ {views} view(s) attached · {stats.get('pushes', 0)} commands pushed so far · "
             f"keepalive {stats.get('keepalive_s')}s")
+
+
+@mcp.tool(annotations=_ann("Chart capabilities", read_only=True))
+def chart_caps() -> str:
+    """What the attached page will actually execute. Read this first: an action this build does not
+    have fails at the page, not here."""
+    try:
+        state = _call("/api/chart/state", timeout=5.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    actions = sorted(state.get("actions") or [])
+    if not state.get("open"):
+        return f"✗ no chart open — {state.get('reason') or 'the console page is not mounted'}"
+    if not actions:
+        return ("the attached page has not published its action list — it is running an older console "
+                "build. The console falls back to its own built-in list.")
+    return (f"page can execute: {', '.join(actions)}\n"
+            f"  reported {state.get('age_s')}s ago · {state.get('symbol')} {state.get('timeframe')}")
 
 
 @mcp.tool(annotations=_ann("Chart state", read_only=True))

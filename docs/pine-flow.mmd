@@ -1,0 +1,36 @@
+%% Trader's Agent — what happens when you ask for a Pine indicator (step by step)
+%% Grounded in console/mcp/server.py, console/backend/server.py, console/frontend/chart-bridge.js,
+%% console/frontend/pinets-runner.js, console/frontend/pinets-layer.js
+%% Renders at https://mermaid.live , in GitHub markdown, and inside docs/pine-flow.html
+sequenceDiagram
+  autonumber
+  actor A as Agent (this chat)
+  participant M as MCP · chart_apply_pine
+  participant API as Console API · 127.0.0.1:8787
+  participant P as Console page · chart-bridge.js
+  participant R as PineTS runner
+  participant V as Vela chart + PineTSPaint
+
+  A->>M: chart_apply_pine(pine source)
+  M->>M: source empty? -> "no Pine source given"
+  M->>API: POST /api/chart/command<br/>action=apply · pine · wait
+  API->>API: queue the command, write agents/_chart/commands.json
+  API-->>P: SSE push to every attached view
+  Note over API,P: no view attached -> pushed=false, and the tool answers<br/>"open the Trader's Agent row ... nothing is listening"
+  P->>API: POST /api/chart/claim — one console executes, the rest stand down
+  P->>V: window.chartBars() — the live bars off the chart
+  V-->>P: bars
+  P->>R: run(pine, bars, name=agent)
+  Note over R: the closed set of refusals, each with a code:<br/>NO_SOURCE · NOT_RUNNABLE[while|for-in|import]<br/>TOO_FEW_BARS (under 30) · TIMEOUT · ENGINE_UNAVAILABLE<br/>RUNTIME_CRASH[kind] with the line the engine quoted
+  R-->>P: ok + ms + series + strategy + ctor, or a code + hint
+  alt the engine would not run it
+    P-->>API: POST /api/chart/result — ok=false, error code/feature/line/hint
+    API-->>M: the same structured failure, plus ms on the wire
+    M-->>A: ✗ NOT_RUNNABLE[while] (line 42) + the hint that says why
+  else it ran
+    P->>V: PineTSPaint.paintNative(pine) — match the script to a real Vela native
+    V-->>P: painted as the native, or a partial note when plots have no exact native
+    P-->>API: POST /api/chart/result — ok=true, detail, series, strategy
+    API-->>M: the result, with stream_ms
+    M-->>A: ✓ ran in N ms over N bars · N series · drawn with Vela native "X"
+  end
