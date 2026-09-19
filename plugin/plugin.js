@@ -271,8 +271,20 @@ function watchPane(setVisible) {
   }
 }
 
-/** Reveal the chart. Called from the page's mount (a user click got us here) and its button. */
+/**
+ * Reveal the chart. Called from the page's mount (a user click got us here) and its button.
+ *
+ * Adoption first, then reveal. A pane the app has dismissed (or a layout template dropped) is not in
+ * the layout tree at all, and `revealPane` alone cannot put it back — the dock hint is only honoured
+ * when the pane is adopted again. Measured 19 Sep: after a layout reset the sidebar row opened the
+ * console as the main page instead of docking the pane, because the pane was gone from the tree.
+ */
 function revealChart() {
+  try {
+    if (typeof host.undismissPane === 'function') host.undismissPane(PANE_ID)
+  } catch (err) {
+    /* older build without the adoption door */
+  }
   try {
     if (typeof host.revealPane === 'function') host.revealPane(PANE_ID)
   } catch (err) {
