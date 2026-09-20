@@ -147,8 +147,21 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_palette` | what colours the chart is wearing (`try_apply` asserts the console theme) |
 | `chart_draw` | run Pine and paint the boxes/lines/labels it builds on the chart overlay |
 | `chart_clear` | clear the overlay and the indicators our paint layer added (then report what is left) |
+| `chart_batch` | run several chart actions in ONE call, in order (`[{"action": "market", …}, …]`), stopping at the first failure unless told otherwise |
+| `chart_snapshot` | remember the chart's market + indicators as a restore point |
+| `chart_undo` | put the chart back to that point, reporting the chart's own before → after lists |
+| `chart_watch` | watch for a spell and answer with a **diff** (what changed), not another snapshot |
 | `library_search` | search the LuxAlgo Library |
 | `library_indicator` | one indicator's write-up, licence and Pine source |
+| `library_list` | browse indicators with filters and paging (`family`, `text`, `concept`, `tier`, `sort`, `page`) |
+| `library_taxonomy` | the Library's own families or concepts — read before filtering, so a name is the Library's |
+| `library_concept` | one concept by slug: what it means and which indicators implement it |
+| `library_source` | Pine source by **exact slug** — no name resolution to get wrong |
+| `edge_presets` | LuxAlgo's measured edge presets and their categories |
+| `edge_report` | one preset's measured edge on one symbol |
+| `edge_symbols` | which symbols the edge reports cover |
+| `propfirms` | prop-firm directory, with an optional filter |
+| `propfirm_offers` | current prop-firm offers from LuxAlgo's own tracker |
 
 Same surface from a shell: `trader-chart remove MACD | --all`, `add ema`, `apply file.pine`,
 `draw file.pine`, `shot`, `market SYMBOL TF`, `state`. Which of those actually paint in this Vela build —

@@ -36,6 +36,19 @@ capabilities:
     - chart_palette
     - library_search
     - library_indicator
+    - library_list
+    - library_taxonomy
+    - library_concept
+    - library_source
+    - edge_presets
+    - edge_report
+    - edge_symbols
+    - propfirms
+    - propfirm_offers
+    - chart_batch
+    - chart_snapshot
+    - chart_undo
+    - chart_watch
   provides_hooks: []
   provides_middleware: []
   requires_env: []

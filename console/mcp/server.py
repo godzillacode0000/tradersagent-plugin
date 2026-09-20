@@ -393,5 +393,358 @@ def library_indicator(query: str) -> str:
     return "\n\n".join(head)
 
 
+@mcp.tool(annotations=_ann("Browse the LuxAlgo Library", read_only=True, open_world=True))
+def library_list(family: str = "", text: str = "", concept: str = "", tier: str = "",
+                 sort: str = "", direction: str = "", page: int = 0, page_size: int = 24) -> str:
+    """Browse indicators with filters and paging, when a search box is not enough.
+
+    `sort` is one of name/date/family, `direction` asc/desc, `page_size` up to 100. Answers with the
+    same rows the console's own list shows, plus the family taxonomy so a caller can narrow down.
+    """
+    params: dict = {"page": max(0, int(page or 0)), "page_size": max(1, min(int(page_size or 24), 100))}
+    for key, value in (("family", family), ("text", text), ("concept", concept),
+                       ("tier", tier), ("sort", sort), ("direction", direction)):
+        if str(value or "").strip():
+            params[key] = str(value).strip()
+    try:
+        data = _call("/api/indicators?" + urllib.parse.urlencode(params), timeout=30.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    rows = data.get("indicators") or []
+    if not rows:
+        return f"no indicators match {params}"
+    out = [f"{len(rows)} indicator(s) · page {data.get('page', params['page'])}"
+           + (f" of {data.get('pages')}" if data.get("pages") else "")
+           + (f" · family {data.get('family')}" if data.get("family") else "")]
+    for row in rows:
+        bits = [f"- {row.get('title') or row.get('name') or row.get('slug')} ({row.get('slug')})"]
+        if row.get("family"):
+            bits.append(f"  family: {row['family']}")
+        if row.get("tier"):
+            bits.append(f"  tier: {row['tier']}")
+        out.append("\n".join(bits))
+    if not data.get("family") and data.get("families"):
+        out.append("families: " + ", ".join(map(str, data["families"])))
+    return "\n".join(out)
+
+
+@mcp.tool(annotations=_ann("Library families and concepts", read_only=True, open_world=True))
+def library_taxonomy(what: str = "families") -> str:
+    """The Library's own taxonomy: `families` (indicator families) or `concepts` (the concept graph).
+
+    Read this before filtering with library_list, so a family name is the Library's, not a guess.
+    """
+    which = (what or "families").strip().lower()
+    try:
+        if which.startswith("concept"):
+            data = _call("/api/concepts", timeout=30.0)
+            rows = data.get("concepts") or []
+            if not rows:
+                return "no concepts returned"
+            return "\n".join([f"{len(rows)} concept(s):"] +
+                             [f"- {r.get('title') or r.get('name') or r.get('slug')} ({r.get('slug')})"
+                              for r in rows])
+        data = _call("/api/families", timeout=30.0)
+        rows = data.get("families") or []
+        if not rows:
+            return "no families returned"
+        out = [f"{len(rows)} family(ies):"]
+        for row in rows:
+            if isinstance(row, dict):
+                out.append(f"- {row.get('name') or row.get('slug')} — {row.get('count') or '?'} indicator(s)")
+            else:
+                out.append(f"- {row}")
+        return "\n".join(out)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+
+
+@mcp.tool(annotations=_ann("One Library concept", read_only=True, open_world=True))
+def library_concept(slug: str) -> str:
+    """One Library concept by slug: what it means and which indicators implement it."""
+    if not slug.strip():
+        return "✗ empty slug"
+    try:
+        data = _call("/api/concept?" + urllib.parse.urlencode({"slug": slug.strip()}), timeout=30.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    item = data.get("concept") or data
+    lines = [f"# {item.get('title') or item.get('name') or slug} ({slug.strip()})"]
+    if item.get("summary") or item.get("description"):
+        lines.append(str(item.get("summary") or item.get("description"))[:800])
+    related = data.get("indicators") or item.get("indicators") or []
+    if related:
+        lines.append("indicators:")
+        lines += [f"- {r.get('title') or r.get('slug')} ({r.get('slug')})" if isinstance(r, dict) else f"- {r}"
+                  for r in related[:20]]
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations=_ann("Library source by slug", read_only=True, open_world=True))
+def library_source(slug: str) -> str:
+    """The Pine source of one Library entry, by EXACT slug — no name resolution, no guessing.
+
+    Same rule as library_indicator: LuxAlgo Library source is CC BY-NC-SA 4.0, fine to run locally,
+    never to redistribute.
+    """
+    if not slug.strip():
+        return "✗ empty slug"
+    try:
+        data = _call("/api/source?" + urllib.parse.urlencode({"slug": slug.strip()}), timeout=30.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    pine = data.get("source") or data.get("pine") or ""
+    if not pine:
+        return f"✗ no source stored for {slug!r} — check the slug with library_search"
+    return (f"# {slug.strip()} — {len(pine.splitlines())} line(s)\n"
+            "Pine source (LuxAlgo Library — CC BY-NC-SA 4.0, not redistributable):\n"
+            "```pine\n" + pine.strip()[:8000] + "\n```")
+
+
+@mcp.tool(annotations=_ann("LuxAlgo edge presets", read_only=True, open_world=True))
+def edge_presets(category: str = "") -> str:
+    """LuxAlgo's own measured edge presets, and the categories they come in."""
+    params = {}
+    if category.strip():
+        params["category"] = category.strip()
+    try:
+        data = _call("/api/edge/presets" + ("?" + urllib.parse.urlencode(params) if params else ""),
+                     timeout=40.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    rows = data.get("presets") or []
+    out = [f"{data.get('count', len(rows))} preset(s)"
+           + (f" in {data['category']}" if data.get("category") else "")]
+    for row in rows[:30]:
+        label = row.get("name") or row.get("id") or row
+        out.append(f"- {label}")
+    if data.get("categories"):
+        out.append("categories: " + ", ".join(map(str, data["categories"])))
+    return "\n".join(out)
+
+
+@mcp.tool(annotations=_ann("LuxAlgo edge report", read_only=True, open_world=True))
+def edge_report(preset: str, symbol: str) -> str:
+    """One preset's measured edge on one symbol — the numbers behind LuxAlgo's published stats."""
+    if not preset.strip() or not symbol.strip():
+        return "✗ both preset and symbol are required"
+    try:
+        data = _call("/api/edge/report?" + urllib.parse.urlencode(
+            {"preset": preset.strip(), "symbol": symbol.strip().upper()}), timeout=60.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    report = data.get("report") or {}
+    lines = [f"{preset} on {symbol.upper()}:"]
+    for key, value in list(report.items())[:20]:
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            lines.append(f"- {key}: {value}")
+        elif isinstance(value, list):
+            lines.append(f"- {key}: {len(value)} row(s)")
+                # nested structures are summarised: the raw report can be large
+    return "\n".join(lines) if len(lines) > 1 else f"no report fields came back for {preset} / {symbol}"
+
+
+@mcp.tool(annotations=_ann("Edge report symbols", read_only=True, open_world=True))
+def edge_symbols() -> str:
+    """Which symbols the edge reports actually cover (ask before requesting one)."""
+    try:
+        data = _call("/api/edge/symbols", timeout=40.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    rows = data.get("symbols") or []
+    head = f"{data.get('count', len(rows))} symbol(s)"
+    if data.get("note"):
+        head += f" · {data['note']}"
+    return head + "\n" + ", ".join(map(str, rows[:60]))
+
+
+@mcp.tool(annotations=_ann("Prop-firm directory", read_only=True, open_world=True))
+def propfirms(query: str = "") -> str:
+    """Prop firms and their current offers, with an optional filter."""
+    params = {"q": query.strip()} if query.strip() else {}
+    try:
+        data = _call("/api/propfirms" + ("?" + urllib.parse.urlencode(params) if params else ""),
+                     timeout=40.0)
+        firms = data.get("firms") or data.get("propfirms") or []
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    out = [f"{len(firms)} firm(s)" + (f" matching {query!r}" if query.strip() else "")]
+    for row in firms[:30]:
+        if isinstance(row, dict):
+            name = row.get("name") or row.get("slug")
+            extra = [str(row[k]) for k in ("max_funding", "profit_split", "platform") if row.get(k)]
+            out.append(f"- {name}" + (f" — {', '.join(extra)}" if extra else ""))
+        else:
+            out.append(f"- {row}")
+    return "\n".join(out)
+
+
+@mcp.tool(annotations=_ann("Prop-firm offers", read_only=True, open_world=True))
+def propfirm_offers(query: str = "") -> str:
+    """Current prop-firm offers (discounts, price changes) from LuxAlgo's own tracker."""
+    params = {"q": query.strip()} if query.strip() else {}
+    try:
+        data = _call("/api/offers" + ("?" + urllib.parse.urlencode(params) if params else ""),
+                     timeout=40.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    rows = data.get("offers") or []
+    out = [f"{len(rows)} offer(s)" + (f" matching {query!r}" if query.strip() else "")]
+    for row in rows[:30]:
+        if isinstance(row, dict):
+            out.append("- " + " · ".join(str(v) for v in (
+                row.get("firm") or row.get("name"), row.get("promo") or row.get("title"),
+                row.get("discount") or row.get("price"), row.get("ends") or row.get("expires")) if v))
+        else:
+            out.append(f"- {row}")
+    return "\n".join(out)
+
+
+# ── chart tools that own more than one round trip ────────────────────────────────────────────────
+_SNAPSHOT: dict = {}          # the last state + natives we saw, for chart_undo
+
+
+def _natives() -> list:
+    """The indicator list the CHART reports (never our own record of what we asked for)."""
+    try:
+        state = _call("/api/chart/state", timeout=5.0)
+    except RuntimeError:
+        return []
+    return [str(n) for n in (state.get("natives") or []) if str(n).strip()]
+
+
+@mcp.tool(annotations=_ann("Run several chart commands", destructive=True))
+def chart_batch(commands: str, stop_on_error: bool = True) -> str:
+    """Run several chart actions in ONE call, in order.
+
+    `commands` is JSON: a list of objects, each `{"action": "market", "symbol": "BTCUSDT",
+    "timeframe": "1h"}`. Allowed actions are the page's own (see chart_caps) — typically market,
+    add, remove, clear, draw, apply, shot, reload. Every step's result is reported, and the run stops
+    at the first failure unless stop_on_error=False. Use it for a sequence (switch market → add the
+    study → capture) instead of one call per step.
+    """
+    try:
+        steps = json.loads(commands) if isinstance(commands, str) else commands
+    except ValueError as exc:
+        return f"✗ commands is not valid JSON: {exc}"
+    if isinstance(steps, dict):
+        steps = [steps]
+    if not isinstance(steps, list) or not steps:
+        return "✗ give a JSON list of {action, ...} objects"
+    lines = []
+    for index, step in enumerate(steps, 1):
+        if not isinstance(step, dict) or not step.get("action"):
+            lines.append(f"{index}. ✗ every step needs an action")
+            if stop_on_error:
+                break
+            continue
+        action = str(step["action"]).strip()
+        fields = {k: v for k, v in step.items() if k != "action"}
+        answer = _command(action, **fields)
+        lines.append(f"{index}. {action} → {answer}")
+        if stop_on_error and answer.lstrip().startswith("✗"):
+            lines.append(f"stopped at step {index} (stop_on_error)")
+            break
+        if stop_on_error and "\n✗ " in answer:
+            lines.append(f"stopped at step {index} (stop_on_error)")
+            break
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations=_ann("Remember the chart as it is"))
+def chart_snapshot() -> str:
+    """Remember the chart's indicators plus its symbol/timeframe as a restore point for chart_undo."""
+    try:
+        state = _call("/api/chart/state", timeout=5.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    if not state.get("open"):
+        return f"✗ no chart open — {state.get('reason') or 'the console page is not mounted'}"
+    _SNAPSHOT.clear()
+    _SNAPSHOT.update({"symbol": state.get("symbol"), "timeframe": state.get("timeframe"),
+                      "natives": [str(n) for n in (state.get("natives") or [])]})
+    natives = ", ".join(_SNAPSHOT["natives"]) or "none"
+    return (f"✓ remembered {_SNAPSHOT['symbol']} {_SNAPSHOT['timeframe']} with: {natives}\n"
+            "  chart_undo puts the chart back to this.")
+
+
+@mcp.tool(annotations=_ann("Restore the remembered chart", destructive=True))
+def chart_undo() -> str:
+    """Put the chart back to the last chart_snapshot: market first, then the indicator set.
+
+    Reports the before → after lists from the chart itself, so a restore that did not land is visible.
+    Drawings are not restored — use chart_clear, then re-draw.
+    """
+    if not _SNAPSHOT:
+        return "✗ nothing remembered yet — call chart_snapshot first"
+    before = _natives()
+    lines = []
+    try:
+        state = _call("/api/chart/state", timeout=5.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    if str(state.get("symbol") or "").upper() != str(_SNAPSHOT.get("symbol") or "").upper() or \
+            str(state.get("timeframe") or "") != str(_SNAPSHOT.get("timeframe") or ""):
+        lines.append("market → " + _command("market", symbol=str(_SNAPSHOT["symbol"]),
+                                            timeframe=str(_SNAPSHOT["timeframe"])))
+    want = list(_SNAPSHOT.get("natives") or [])
+    for native in [n for n in before if n not in want]:
+        lines.append(f"remove {native} → " + _command("remove", native=native))
+    for native in [n for n in want if n not in before]:
+        lines.append(f"add {native} → " + _command("add", native=native))
+    after = _natives()
+    verb = "✓" if sorted(after) == sorted(want) else "⚠"
+    return (f"{verb} undo: {before} → {after} (wanted {want})\n" + "\n".join(lines))
+
+
+@mcp.tool(annotations=_ann("Wait for the chart to change", read_only=True))
+def chart_watch(seconds: int = 15, timeout_s: int = 0) -> str:
+    """Watch the chart for `seconds` and report what actually changed.
+
+    Compares the heartbeat's own fields (symbol, timeframe, last price, bars, indicators, drawings)
+    between two reads, so the answer is a diff rather than a second snapshot. `seconds` defaults to
+    15 and is capped at 120. Set timeout_s to wait no longer than that for the FIRST change.
+    """
+    span = max(1, min(int(seconds or 15), 120))
+    try:
+        first = _call("/api/chart/state", timeout=5.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    if not first.get("open"):
+        return f"✗ no chart open — {first.get('reason') or 'the console page is not mounted'}"
+
+    def face(state):
+        return {"symbol": state.get("symbol"), "timeframe": state.get("timeframe"),
+                "last": state.get("last"), "bars": state.get("bars"),
+                "natives": [str(n) for n in (state.get("natives") or [])],
+                "drawings": state.get("drawings"), "series": state.get("series")}
+
+    start = face(first)
+    deadline = time.time() + span
+    changed = None
+    while time.time() < deadline:
+        time.sleep(1.5)
+        try:
+            now = _call("/api/chart/state", timeout=5.0)
+        except RuntimeError:
+            continue
+        diff = {k: (start[k], now.get(k)) for k in start if start[k] != now.get(k)}
+        if diff:
+            changed = (diff, now)
+            if not timeout_s:
+                break
+    if not changed:
+        return (f"no change in {span}s — still {start['symbol']} {start['timeframe']} · "
+                f"last {start['last']} · indicators {', '.join(start['natives']) or 'none'}")
+    diff, now = changed
+    lines = [f"changed within {span}s:"]
+    for key, (old, new) in diff.items():
+        if isinstance(old, list):
+            old, new = ", ".join(map(str, old)) or "none", ", ".join(map(str, new or [])) or "none"
+        lines.append(f"- {key}: {old} → {new}")
+    lines.append(f"now: {now.get('symbol')} {now.get('timeframe')} · last {now.get('last')}")
+    return "\n".join(lines)
+
+
 if __name__ == "__main__":
     mcp.run()

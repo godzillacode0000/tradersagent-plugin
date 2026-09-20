@@ -29,13 +29,22 @@ def _read(path: str) -> str:
 def mcp_tools() -> list:
     """Tool names as the decorators declare them, in file order.
 
-    The decorator nests parens (`_ann("…", read_only=True)` inside `@mcp.tool(...)`), so this walks
-    the source counting depth instead of regex-matching the whole line.
+    Both loops are tolerant of the ways this file legitimately wraps and quotes:
+
+    * the decorator nests parens (`_ann("…", read_only=True)` inside `@mcp.tool(...)`), so the block
+      is walked with a depth counter instead of a regex on one line;
+    * a signature may wrap (`def library_list(family: str = "",\\n    sort: str = "", …)`), so the
+      `def` is looked for over a small window rather than only the first line after the block;
+    * a tool's own docstring quotes a call — `@mcp.tool(` inside chart_batch's help text — which the
+      depth walk otherwise counts as a real decorator, swallowing the next tool. Only a line that
+      STARTS with the decorator opens a block, and the def window is measured from there.
     """
     names = []
     lines = _read(MCP_SERVER).splitlines()
-    for index, line in enumerate(lines):
-        if not line.lstrip().startswith("@mcp.tool("):
+    index = 0
+    while index < len(lines):
+        if not lines[index].lstrip().startswith("@mcp.tool("):
+            index += 1
             continue
         depth = 0
         cursor = index
@@ -44,11 +53,15 @@ def mcp_tools() -> list:
             if depth <= 0 and cursor > index:
                 break
             cursor += 1
-        for follow in lines[cursor:cursor + 3]:
+        # The def sits on the decorator's own line or immediately below it, and its signature may
+        # wrap: scan forward from the decorator for the first line that OPENS a definition, which is
+        # always before the body's docstring.
+        for follow in lines[index:index + 4]:
             match = re.match(r"\s*(?:async\s+)?def\s+([a-z_][a-z0-9_]*)\s*\(", follow)
             if match:
                 names.append(match.group(1))
                 break
+        index = max(cursor, index + 1)
     return names
 
 
