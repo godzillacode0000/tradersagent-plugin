@@ -30,6 +30,7 @@ capabilities:
     - chart_draw
     - chart_clear
     - chart_add_indicator
+    - chart_remove_indicator
     - chart_set_market
     - library_search
     - library_indicator
