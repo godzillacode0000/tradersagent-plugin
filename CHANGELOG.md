@@ -6,6 +6,20 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Indicators can come OFF the chart, and the answer is evidence.** `chart_remove_indicator` (MCP),
+  `trader-chart remove NAME|--all` (CLI) and a `remove` bridge action. The measured door in this Vela
+  build is the ledger entry's own `remove()`
+  (`chart.indicators()` → entries carrying `nativeType`); the cell doors `removeNative` /
+  `removeInstance` / `removeFromChart` **accept ids and names and remove nothing**, so the bridge
+  re-reads the chart after each pass and reports `removed X · chart now carries: Y`.
+  Verified live: `add ema` → `remove --all` → `chart now carries: nothing`.
+- **`docs/vela-chart-api-notes.md`** — the measured map of this Vela build: which calls remove a study
+  and which are silent no-ops, why `apply` cannot show a price level while `draw` can, the per-bar trap
+  that turned one `line.new` into 50, and the PDH/PDL recipe that actually painted (2 lines, 2 labels).
+- **PDH/PDL on demand.** The catalogue does carry *Previous Highs & Lows* (`previous-highs-lows`), but
+  its Pine cannot run here — `for … in` is unimplemented in PineTS — so the levels come from the data
+  (Binance daily klines → previous UTC day's high/low) and are drawn on the overlay.
+
 - **The page says why the chart is not beside the chat.** When the app keeps the pane's layout zone
   minimized, `revealPane()` can report success and still leave the chart hidden, so the row landed on
   a console rendered in the main zone with no explanation. The page now asks for adoption and reveal,

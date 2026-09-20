@@ -141,11 +141,17 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_shot` | one PNG of the chart (returned as an image, plus the path) |
 | `chart_apply_pine` | run Pine over the chart's live bars and paint a matching native |
 | `chart_add_indicator` | add a Vela native (`ema`, `supertrend`, `donchian-channels`, …) |
+| `chart_remove_indicator` | take indicators **off** the chart — one by name, or `all` for every study (reports the chart's before → after list) |
 | `chart_set_market` | switch symbol / timeframe |
 | `chart_draw` | run Pine and paint the boxes/lines/labels it builds on the chart overlay |
 | `chart_clear` | clear the overlay and the indicators our paint layer added (then report what is left) |
 | `library_search` | search the LuxAlgo Library |
 | `library_indicator` | one indicator's write-up, licence and Pine source |
+
+Same surface from a shell: `trader-chart remove MACD | --all`, `add ema`, `apply file.pine`,
+`draw file.pine`, `shot`, `market SYMBOL TF`, `state`. Which of those actually paint in this Vela build —
+and which calls return cleanly while doing nothing — is written down in
+[`docs/vela-chart-api-notes.md`](docs/vela-chart-api-notes.md), measured from the running app.
 
 Every tool carries MCP annotations (title, `readOnlyHint`, `destructiveHint`, `openWorldHint`), and the
 mutating ones answer with what the chart looks like *after* the call — a request echoed back is not a

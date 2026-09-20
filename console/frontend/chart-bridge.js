@@ -37,8 +37,8 @@
      already (an action passed the server, reached the page, and came back "unknown action" — HTTP
      200 with nothing done). So the page publishes its real list in every heartbeat and the server
      validates against that instead of trusting a constant. */
-  const ACTIONS = ['apply', 'add', 'draw', 'clear', 'probe', 'market', 'shot', 'reload', 'mode',
-                   'script', 'palette'];
+  const ACTIONS = ['apply', 'add', 'remove', 'draw', 'clear', 'probe', 'market', 'shot', 'reload',
+                   'mode', 'script', 'palette'];
 
   const api = async (path, body) => {
     const res = await fetch(path, body
@@ -285,9 +285,187 @@
             ' · chart still carries: ' + (onChart ? (onChart.join(', ') || 'nothing') : 'unknown');
           break;
         }
+        case 'remove': {
+          /* Remove indicators: `native` names one, `all: true` clears the chart's studies.
+             `clear` deliberately leaves operator-added studies alone, so this is the door for "take
+             them off" — and Vela's own indicators control is the only thing that can. Which removal
+             method that control exposes is not documented in this build, so the doors are tried in
+             order and the report names the one that worked, read back from the chart. */
+          const c = chart();
+          const read = () => (c && typeof c.presentNativeIndicators === 'function')
+            ? (c.presentNativeIndicators() || []) : [];
+          const before = read();
+          const ctl = c && c.indicators;
+          let names = [];
+          if (ctl) {
+            try { names = names.concat(Object.keys(ctl)); } catch (err) { /* opaque */ }
+            try { names = names.concat(Object.getOwnPropertyNames(Object.getPrototypeOf(ctl) || {})); } catch (err) { /* opaque */ }
+          }
+          names = Array.from(new Set(names)).filter((n) => n !== 'constructor').sort();
+          const tried = [];
+          const attempt = (obj, name, ...args) => {
+            try {
+              if (!obj || typeof obj[name] !== 'function') return false;
+              obj[name](...args);
+              tried.push(name + '()');
+              return true;
+            } catch (err) {
+              tried.push(name + ' ✗ ' + (err && err.message));
+              return false;
+            }
+          };
+          const want = command.native ? String(command.native) : null;
+          if (command.all) {
+            for (const door of ['removeAll', 'clear', 'reset', 'disposeAll', 'removeAllIndicators']) {
+              if (attempt(ctl, door)) break;
+            }
+          } else if (want) {
+            for (const door of ['remove', 'removeIndicator', 'delete', 'dispose', 'removeByName']) {
+              if (attempt(ctl, door, want)) break;
+            }
+          } else {
+            out.detail = 'remove needs `native` (one name) or `all: true`';
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 400));
+          let after = read();
+          out.natives = after;
+          out.ok = after.length < before.length;
+
+          /* The door that actually exists in this build: the *cell's* indicator ledger — `ws.active`
+             exposes removeNative(name) / removeInstance(id) / removeFromChart(id) and onChartRows()
+             for the list itself. The state object is not it (its `indicators.natives` was empty while
+             the chart carried two studies), so the ledger is asked directly and read back after. */
+          if (!out.ok) {
+            const ws = (window.__wsApp || {}).ws;
+            const firstCell = (() => {
+              try {
+                if (ws && typeof ws.cells === 'function') {
+                  const cells = ws.cells();
+                  if (Array.isArray(cells) && cells.length) return cells[0];
+                }
+                if (ws && ws.active) return ws.active;
+              } catch (err) { /* opaque */ }
+              return null;
+            })();
+            if (firstCell) {
+              const ledgerOf = () => {
+                try {
+                  const l = (typeof c.indicators === 'function') ? c.indicators() : c.indicators;
+                  if (Array.isArray(l)) return l;
+                  if (l && Array.isArray(l.indicators)) return l.indicators;
+                } catch (err) { tried.push('ledger \u2717 ' + (err && err.message)); }
+                return [];
+              };
+              const rowMatches = (entry, wanted) => {
+                const fields = [entry && entry.nativeType, entry && entry.name, entry && entry.title,
+                                entry && entry.id]
+                  .filter(Boolean).map((v) => String(v).toLowerCase());
+                return fields.some((f) => f === wanted || f.includes(wanted));
+              };
+              tried.push('ledger: ' + JSON.stringify(ledgerOf().map((e) => e && e.nativeType || e && e.name)).slice(0, 160));
+
+              /* The door that works in this build, measured: the ledger entry's own remove() —
+                 `chart.indicators()` returns entries whose prototype carries remove/moveTo/setVisible.
+                 The cell doors (removeInstance/removeFromChart/removeNative) rejected ids and names
+                 alike, and each pass re-reads the ledger because the list shifts as studies come off.
+                 `all` therefore actually means all: passes until the chart is empty or nothing lands. */
+              let passes = 0;
+              const maxPasses = command.all ? 6 : 1;
+              while (passes < maxPasses) {
+                passes += 1;
+                const entries = ledgerOf();
+                if (!entries.length) break;
+                let acted = false;
+                for (const entry of entries) {
+                  if (!command.all && !rowMatches(entry, String(want || '').toLowerCase())) continue;
+                  const shapes = [
+                    ['entry.remove()', entry],
+                    ['entry.controller.remove()', entry && entry.controller],
+                    ['entry.controller.renderer.remove()', entry && entry.controller && entry.controller.renderer],
+                  ];
+                  for (const pair of shapes) {
+                    const label = pair[0];
+                    const obj = pair[1];
+                    if (!obj || typeof obj.remove !== 'function') continue;
+                    try {
+                      obj.remove();
+                      tried.push(label);
+                      acted = true;
+                    } catch (err) {
+                      tried.push(label + ' \u2717 ' + (err && err.message));
+                    }
+                    if (acted) break;
+                  }
+                  if (acted) {
+                    await new Promise((r) => setTimeout(r, 500));
+                    if (!command.all) break;
+                  }
+                }
+                await new Promise((r) => setTimeout(r, 400));
+                if (!command.all) break;
+                if (!acted) break;
+                if (read().length === 0) break;
+              }
+              after = read();
+              out.natives = after;
+              out.ok = after.length < before.length;
+            }
+          }
+
+          /* The answer a person (or the agent) reads first: what actually came off, and what the chart
+             carries now. The door-by-door trace is only worth showing when nothing was removed. */
+          const removed = before.filter((n) => !after.includes(n));
+          out.detail = (removed.length ? 'removed ' + removed.join(', ') : 'nothing removed') +
+                       ' · chart now carries: ' + (after.join(', ') || 'nothing') +
+                       (out.ok ? '' : ' · tried: ' + (tried.join(', ') || 'nothing'));
+          break;
+        }
         case 'probe': {
           // Diagnostics only: what this page can actually see and what the handles expose.
           const c = chart();
+          /* Which door removes an indicator? Guessing cost a cycle already (`indicators` is a method,
+             not a control). So every handle is described by its *methods*, which is the map I actually
+             need when a new action has to do something the bridge has never done before. */
+          const describe = (obj, depth = 0) => {
+            const out2 = {};
+            let keys = [];
+            try { keys = keys.concat(Object.keys(obj)); } catch (err) { /* opaque */ }
+            try { keys = keys.concat(Object.getOwnPropertyNames(Object.getPrototypeOf(obj) || {})); } catch (err) { /* opaque */ }
+            for (const key of Array.from(new Set(keys)).sort()) {
+              if (depth > 0 || out2[key] !== undefined) continue;
+              let value;
+              try { value = obj[key]; } catch (err) { continue; }
+              const type = typeof value;
+              if (type === 'function') { out2[key] = 'fn/' + (value.length || 0); continue; }
+              if (type === 'object' && value && depth === 0) {
+                const methods = [];
+                try { Object.keys(value).forEach((k) => { if (typeof value[k] === 'function') methods.push(k); }); } catch (err) { /* opaque */ }
+                try {
+                  Object.getOwnPropertyNames(Object.getPrototypeOf(value) || {}).forEach((k) => {
+                    if (typeof value[k] === 'function') methods.push(k);
+                  });
+                } catch (err) { /* opaque */ }
+                out2[key] = Array.from(new Set(methods)).sort().slice(0, 24);
+              }
+            }
+            return out2;
+          };
+          const handleMap = { chart: describe(c) };
+          try {
+            const ws = (window.__wsApp || {}).ws;
+            if (ws) {
+              handleMap.workspace = describe(ws);
+              for (const key of ['activeCell', 'cell', 'active']) {
+                try { if (ws[key]) handleMap['ws.' + key] = describe(ws[key]); } catch (err) { /* opaque */ }
+              }
+              try {
+                const cells = ws.cells && (typeof ws.cells === 'function' ? ws.cells() : ws.cells);
+                const first = Array.isArray(cells) ? cells[0] : (cells && cells[0]);
+                if (first) handleMap['ws.cells[0]'] = describe(first);
+              } catch (err) { /* opaque */ }
+            }
+          } catch (err) { /* opaque */ }
           const names = (o) => {
             if (!o) return null;
             const out2 = new Set();
@@ -304,6 +482,7 @@
           });
           out.ok = true;
           out.detail = JSON.stringify({
+            handles: handleMap,
             market: marketFromDom(),
             chartNames: names(c),
             wsNames: window.__ws ? names(window.__ws) : null,

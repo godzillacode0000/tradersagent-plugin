@@ -275,6 +275,23 @@ def chart_add_indicator(native: str) -> str:
     return _command("add", native=native.strip())
 
 
+@mcp.tool(annotations=_ann("Remove Vela indicator(s)", destructive=True))
+def chart_remove_indicator(native: str = "", all: bool = False) -> str:
+    """Remove indicators from the chart: one by name (native='macd'), or every study (all=True).
+
+    Measured in this Vela build: the door that works is the *ledger entry's own* remove() — the
+    chart's `indicators()` returns entries carrying `nativeType` ('macd', 'ema', …) and an id like
+    'native-1'. The cell doors (removeNative / removeInstance / removeFromChart) accept ids and names
+    and remove NOTHING, which is why this tool's answer carries the before → after list from the
+    chart rather than a claim.
+    """
+    if not native.strip() and not all:
+        return "✗ give a name (native='macd') or all=True"
+    if all:
+        return _command("remove", all=True)
+    return _command("remove", native=native.strip())
+
+
 @mcp.tool(annotations=_ann("Switch symbol/timeframe", destructive=True))
 def chart_set_market(symbol: str, timeframe: str) -> str:
     """Switch the chart to another symbol/timeframe (e.g. BTCUSDT, 1h)."""

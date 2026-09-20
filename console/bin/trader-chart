@@ -211,6 +211,28 @@ def cmd_clear(args) -> int:
     return 0 if result.get("ok") else 1
 
 
+def cmd_remove(args) -> int:
+    """Take indicators off the chart — one by name, or every study with --all.
+
+    `clear` deliberately leaves studies the operator or the agent added; this is the door for those.
+    The page reports the chart's indicator list before and after, so "removed" is evidence.
+    """
+    command = {"action": "remove"}
+    if getattr(args, "all", False):
+        command["all"] = True
+    elif getattr(args, "native", ""):
+        command["native"] = args.native
+    else:
+        print("give an indicator name (e.g. macd) or --all", file=sys.stderr)
+        return 2
+    result = send(args, command)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
 def cmd_script(args) -> int:
     """Drive Script mode: load a .pine into the editor, run what is in it, or read it back."""
     command = {"action": "script", "mode": args.what}
@@ -329,6 +351,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("clear", help="clear the overlay and the natives our paint layer added")
     s.set_defaults(func=cmd_clear)
+
+    s = sub.add_parser("remove", help="take indicators OFF the chart: a name, or --all for every study")
+    s.add_argument("native", nargs="?", default="", help="native indicator name, e.g. macd")
+    s.add_argument("--all", action="store_true", help="remove every study the chart carries")
+    s.set_defaults(func=cmd_remove)
 
     s = sub.add_parser("script", help="drive Script mode: show / draw / native / clear, optionally loading a .pine")
     s.add_argument("what", choices=["show", "draw", "native", "clear"])
