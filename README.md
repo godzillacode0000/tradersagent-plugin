@@ -290,6 +290,12 @@ Measured 19 Sep 2026 on Omarchy + Hermes Desktop 0.17.0: after Layouts -> Reset,
 store and the chart opened as the main page. Clearing the flag and reloading the window docks the
 pane beside the chat as intended.
 
+The plugin handles it as far as it can: the page asks for adoption and reveal, retries once a beat
+later (the app may still be rebuilding the tree when a page mounts), and when the pane is still not
+visible it renders the console itself under a short note that says why — with *Ask again* and *Open in
+a browser* in reach. The note only appears when the pane API exists and reports the pane hidden, so a
+build without panes gets the plain console and no nagging.
+
 Recovery for a user who hits it: un-minimize the pane's group in `hermes.desktop.layoutTree.v2`
 (DevTools / a CDP session on `--remote-debugging-port`) or pick a layout template that re-adopts
 contributed panes, then reload the window. The plugin asks for the documented reveal first and

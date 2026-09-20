@@ -1,9 +1,3 @@
-## Unreleased
-
-- Document the Hermes Desktop collapsed-pane interaction: `defaultCollapsed: true` panes are adopted
-  with a minimized layout group that `revealPane()` does not clear, so the row falls back to rendering
-  the console in the main zone. Includes the store evidence and the recovery steps.
-
 # Changelog
 
 All notable changes to this project are documented here. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning: [SemVer](https://semver.org/).
@@ -11,6 +5,15 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 ## [Unreleased]
 
 ### Added
+
+- **The page says why the chart is not beside the chat.** When the app keeps the pane's layout zone
+  minimized, `revealPane()` can report success and still leave the chart hidden, so the row landed on
+  a console rendered in the main zone with no explanation. The page now asks for adoption and reveal,
+  asks again 700 ms later (the app may still be rebuilding the tree when a page mounts), and when the
+  pane is still not visible it shows a short note with the two ways out — *Ask again* and *Open in a
+  browser* — instead of a silent fallback. The note only renders when the pane API exists and reports
+  the pane hidden, so a build without panes gets the plain console. Documented in the README with the
+  measured store evidence (`hermes.desktop.layoutTree.v2`, `"minimized": true`).
 
 - **`chart_caps` in the MCP surface.** The CLI had it and the skill tells an agent to read it before
   drawing, but the MCP server never exposed it — an agent working only through MCP drew blind against

@@ -23,6 +23,16 @@
       ]
     },
     {
+      "comment": "The pane-hidden branch: the app kept the pane's zone minimized, so the page renders the console itself AND says why, with the way out in reach. Without this check the fallback could regress to a silent console and nothing would notice.",
+      "area": "routes",
+      "paneHidden": true,
+      "contains": [
+        "The chart pane is not on screen",
+        "Ask again",
+        "Starting the local console"
+      ]
+    },
+    {
       "area": "statusBar.right",
       "contains": [
         "Trader's Agent"

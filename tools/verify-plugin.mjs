@@ -51,7 +51,7 @@ const url = (f) => pathToFileURL(path.join(tmp, f)).href
 fs.writeFileSync(path.join(tmp, 'react.mjs'), `
 export const useEffect = () => {}
 export const useLayoutEffect = () => {}
-export const useState = (v) => [v, () => {}]
+export const useState = (v) => [typeof v === 'function' ? v() : v, () => {}]
 export const useMemo = (fn) => fn()
 export const useRef = (v) => ({ current: v })
 export const useCallback = (fn) => fn
@@ -80,7 +80,13 @@ export const computed = (stores, fn) => ({
   get: () => fn(...(Array.isArray(stores) ? stores : [stores]).map((s) => (s && s.get ? s.get() : undefined))),
 })
 export const useValue = (store) => (store && store.get ? store.get() : undefined)
+/* A pane API, so a plugin's pane-aware branches are actually exercised: paneVisibility(id) is read
+   during render, and the harness flips the flag per render check (paneHidden: true). Default: the
+   pane is on screen, which is the state a working install reports. */
 export const host = {
+  paneVisibility: (id) => makeAtom(globalThis.__hermesPaneVisible !== false),
+  undismissPane: (id) => { globalThis.__hermesPaneCalls = (globalThis.__hermesPaneCalls || []).concat(['undismiss', id]) },
+  revealPane: (id) => { globalThis.__hermesPaneCalls = (globalThis.__hermesPaneCalls || []).concat(['reveal', id]) },
   state: {},
   notify: (m) => console.log('      host.notify:', typeof m === 'string' ? m : JSON.stringify(m)),
   navigate: () => {}, onEvent: () => () => {}, logs: () => [], restartGateway: async () => {},
@@ -204,6 +210,10 @@ if (fs.existsSync(expectPath)) {
     if (!registrations.some((r) => r.area === area)) failures.push(`expected area ${area} was not registered`)
   }
   for (const want of expected.renders || []) {
+    /* A check may state the pane state it is about: `paneHidden: true` renders with a pane API that
+       reports the pane as not on screen, which is the branch that decides whether the operator sees a
+       chart or an explanation. Anything else renders with the pane visible. */
+    globalThis.__hermesPaneVisible = want.paneHidden !== true
     const reg = registrations.find((r) => r.area === want.area)
     if (!reg || typeof reg.render !== 'function') {
       failures.push(`expected a render on area ${want.area}`)

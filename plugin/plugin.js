@@ -19,6 +19,9 @@
  * land on an empty page (the 17 Sep failure was a pane that mounted collapsed while the page deferred
  * to it: "nothing shown directly — where is my chart?").
  *
+ * When the pane cannot be shown at all (the app kept its layout zone minimized), the page renders the
+ * console itself plus a short PaneHint saying so, with the two ways out — never a silent empty page.
+ *
  * The chat on the left is the app's own composer on a real Hermes session (the desk chat), and that
  * session reads and drives the chart through the traders-chart MCP tools — not a second composer
  * bolted into this plugin (he removed one of those on 16 Sep).
@@ -84,6 +87,20 @@ const S = {
              borderRadius: '6px', border: '1px solid var(--ui-border, rgba(128,128,128,0.35))',
              background: 'var(--ui-bg-card, transparent)', color: 'var(--ui-text, inherit)' },
   meta: { fontSize: '11px', opacity: 0.65 },
+  /* The pane-hidden note: a thin strip above the fallback console. The operator clicked for a chart
+     beside the chat and got the console in the page instead, so he deserves to know why and to have
+     both ways out within reach. */
+  hint: { display: 'flex', gap: '10px', alignItems: 'flex-start', flexWrap: 'wrap',
+          padding: '8px 12px', fontSize: '12px',
+          borderBottom: '1px solid var(--ui-border, rgba(128,128,128,0.35))',
+          background: 'var(--ui-bg-card, transparent)' },
+  hintBody: { display: 'flex', flexDirection: 'column', gap: '2px', flex: 1, minWidth: '240px' },
+  hintTitle: { fontSize: '12px', fontWeight: 600 },
+  hintText: { fontSize: '11px', opacity: 0.7, lineHeight: 1.5 },
+  hintActions: { display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' },
+  hintClose: { font: 'inherit', fontSize: '11px', padding: '2px 6px', cursor: 'pointer',
+               background: 'transparent', color: 'inherit', opacity: 0.6,
+               border: '1px solid transparent' },
   frameWrap: { position: 'relative', flex: 1, minHeight: 0, background: 'var(--ui-bg-card, transparent)' },
   frame: { border: 0, width: '100%', height: '100%', display: 'block' },
   overlay: {
@@ -279,7 +296,7 @@ function watchPane(setVisible) {
  * when the pane is adopted again. Measured 19 Sep: after a layout reset the sidebar row opened the
  * console as the main page instead of docking the pane, because the pane was gone from the tree.
  */
-function revealChart() {
+function adoptAndReveal() {
   try {
     if (typeof host.undismissPane === 'function') host.undismissPane(PANE_ID)
   } catch (err) {
@@ -290,6 +307,24 @@ function revealChart() {
   } catch (err) {
     /* no pane door on this build: the page falls back to the console frame itself */
   }
+}
+
+/**
+ * Reveal the chart, twice: now, and once more a beat later.
+ *
+ * The app adopts contributed panes on its own schedule, so a reveal fired from a page's mount can
+ * land while the tree is still being rebuilt — and then the pane stays minimized even though the
+ * call "succeeded". Measured 19 Sep 2026 on Hermes Desktop 0.17.0: after Layouts -> Reset, the row's
+ * reveal left `{"panes":["traders-desk:chart"],"minimized":true}` in hermes.desktop.layoutTree.v2
+ * and the console rendered in the main zone instead of docking beside the chat. The second call
+ * catches that window; when even that misses, the page says so instead of pretending (PaneHint).
+ *
+ * Returns a cancel function so an effect can clean the timer up.
+ */
+function revealChart() {
+  adoptAndReveal()
+  const timer = setTimeout(adoptAndReveal, 700)
+  return () => clearTimeout(timer)
 }
 
 /**
@@ -360,8 +395,80 @@ function TradersDeskPage() {
     }
   }, [])
 
-  if (!paneUp) return jsx('div', { style: S.page, children: jsx(ConsoleFrame, {}) })
+  if (!paneUp) {
+    return jsxs('div', {
+      style: S.page,
+      children: [
+        jsx(PaneHint, { onRetry: () => { revealChart(); setTimeout(() => setPaneUp(paneVisible()), 1200) } }),
+        jsx(ConsoleFrame, {})
+      ]
+    })
+  }
   return jsx(ChartDocked, { note })
+}
+
+/**
+ * Why the chart is not beside the chat — and the two ways to get it there.
+ *
+ * Only rendered when the pane API exists and still reports the pane as not visible, i.e. exactly the
+ * minimized-zone case; a build without panes at all gets the plain console and no nagging.
+ */
+function PaneHint({ onRetry }) {
+  const [asked, setAsked] = useState(false)
+  const [hidden, setHidden] = useState(false)
+
+  if (hidden) return null
+  if (typeof host.paneVisibility !== 'function') return null
+
+  return jsxs('div', {
+    style: S.hint,
+    children: [
+      jsxs('div', {
+        style: S.hintBody,
+        children: [
+          jsx('span', { style: S.hintTitle, children: 'The chart pane is not on screen' }),
+          jsx('span', {
+            style: S.hintText,
+            children: 'The app kept this pane minimized in the saved layout, and a reveal request ' +
+              'does not always clear that (Hermes Desktop 0.17.0). The console below is the same ' +
+              'chart, so nothing is lost — to dock it beside the chat, open Layouts (Ctrl+Shift+\\) ' +
+              'and pick a template, or reload the window (Ctrl+R).'
+          })
+        ]
+      }),
+      jsxs('div', {
+        style: S.hintActions,
+        children: [
+          jsx('button', {
+            type: 'button',
+            style: S.cardBtn,
+            onClick: () => {
+              haptic()
+              setAsked(true)
+              onRetry()
+            },
+            children: asked ? 'Asked again…' : 'Ask again'
+          }),
+          jsx('button', {
+            type: 'button',
+            style: S.cardBtn,
+            onClick: () => {
+              haptic()
+              ctx_os_open(CONSOLE_ORIGIN)
+            },
+            children: 'Open in a browser ↗'
+          }),
+          jsx('button', {
+            type: 'button',
+            style: S.hintClose,
+            title: 'Hide this note',
+            onClick: () => setHidden(true),
+            children: '✕'
+          })
+        ]
+      })
+    ]
+  })
 }
 
 /** Shown when the chart is already docked right: the chat owns the left, and this says so. */
