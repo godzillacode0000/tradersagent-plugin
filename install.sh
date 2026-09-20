@@ -2,6 +2,7 @@
 # Install the Trader's Agent plugin into Hermes Desktop.
 #
 #   ./install.sh                    copy plugin/ -> $HERMES_HOME/desktop-plugins/traders-desk/
+#   ./install.sh --doctor           check interpreter, console port, service, plugin folder
 #   ./install.sh --vendor           also fetch LuxAlgo's pinned browser builds into
 #                                   console/frontend/vendor/ for offline use (not tracked by git)
 #   HERMES_HOME=/path ./install.sh  install into another Hermes home
@@ -13,6 +14,27 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 DST="$HERMES_HOME/desktop-plugins/traders-desk"
+
+if [[ "${1:-}" == "--doctor" ]]; then
+  fail=0
+  check() { # $1 label, $2 command
+    if eval "$2" >/dev/null 2>&1; then echo "  ok  $1"; else echo "  FAIL $1"; fail=1; fi
+  }
+  echo "Trader's Agent — install doctor"
+  check "python3 on PATH" "command -v python3"
+  check "plugin.js in repo" "test -f \"$HERE/plugin/plugin.js\""
+  check "MCP server in repo" "test -f \"$HERE/console/mcp/server.py\""
+  check "console answering on 127.0.0.1:8787" "curl -fsS --max-time 3 http://127.0.0.1:8787/api/health"
+  check "luxalgo-web.service active (this machine)" "systemctl --user is-active luxalgo-web.service"
+  check "plugin deployed" "test -f \"$DST/plugin.js\""
+  check "desk skill deployed" "test -f \"$HERMES_HOME/skills/trading/trader-desk/SKILL.md\""
+  if [[ $fail -ne 0 ]]; then
+    echo "one or more checks failed — start the console (./console/start.sh or the user unit) and ./install.sh"
+    exit 1
+  fi
+  echo "all checks passed"
+  exit 0
+fi
 
 mkdir -p "$DST"
 cp "$HERE/plugin/plugin.js" "$HERE/plugin/plugin.expect.json" "$DST/"

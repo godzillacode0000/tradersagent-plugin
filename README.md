@@ -143,6 +143,8 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_add_indicator` | add a Vela native (`ema`, `supertrend`, `donchian-channels`, …) |
 | `chart_remove_indicator` | take indicators **off** the chart — one by name, or `all` for every study (reports the chart's before → after list) |
 | `chart_set_market` | switch symbol / timeframe |
+| `chart_reload` | remount every attached console (picks up new frontend files) |
+| `chart_palette` | what colours the chart is wearing (`try_apply` asserts the console theme) |
 | `chart_draw` | run Pine and paint the boxes/lines/labels it builds on the chart overlay |
 | `chart_clear` | clear the overlay and the indicators our paint layer added (then report what is left) |
 | `library_search` | search the LuxAlgo Library |

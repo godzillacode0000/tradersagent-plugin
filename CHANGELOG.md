@@ -20,6 +20,13 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   its Pine cannot run here — `for … in` is unimplemented in PineTS — so the levels come from the data
   (Binance daily klines → previous UTC day's high/low) and are drawn on the overlay.
 
+- **`chart_reload` and `chart_palette` MCP tools** so prompt-to-chart does not shell out for a
+  remount or a colour check. Reload is once-per-view. `chart_state` now prints `build`/`viewer`
+  when the heartbeat carries them (stale-frame check).
+- **`./tools/sync-live.sh`** copies the repo console onto `~/Projects/luxalgo-web` (the unit that
+  actually serves). **`./install.sh --doctor`** checks python, port 8787, the user unit, and the
+  deployed plugin/skill.
+
 - **The page says why the chart is not beside the chat.** When the app keeps the pane's layout zone
   minimized, `revealPane()` can report success and still leave the chart hidden, so the row landed on
   a console rendered in the main zone with no explanation. The page now asks for adoption and reveal,

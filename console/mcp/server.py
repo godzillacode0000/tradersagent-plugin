@@ -12,7 +12,10 @@ wrapper that turns those endpoints into tools an agent can call directly, with n
     chart_draw             run Pine and paint the boxes/lines/labels it builds on the overlay
     chart_clear            clear our overlay and painted natives, then report what is left
     chart_add_indicator    add a Vela native (ema, supertrend, donchian-channels, …)
+    chart_remove_indicator take studies OFF the chart (one name, or all=True)
     chart_set_market       switch symbol / timeframe
+    chart_reload           remount every attached console (once-per-view)
+    chart_palette          what colours the chart is wearing (try=True applies the console theme)
     library_search         search the LuxAlgo Library (concepts + indicators)
     library_indicator      one indicator: metadata, licence and its Pine source
 
@@ -195,6 +198,8 @@ def chart_state() -> str:
         f"indicators on the chart: {', '.join(state.get('natives') or []) or 'none'}",
         f"heartbeat {state.get('age_s')}s ago" + (f" · picture: {state['shot']}" if state.get("shot") else ""),
     ]
+    if state.get("build") or state.get("viewer"):
+        lines.append(f"build {state.get('build') or '—'} · viewer {state.get('viewer') or '—'}")
     return "\n".join(lines)
 
 
@@ -298,6 +303,31 @@ def chart_set_market(symbol: str, timeframe: str) -> str:
     if not symbol.strip() or not timeframe.strip():
         return "✗ both symbol and timeframe are required"
     return _command("market", symbol=symbol.strip().upper(), timeframe=timeframe.strip())
+
+
+@mcp.tool(annotations=_ann("Reload every chart view", destructive=True))
+def chart_reload() -> str:
+    """Reload every attached console page so it picks up current frontend files.
+
+    Marked once-per-view: a freshly reloaded page re-attaches first and would otherwise claim the
+    follow-up reloads, leaving a stale frame stale. Use this after editing the console, not as a
+    substitute for chart_remove_indicator / chart_clear.
+    """
+    return _command("reload", once_per_view=True)
+
+
+@mcp.tool(annotations=_ann("Chart palette"))
+def chart_palette(try_apply: bool = False) -> str:
+    """What colours the chart is actually wearing (background, candle up/down, console theme).
+
+    A Vela theme *string* does not rewrite a renderer config that already holds explicit colours, so
+    this reads the live config. `try_apply=True` also asserts the console's palette and reports what
+    landed 300 ms later — read-only when False.
+    """
+    fields = {}
+    if try_apply:
+        fields["try"] = True
+    return _command("palette", **fields)
 
 
 # ── LuxAlgo Library tools ───────────────────────────────────────────────────────────────────────

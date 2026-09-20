@@ -32,6 +32,8 @@ capabilities:
     - chart_add_indicator
     - chart_remove_indicator
     - chart_set_market
+    - chart_reload
+    - chart_palette
     - library_search
     - library_indicator
   provides_hooks: []

@@ -130,6 +130,15 @@ class MCPToolsTest(unittest.TestCase):
         self.assertIn("volume, ema, donchian-channels", out)
         self.assertIn("/tmp/chart.png", out)
 
+    def test_chart_state_reports_a_stale_frame_when_the_build_is_present(self):
+        _Stub.routes = {"/api/chart/state": {"ok": True, "data": {
+            "open": True, "symbol": "SOLUSDT", "timeframe": "1h", "last": 108.4, "bars": 500,
+            "series": 4, "drawings": 0, "natives": [], "age_s": 2.0,
+            "build": "1789819400", "viewer": "v0hutdsfb"}}}
+        out = self.mcp.chart_state()
+        self.assertIn("build 1789819400", out)
+        self.assertIn("viewer v0hutdsfb", out)
+
     def test_chart_state_says_when_no_chart_is_open(self):
         _Stub.routes = {"/api/chart/state": {"ok": True, "data": {
             "open": False, "reason": "the last chart heartbeat was 2000s ago"}}}
@@ -173,6 +182,26 @@ class MCPToolsTest(unittest.TestCase):
         self.mcp.chart_set_market("btcusdt", "15m")
         self.assertEqual(_Stub.posts[-1]["symbol"], "BTCUSDT")
         self.assertEqual(_Stub.posts[-1]["timeframe"], "15m")
+
+    def test_reload_is_once_per_view(self):
+        _Stub.routes = {"/api/chart/command": {"ok": True, "data": {
+            "pushed": 1, "command": {"id": 20},
+            "result": {"id": 20, "ok": True, "detail": "reloading"}}}}
+        out = self.mcp.chart_reload()
+        self.assertTrue(out.startswith("✓"))
+        self.assertTrue(_Stub.posts[-1].get("once_per_view"))
+        self.assertEqual(_Stub.posts[-1]["action"], "reload")
+
+    def test_remove_refuses_empty_and_palette_is_read_by_default(self):
+        self.assertIn("give a name", self.mcp.chart_remove_indicator())
+        _Stub.routes = {"/api/chart/command": {"ok": True, "data": {
+            "pushed": 1, "command": {"id": 21},
+            "result": {"id": 21, "ok": True, "detail": "background #151619"}}}}
+        self.mcp.chart_palette()
+        self.assertEqual(_Stub.posts[-1]["action"], "palette")
+        self.assertNotIn("try", _Stub.posts[-1])
+        self.mcp.chart_palette(try_apply=True)
+        self.assertTrue(_Stub.posts[-1].get("try"))
 
     # ── captures ────────────────────────────────────────────────────────────
     def test_chart_shot_writes_the_picture_and_says_where(self):

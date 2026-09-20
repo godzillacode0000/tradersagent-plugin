@@ -486,7 +486,7 @@ async function runSearch(event) {
     toast(`${rows.length} result${rows.length === 1 ? '' : 's'} for “${term}”`);
   } catch (err) {
     el.results.innerHTML = `<div class="empty"><p>Search failed.</p><p class="muted">${esc(err.message)}</p>
-      <p class="muted">Is the backend running? <code>…/venv/bin/python backend/mvp_server.py</code></p></div>`;
+      <p class="muted">Is the backend running? <code>./console/start.sh</code> (or the luxalgo-web user unit)</p></div>`;
     toast('Search failed: ' + err.message, true);
   }
 }
@@ -637,7 +637,7 @@ async function checkHealth() {
     el.mcp.textContent = 'MCP: no backend';
     el.mcp.className = 'pill pill--bad';
     el.mcp.title = err.message;
-    toast('Backend unreachable — start backend/mvp_server.py first', true);
+    toast('Backend unreachable — start ./console/start.sh (or luxalgo-web.service) first', true);
   }
 }
 

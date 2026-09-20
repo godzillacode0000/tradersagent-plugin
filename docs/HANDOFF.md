@@ -1,7 +1,7 @@
 # HANDOFF — Trader's Agent (Hermes Desktop plugin + local Vela console)
 
 **Written for:** an outside agent/model picking this up cold (no access to the chat that built it).
-**Written by:** the previous agent session, 20 Sep 2026, repo `godzillacode0000/tradersagent-plugin` @ `5b11678`.
+**Written by:** the previous agent session, 20 Sep 2026, repo `godzillacode0000/tradersagent-plugin` @ `369a949` (this file lives at `docs/HANDOFF.md`; bump the SHA when you ship).
 **Operator:** one user, Malay/English speaker, runs a single laptop (Omarchy/Arch, 8 GB RAM), drives it
 mostly from his phone over Telegram, wants short answers with commands explained plainly.
 
@@ -74,7 +74,7 @@ flowchart TB
   subgraph AGENTS["Agent side"]
     ME["Hermes agent"]
     CLI["CLI · bin/trader-chart<br/>state · shot · apply · add · remove<br/>market · draw · reload · caps"]
-    MCP["MCP · traders-chart<br/>12 native chart tools"]
+    MCP["MCP · traders-chart<br/>14 native chart tools"]
     LUX["LuxAlgo MCP<br/>library · edge · prop-firm"]
   end
 
@@ -197,9 +197,11 @@ short note with the way out instead of failing silently.
 | `pinets-runner.js`, `pinets-layer.js` | PineTS execution + the native paint layer |
 | `styles.css` | console chrome, responsive top row (clip-proof from ~500 px to 1280 px pane width) |
 
-**MCP server (`console/mcp/server.py`)** — 12 tools, thin wrapper over the HTTP API, each annotated
-(read-only vs destructive) and each answering with the chart's after-state. **Tools load at session start:
-after adding a tool, the running session will not see it — start a new session to use it.**
+**MCP server (`console/mcp/server.py`)** — 14 tools (`chart_views`, `chart_caps`, `chart_state`,
+`chart_shot`, `chart_apply_pine`, `chart_draw`, `chart_clear`, `chart_add_indicator`,
+`chart_remove_indicator`, `chart_set_market`, `chart_reload`, `chart_palette`, `library_search`,
+`library_indicator`). Thin wrapper over the HTTP API. **Tools load at session start: after adding a
+tool, the running session will not see it — start a new session or `/reload-mcp`.**
 
 **CLI (`console/bin/trader-chart`)** — 14 subcommands; also `console/bin/library-indicator` (fetch one
 Library indicator) and `console/bin/all-library-context-dependency.py` (Library analysis helper).
@@ -238,7 +240,8 @@ Working, with evidence:
 - Chart beside the chat; the operator's 3-zone layout is the app's **active** preset
   (`layoutPreset.active = user-trader-s-agent-plugin`; tree = `sessions` │ `workspace`+terminal │
   `traders-desk:chart`+review+files).
-- All 12 MCP tools answer; `chart_state` returns live data (symbol/timeframe/bars/indicators/heartbeat age).
+- All 14 MCP tools answer (`chart_reload` / `chart_palette` / `chart_remove_indicator` included).
+  `chart_state` returns live data plus `build`/`viewer` when the page publishes them.
 - `add ema` → `remove --all` → `chart now carries: nothing` (the new removal path, end to end).
 - PDH/PDL drawn on demand: previous UTC day's high/low from Binance daily klines → `draw` →
   `2 line(s), 2 label(s)`, verified on screen.
@@ -274,9 +277,10 @@ a hand-made palette parked; the docked pane may be hidden — check the heartbea
 5. **Frozen/occluded frames.** Mitigated (remount-on-reveal, palette command, build stamps) but the class
    of bug remains: any new feature must assume a page may be frozen and must be verifiable from the
    backend (heartbeat/heartbeat-build/result files), never from a screenshot alone.
-6. **Repo hygiene to decide:** committed `__pycache__/*.pyc` files; `console/backend/mvp_server.py` legacy
-   module; two Library helper scripts with overlapping purpose — pick canonical, delete the rest, add them
-   to `.gitignore`.
+6. **Repo hygiene:** `__pycache__` is gitignored. `mvp_server.py` is the `--mvp` fallback in
+   `console/start.sh` only — the live unit runs `server.py`. Error toasts now point at `start.sh`,
+   not the prototype. Sync live console with `./tools/sync-live.sh`. `./install.sh --doctor` checks
+   interpreter, port, unit, plugin folder.
 7. **Docs drift is guarded by CI** (`test_docs_drift.py` compares `docs/plugin-catalog-entry.yaml` with the
    MCP server's tools): adding/removing a tool without updating the entry turns CI red. Keep that in mind
    when you touch tools.
