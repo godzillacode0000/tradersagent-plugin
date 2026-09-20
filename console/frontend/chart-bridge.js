@@ -495,8 +495,30 @@
         case 'market': {
           if (!c || typeof c.setMarket !== 'function') throw new Error('this chart cannot switch market');
           await c.setMarket({ symbol: command.symbol, timeframe: command.timeframe });
+          /* Read the chart back in this same result so the agent does not need a second chart_state
+             call (~the whole perceived delay last time). setMarket has already fetched the bars. */
+          let last = null;
+          let nBars = null;
+          try {
+            if (typeof window.chartBars === 'function') {
+              const bars = await window.chartBars();
+              if (bars && bars.length) {
+                last = bars[bars.length - 1].close;
+                nBars = bars.length;
+              }
+            }
+          } catch (err) { /* bars not ready — detail still names the market */ }
+          const seen = marketFromDom();
+          const symbol = (seen && seen.symbol) || command.symbol;
+          const timeframe = (seen && seen.timeframe) || command.timeframe || '';
           out.ok = true;
-          out.detail = 'switched to ' + command.symbol + ' ' + (command.timeframe || '');
+          out.last = last;
+          out.bars = nBars;
+          out.symbol = symbol;
+          out.timeframe = timeframe;
+          out.detail = 'switched to ' + symbol + ' ' + timeframe +
+            (last != null ? ' · last ' + last : '') +
+            (nBars != null ? ' · bars ' + nBars : '');
           break;
         }
         case 'palette': {

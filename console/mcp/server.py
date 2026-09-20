@@ -299,7 +299,11 @@ def chart_remove_indicator(native: str = "", all: bool = False) -> str:
 
 @mcp.tool(annotations=_ann("Switch symbol/timeframe", destructive=True))
 def chart_set_market(symbol: str, timeframe: str) -> str:
-    """Switch the chart to another symbol/timeframe (e.g. BTCUSDT, 1h)."""
+    """Switch the chart to another symbol/timeframe (e.g. BTCUSDT, 1h).
+
+    The answer includes last price and bar count from the chart after the switch — do not follow up
+    with chart_state just to confirm.
+    """
     if not symbol.strip() or not timeframe.strip():
         return "✗ both symbol and timeframe are required"
     return _command("market", symbol=symbol.strip().upper(), timeframe=timeframe.strip())

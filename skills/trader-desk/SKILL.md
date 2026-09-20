@@ -27,7 +27,8 @@ natives + overlay drawings + market/state/shot.
 
 ## Step 2 — put the chart where the analysis needs it
 
-- `chart_set_market` (symbol + timeframe), then re-read `chart_state`.
+- `chart_set_market` (symbol + timeframe). The answer already has last price and bars — do not follow
+  with `chart_state` just to confirm.
 - Prefer the timeframe the operator asked for.
 
 ## Step 3 — one study at a time

@@ -189,6 +189,10 @@ def record_result(root: str | Path, payload: dict) -> dict:
         "error": payload.get("error"),
         "onCanvas": payload.get("onCanvas"),
         "natives": payload.get("natives"),
+        "last": payload.get("last"),
+        "bars": payload.get("bars"),
+        "symbol": payload.get("symbol"),
+        "timeframe": payload.get("timeframe"),
     }
     if payload.get("shot"):
         path = _decode_shot(root, f"shot-{rid}", str(payload["shot"]))

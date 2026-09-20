@@ -20,6 +20,8 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   its Pine cannot run here — `for … in` is unimplemented in PineTS — so the levels come from the data
   (Binance daily klines → previous UTC day's high/low) and are drawn on the overlay.
 
+- **`chart_set_market` returns last price and bars** in the same result (`switched to BTCUSDT 1h · last
+  80458.96 · bars 500`), so a follow-up `chart_state` is not needed. Measured live after the page reload.
 - **`chart_reload` and `chart_palette` MCP tools** so prompt-to-chart does not shell out for a
   remount or a colour check. Reload is once-per-view. `chart_state` now prints `build`/`viewer`
   when the heartbeat carries them (stale-frame check).

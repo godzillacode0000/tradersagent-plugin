@@ -115,6 +115,16 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(got["series"], 3)
         self.assertEqual(got["detail"], "ran in 61 ms")
 
+    def test_a_market_result_keeps_last_price_and_bars(self):
+        cmd = cb.enqueue(self.root, {"action": "market", "symbol": "BTCUSDT", "timeframe": "1h"})
+        cb.record_result(self.root, {"id": cmd["id"], "ok": True,
+                                     "detail": "switched to BTCUSDT 1h · last 80459.9 · bars 500",
+                                     "last": 80459.9, "bars": 500, "symbol": "BTCUSDT", "timeframe": "1h"})
+        got = cb.get_result(self.root, cmd["id"])
+        self.assertEqual(got["last"], 80459.9)
+        self.assertEqual(got["bars"], 500)
+        self.assertEqual(got["symbol"], "BTCUSDT")
+
     def test_a_result_carries_the_picture_back_to_the_agent(self):
         cmd = cb.enqueue(self.root, {"action": "shot"})
         cb.record_result(self.root, {"id": cmd["id"], "ok": True, "shot": PNG})
