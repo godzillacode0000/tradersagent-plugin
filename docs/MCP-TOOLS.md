@@ -1,4 +1,4 @@
-# Trader's Agent — MCP tools (14)
+# Trader's Agent — MCP tools (27)
 
 The `traders-chart` MCP server exposes the live LuxAlgo **Vela** chart as native tools.
 Every tool talks to the local console (`http://127.0.0.1:8787`) over its push channel (SSE), so a
@@ -20,8 +20,8 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | `chart_state` | — | Symbol, timeframe, last price, bars, indicators on the chart, plus `build`/`viewer` when the page publishes them (stale-frame check). |
 | `chart_shot` | `name: str = ""` | One PNG of the chart. Returned as an image when the client takes images, plus the path on disk. |
 | `chart_palette` | `try_apply: bool = false` | What colours the chart is actually wearing (background, candles, console theme). `try_apply=true` asserts the console's palette and reports what landed 300 ms later. |
-| `library_search` | `query: str`, `kind: str = ""` (`concept`/`indicator`), `limit: int = 8` | Search the LuxAlgo Library (concepts + indicators). Leaves this machine. |
-| `library_indicator` | `query: str` | One indicator by name or slug: summary, licence, and its full Pine source. Leaves this machine. |
+| `library_search` | `query: str`, `kind: str = ""` (`concept`/`indicator`), `limit: int = 8` | Search the LuxAlgo Library (concepts + indicators). See the Library section below for the other nine. |
+| `library_indicator` | `query: str` | One indicator by name or slug: summary, licence, and its full Pine source. |
 
 ## Mutating tools
 
@@ -30,10 +30,32 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | `chart_set_market` | `symbol: str`, `timeframe: str` | Switch the chart. **The answer already carries last price and bar count** — do not follow up with `chart_state`. |
 | `chart_add_indicator` | `native: str` | Add a Vela native (`ema`, `macd`, `supertrend`, `donchian-channels`, …). |
 | `chart_remove_indicator` | `native: str = ""`, `all: bool = false` | Take studies **off** the chart — one by name, or every study with `all=true`. Reports `removed X · chart now carries: Y`. |
-| `chart_apply_pine` | `pine: str` | Run Pine over the chart's live bars and paint a **matching Vela native**. PineTS subset: no `import`, no `while`, no `for …in`. |
+| `chart_apply_pine` | `pine: str` | Run Pine over the chart's live bars and paint a **matching Vela native**. PineTS is a measured subset: `import` is refused outright, while `while`, `for … in`, `request.security`, tuple returns, `box/line/label/table` and `strategy()` all run. |
 | `chart_draw` | `pine: str` | Run Pine and paint the geometry it **builds** (boxes/lines/labels/tables) on the console's overlay. The route for level-type scripts (SMC/liquidity models, PDH/PDL). |
 | `chart_clear` | — | Clear our overlay drawings and the natives our paint layer added, then report what is left. **Does not remove studies added with `chart_add_indicator`** — use `chart_remove_indicator`. |
 | `chart_reload` | — | Reload every attached console page (picks up new frontend files). Once-per-view. |
+| `chart_batch` | `steps: str` (JSON array) | Several actions in one call, in order. Each step is `{"action": "...", ...fields}`; stops at the first failure unless `stop_on_error=false`. One round trip instead of five. |
+| `chart_snapshot` | — | Remember the market + indicator set as a restore point for `chart_undo`. |
+| `chart_undo` | — | Put the chart back to the last snapshot: market first, then the indicator set, reporting the chart's own before → after lists. **Drawings are not restored** — `chart_clear`, then re-draw. |
+| `chart_watch` | `seconds: int = 10` | Watch for a spell and answer with a **diff** (what changed) rather than a second snapshot. |
+
+## Library / research tools
+
+Read-only, and every one leaves this machine (they reach LuxAlgo's hosted MCP).
+
+| Tool | Arguments | What it does |
+|---|---|---|
+| `library_search` | `query: str`, `kind: str = ""` (`concept`/`indicator`), `limit: int = 8` | Search the Library (concepts + indicators). |
+| `library_indicator` | `query: str` | One indicator by name or slug: summary, licence, full Pine source. |
+| `library_list` | `family`, `text`, `concept`, `tier`, `sort`, `direction`, `page`, `page_size` | Browse with the same filters and paging the console's own list uses. |
+| `library_taxonomy` | `what: str = "families"` | The Library's own families (17 measured) or its concept graph — so a filter value is the Library's, not a guess. |
+| `library_concept` | `slug: str` | One concept by slug, with the indicators that implement it. |
+| `library_source` | `slug: str` | Pine source by **exact** slug — no name resolution to get wrong. |
+| `edge_presets` | — | LuxAlgo's measured edge presets (42 measured). |
+| `edge_report` | `preset: str`, `symbol: str` | One preset's measured performance on one symbol. |
+| `edge_symbols` | — | The symbols the edge dataset covers. |
+| `propfirms` | — | Prop-firm challenges (25 measured). |
+| `propfirm_offers` | — | Offers for those challenges. |
 
 ---
 
@@ -50,7 +72,8 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 
 | Code | Meaning |
 |---|---|
-| `NOT_RUNNABLE[while/for-in/import]` | PineTS cannot execute that construct — the script needs a full TradingView engine. |
+| `SYMBOL_NOT_SERVED[XAUUSD]` | This console's workspace provider is Binance only, and it never answered for that symbol. The chart is unchanged — use a crypto pair (the op has a 6 s deadline so it refuses instead of hanging). |
+| `NOT_RUNNABLE[import/for-in]` | PineTS cannot execute that construct — the script needs a full TradingView engine. Measured: `import` is the real one; `for … in` actually runs. |
 | `RUNTIME_CRASH[…]` | The engine threw mid-run (engine bug, not the caller's). |
 | `TOO_FEW_BARS` | Not enough history loaded — widen the range, retry once. |
 | `ENGINE_UNAVAILABLE` | The PineTS module could not be fetched (network). |

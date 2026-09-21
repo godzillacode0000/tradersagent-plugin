@@ -17,6 +17,7 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 MCP_SERVER = os.path.join(ROOT, "console", "mcp", "server.py")
 README = os.path.join(ROOT, "README.md")
 CATALOG = os.path.join(ROOT, "docs", "plugin-catalog-entry.yaml")
+MCP_TOOLS_DOC = os.path.join(ROOT, "docs", "MCP-TOOLS.md")
 
 TABLE_HEADER = "| Tool | What it does |"
 
@@ -99,12 +100,33 @@ class DocDrift(unittest.TestCase):
         self.assertEqual(extra, [], f"README documents tools that do not exist: {extra}")
 
     def test_catalog_entry_lists_the_same_tools(self):
-        """The catalog entry is what a reviewer reads before enabling the plugin."""
         src = _read(CATALOG)
         block = re.search(r"provides_tools:\n((?:\s+-\s+\S+\n)+)", src)
         self.assertIsNotNone(block, "docs/plugin-catalog-entry.yaml has no provides_tools list")
         listed = re.findall(r"-\s+(\S+)", block.group(1) if block else "")
         self.assertEqual(sorted(listed), sorted(mcp_tools()))
+
+    def test_mcp_tools_doc_lists_the_same_tools(self):
+        """docs/MCP-TOOLS.md is the third view of the same fact, and it rotted worst.
+
+        Its title still read "(14)" while the server had 27 — the count in a heading is the kind of
+        thing nobody re-reads, and a reader trusts it precisely because it is a number.
+        """
+        src = _read(MCP_TOOLS_DOC)
+        documented = set(re.findall(r"^\|\s*`([a-z_][a-z0-9_]*)`\s*\|", src, re.M))
+        self.assertTrue(documented, "docs/MCP-TOOLS.md has no tool table rows")
+        missing = [name for name in mcp_tools() if name not in documented]
+        extra = [name for name in sorted(documented) if name not in set(mcp_tools())]
+        self.assertEqual(missing, [], f"docs/MCP-TOOLS.md is missing: {missing}")
+        self.assertEqual(extra, [], f"docs/MCP-TOOLS.md documents tools that do not exist: {extra}")
+
+    def test_mcp_tools_doc_heading_matches_the_count(self):
+        """The heading promises a number; hold it to the number."""
+        src = _read(MCP_TOOLS_DOC)
+        match = re.search(r"^#\s+.*\((\d+)\)\s*$", src, re.M)
+        self.assertIsNotNone(match, "docs/MCP-TOOLS.md heading no longer carries a tool count")
+        self.assertEqual(int(match.group(1)), len(mcp_tools()),
+                         "the tool count in docs/MCP-TOOLS.md's heading is stale")
 
 
 if __name__ == "__main__":                                        # pragma: no cover
