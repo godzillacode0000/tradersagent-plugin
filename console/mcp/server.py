@@ -68,6 +68,16 @@ try:  # FastMCP's image helper: lets chart_shot return the picture itself, not j
 except ImportError:  # pragma: no cover
     MCPImage = None
 
+# The staleness guard lives in its own module so the stdlib-only suite can test it — this file cannot
+# be imported without fastmcp, and a guard that only runs when a dependency is present is not a guard.
+try:
+    from freshness import DEAD_AFTER_S, STALE_AFTER_S, _freshness
+except ImportError:  # pragma: no cover - running as a path, not a package
+    import sys as _sys
+
+    _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from freshness import DEAD_AFTER_S, STALE_AFTER_S, _freshness
+
 BASE = os.environ.get("LUXALGO_CONSOLE", "http://127.0.0.1:8787").rstrip("/")
 INLINE_WAIT = float(os.environ.get("LUXALGO_CHART_INLINE_WAIT", "8"))
 SHOT_DIR = os.environ.get("LUXALGO_SHOT_DIR", "/tmp")
@@ -180,7 +190,8 @@ def chart_caps() -> str:
         return ("the attached page has not published its action list — it is running an older console "
                 "build. The console falls back to its own built-in list.")
     return (f"page can execute: {', '.join(actions)}\n"
-            f"  reported {state.get('age_s')}s ago · {state.get('symbol')} {state.get('timeframe')}")
+            f"  reported {state.get('age_s')}s ago · {state.get('symbol')} {state.get('timeframe')}"
+            f"{_freshness(state.get('age_s'))}")
 
 
 @mcp.tool(annotations=_ann("Chart state", read_only=True))
@@ -200,6 +211,11 @@ def chart_state() -> str:
     ]
     if state.get("build") or state.get("viewer"):
         lines.append(f"build {state.get('build') or '—'} · viewer {state.get('viewer') or '—'}")
+    # A stale chart is the one failure an agent cannot see for itself: the values below look perfectly
+    # plausible whether they were measured a second ago or an hour ago. Say so in words.
+    warning = _freshness(state.get("age_s"))
+    if warning:
+        lines.append(warning.lstrip("\n"))
     return "\n".join(lines)
 
 
