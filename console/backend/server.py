@@ -10,11 +10,10 @@ It also serves the static frontend directory, so the browser can load ES
 modules from the same origin as the API.
 
 Run:
-    /home/godzillaton/.hermes/hermes-agent/venv/bin/python server.py \
-        --port 8787 --frontend ../frontend
+    python3 server.py --port 8787 --frontend ../frontend
 
-The only non-stdlib import is the `mcp` client package, which lives in the
-Hermes venv at /home/godzillaton/.hermes/hermes-agent/venv.
+The only non-stdlib import is the `mcp` client package. It is normally found through the Hermes venv;
+set HERMES_PYTHON to point elsewhere.
 
 Design notes
 ------------
@@ -80,7 +79,8 @@ CHART_INLINE_WAIT_MAX = 30.0
 AGENTS_ROOT = os.path.abspath(os.environ.get(
     "LUXALGO_AGENTS_DIR",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agents")))
-CHAT_CLI = os.environ.get("HERMES_CLI") or "/home/godzillaton/.hermes/hermes-agent/venv/bin/hermes"
+CHAT_CLI = os.environ.get("HERMES_CLI") or os.path.expanduser(
+    "~/.hermes/hermes-agent/venv/bin/hermes")
 DEFAULT_PORT = 8787
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_FRONTEND = "../frontend"

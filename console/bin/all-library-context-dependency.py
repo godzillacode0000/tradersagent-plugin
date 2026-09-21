@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import json
 import re
+import os
 import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
 
 CONSOLE = "http://127.0.0.1:8787"
-DOCS = Path('/home/godzillaton/Projects/luxalgo-web/docs')
+DOCS = Path(os.environ.get(
+    "LUXALGO_DOCS",
+    Path(__file__).resolve().parents[2] / "docs"))
 OUT = DOCS / 'luxalgo-context-dependency.jsonl'
 
 PATTERNS = {
