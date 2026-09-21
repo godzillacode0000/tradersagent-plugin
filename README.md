@@ -53,8 +53,20 @@ cd tradersagent-plugin
 Then in Hermes Desktop:
 
 1. `Ctrl+K` → **Reload desktop plugins**
-2. **Capabilities → Plugins** → enable **Trading Desk**
+2. **Capabilities → Plugins** → enable **Trader's Agent**
 3. Click **Trader's Agent** in the left sidebar — the console opens in the main zone
+
+**Step 2 is not optional, and it is the step that gets skipped.** Hermes Desktop ships every desktop
+plugin **disabled by default**: an installed plugin is inventoried but contributes nothing — no
+sidebar row, no pane, no error — until you switch it on. Enabling is a decision the app stores
+itself, so `install.sh --doctor` cannot see it. To ask directly:
+
+```bash
+./bin/is-enabled.sh          # files ok? decision on/off? what to do about it
+```
+
+If the pane is enabled but still does not dock, that is a different, app-side interaction —
+see [`docs/INSTALL-ENABLE.md`](docs/INSTALL-ENABLE.md) for both failure modes side by side.
 
 `./install.sh --vendor` additionally fetches LuxAlgo's pinned browser builds into
 `console/frontend/vendor/` for offline use (see the licence note in `THIRD-PARTY.md`).

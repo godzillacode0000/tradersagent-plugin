@@ -6,6 +6,13 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **`bin/is-enabled.sh` — ask whether the app has actually enabled the plugin.** `install.sh --doctor`
+  answers "are the files in place"; it cannot answer "is it on", because that decision lives in the
+  app's own store (a LevelDB under `~/.config/Hermes/…`). This reads it and says `on` / `OFF` / `?`
+  with the next step. Exit 0 enabled · 1 disabled or not installed · 2 unreadable.
+- **`docs/INSTALL-ENABLE.md` — the two ways a correct install looks broken**, side by side: the
+  plugin is disabled (the default state), versus enabled but its layout zone is `minimized: true`.
+  Different causes, different fixes, and the second one no plugin can clear for itself.
 - **Indicators can come OFF the chart, and the answer is evidence.** `chart_remove_indicator` (MCP),
   `trader-chart remove NAME|--all` (CLI) and a `remove` bridge action. The measured door in this Vela
   build is the ledger entry's own `remove()`
