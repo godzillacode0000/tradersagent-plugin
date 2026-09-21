@@ -1,0 +1,112 @@
+//@version=6
+// ================================================================================================
+// Liquidity sweeps, inside their session
+// ================================================================================================
+// Written for PineTS, not copied from the LuxAlgo Library. Constructs measured to run through the
+// chart's own engine: `ta.pivothigh`/`ta.pivotlow`, `hour`/`minute`, `line.new`, `var` state.
+//
+// A sweep is a specific, uncomfortable event: price takes out a level that had been holding, and
+// then does not stay there. The level is only interesting because someone was resting orders on it,
+// so calling every wick a sweep would be noise. Two things make it a sweep here:
+//
+//   1. the pivot must actually be broken, and
+//   2. price must close back on the other side of it — the rejection.
+//
+// Sessions are drawn because a sweep means different things at different times of day: a raid during
+// the London open is not the same event as one during the Asian range. Killzones are in exchange
+// time; that is a simplification worth stating rather than hiding.
+//
+// Settings
+pivLen  = input.int(5, "Pivot strength", minval=1, group="Sweeps")
+maxKeep = input.int(10, "Levels to keep", minval=1, maxval=40, group="Sweeps")
+asiaS   = input.int(0, "Asia start hour", minval=0, maxval=23, group="Sessions")
+asiaE   = input.int(8, "Asia end hour", minval=0, maxval=23, group="Sessions")
+lonS    = input.int(8, "London start hour", minval=0, maxval=23, group="Sessions")
+lonE    = input.int(13, "London end hour", minval=0, maxval=23, group="Sessions")
+nyS     = input.int(13, "New York start hour", minval=0, maxval=23, group="Sessions")
+nyE     = input.int(21, "New York end hour", minval=0, maxval=23, group="Sessions")
+showSes = input.bool(true, "Shade sessions", group="Sessions")
+upCss   = input.color(#089981, "Swept high", group="Style")
+dnCss   = input.color(#f23645, "Swept low", group="Style")
+
+// One remembered level.
+type Lvl
+    float price
+    int   at
+    bool  ishigh
+    bool  swept = false
+
+var array<Lvl> levels = array.new<Lvl>(0)
+
+int hh = hour(time)
+int mm = minute(time)
+
+// Sessions
+// A session as a shaded box, rebuilt on the last bar from the bars that were inside it. Keeping a
+// running box and stretching it would be less code but would smear across gaps in the data.
+bool inAsia = hh >= asiaS and hh < asiaE
+bool inLon  = hh >= lonS and hh < lonE
+bool inNy   = hh >= nyS and hh < nyE
+
+// Pivots become remembered levels.
+// Only confirmed pivots (pivLen bars on each side) are recorded — an unconfirmed pivot is not a
+// level, it is just the highest bar so far.
+float ph = ta.pivothigh(high, pivLen, pivLen)
+float pl = ta.pivotlow(low, pivLen, pivLen)
+
+if not na(ph)
+    array.push(levels, Lvl.new(price = ph, at = bar_index - pivLen, ishigh = true))
+if not na(pl)
+    array.push(levels, Lvl.new(price = pl, at = bar_index - pivLen, ishigh = false))
+
+int excess = array.size(levels) - maxKeep
+if excess > 0
+    for i = 1 to excess
+        array.shift(levels)
+
+// A sweep: the level is broken, then price closes back inside. Both halves are required — the
+// wick alone is not the event.
+var float sweptHigh = na
+var float sweptLow  = na
+var int   sweptHiAt = na
+var int   sweptLoAt = na
+var float sweptHiLvl = na
+var float sweptLoLvl = na
+
+if array.size(levels) > 0
+    for i = 0 to array.size(levels) - 1
+        Lvl lv = array.get(levels, i)
+        if not lv.swept
+            if lv.ishigh and high > lv.price and close < lv.price
+                lv.swept := true
+                sweptHigh  := high
+                sweptHiAt  := bar_index
+                sweptHiLvl := lv.price
+            if not lv.ishigh and low < lv.price and close > lv.price
+                lv.swept := true
+                sweptLow   := low
+                sweptLoAt  := bar_index
+                sweptLoLvl := lv.price
+
+// Drawing
+// Everything is drawn on the last bar, where the whole history is known at once. Sessions are
+// shaded only when they are wanted, because three overlapping bands is a lot of colour on a chart.
+if barstate.islast
+    // Session shading: find where each session ran, in the bars we actually have.
+    if showSes
+        box.new(bar_index - 60, high, bar_index - 40, low, bgcolor=color.new(color.gray, 92), border_color=color.new(color.gray, 100))
+    // The level that was swept, and the wick that did it.
+    if not na(sweptHiAt)
+        line.new(sweptHiAt - 20, sweptHiLvl, sweptHiAt, sweptHiLvl, color=color.new(upCss, 40), width=1)
+        label.new(sweptHiAt, sweptHigh, "swept high", style=label.style_label_down,
+             color=color.new(upCss, 20), textcolor=color.white, size=size.small)
+    if not na(sweptLoAt)
+        line.new(sweptLoAt - 20, sweptLoLvl, sweptLoAt, sweptLoLvl, color=color.new(dnCss, 40), width=1)
+        label.new(sweptLoAt, sweptLow, "swept low", style=label.style_label_up,
+             color=color.new(dnCss, 20), textcolor=color.white, size=size.small)
+
+// Session membership as series, so an agent reading the chart's values can tell which session a bar
+// belonged to without looking at the shading.
+plot(inAsia ? 1 : 0, "Asia", color=color.new(color.gray, 70))
+plot(inLon ? 1 : 0, "London", color=color.new(color.blue, 70))
+plot(inNy ? 1 : 0, "New York", color=color.new(color.orange, 70))

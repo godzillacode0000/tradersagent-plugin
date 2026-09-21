@@ -1,0 +1,105 @@
+//@version=6
+// ================================================================================================
+// Fair Value Gaps — with mitigation, drawn as boxes
+// ================================================================================================
+// Written for PineTS, not copied from the LuxAlgo Library. Every construct here was measured to run
+// through the chart's own engine (see /tmp/smc-study/capability.json, 16/16): 3-bar indexing, `var`
+// state, `box.new`/`box.set_*`, arrays, `ta.atr`, `color.new`.
+//
+// The one thing PineTS cannot do is `import`, so this is self-contained by design. It does not try
+// to be a drop-in for the Library's FVG scripts; it does the part an agent actually needs — find the
+// gap, keep it until price comes back, and say so out loud.
+//
+// The gap itself is the standard three-bar reading:
+//   bullish: low > high[2]   (today's low leaves the high of two bars ago behind)
+//   bearish: high < low[2]
+// A gap is not "unfilled" forever: once price trades back into it, it has been mitigated, and a
+// mitigated gap reads differently (interacted-with liquidity) from a fresh one.
+//
+// Settings
+atrLen   = input.int(14, "ATR length", minval=1, group="Filter")
+minATR   = input.float(0.25, "Min gap size (ATR)", minval=0.0, step=0.05, group="Filter",
+     tooltip="Gaps smaller than this are noise on most timeframes. 0 disables the filter.")
+maxKeep  = input.int(12, "Gaps to keep", minval=1, maxval=50, group="Display")
+bullCss  = input.color(#089981, "Bullish gap", group="Style")
+bearCss  = input.color(#f23645, "Bearish gap", group="Style")
+mitAlpha = input.int(85, "Mitigated fill opacity", minval=0, maxval=100, group="Style")
+
+// One gap, remembered as an object so the whole thing reads as a list of gaps rather than
+// parallel arrays that drift apart.
+type Gap
+    float top
+    float btm
+    int   left
+    bool  isbull
+    bool  mit  = false
+
+var array<Gap> gaps = array.new<Gap>(0)
+
+float atr = ta.atr(atrLen)
+float minSize = minATR * atr
+
+// Detection
+// A gap opens when the three-bar window leaves a hole, and the hole is wide enough to matter.
+bool bullGap = low > high[2] and (low - high[2]) >= minSize
+bool bearGap = high < low[2] and (low[2] - high) >= minSize
+
+if bullGap
+    array.push(gaps, Gap.new(top = low, btm = high[2], left = bar_index - 2, isbull = true))
+if bearGap
+    array.push(gaps, Gap.new(top = low[2], btm = high, left = bar_index - 2, isbull = false))
+
+// The list cannot grow forever: on a busy chart every other bar opens a gap.
+// Measured: PineTS refuses `while` outright ("`while` loops are unimplemented"), so trimming is a
+// counted `for` with a shift — the same result, built from a construct the engine actually runs.
+// The count is computed first and the loop only runs when there is something to trim; a `for` whose
+// upper bound is negative crashes the engine ("Index -1 is out of bounds, array size is 0").
+int excess = array.size(gaps) - maxKeep
+if excess > 0
+    for i = 1 to excess
+        array.shift(gaps)
+
+// Mitigation
+// Price entering the gap is the event that matters. It is recorded once and never un-recorded —
+// calling price out of a gap that has already been tested would be a lie about the chart.
+if array.size(gaps) > 0
+    for i = 0 to array.size(gaps) - 1
+        Gap g = array.get(gaps, i)
+        if not g.mit
+            bool touched = g.isbull ? low <= g.top : high >= g.btm
+            if touched
+                g.mit := true
+
+// Drawing
+// Boxes are redrawn from the remembered list rather than mutated, so what is on screen is always a
+// statement about the current list. Only the tail of the list is drawn — older gaps are history.
+if barstate.islast
+    int shown = math.min(array.size(gaps), maxKeep)
+    for i = 0 to shown - 1
+        Gap g = array.get(gaps, i)
+        color fill = g.isbull ? bullCss : bearCss
+        color edge = color.new(fill, g.mit ? mitAlpha : 40)
+        color body = color.new(fill, g.mit ? mitAlpha : 75)
+        box b = box.new(g.left, g.top, bar_index + 5, g.btm,
+             border_color = edge,
+             border_width = g.mit ? 1 : 2,
+             bgcolor      = body,
+             text         = g.mit ? "mitigated" : (g.isbull ? "FVG" : "FVG"),
+             text_color   = color.new(color.white, 30),
+             text_size    = size.small)
+
+// The newest gap, as a value other code (or an agent reading the chart) can act on.
+// Measured: `array.get(gaps, array.size(gaps) - 1)` inside a plot crashes the engine — plot
+// arguments are evaluated before the first push, so the index is -1 while the array is still empty.
+// Tracking the newest level in its own `var float` avoids reading a list that may not have entries.
+var float newestTop = na
+var float newestBtm = na
+if bullGap
+    newestTop := low
+    newestBtm := high[2]
+if bearGap
+    newestTop := low[2]
+    newestBtm := high
+
+plot(newestTop, "newest gap top", color=color.new(bullCss, 60))
+plot(newestBtm, "newest gap bottom", color=color.new(bullCss, 60))
