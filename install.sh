@@ -62,7 +62,7 @@ cat <<'EOF'
 Next:
   1. start the console      ./console/start.sh          (needs python3 with `pip install mcp`)
   2. reload the plugins     in Hermes Desktop: Ctrl+K -> "Reload desktop plugins"
-  3. enable it              Capabilities -> Plugins -> "Trading Desk" -> on
+  3. enable it              Capabilities -> Plugins -> "Trader's Agent" -> on
   4. click the row          left sidebar -> "Trader's Agent"
 
 The console opens in the main zone. If the page looks stale after editing the console's files,

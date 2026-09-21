@@ -55,7 +55,7 @@ const CONSOLE_ORIGIN = 'http://127.0.0.1:8787/'
 /* The console is served without cache validators, so an embedded refresh can keep the previous
    CSS/JS. A stamp per plugin load (i.e. per app start) makes the frame fetch the current files. */
 const APP_URL = `${CONSOLE_ORIGIN}?v=${Date.now().toString(36)}`
-const ROUTE = '/trading-desk'
+const ROUTE = '/traders-agent'
 const REVEAL_DELAY_MS = 1500
 /* Panes are addressed as `<pluginId>:<contributionId>` (the app prefixes the plugin id), and this
    one is the chart itself: docked to the RIGHT of the conversation, so the app's own chat keeps the
@@ -538,7 +538,7 @@ function DeskChip() {
 
 export default {
   id: 'traders-desk',
-  name: 'Trading Desk',
+  name: "Trader's Agent",
   register(ctx) {
     if (ctx.os) ctx_os_open = (url) => ctx.os.openExternal(url)
 
