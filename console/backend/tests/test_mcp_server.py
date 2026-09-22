@@ -16,6 +16,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import unittest.mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -250,6 +251,55 @@ class MCPToolsTest(unittest.TestCase):
         self.assertIn("CC BY-NC-SA 4.0", out)
         self.assertIn("not redistributable", out)
         self.assertIn("```pine", out)
+
+    # ── chart_alert: the market, not the chart ───────────────────────────────
+
+    def test_chart_alert_reports_the_move_once_price_travels(self):
+        """The promise: name the direction, both prices, and the size of the move.
+
+        This is the tool's whole point, so the assertions are on the sentence a trader reads.
+        """
+        calls = {"n": 0}
+
+        def state_once_then_up(*_a, **_k):
+            calls["n"] += 1
+            last = 100.0 if calls["n"] == 1 else 101.0
+            return {"ok": True, "data": {
+                "open": True, "symbol": "SOLUSDT", "timeframe": "4h", "last": last,
+                "bars": 500, "series": 2, "drawings": 0, "natives": ["ema"], "age_s": 1.0}}
+
+        with unittest.mock.patch.object(self.mcp, "_call", side_effect=state_once_then_up), \
+                unittest.mock.patch.object(self.mcp.time, "sleep", lambda *_: None):
+            out = self.mcp.chart_alert(seconds=10, move_pct=0.5)
+        self.assertIn("moved up", out)
+        self.assertIn("100.0 → 101.0", out)
+        self.assertIn("1.000%", out)
+
+    def test_chart_alert_names_the_pause_when_nothing_moves(self):
+        """No move is an answer too — and the excursion seen is the evidence for saying so."""
+        quiet = {"ok": True, "data": {
+            "open": True, "symbol": "BTCUSDT", "timeframe": "1h", "last": 70000.0, "bars": 500,
+            "series": 3, "drawings": 0, "natives": [], "age_s": 1.0}}
+        with unittest.mock.patch.object(self.mcp, "_call", return_value=quiet), \
+                unittest.mock.patch.object(self.mcp.time, "sleep", lambda *_: None):
+            out = self.mcp.chart_alert(seconds=2, move_pct=5.0)
+        self.assertIn("no qualifying move", out)
+        self.assertIn("BTCUSDT 1h", out)
+        self.assertIn("needed 5.0%", out)
+
+    def test_chart_alert_refuses_a_number_that_cannot_be_a_percentage(self):
+        # A caller passing 25 meaning "25 dollars", or a plain mistake, gets told the unit rather than
+        # a chart that never fires because the bar is unreachable.
+        out = self.mcp.chart_alert(seconds=1, move_pct=250)
+        self.assertIn("percentage of price", out)
+
+    def test_chart_alert_does_not_wait_when_the_feed_has_no_price(self):
+        # A chart with no price yet must say that, not spin for the full window comparing NaNs.
+        _Stub.routes = {"/api/chart/state": {"ok": True, "data": {
+            "open": True, "symbol": "BTCUSDT", "timeframe": "1h", "last": None, "bars": 0,
+            "series": 0, "drawings": 0, "natives": [], "age_s": 1.0}}}
+        out = self.mcp.chart_alert(seconds=30, move_pct=0.1)
+        self.assertIn("no usable price", out)
 
 
 if __name__ == "__main__":

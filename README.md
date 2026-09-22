@@ -163,6 +163,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_snapshot` | remember the chart's market + indicators as a restore point |
 | `chart_undo` | put the chart back to that point, reporting the chart's own before → after lists |
 | `chart_watch` | watch for a spell and answer with a **diff** (what changed), not another snapshot |
+| `chart_alert` | wait for **price** to move (by a `move_pct`, or at all) and report the move |
 | `library_search` | search the LuxAlgo Library |
 | `library_indicator` | one indicator's write-up, licence and Pine source |
 | `library_list` | browse indicators with filters and paging (`family`, `text`, `concept`, `tier`, `sort`, `page`) |

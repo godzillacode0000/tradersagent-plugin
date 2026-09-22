@@ -1,4 +1,4 @@
-# Trader's Agent — MCP tools (27)
+# Trader's Agent — MCP tools (28)
 
 The `traders-chart` MCP server exposes the live LuxAlgo **Vela** chart as native tools.
 Every tool talks to the local console (`http://127.0.0.1:8787`) over its push channel (SSE), so a
@@ -38,6 +38,7 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | `chart_snapshot` | — | Remember the market + indicator set as a restore point for `chart_undo`. |
 | `chart_undo` | — | Put the chart back to the last snapshot: market first, then the indicator set, reporting the chart's own before → after lists. **Drawings are not restored** — `chart_clear`, then re-draw. |
 | `chart_watch` | `seconds: int = 10` | Watch for a spell and answer with a **diff** (what changed) rather than a second snapshot. |
+| `chart_alert` | `seconds: int = 30, move_pct: float = 0.0` | Wait for the **market** to move. Reuses the heartbeat's own `last`, reports the move (from → to, percent and absolute) as soon as price travels `move_pct` percent from the first reading — `0` means any change. Where `chart_watch` answers "did the chart change", this answers "did price do something", and reports the largest excursion it saw when the threshold is never met. |
 
 ## Library / research tools
 

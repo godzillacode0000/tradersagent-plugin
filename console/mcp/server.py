@@ -762,5 +762,70 @@ def chart_watch(seconds: int = 15, timeout_s: int = 0) -> str:
     return "\n".join(lines)
 
 
+@mcp.tool(annotations=_ann("Watch the market and say when it moves", read_only=True))
+def chart_alert(seconds: int = 30, move_pct: float = 0.0, timeout_s: int = 0) -> str:
+    """Wait for the MARKET to move, and report the move — price, and how far it went.
+
+    `chart_watch` answers "did the chart change" (a study was added, the symbol switched). This
+    answers the question a trader actually asks: "tell me if price does something". It samples the
+    last price and reports when it has moved at least `move_pct` percent from the first reading —
+    0 means any change at all, which is useful on a quiet timeframe but noisy on a live one.
+
+    `seconds` caps how long to listen (default 30, max 300) and `timeout_s` caps the wait for the
+    FIRST qualifying move. Reuses the heartbeat's own `last` price, so the number reported is the
+    same one `chart_state` shows rather than a second, possibly disagreeing source.
+    """
+    span = max(1, min(int(seconds or 30), 300))
+    try:
+        threshold = abs(float(move_pct or 0.0))
+    except (TypeError, ValueError):
+        return f"✗ move_pct must be a number, got {move_pct!r}"
+    if threshold >= 100:
+        return f"✗ move_pct is a percentage of price (e.g. 0.25 for a quarter of one percent), got {threshold}"
+
+    try:
+        first = _call("/api/chart/state", timeout=5.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    if not first.get("open"):
+        return f"✗ no chart open — {first.get('reason') or 'the console page is not mounted'}"
+
+    start_price = first.get("last")
+    if not isinstance(start_price, (int, float)) or start_price <= 0:
+        return (f"✗ the page reported no usable price (last={start_price!r}) — this chart's feed may "
+                f"not have delivered a bar yet")
+
+    symbol, timeframe = first.get("symbol"), first.get("timeframe")
+    needed = abs(start_price) * threshold / 100.0
+    best = 0.0
+    deadline = time.time() + span
+    while time.time() < deadline:
+        time.sleep(1.5)
+        try:
+            now = _call("/api/chart/state", timeout=5.0)
+        except RuntimeError:
+            continue
+        price = now.get("last")
+        if not isinstance(price, (int, float)):
+            continue
+        delta = float(price) - float(start_price)
+        if abs(delta) > abs(best):
+            best = delta
+        if abs(delta) >= needed and abs(delta) > 0:
+            pct = delta / float(start_price) * 100.0
+            direction = "up" if delta > 0 else "down"
+            warn = _freshness(now.get("age_s"))
+            stale = " (from a stale reading — see below)" if warn else ""
+            return (f"{symbol} {timeframe} moved {direction} {abs(pct):.3f}%{stale}\n"
+                    f"  {start_price} → {price} ({delta:+.6g})\n"
+                    f"  watched {span}s, threshold {threshold}%" + warn +
+                    (f"\n  note: the market also switched to {now.get('symbol')} "
+                     f"{now.get('timeframe')} while watching" if now.get("symbol") != symbol else ""))
+
+    pct = best / float(start_price) * 100.0 if start_price else 0.0
+    return (f"no qualifying move in {span}s — {symbol} {timeframe} still near {start_price}\n"
+            f"  largest excursion seen: {best:+.6g} ({pct:+.3f}%), needed {threshold}%")
+
+
 if __name__ == "__main__":
     mcp.run()
