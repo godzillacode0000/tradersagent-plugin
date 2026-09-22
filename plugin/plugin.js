@@ -43,6 +43,7 @@
 import {
   host,
   haptic,
+  useValue,
   ROUTES_AREA,
   PANES_AREA,
   SIDEBAR_NAV_AREA,
@@ -355,26 +356,29 @@ function TradersDeskPage() {
    * Hand the workspace back to the chat he was in.
    *
    * A contributed route is a FULL PAGE by SDK design ("A route mounts a full page in the
-   * workspace pane"), so landing here used to cover his conversation — the 22 Sep report:
-   * "where is my chat composer part in the middle?". The card below then claimed his chat was
-   * left open while it sat where his composer should be. The row promises reveal-only: once the
-   * pane is confirmed on screen, go back to the focused chat, session unchanged.
+   * workspace pane"), so landing here used to cover his conversation — the report: "where is my
+   * chat composer part in the middle?". The card below then claimed his chat was left open while
+   * it sat where his composer should be. The row promises reveal-only: once the pane is confirmed
+   * on screen, go back to the focused chat, session unchanged.
+   *
+   * The id is read REACTIVELY (useValue), not once at mount: sessions restore asynchronously, so a
+   * cold boot mounts this page while focusedStoredSessionId is still null. The first version read
+   * it exactly once — it skipped the navigate, never retried, and clicking the row again did not
+   * remount (same path), so the card stuck forever (the 23 Sep 06:08 screenshot, app restarted
+   * 05:51). Subscribing means the bounce fires the moment the id arrives, whatever woke this page.
    *
    * `focusedStoredSessionId`, not `activeSessionId`: routes parse STORED ids (routes.ts —
    * routeSessionId reads '/' + durable id), while activeSessionId is a runtime id that lands on
    * a route no parser accepts. Guarded on paneUp: while the pane is hidden this page IS the
    * console fallback (the 17 Sep "where is my chart?" rule) and must stay put. No focused
-   * session (cold start, a full page like Settings): no navigation — the card is the honest
-   * answer there.
+   * session ever (a full page like Settings): no navigation — the card is the honest answer there.
    */
+  const sid = useValue(host.state && host.state.focusedStoredSessionId)
   useEffect(() => {
     if (!paneUp) return
-    const atom = host.state && host.state.focusedStoredSessionId
-    const sid = atom && typeof atom.get === 'function' ? atom.get() : null
-    if (sid && typeof host.navigate === 'function') {
-      host.navigate('/' + encodeURIComponent(sid))
-    }
-  }, [paneUp])
+    if (!sid || typeof host.navigate !== 'function') return
+    host.navigate('/' + encodeURIComponent(sid))
+  }, [paneUp, sid])
 
   if (!paneUp) {
     return jsxs('div', {

@@ -101,6 +101,15 @@ class TheLandingHandsTheWorkspaceBack(unittest.TestCase):
         self.assertIn("host.state.focusedStoredSessionId", self.code)
         self.assertIn("host.navigate", self.code)
 
+    def test_the_id_read_is_reactive_not_one_shot(self):
+        # The first bounce read the id exactly once at mount. Sessions restore asynchronously, so
+        # a cold boot mounted the page while the id was still null: the navigate was skipped, the
+        # effect never re-ran (deps were [paneUp] only), and re-clicking the row did not remount
+        # the same path — the card stuck until the app was restarted (23 Sep screenshot). The id
+        # must arrive through a subscription, and the effect must re-fire when it does.
+        self.assertIn("useValue(host.state && host.state.focusedStoredSessionId)", self.code)
+        self.assertRegex(self.code, r"\[paneUp, sid\]")
+
     def test_it_does_not_route_on_the_runtime_id(self):
         # activeSessionId is the RUNTIME id (store/session.ts seeds it with 'rt-focus'-shaped
         # values); sessionRoute builds '/' + stored id, so routing on it lands on no route.
