@@ -6,7 +6,8 @@
  * agent-side, invoked on request — nothing here lists them.
  *
  * Contributions:
- *   PLUGIN_PAGE       the landing the row opens: reveals the chart pane, leaves the session alone
+ *   PLUGIN_PAGE       the landing the row opens: reveals the chart pane, hands the workspace
+ *                     back to your open chat — leaves the session alone
  *   PANES_AREA        the chart itself, docked to the right of the conversation
  *   SIDEBAR_NAV_AREA  the row itself
  *   PALETTE_AREA      commands: open the console · reload the chart pane · toggle the reveal on
@@ -349,6 +350,31 @@ function TradersDeskPage() {
       if (typeof stop === 'function') stop()
     }
   }, [])
+
+  /**
+   * Hand the workspace back to the chat he was in.
+   *
+   * A contributed route is a FULL PAGE by SDK design ("A route mounts a full page in the
+   * workspace pane"), so landing here used to cover his conversation — the 22 Sep report:
+   * "where is my chat composer part in the middle?". The card below then claimed his chat was
+   * left open while it sat where his composer should be. The row promises reveal-only: once the
+   * pane is confirmed on screen, go back to the focused chat, session unchanged.
+   *
+   * `focusedStoredSessionId`, not `activeSessionId`: routes parse STORED ids (routes.ts —
+   * routeSessionId reads '/' + durable id), while activeSessionId is a runtime id that lands on
+   * a route no parser accepts. Guarded on paneUp: while the pane is hidden this page IS the
+   * console fallback (the 17 Sep "where is my chart?" rule) and must stay put. No focused
+   * session (cold start, a full page like Settings): no navigation — the card is the honest
+   * answer there.
+   */
+  useEffect(() => {
+    if (!paneUp) return
+    const atom = host.state && host.state.focusedStoredSessionId
+    const sid = atom && typeof atom.get === 'function' ? atom.get() : null
+    if (sid && typeof host.navigate === 'function') {
+      host.navigate('/' + encodeURIComponent(sid))
+    }
+  }, [paneUp])
 
   if (!paneUp) {
     return jsxs('div', {

@@ -83,6 +83,34 @@ class TheRowLeavesTheSessionAlone(unittest.TestCase):
         )
 
 
+class TheLandingHandsTheWorkspaceBack(unittest.TestCase):
+    """22 Sep: the route page covered his chat — the composer sat behind a status card.
+
+    A contributed route mounts a FULL page in the workspace by SDK design, so the row's landing
+    displaced his conversation while the card claimed "your chat was left open". The bounce back
+    to the focused chat is the difference between reveal-only (the promise) and take-over (the
+    report: "where is my chat composer part in the middle?"). It must: exist, carry the STORED
+    id — routes parse durable ids, the runtime id resolves to no route — and wait for the pane,
+    because the hidden-pane branch is the console fallback that must stay put.
+    """
+
+    def setUp(self):
+        self.code = without_comments(plugin_source())
+
+    def test_the_page_navigates_back_to_the_focused_chat(self):
+        self.assertIn("host.state.focusedStoredSessionId", self.code)
+        self.assertIn("host.navigate", self.code)
+
+    def test_it_does_not_route_on_the_runtime_id(self):
+        # activeSessionId is the RUNTIME id (store/session.ts seeds it with 'rt-focus'-shaped
+        # values); sessionRoute builds '/' + stored id, so routing on it lands on no route.
+        self.assertNotIn("host.state.activeSessionId", self.code)
+
+    def test_the_bounce_waits_for_the_pane(self):
+        # Pane hidden → this page IS the console fallback (the 17 Sep rule) and must stay.
+        self.assertRegex(self.code, r"if \(!paneUp\) return")
+
+
 class TheManifestStaysHonest(unittest.TestCase):
     def test_expected_renders_match_what_the_plugin_contributes(self):
         # plugin.expect.json is what tools/verify-plugin.mjs checks against the rendered output, and

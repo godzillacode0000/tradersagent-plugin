@@ -108,7 +108,7 @@ systemctl --user enable --now traders-agent.service
 
 | Where | What it does |
 |---|---|
-| Left sidebar → **Trader's Agent** | reveals the chart pane beside your chat — your session is not switched |
+| Left sidebar → **Trader's Agent** | reveals the chart pane beside your chat, then hands you back to the chat you were on — your session is not switched |
 | Status bar → **Trader's Agent** chip | same, from anywhere in the app |
 | `Ctrl+K` → **Trading: open Trader's Agent** | same, from the palette |
 | `Ctrl+K` → **Trading: open console in browser ↗** | opens `127.0.0.1:8787` in your real browser |
