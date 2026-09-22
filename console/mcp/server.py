@@ -620,8 +620,52 @@ def propfirm_offers(query: str = "") -> str:
 _SNAPSHOT: dict = {}          # the last state + natives we saw, for chart_undo
 
 
-def _natives() -> list:
-    """The indicator list the CHART reports (never our own record of what we asked for)."""
+def _live_market(timeout_s: float = 6.0) -> dict:
+    """Read the market from the CHART, not from the heartbeat.
+
+    `/api/chart/state` is a heartbeat the page republishes every 4 s (STATE_EVERY in the console's
+    chart-bridge.js). Reading it right after a command therefore returns the state from BEFORE that
+    command, which is how chart_watch reported "SOLUSDT 1h" for a chart that a batch had just switched
+    to ETHUSDT — a plausible, wrong answer, which is the worst kind.
+
+    A bare `market` command (no symbol) is a no-op the page answers with its own present market in
+    ~100 ms, so that is the live reading. Measured: `symbol ETHUSDT · timeframe 1h · last 2723.93`
+    came back from a page whose heartbeat still said SOLUSDT. Returns {} when no view answered, and
+    the caller falls back to the heartbeat.
+    """
+    answer = _command("market", wait=timeout_s)
+    fields = {}
+    for line in str(answer or "").splitlines():
+        if "switched to " in line:
+            piece = line.split("switched to ", 1)[1].strip()
+            parts = piece.split(" · ")[0].split()
+            if parts:
+                fields["symbol"] = parts[0]
+            if len(parts) > 1:
+                fields["timeframe"] = parts[1]
+    return fields
+
+
+def _natives(live: bool = False) -> list:
+    """The indicator list the CHART reports (never our own record of what we asked for).
+
+    Read from the heartbeat, which is the only door that carries the indicator list: the live `market`
+    probe answers with the market and price but reports `natives: null`, and `probe` answers with a
+    dump of the page's method handles. Measuring that cost a cycle — an earlier version of this
+    function parsed the `probe` dump looking for a natives line that was never there, silently fell
+    through, and looked like it worked because the heartbeat agreed.
+
+    `live=True` is kept for callers that have just issued a command and want the listing the command
+    itself reported; it is not a substitute for a heartbeat read.
+    """
+    if live:
+        answer = _command("market", wait=6.0)
+        for line in str(answer or "").splitlines():
+            if "natives" in line.lower():
+                _, _, rest = line.partition(":")
+                names = [n.strip() for n in rest.split(",") if n.strip() and n.strip() != "none"]
+                if names or "none" in rest.lower():
+                    return names
     try:
         state = _call("/api/chart/state", timeout=5.0)
     except RuntimeError:
@@ -667,15 +711,24 @@ def chart_batch(commands: str, stop_on_error: bool = True) -> str:
     return "\n".join(lines)
 
 
-@mcp.tool(annotations=_ann("Remember the chart as it is"))
+@mcp.tool(annotations=_ann("Remember the chart's state"))
 def chart_snapshot() -> str:
-    """Remember the chart's indicators plus its symbol/timeframe as a restore point for chart_undo."""
+    """Remember the chart's indicators plus its symbol/timeframe as a restore point for chart_undo.
+
+    The market is read live rather than from the 4 s heartbeat, so a snapshot taken straight after a
+    command records what that command produced. Reading the heartbeat here once stored the market from
+    BEFORE a switch, and chart_undo then "restored" the chart to a market it was never on.
+    """
     try:
         state = _call("/api/chart/state", timeout=5.0)
     except RuntimeError as exc:
         return f"✗ {exc}"
     if not state.get("open"):
         return f"✗ no chart open — {state.get('reason') or 'the console page is not mounted'}"
+    live = _live_market()
+    if live:
+        state = dict(state)
+        state.update({k: v for k, v in live.items() if v})
     _SNAPSHOT.clear()
     _SNAPSHOT.update({"symbol": state.get("symbol"), "timeframe": state.get("timeframe"),
                       "natives": [str(n) for n in (state.get("natives") or [])]})
@@ -717,9 +770,13 @@ def chart_undo() -> str:
 def chart_watch(seconds: int = 15, timeout_s: int = 0) -> str:
     """Watch the chart for `seconds` and report what actually changed.
 
-    Compares the heartbeat's own fields (symbol, timeframe, last price, bars, indicators, drawings)
+    Compares the chart's own fields (symbol, timeframe, last price, bars, indicators, drawings)
     between two reads, so the answer is a diff rather than a second snapshot. `seconds` defaults to
     15 and is capped at 120. Set timeout_s to wait no longer than that for the FIRST change.
+
+    The market is read live (the page answers a bare `market` probe in ~100 ms) rather than from the
+    4 s heartbeat, so the diff cannot describe the moment before a switch that just happened — that
+    is how this tool once reported SOLUSDT for a chart a batch had already moved to ETHUSDT.
     """
     span = max(1, min(int(seconds or 15), 120))
     try:
@@ -728,6 +785,11 @@ def chart_watch(seconds: int = 15, timeout_s: int = 0) -> str:
         return f"✗ {exc}"
     if not first.get("open"):
         return f"✗ no chart open — {first.get('reason') or 'the console page is not mounted'}"
+
+    live = _live_market()
+    if live:
+        first = dict(first)
+        first.update({k: v for k, v in live.items() if v})
 
     def face(state):
         return {"symbol": state.get("symbol"), "timeframe": state.get("timeframe"),
@@ -744,6 +806,10 @@ def chart_watch(seconds: int = 15, timeout_s: int = 0) -> str:
             now = _call("/api/chart/state", timeout=5.0)
         except RuntimeError:
             continue
+        live_now = _live_market()
+        if live_now:
+            now = dict(now)
+            now.update({k: v for k, v in live_now.items() if v})
         diff = {k: (start[k], now.get(k)) for k in start if start[k] != now.get(k)}
         if diff:
             changed = (diff, now)

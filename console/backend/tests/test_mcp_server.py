@@ -259,16 +259,17 @@ class MCPToolsTest(unittest.TestCase):
 
         This is the tool's whole point, so the assertions are on the sentence a trader reads.
         """
-        calls = {"n": 0}
+        prices = iter([100.0, 101.0])
 
-        def state_once_then_up(*_a, **_k):
-            calls["n"] += 1
-            last = 100.0 if calls["n"] == 1 else 101.0
-            return {"ok": True, "data": {
-                "open": True, "symbol": "SOLUSDT", "timeframe": "4h", "last": last,
-                "bars": 500, "series": 2, "drawings": 0, "natives": ["ema"], "age_s": 1.0}}
+        def moving(_path, *a, **k):
+            # _call already unwraps the console's envelope and returns `data` itself, so the stub
+            # hands back the state directly — nesting it under "data" again is what made this test
+            # report "no chart open" against a correct tool.
+            return {"open": True, "symbol": "SOLUSDT", "timeframe": "4h",
+                    "last": next(prices, 101.0), "bars": 500, "series": 2, "drawings": 0,
+                    "natives": ["ema"], "age_s": 1.0}
 
-        with unittest.mock.patch.object(self.mcp, "_call", side_effect=state_once_then_up), \
+        with unittest.mock.patch.object(self.mcp, "_call", side_effect=moving), \
                 unittest.mock.patch.object(self.mcp.time, "sleep", lambda *_: None):
             out = self.mcp.chart_alert(seconds=10, move_pct=0.5)
         self.assertIn("moved up", out)
@@ -277,9 +278,8 @@ class MCPToolsTest(unittest.TestCase):
 
     def test_chart_alert_names_the_pause_when_nothing_moves(self):
         """No move is an answer too — and the excursion seen is the evidence for saying so."""
-        quiet = {"ok": True, "data": {
-            "open": True, "symbol": "BTCUSDT", "timeframe": "1h", "last": 70000.0, "bars": 500,
-            "series": 3, "drawings": 0, "natives": [], "age_s": 1.0}}
+        quiet = {"open": True, "symbol": "BTCUSDT", "timeframe": "1h", "last": 70000.0,
+                 "bars": 500, "series": 3, "drawings": 0, "natives": [], "age_s": 1.0}
         with unittest.mock.patch.object(self.mcp, "_call", return_value=quiet), \
                 unittest.mock.patch.object(self.mcp.time, "sleep", lambda *_: None):
             out = self.mcp.chart_alert(seconds=2, move_pct=5.0)
