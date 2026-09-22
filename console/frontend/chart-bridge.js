@@ -206,18 +206,37 @@
         }
         case 'add': {
           if (!c || typeof c.addNativeIndicator !== 'function') throw new Error('no chart on this page');
+          const name = String(command.native || '').trim();
           const before = (typeof c.presentNativeIndicators === 'function') ? c.presentNativeIndicators() : [];
-          c.addNativeIndicator(command.native);
+
+          /* Vela stacks a second study instead of replacing the one already there, so asking twice
+             drew two overlapping EMAs — and the old `after.includes(name)` check called that a
+             success, because the name was present either way. Read the chart first: if this study is
+             already on it, say so and change nothing, so a repeat call is idempotent instead of
+             silently doubling the pane. */
+          const already = before.filter((n) => n === name).length;
+          if (already > 0) {
+            const dupes = already > 1 ? ' (it is on the chart ' + already + ' times)' : '';
+            out.ok = true;
+            out.added = null;
+            out.alreadyPresent = true;
+            out.natives = before;
+            out.detail = 'the chart already carries Vela native "' + name + '"' + dupes +
+              ' · nothing added · chart carries: ' + (before.join(', ') || 'none');
+            break;
+          }
+
+          c.addNativeIndicator(name);
           /* Read the chart back instead of echoing the request: the handle accepts the call even
              when the study never lands, and "ok" from a request is not evidence of a painted pane. */
           const after = (typeof c.presentNativeIndicators === 'function') ? c.presentNativeIndicators() : [];
           const gained = after.filter((n) => !before.includes(n));
-          out.ok = gained.length > 0 || after.includes(command.native);
-          out.added = out.ok ? command.native : null;
+          out.ok = gained.length > 0;
+          out.added = out.ok ? name : null;
           out.natives = after;
           out.detail = out.ok
-            ? 'added Vela native "' + command.native + '" · chart now carries: ' + (after.join(', ') || 'none')
-            : 'asked for "' + command.native + '" but the chart still carries: ' + (after.join(', ') || 'none');
+            ? 'added Vela native "' + name + '" · chart now carries: ' + (after.join(', ') || 'none')
+            : 'asked for "' + name + '" but the chart still carries: ' + (after.join(', ') || 'none');
           break;
         }
         case 'draw': {
@@ -332,85 +351,73 @@
           out.natives = after;
           out.ok = after.length < before.length;
 
-          /* The door that actually exists in this build: the *cell's* indicator ledger — `ws.active`
-             exposes removeNative(name) / removeInstance(id) / removeFromChart(id) and onChartRows()
-             for the list itself. The state object is not it (its `indicators.natives` was empty while
-             the chart carried two studies), so the ledger is asked directly and read back after. */
+          /* The door that actually exists in this build: the chart's own indicator ledger —
+             `chart.indicators()` returns entries whose prototype carries remove/moveTo/setVisible.
+             This used to be reached only when `window.__wsApp` was present, so on a bare-chart page
+             (no workspace) every removal silently did nothing and the tool reported "nothing removed"
+             while the studies stayed. The ledger is read off the chart handle itself now. */
           if (!out.ok) {
-            const ws = (window.__wsApp || {}).ws;
-            const firstCell = (() => {
+            const ledgerOf = () => {
               try {
-                if (ws && typeof ws.cells === 'function') {
-                  const cells = ws.cells();
-                  if (Array.isArray(cells) && cells.length) return cells[0];
-                }
-                if (ws && ws.active) return ws.active;
-              } catch (err) { /* opaque */ }
-              return null;
-            })();
-            if (firstCell) {
-              const ledgerOf = () => {
-                try {
-                  const l = (typeof c.indicators === 'function') ? c.indicators() : c.indicators;
-                  if (Array.isArray(l)) return l;
-                  if (l && Array.isArray(l.indicators)) return l.indicators;
-                } catch (err) { tried.push('ledger \u2717 ' + (err && err.message)); }
-                return [];
-              };
-              const rowMatches = (entry, wanted) => {
-                const fields = [entry && entry.nativeType, entry && entry.name, entry && entry.title,
-                                entry && entry.id]
-                  .filter(Boolean).map((v) => String(v).toLowerCase());
-                return fields.some((f) => f === wanted || f.includes(wanted));
-              };
-              tried.push('ledger: ' + JSON.stringify(ledgerOf().map((e) => e && e.nativeType || e && e.name)).slice(0, 160));
+                const l = (typeof c.indicators === 'function') ? c.indicators() : c.indicators;
+                if (Array.isArray(l)) return l;
+                if (l && Array.isArray(l.indicators)) return l.indicators;
+              } catch (err) { tried.push('ledger \u2717 ' + (err && err.message)); }
+              return [];
+            };
+            const rowMatches = (entry, wanted) => {
+              const fields = [entry && entry.nativeType, entry && entry.name, entry && entry.title,
+                              entry && entry.id]
+                .filter(Boolean).map((v) => String(v).toLowerCase());
+              return fields.some((f) => f === wanted || f.includes(wanted));
+            };
+            tried.push('ledger: ' + JSON.stringify(ledgerOf().map((e) => e && e.nativeType || e && e.name)).slice(0, 160));
 
-              /* The door that works in this build, measured: the ledger entry's own remove() —
-                 `chart.indicators()` returns entries whose prototype carries remove/moveTo/setVisible.
-                 The cell doors (removeInstance/removeFromChart/removeNative) rejected ids and names
-                 alike, and each pass re-reads the ledger because the list shifts as studies come off.
-                 `all` therefore actually means all: passes until the chart is empty or nothing lands. */
-              let passes = 0;
-              const maxPasses = command.all ? 6 : 1;
-              while (passes < maxPasses) {
-                passes += 1;
-                const entries = ledgerOf();
-                if (!entries.length) break;
-                let acted = false;
-                for (const entry of entries) {
-                  if (!command.all && !rowMatches(entry, String(want || '').toLowerCase())) continue;
-                  const shapes = [
-                    ['entry.remove()', entry],
-                    ['entry.controller.remove()', entry && entry.controller],
-                    ['entry.controller.renderer.remove()', entry && entry.controller && entry.controller.renderer],
-                  ];
-                  for (const pair of shapes) {
-                    const label = pair[0];
-                    const obj = pair[1];
-                    if (!obj || typeof obj.remove !== 'function') continue;
-                    try {
-                      obj.remove();
-                      tried.push(label);
-                      acted = true;
-                    } catch (err) {
-                      tried.push(label + ' \u2717 ' + (err && err.message));
-                    }
-                    if (acted) break;
+            /* The door that works in this build, measured: the ledger entry's own remove() —
+               `chart.indicators()` returns entries whose prototype carries remove/moveTo/setVisible.
+               The cell doors (removeInstance/removeFromChart/removeNative) rejected ids and names
+               alike, and each pass re-reads the ledger because the list shifts as studies come off.
+               `all` therefore actually means all: passes until the chart is empty or nothing lands. */
+            let passes = 0;
+            const maxPasses = command.all ? 6 : 1;
+            while (passes < maxPasses) {
+              passes += 1;
+              const entries = ledgerOf();
+              if (!entries.length) break;
+              let acted = false;
+              for (const entry of entries) {
+                if (!command.all && !rowMatches(entry, String(want || '').toLowerCase())) continue;
+                const shapes = [
+                  ['entry.remove()', entry],
+                  ['entry.controller.remove()', entry && entry.controller],
+                  ['entry.controller.renderer.remove()', entry && entry.controller && entry.controller.renderer],
+                ];
+                for (const pair of shapes) {
+                  const label = pair[0];
+                  const obj = pair[1];
+                  if (!obj || typeof obj.remove !== 'function') continue;
+                  try {
+                    obj.remove();
+                    tried.push(label);
+                    acted = true;
+                  } catch (err) {
+                    tried.push(label + ' \u2717 ' + (err && err.message));
                   }
-                  if (acted) {
-                    await new Promise((r) => setTimeout(r, 500));
-                    if (!command.all) break;
-                  }
+                  if (acted) break;
                 }
-                await new Promise((r) => setTimeout(r, 400));
-                if (!command.all) break;
-                if (!acted) break;
-                if (read().length === 0) break;
+                if (acted) {
+                  await new Promise((r) => setTimeout(r, 500));
+                  if (!command.all) break;
+                }
               }
-              after = read();
-              out.natives = after;
-              out.ok = after.length < before.length;
+              await new Promise((r) => setTimeout(r, 400));
+              if (!command.all) break;
+              if (!acted) break;
+              if (read().length === 0) break;
             }
+            after = read();
+            out.natives = after;
+            out.ok = after.length < before.length;
           }
 
           /* The answer a person (or the agent) reads first: what actually came off, and what the chart
@@ -494,7 +501,45 @@
         }
         case 'market': {
           if (!c || typeof c.setMarket !== 'function') throw new Error('this chart cannot switch market');
-          await c.setMarket({ symbol: command.symbol, timeframe: command.timeframe });
+          /* setMarket fetches bars from the workspace provider. When that provider has never heard of
+             the symbol (this Vela workspace registers Binance only), the promise neither resolves nor
+             rejects — so without a deadline this op never answers and the caller waits out its whole
+             window with no idea why. Measured: `market XAUUSD 5m` sat there for 30 s and left the
+             chart on BTCUSDT. Race it, then say plainly which markets this workspace can serve. */
+          /* Must be SHORTER than the caller's inline wait (LUXALGO_CHART_INLINE_WAIT, 8 s by default)
+             or the caller times out first and reports a generic "chart had not answered" instead of
+             this refusal — which is the whole point of the guard. */
+          const SWITCH_DEADLINE_MS = 6000;
+          let timer = null;
+          const guard = new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error('__switch_timeout__')), SWITCH_DEADLINE_MS);
+          });
+          try {
+            await Promise.race([
+              c.setMarket({ symbol: command.symbol, timeframe: command.timeframe }),
+              guard,
+            ]);
+          } catch (err) {
+            if (String((err && err.message) || err) === '__switch_timeout__') {
+              /* Same shape the Pine runner publishes: a stable code plus a hint, so the caller can
+                 branch and a human knows the next move (see out.error above and the MCP reader in
+                 console/mcp/server.py, which prints code[feature] and the hint). */
+              out.error = {
+                code: 'SYMBOL_NOT_SERVED',
+                feature: String(command.symbol || '?'),
+                message: String(command.symbol || '?') + ' did not load — the workspace provider ' +
+                  'never answered within ' + (SWITCH_DEADLINE_MS / 1000) + 's.',
+                hint: 'This console is wired to the Binance feed only, so a crypto pair works ' +
+                  '(BTCUSDT, ETHUSDT, SOLUSDT…). XAUUSD/NAS100/forex are not served here yet; the ' +
+                  'chart is unchanged.',
+              };
+              out.detail = 'refused: ' + command.symbol + ' is not a market this console can load';
+              break;
+            }
+            throw err;
+          } finally {
+            if (timer) clearTimeout(timer);
+          }
           /* Read the chart back in this same result so the agent does not need a second chart_state
              call (~the whole perceived delay last time). setMarket has already fetched the bars. */
           let last = null;
