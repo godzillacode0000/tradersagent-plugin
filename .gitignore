@@ -18,3 +18,5 @@ venv/
 # local scratch
 *.log
 /tmp/
+# local test screenshots (grim captures from UI verification runs)
+/shots/
