@@ -66,12 +66,6 @@ const REVEAL_DELAY_MS = 1500
    in the renderer's localStorage, and the old id carried a "collapsed" left over from the dock the
    operator rejected on 17 Sep — a fresh id is a fresh placement (and this one opens by default). */
 const PANE_ID = 'traders-desk:chart'
-const DESK_TITLE = /trader'?s agent/i
-/* The desk study's Hermes session (console/agents/desk/index.json) — the chat whose context and
-   tool list are built for this chart. A shortcut for navigation only: on any other install this id
-   simply does not exist, the openSession below fails harmlessly, and the title search then a fresh
-   chat take over — so nothing machine-specific is required for the plugin to work. */
-const DESK_SESSION_ID = '20260915_141502_527bcc'
 
 const S = {
   page: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 },
@@ -328,67 +322,27 @@ function revealChart() {
 }
 
 /**
- * Put the chart-aware chat in front.
- *
- * The desk session is the one that carries the study's context and can call the chart tools, so the
- * row opens THAT chat rather than a blank one. Resolution ladder: the study's own session id (a
- * navigation shortcut with a fallback, never an identity claim — a stale id cannot dangle), then a
- * title search in the session list, then a fresh chat.
- */
-async function openDeskChat() {
-  const failures = []
-
-  if (DESK_SESSION_ID) {
-    try {
-      await host.openSession(DESK_SESSION_ID)
-      return 'desk chat in front'
-    } catch (err) {
-      failures.push('id')
-    }
-  }
-
-  try {
-    const profile = (host.state && host.state.profile && host.state.profile.get && host.state.profile.get()) || 'default'
-    const page = await host.listPersistedSessions(null, { profile, limit: 60 })
-    const rows = (page && page.sessions) || []
-    const desk = rows.find((row) => row && DESK_TITLE.test(String(row.title || '')))
-    if (desk && desk.id) {
-      await host.openSession(desk.id)
-      return 'desk chat in front'
-    }
-    failures.push('title')
-  } catch (err) {
-    failures.push('list')
-  }
-
-  try {
-    host.newChat()
-    return 'a fresh chat is in front'
-  } catch (err) {
-    return 'chat unchanged (' + failures.join(', ') + ')'
-  }
-}
-
-/**
  * The page — where the sidebar row, the status chip and the palette command land.
  *
- * Two things, in order: reveal the chart pane (this click IS the explicit user action that justifies
- * it), and put the desk chat in front. If the pane cannot be shown, the page renders the console
- * itself — so a click never lands on an empty page (which is exactly how the 17 Sep version failed).
+ * One job: reveal the chart pane. This click IS the explicit user action that justifies it.
+ *
+ * It deliberately does NOT switch the chat. Until 22 Sep this called openDeskChat(), which jumped the
+ * operator into the desk's own session (resolved by id, then by title) every time the row was
+ * clicked — so pressing "Trader's Agent" pulled him out of the conversation he was having, which is
+ * the "I have to go hunting for it" complaint. The row now leaves his session exactly where it was and
+ * only puts the chart beside it; the agent in whatever chat he is already using can read the chart,
+ * because the tools are server-side and not scoped to the desk session.
+ *
+ * If the pane cannot be shown, the page renders the console itself — so a click never lands on an
+ * empty page (which is exactly how the 17 Sep version failed).
  */
 function TradersDeskPage() {
   const [paneUp, setPaneUp] = useState(paneVisible)
-  const [note, setNote] = useState('opening the desk chat…')
 
   useEffect(() => {
     let live = true
     const stop = watchPane(setPaneUp)
     revealChart()
-    openDeskChat()
-      .then((text) => {
-        if (live) setNote(text)
-      })
-      .catch(() => {})
     return () => {
       live = false
       if (typeof stop === 'function') stop()
@@ -404,7 +358,7 @@ function TradersDeskPage() {
       ]
     })
   }
-  return jsx(ChartDocked, { note })
+  return jsx(ChartDocked, { note: 'your chat was left open — the chart is beside it' })
 }
 
 /**

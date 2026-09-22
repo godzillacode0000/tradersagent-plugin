@@ -65,6 +65,8 @@ Next:
   3. enable it              Capabilities -> Plugins -> "Trader's Agent" -> on
   4. click the row          left sidebar -> "Trader's Agent"
 
-The console opens in the main zone. If the page looks stale after editing the console's files,
+The chart docks on the right, beside whatever chat you are already in — the row does not switch your
+session. If the pane cannot be shown, the page renders the console itself rather than an empty page.
+If the page looks stale after editing the console's files,
 switch to another session and back (or restart the app) so the frame reloads.
 EOF

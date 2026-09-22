@@ -54,7 +54,7 @@ Then in Hermes Desktop:
 
 1. `Ctrl+K` → **Reload desktop plugins**
 2. **Capabilities → Plugins** → enable **Trader's Agent**
-3. Click **Trader's Agent** in the left sidebar — the console opens in the main zone
+3. Click **Trader's Agent** in the left sidebar — the chart docks beside your conversation
 
 **Step 2 is not optional, and it is the step that gets skipped.** Hermes Desktop ships every desktop
 plugin **disabled by default**: an installed plugin is inventoried but contributes nothing — no
@@ -208,7 +208,7 @@ is still not a headless renderer: with no view attached, commands fail fast and 
 | | |
 |---|---|
 | ![in Hermes Desktop](docs/shots/app-in-hermes.png) | ![chart-first](docs/shots/console-chart-first.png) |
-| **In Hermes Desktop** — the sidebar row and the console in the main zone | **Chart-first** — Vela gets the whole pane; panels are opt-in |
+| **In Hermes Desktop** — the sidebar row docks the chart beside the chat | **Chart-first** — Vela gets the whole pane; panels are opt-in |
 | ![Library open](docs/shots/console-library.png) | ![detail panel](docs/shots/detail-panel.png) |
 | **Library open** — search across the LuxAlgo Library | **Detail panel** — write-up, licence badge, **Run PineTS** / **Add to chart** |
 
