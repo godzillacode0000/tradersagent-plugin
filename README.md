@@ -13,9 +13,9 @@
 
 </div>
 
-A sidebar entry that opens a full trading console in the main zone: **Vela**-rendered candlesticks and
-the **LuxAlgo Library** (800+ concepts and indicators, served live by LuxAlgo's own MCP server) in one
-local web app.
+A sidebar entry that docks a full trading console **beside your conversation**: **Vela**-rendered
+candlesticks and the **LuxAlgo Library** (800+ concepts and indicators, served live by LuxAlgo's own
+MCP server) in one local web app — your chat session is left exactly where it was.
 
 - **Chart-first by design.** Vela gets the whole pane. The Library and the item detail panel are two
   small toggles in the top bar, never permanent columns.
@@ -108,7 +108,7 @@ systemctl --user enable --now traders-agent.service
 
 | Where | What it does |
 |---|---|
-| Left sidebar → **Trader's Agent** | reveals the chart pane and brings the desk chat to the front — one click, both surfaces |
+| Left sidebar → **Trader's Agent** | reveals the chart pane beside your chat — your session is not switched |
 | Status bar → **Trader's Agent** chip | same, from anywhere in the app |
 | `Ctrl+K` → **Trading: open Trader's Agent** | same, from the palette |
 | `Ctrl+K` → **Trading: open console in browser ↗** | opens `127.0.0.1:8787` in your real browser |
@@ -119,12 +119,13 @@ systemctl --user enable --now traders-agent.service
 
 ### Chat beside the chart
 
-The chart is a **pane docked to the right of the conversation** (`traders-desk:chart`, 620px, open by
-default), so the app's own composer keeps the left and the chart reads on the right — drag the divider
-to re-balance, or collapse the pane with the app's own control. Clicking the sidebar row re-opens it
-(`host.revealPane`, the app's door for "an explicit user action happened") and opens the **desk chat**
-— the session whose context carries the study's learnings. Any session can drive the chart through the
-tools; the desk one also remembers what we have already looked at.
+The chart is a **pane docked to the right of the conversation** (`traders-desk:chart`, 620px, collapsed
+until you ask for it — your call, 19 Sep: it does not open with the app), so the app's own composer
+keeps the left and the chart reads on the right — drag the divider to re-balance, or collapse the pane
+with the app's own control. Clicking the sidebar row re-opens it (`host.revealPane`, the app's door for
+"an explicit user action happened") and **leaves your session alone**: it used to jump to a dedicated
+desk chat on every click, which pulled you out of whatever you were doing. Any session can drive the
+chart through the tools — the pane is chart, not conversation.
 
 That chat is the "connected, sees, understands" part, and it needs no bespoke composer: the tools
 below answer over the console's push channel, so the round trip is local.

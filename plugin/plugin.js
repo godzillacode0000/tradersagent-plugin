@@ -6,7 +6,7 @@
  * agent-side, invoked on request — nothing here lists them.
  *
  * Contributions:
- *   PLUGIN_PAGE       the landing the row opens: reveals the chart pane, opens the desk chat
+ *   PLUGIN_PAGE       the landing the row opens: reveals the chart pane, leaves the session alone
  *   PANES_AREA        the chart itself, docked to the right of the conversation
  *   SIDEBAR_NAV_AREA  the row itself
  *   PALETTE_AREA      commands: open the console · reload the chart pane · toggle the reveal on
@@ -64,7 +64,8 @@ const REVEAL_DELAY_MS = 1500
    MCP tools answer in tens of milliseconds over the console's push channel.
    The id is `chart` and not `console` on purpose: the app remembers a pane's collapsed state by id
    in the renderer's localStorage, and the old id carried a "collapsed" left over from the dock the
-   operator rejected on 17 Sep — a fresh id is a fresh placement (and this one opens by default). */
+   operator rejected on 17 Sep — a fresh id is a fresh placement, contributed collapsed so it only
+   opens when the row is clicked (his call, 19 Sep). */
 const PANE_ID = 'traders-desk:chart'
 
 const S = {

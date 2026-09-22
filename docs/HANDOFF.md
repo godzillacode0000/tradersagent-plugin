@@ -54,7 +54,7 @@ Versions at handoff: Hermes Desktop 0.21.3, console `SERVER_VERSION = 1.0.0`, CI
 flowchart TB
   subgraph SURFACE["Hermes Desktop · the operator's window"]
     ROW["Sidebar row: Trader's Agent"]
-    ROUTE["Route /traders-agent<br/>reveals the pane, opens the desk chat"]
+    ROUTE["Route /traders-agent<br/>reveals the pane, session untouched"]
     PANE["Pane traders-desk:chart<br/>iframe → 127.0.0.1:8787"]
     CHIP["Status chip"]
     PAL["Palette: open console · reload chart pane"]
@@ -162,7 +162,7 @@ explicit apply leaves behind 300 ms later.
 
 | Contribution | Area | What it does |
 | --- | --- | --- |
-| `page` | `routes` | landing `/traders-agent`: reveals the chart pane, opens the desk chat |
+| `page` | `routes` | landing `/traders-agent`: reveals the chart pane, leaves the current session alone |
 | `chart` | `panes` | the chart itself, docked right of the conversation (`PANES_AREA`), iframe on `APP_URL` |
 | `nav` | `sidebar.nav` | the "Trader's Agent" row (order 40) |
 | `chip` | `statusBar.right` | status chip, click opens the console |

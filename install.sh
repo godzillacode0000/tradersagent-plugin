@@ -25,7 +25,16 @@ if [[ "${1:-}" == "--doctor" ]]; then
   check "plugin.js in repo" "test -f \"$HERE/plugin/plugin.js\""
   check "MCP server in repo" "test -f \"$HERE/console/mcp/server.py\""
   check "console answering on 127.0.0.1:8787" "curl -fsS --max-time 3 http://127.0.0.1:8787/api/health"
-  check "luxalgo-web.service active (this machine)" "systemctl --user is-active luxalgo-web.service"
+  # Only this development machine carries luxalgo-web.service; a fresh install follows the README and
+  # runs traders-agent.service instead. Checking the machine-specific unit unconditionally made
+  # `--doctor` FAIL on every other install, which is exactly the first thing a new user runs.
+  if systemctl --user list-unit-files luxalgo-web.service >/dev/null 2>&1; then
+    check "luxalgo-web.service active (this machine)" "systemctl --user is-active luxalgo-web.service"
+  elif systemctl --user list-unit-files traders-agent.service >/dev/null 2>&1; then
+    check "traders-agent.service active" "systemctl --user is-active traders-agent.service"
+  else
+    check "console reachable (no user unit installed)" "curl -fsS --max-time 3 http://127.0.0.1:8787/api/health"
+  fi
   check "plugin deployed" "test -f \"$DST/plugin.js\""
   check "desk skill deployed" "test -f \"$HERMES_HOME/skills/trading/trader-desk/SKILL.md\""
   if [[ $fail -ne 0 ]]; then
