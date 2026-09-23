@@ -172,6 +172,33 @@ class MCPToolsTest(unittest.TestCase):
         self.assertIn("had not answered within", out)
         self.assertIn("chart_state", out)
 
+    def test_a_frozen_page_is_refused_before_anything_is_queued(self):
+        # The failure this exists for: the view is still registered (so pushed=1) but its
+        # heartbeat is minutes old. Without the preflight the caller burns the whole inline
+        # window and hears "had not answered" from a page that was never going to answer.
+        _Stub.routes = {
+            "/api/chart/state": {"ok": True, "data": {"open": False, "age_s": 37.0,
+                                                      "reason": "heartbeat lost"}},
+            "/api/chart/command": {"ok": True, "data": {"pushed": 1, "command": {"id": 13},
+                                                        "result": None}}}
+        out = self.mcp.chart_add_indicator("ema")
+        self.assertIn("not answering", out)
+        self.assertIn("37s", out)
+        self.assertIn("Trader's Agent", out)
+        self.assertIn("Nothing was queued", out)
+        self.assertFalse(_Stub.posts, "the queue must not be touched when the page cannot claim")
+
+    def test_a_live_page_still_reaches_the_queue(self):
+        # The other half of the promise: a heartbeat one beat old must not turn into a refusal.
+        _Stub.routes = {
+            "/api/chart/state": {"ok": True, "data": {"open": True, "age_s": 1.0, "viewer": "v1"}},
+            "/api/chart/command": {"ok": True, "data": {"pushed": 1, "command": {"id": 14},
+                                                        "result": {"id": 14, "ok": True,
+                                                                   "detail": "ran"}}}}
+        out = self.mcp.chart_add_indicator("ema")
+        self.assertTrue(out.startswith("✓"))
+        self.assertEqual(_Stub.posts[-1]["action"], "add")
+
     def test_the_command_tools_refuse_empty_arguments(self):
         self.assertIn("no Pine source", self.mcp.chart_apply_pine("   "))
         self.assertIn("no indicator name", self.mcp.chart_add_indicator("  "))

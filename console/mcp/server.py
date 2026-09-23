@@ -71,12 +71,12 @@ except ImportError:  # pragma: no cover
 # The staleness guard lives in its own module so the stdlib-only suite can test it — this file cannot
 # be imported without fastmcp, and a guard that only runs when a dependency is present is not a guard.
 try:
-    from freshness import DEAD_AFTER_S, STALE_AFTER_S, _freshness
+    from freshness import DEAD_AFTER_S, STALE_AFTER_S, _command_gate, _freshness
 except ImportError:  # pragma: no cover - running as a path, not a package
     import sys as _sys
 
     _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from freshness import DEAD_AFTER_S, STALE_AFTER_S, _freshness
+    from freshness import DEAD_AFTER_S, STALE_AFTER_S, _command_gate, _freshness
 
 BASE = os.environ.get("LUXALGO_CONSOLE", "http://127.0.0.1:8787").rstrip("/")
 INLINE_WAIT = float(os.environ.get("LUXALGO_CHART_INLINE_WAIT", "8"))
@@ -124,8 +124,32 @@ def _call(path: str, payload: dict | None = None, timeout: float = 20.0) -> dict
     return body.get("data") or {}
 
 
+def _page_age() -> float | None:
+    """The console page's heartbeat age in seconds — or None when it cannot be known.
+
+    Every command is executed by the page (push → claim → run), so this age is the one fact that
+    decides whether queueing is pointless. None — console restarting, an older build without the
+    field, unreadable state — means "proceed and let push-and-wait decide".
+    """
+    try:
+        state = _call("/api/chart/state", timeout=3.0)
+    except Exception:
+        return None
+    age = state.get("age_s")
+    return float(age) if isinstance(age, (int, float)) else None
+
+
 def _command(action: str, timeout: float = INLINE_WAIT + 8.0, **fields) -> str:
-    """Queue one chart command and wait for the page's answer (push channel → same round trip)."""
+    """Queue one chart command and wait for the page's answer (push channel → same round trip).
+
+    The heartbeat preflight runs first (freshness.py's command gate): a page old enough that
+    nobody will claim the command is told so in milliseconds, instead of the caller waiting the
+    full inline window for "had not answered". A view can be registered and still be frozen —
+    pushed=1 does not mean an answer is coming; the heartbeat does.
+    """
+    blocked = _command_gate(_page_age())
+    if blocked:
+        return f"✗ {blocked}"
     try:
         queued = _call("/api/chart/command", {"action": action, "wait": INLINE_WAIT, **fields},
                        timeout=timeout)

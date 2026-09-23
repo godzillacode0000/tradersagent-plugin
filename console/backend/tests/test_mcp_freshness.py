@@ -76,5 +76,41 @@ class FreshnessWarning(unittest.TestCase):
                            "must be longer than the page's own 4s republish interval")
 
 
+class CommandGate(unittest.TestCase):
+    """The read warns at 30s and still delivers its numbers; a command nobody can claim is eight
+    seconds of pretending. So the gate must fire exactly when the page can no longer claim — and
+    never before: one refusal on a healthy chart teaches the agent to route around the gate, which
+    is worse than having no gate at all."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mod = _load()
+
+    def test_a_healthy_or_unknown_age_lets_the_command_through(self):
+        # None, garbage, and anything under the gate must queue: push-and-wait already handles
+        # those honestly (pushed=0, the timeout sentence), and guessing here would refuse a chart
+        # that is merely mid-run.
+        for age in (None, 0, 4, 9.9, "n/a"):
+            with self.subTest(age=age):
+                self.assertEqual(self.mod._command_gate(age), "")
+
+    def test_the_boundary_fires_exactly_at_the_gate(self):
+        gate = self.mod.COMMAND_MAX_AGE_S
+        self.assertEqual(self.mod._command_gate(gate - 0.1), "")
+        self.assertIn("not answering", self.mod._command_gate(gate))
+
+    def test_a_frozen_page_is_refused_with_the_fix_and_no_queue(self):
+        msg = self.mod._command_gate(37)
+        self.assertIn("37s", msg)
+        self.assertIn("Trader's Agent", msg)
+        self.assertIn("Nothing was queued", msg)
+
+    def test_the_gate_sits_below_the_read_warning_and_over_missed_beats(self):
+        # Commands gate harder than reads (a refused command costs a retry; a warned read still
+        # arrives), but never tighter than two missed 4s heartbeats.
+        self.assertLess(self.mod.COMMAND_MAX_AGE_S, self.mod.STALE_AFTER_S)
+        self.assertGreaterEqual(self.mod.COMMAND_MAX_AGE_S, 9)
+
+
 if __name__ == "__main__":
     unittest.main()
