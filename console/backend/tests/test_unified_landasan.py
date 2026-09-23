@@ -109,6 +109,18 @@ class TheScriptPaneIsBack(unittest.TestCase):
         self.assertIn("TraderRun.list()", body)
         self.assertIn("overlay", body)
 
+    def test_hidden_view_state_beats_subject_display_rules(self):
+        """Nothing selected sat under the open script editor: .detail{display:flex} lives
+        LATER in the sheet than .view--hidden at equal specificity, so the state class lost
+        and the Library placeholder refused to hide. The state rule must win outright."""
+        import re
+        m = re.search(r"\.view--hidden\s*\{([^}]*)\}", CSS)
+        self.assertIsNotNone(m)
+        self.assertIn("!important", m.group(1))
+        # and both right-track views must actually be wired to that state
+        self.assertIn("classList.toggle('view--hidden', which !== 'script')", APP)
+        self.assertIn("classList.toggle('view--hidden', which === 'script')", APP)
+
     def test_editor_surface_is_styled_and_legend_hides_via_hidden_attr(self):
         self.assertIn(".script__src", CSS)
         self.assertIn(".script__out", CSS)
@@ -139,6 +151,16 @@ class TheScriptControlRidesVelaToolbar(unittest.TestCase):
         self.assertIn(".vela-topbar-right #script-open", CSS)
         self.assertIn(".btn__label", CSS)   # hidden while docked, shown back in the topbar
         self.assertIn("--vela-tool-color", CSS)
+
+    def test_script_open_guard_reads_the_column_not_only_the_view(self):
+        """id428 reported "script pane opened" with the column shut: rightview pref left the
+        view visible, so the view--hidden-only guard skipped the click. The guard must see
+        data-detail as well."""
+        i = BRIDGE.index("case 'script'")
+        body = BRIDGE[i:i + 900]
+        self.assertIn("dataset.detail", body)
+        self.assertIn("view--hidden", body)
+        self.assertIn("colOff", body)
 
     def test_where_the_control_lives_is_stated_honestly(self):
         self.assertIn("rides Vela", BRIDGE)              # mode() no longer claims topbar-only

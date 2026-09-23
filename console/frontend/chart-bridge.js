@@ -607,10 +607,15 @@
         }
         case 'script': {
           /* The editor is back (23 Sep, operator's call): open the pane for real, and if the
-             command carried Pine, run it on the same landasan every other door uses. */
+             command carried Pine, run it on the same landasan every other door uses.
+             The guard reads the COLUMN too, not just the view: a reload can leave the
+             rightview pref with view-script visible while data-detail is still off, and a
+             view--hidden-only check then skipped the click and reported success anyway. */
           const openBtn = document.getElementById('script-open');
           const pane = document.getElementById('view-script');
-          if (openBtn && pane && pane.classList.contains('view--hidden')) openBtn.click();
+          const track = document.querySelector('.main');
+          const colOff = !track || track.dataset.detail !== 'on';
+          if (openBtn && pane && (colOff || pane.classList.contains('view--hidden'))) openBtn.click();
           const pine = String(command.pine || '');
           if (!pine.trim()) {
             out.ok = true;
