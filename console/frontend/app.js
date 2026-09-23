@@ -94,6 +94,38 @@ const chartReady = new Promise((resolve) => { markChartReady = resolve; });
    not only when this page happens to mount something itself. */
 setInterval(refreshIndicatorCount, 4000);
 
+/* The `<>` control rides VELA's own toolbar (operator, 23 Sep: "sy nak editor script tun ikut
+   sebaris toolbar Vela"). Vela's widget topbar is real DOM — no fork needed for this — so the
+   live NODE moves into its right cluster: same #script-open, so the bridge's click,
+   syncRightButtons' aria state and every test grepping the id keep working from wherever it
+   hangs. It lands before the camera icon like the reference he sent, and takes the sibling
+   tool's colour read at runtime (--vela-tool-color) so dark and light themes both fit with no
+   hardcoded grey. Vela rebuilds that row on its own schedule; a rebuild only DETACHES the node
+   (our reference survives innerHTML wipes), so this runs on a light timer to re-dock — and with
+   no workspace row (bare chart) the control goes back to our topbar where .topbar rules apply. */
+function dockScriptButton() {
+  const btn = el.scriptOpen;
+  if (!btn) return false;
+  const slot = document.querySelector('.vela-widget-topbar .vela-topbar-right');
+  if (!slot) {
+    if (!btn.isConnected) {
+      const home = document.querySelector('.topbar__right');
+      const mcp = document.getElementById('mcp-status');
+      if (home) (mcp ? home.insertBefore(btn, mcp) : home.appendChild(btn));
+      btn.style.removeProperty('--vela-tool-color');
+    }
+    return false;
+  }
+  if (btn.parentElement !== slot) {
+    const cam = slot.querySelector('.vela-widget-screenshot');
+    if (cam) slot.insertBefore(btn, cam); else slot.appendChild(btn);
+  }
+  const sib = slot.querySelector('.vela-widget-tool');
+  if (sib) btn.style.setProperty('--vela-tool-color', getComputedStyle(sib).color);
+  return true;
+}
+setInterval(dockScriptButton, 4000);
+
 /* ------------------------------------------------------------------ helpers */
 function toast(message, bad = false) {
   el.toast.textContent = message;
@@ -241,6 +273,8 @@ async function bootChart() {
         el.chartOrigin.textContent = 'full Vela workspace · binance provider';
         document.body.classList.add('has-workspace');   // hides our redundant chart header
         log('Workspace active: cell chart adopted. Pine mounting remains experimental.');
+        /* The workspace built its toolbar row by now — put the `<>` control on it. */
+        dockScriptButton();
         unblockPineEngine();
         markChartReady(); exposeChart();
         /* The chart's stored palette is not the console's: Vela restores whatever it last saved, and a

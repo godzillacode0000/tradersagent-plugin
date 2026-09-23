@@ -629,8 +629,9 @@
         }
         case 'mode': {
           out.ok = true;
-          out.detail = 'the console is chart-first: the <> Script pane, the Library and Details ' +
-            'open from the topbar; every door runs the same landasan (window.TraderRun)';
+          out.detail = 'the console is chart-first: the <> control rides Vela\'s own toolbar ' +
+            '(resting in the topbar on the bare-chart path), the Library and Details open from ' +
+            'the topbar, and every door runs the same landasan (window.TraderRun)';
           break;
         }
         case 'reload': {

@@ -27,7 +27,7 @@
       <!-- Restored 23 Sep (operator's call): the LuxAlgo-style "paste and Run" pane, back as a
            view of the right-hand track. It runs through the same landasan as chat and Library. -->
       <button type="button" class="btn btn--ghost btn--toggle" id="script-open"
-              aria-pressed="false" title="Write and run Pine on this chart">&lt;&gt; Script</button>
+              aria-pressed="false" title="Write and run Pine on this chart">&lt;&gt;<span class="btn__label"> Script</span></button>
       <!-- Names whose overlay geometry is on screen — set by the unified landasan. Lives HERE,
            not in .chart-head: workspace mode hides that row (body.has-workspace .chart-head). -->
       <span class="chart-legend" id="script-legend" hidden></span>
@@ -101,8 +101,9 @@
 
     <!-- The Pine editor that used to sit between the Library and the chart (removed 17 Sep,
          git history b30222c) is BACK — the operator asked for the LuxAlgo-style paste-and-Run
-         pane on 23 Sep. It lives as a view of the right-hand track, next to the picked result;
-         the topbar's `<> Script` button opens it. -->
+         pane on 23 Sep. It lives as a view of the right-hand track, next to the picked result,
+         and the `<>` control opens it — docked onto Vela's own toolbar row (same day: "ikut
+         sebaris toolbar Vela"), resting in this topbar only on the bare-chart path. -->
 
     <!-- CENTER: the chart -->
     <section class="panel panel--chart">

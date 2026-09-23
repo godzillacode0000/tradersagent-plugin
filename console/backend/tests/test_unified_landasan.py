@@ -116,5 +116,35 @@ class TheScriptPaneIsBack(unittest.TestCase):
         self.assertNotIn("display", legend)   # [hidden] must be able to hide it
 
 
+class TheScriptControlRidesVelaToolbar(unittest.TestCase):
+    """Operator, 23 Sep: "sy nak editor script tun ikut sebaris toolbar Vela". Vela's widget
+    topbar is plain DOM, so the fix is a MOVE of the live node — not a fork, not a copy — with a
+    light-timer re-dock, because Vela re-renders that row on its own schedule."""
+
+    def test_dock_moves_the_live_node_into_velas_right_cluster(self):
+        i = APP.index("function dockScriptButton")
+        body = APP[i:i + 900]
+        self.assertIn(".vela-topbar-right", body)        # Vela's own right cluster
+        self.assertIn("el.scriptOpen", body)             # the live node — id stays unique
+        self.assertNotIn("cloneNode", body)
+        self.assertIn(".vela-widget-screenshot", body)    # before the camera icon (his reference)
+        self.assertIn(".topbar__right", body)            # bare-chart fallback returns it home
+
+    def test_dock_runs_on_boot_and_on_the_light_timer(self):
+        self.assertIn("setInterval(dockScriptButton, 4000)", APP)
+        j = APP.index("function bootChart")
+        self.assertIn("dockScriptButton()", APP[j:j + 3500])
+
+    def test_docked_control_is_styled_as_a_vela_tool_and_drops_its_label(self):
+        self.assertIn(".vela-topbar-right #script-open", CSS)
+        self.assertIn(".btn__label", CSS)   # hidden while docked, shown back in the topbar
+        self.assertIn("--vela-tool-color", CSS)
+
+    def test_where_the_control_lives_is_stated_honestly(self):
+        self.assertIn("rides Vela", BRIDGE)              # mode() no longer claims topbar-only
+        self.assertNotIn("the <> Script pane, the Library and Details", BRIDGE)
+        self.assertIn("docked onto Vela", HTML)
+
+
 if __name__ == "__main__":
     unittest.main()

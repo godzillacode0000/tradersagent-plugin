@@ -499,6 +499,22 @@ input::placeholder { color: var(--lx-fg-faint); }
 .btn--toggle { height: var(--lx-control-h-sm); padding: 0 var(--lx-space-2); font-size: var(--lx-fs-xs); color: var(--lx-fg-muted); }
 .btn--toggle:hover { color: var(--lx-fg-bright); }
 .btn--toggle[aria-pressed="true"] { color: var(--lx-fg); border-color: var(--lx-border-strong); background: var(--lx-surface-3); }
+/* Docked onto Vela's toolbar row (dockScriptButton moves the node — the operator wants it
+   "sebaris toolbar Vela"): one of that row's icon tools — 30px like its siblings, transparent,
+   the sibling colour read at runtime via --vela-tool-color — label dropped to bare glyphs.
+   At home in .topbar the normal .btn rules apply again; both contexts stay correct. */
+.vela-topbar-right #script-open {
+  width: 32px; height: 30px; padding: 0;
+  border: 0; border-radius: 4px;
+  background: transparent;
+  color: var(--vela-tool-color, #868a96);
+  font-size: 13px;
+}
+.vela-topbar-right #script-open:hover { background: var(--lx-bg-hover-strong); }
+.vela-topbar-right #script-open .btn__label { display: none; }
+.vela-topbar-right #script-open[aria-pressed="true"] {
+  color: var(--lx-accent-ink); background: var(--lx-surface-3);
+}
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
 
 .chips { display: flex; flex-wrap: wrap; gap: var(--lx-space-1); }
