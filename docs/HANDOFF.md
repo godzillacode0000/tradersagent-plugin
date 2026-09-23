@@ -221,9 +221,11 @@ Full version: `docs/vela-chart-api-notes.md`. The essentials:
 - **Pine runs once per bar.** An unguarded `line.new` in a 500-bar run produced **50 lines and 50 labels**.
   Guard with `var bool drawn = false` / `if not drawn`, and draw at absolute bar coordinates (`0 → bars-1`)
   so a level spans the loaded window instead of trailing the last bar.
-- **`apply` vs `draw`:** `apply` runs Pine and paints a *Vela native* — a plain price level has no matching
-  native, and the answer says so ("…overlay needed"). `draw` paints the geometry the script builds onto our
-  overlay: that is the route for levels like PDH/PDL.
+- **`apply` vs `draw`:** one landasan (frontend `window.TraderRun`) — geometry (boxes/lines/labels/tables)
+  goes to our overlay with the state read back after drawing, plot series to a matching *Vela native*, and
+  only when the script really plots. `draw` stays the explicit geometry door for levels like PDH/PDL;
+  `apply`, the script pane and the Library all share the same run, so no door can claim it lacks a
+  surface while drawing nothing.
 - **PineTS is a subset:** no `import`, no `while`, no `for … in`. The Library's *Previous Highs & Lows*
   (the PDH/PDL indicator) **cannot run** for exactly this reason. Vela's own Pine engine is a paid feature
   and is not used. When a Library script hits the wall, compute the value from data and draw it.

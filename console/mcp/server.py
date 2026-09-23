@@ -258,10 +258,13 @@ def chart_shot(name: str = ""):
 
 @mcp.tool(annotations=_ann("Run Pine on the chart", destructive=True))
 def chart_apply_pine(pine: str) -> str:
-    """Run Pine source over the chart's live bars (LuxAlgo PineTS) and paint a matching native.
+    """Run Pine source over the chart's live bars (LuxAlgo PineTS) and paint what it makes.
 
-    PineTS implements a subset: `import`, `while` and `for…in` are not available — the answer says so
-    rather than pretending. Sizes it can do: studies with plot/hline/fill/bgcolor and simple ta.* calls.
+    One landasan for every door (chat, script pane, Library): geometry (boxes/lines/labels/tables)
+    lands on the console's overlay and is read back after drawing; plot series lands as a matching
+    Vela native — only when the script actually plots. PineTS implements a subset: `import`, `while`
+    and `for…in` are not available — the answer says so rather than pretending. Sizes it can do:
+    studies with plot/hline/fill/bgcolor and simple ta.* calls.
     """
     if not pine.strip():
         return "✗ no Pine source given"

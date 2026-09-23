@@ -170,38 +170,22 @@
           const pine = String(command.pine || '');
           if (!pine.trim()) throw new Error('no Pine source in the command');
           if (!c || typeof window.chartBars !== 'function') throw new Error('no chart on this page');
-          const bars = await window.chartBars();
-          const res = await window.PineTSRunner.run(pine, bars, { name: 'agent' });
-          if (!res.ok) {
-            out.detail = res.reason || 'not runnable: unknown';
-            out.error = res.error || null;             // stable code + hint, not just prose
+          /* One landasan (unified.js): geometry to the overlay, plot series to a native — the
+             same run the script editor and the Library's Run PineTS perform. */
+          const r = await window.TraderRun.run(pine, 'agent');
+          if (!r.ok) {
+            out.detail = r.reason || 'not runnable: unknown';
+            out.error = r.error || null;             // stable code + hint, not just prose
             break;
           }
-          const paint = await window.PineTSPaint.paintNative(pine);
-          const partial = paint.added && res.series.length > 1
-            ? ' · ' + (res.series.length - 1) + ' other plot(s) not drawn (no exact Vela native)'
-            : '';
           out.ok = true;
-          out.series = res.series.length;
-          out.added = paint.added ? paint.added.title : null;
-          out.ms = res.ms;
-          out.strategy = res.strategy || null;          // a strategy() script's own metrics
-          out.ctor = res.ctor || null;                  // which PineTS constructor ran (context matters)
-          const s = res.strategy;
-          const strat = s
-            ? ' · strategy: net ' + s.netprofit + ' over ' + s.closedtrades + ' closed trades (' +
-              s.wintrades + 'W/' + s.losstrades + 'L), max DD ' + s.max_drawdown +
-              ', Sharpe ' + s.sharpe + ', CAGR ' + s.cagr + (s.truncated ? ' [partial]' : '')
-            : '';
-          const drawParts = (res.drawings || []).map((d) => d.replace(/__/g, ''));
-          const drawable = drawParts.length
-            ? ' · script drew ' + drawParts.join('/') + ' (no render surface in this build — overlay needed)'
-            : '';
-          out.detail = 'ran in ' + res.ms + ' ms over ' + bars.length + ' bars · ' +
-            res.series.length + ' series · ' + (paint.added
-              ? 'drawn with Vela native "' + paint.added.title + '"' + partial
-              : 'not drawn: ' + paint.reason) + strat + drawable +
-            (res.ctor ? ' · engine context: ' + res.ctor + (res.context ? ' (' + res.context + ')' : '') : '');
+          out.series = r.series.length;
+          out.added = r.paint && r.paint.added ? r.paint.added.title : null;
+          out.ms = r.ms;
+          out.strategy = r.strategy || null;          // a strategy() script's own metrics
+          out.ctor = r.ctor || null;                  // which PineTS constructor ran (context matters)
+          out.onCanvas = r.verified || null;
+          out.detail = window.TraderRun.summarize(r);
           break;
         }
         case 'add': {
@@ -240,56 +224,31 @@
           break;
         }
         case 'draw': {
-          // Run a Library script and paint the geometry it BUILT (boxes/lines/labels) on our overlay.
+          /* One landasan (unified.js): the geometry goes to our overlay, read back from state();
+             any plot series lands as a native too — same run as `apply`, the editor, the Library. */
           const pine = String(command.pine || '');
           if (!pine.trim()) throw new Error('no Pine source in the command');
           if (!window.ChartOverlay) throw new Error('no overlay on this page — reload the console');
-          const bars = await window.chartBars();
-          const res = await window.PineTSRunner.run(pine, bars, { name: 'agent-draw' });
-          if (!res.ok) {
-            out.detail = res.reason || 'not runnable: unknown';
-            out.error = res.error || null;             // same contract as `apply`
+          const r = await window.TraderRun.run(pine, 'agent-draw', command.opts || {});
+          if (!r.ok) {
+            out.detail = r.reason || 'not runnable: unknown';
+            out.error = r.error || null;             // same contract as `apply`
             break;
           }
-          const plots = (res.raw && res.raw.plots) || {};
-          const flatten = (key) => {
-            const node = plots[key];
-            const rows = node && Array.isArray(node.data) ? node.data : [];
-            const vals = [];
-            for (const row of rows) {
-              const v = row && row.value;
-              if (Array.isArray(v)) vals.push(...v);
-            }
-            return vals.filter((x) => x && typeof x === 'object' && !x._deleted);
-          };
-          const boxes = flatten('__boxes__').filter((b) => b.xloc !== 'bt');
-          const lines = flatten('__lines__');
-          const labels = flatten('__labels__');
-          /* A backtester's whole output is a dashboard `table`; the overlay renders it as a DOM layer. */
-          const tables = flatten('__tables__');
-          if (!boxes.length && !lines.length && !labels.length && !tables.length) {
-            out.detail = 'ran in ' + res.ms + ' ms but the script built no boxes/lines/labels/tables to draw';
-            break;
-          }
-          const drawn = await window.ChartOverlay.apply({ boxes, lines, labels, tables }, command.opts || {});
-          /* What is on the canvas NOW, not what the script asked for. apply() may drop objects it
-             cannot map, and a silent drop reads to the operator as an empty chart. */
-          const onCanvas = (window.ChartOverlay.state ? window.ChartOverlay.state() : null);
-          out.ok = !!drawn.ok && !!onCanvas &&
-            (onCanvas.boxes + onCanvas.lines + onCanvas.labels + (onCanvas.tables || 0)) > 0;
-          out.onCanvas = onCanvas;
-          out.detail = 'ran in ' + res.ms + ' ms · overlay drew ' + (drawn.boxes || 0) + ' box(es), ' +
-            (drawn.lines || 0) + ' line(s), ' + (drawn.labels || 0) + ' label(s), ' +
-            (drawn.tables || 0) + ' table(s)' +
-            (onCanvas ? ' · verified: ' + onCanvas.boxes + ' box / ' + onCanvas.lines + ' line / ' +
-              onCanvas.labels + ' label / ' + (onCanvas.tables || 0) + ' table on screen' : '') +
-            (drawn.reason ? ' · ' + drawn.reason : '') +
-            (drawn.mapping ? ' · window bars ' + drawn.mapping.i0 + '+' + drawn.mapping.n + ' of ' + drawn.mapping.bars +
-              ', price ' + Math.round(drawn.mapping.lo) + '-' + Math.round(drawn.mapping.hi) : '');
+          const v = r.verified;
+          out.ok = r.containers
+            ? !!v && (v.boxes + v.lines + v.labels + (v.tables || 0)) > 0
+            : Boolean(r.paint && r.paint.added);
+          out.ms = r.ms;
+          out.series = r.series.length;
+          out.added = r.paint && r.paint.added ? r.paint.added.title : null;
+          out.onCanvas = v || null;
+          out.detail = window.TraderRun.summarize(r);
           break;
         }
         case 'clear': {
           if (window.ChartOverlay) window.ChartOverlay.clear();
+          if (window.TraderRun) window.TraderRun.reset();   // legend + badge forget with the overlay
           const removed = (window.PineTSPaint && window.PineTSPaint.clear) ? window.PineTSPaint.clear() : 0;
           /* Same rule as every other mutation: report the state after the call, not the intent. */
           const left = window.ChartOverlay && window.ChartOverlay.state ? window.ChartOverlay.state() : null;
@@ -647,17 +606,31 @@
           break;
         }
         case 'script': {
-          /* The Pine editor surface was removed on the operator's call (17 Sep): this build has no
-             script panel, so the command answers honestly instead of pretending to load it. Scripts
-             still run through `apply` (PineTS over the live bars) — that is the path to use. */
-          out.detail = 'this build has no script panel (the Pine editor was removed, 17 Sep) — ' +
-            'send {\"action\":\"apply\",\"pine\":\"…\"} to run a script over the chart instead';
+          /* The editor is back (23 Sep, operator's call): open the pane for real, and if the
+             command carried Pine, run it on the same landasan every other door uses. */
+          const openBtn = document.getElementById('script-open');
+          const pane = document.getElementById('view-script');
+          if (openBtn && pane && pane.classList.contains('view--hidden')) openBtn.click();
+          const pine = String(command.pine || '');
+          if (!pine.trim()) {
+            out.ok = true;
+            out.detail = 'script pane opened — paste Pine and press Run, or send ' +
+              '{"action":"script","pine":"…"} to run it right away';
+            break;
+          }
+          const r = await window.TraderRun.run(pine, String(command.name || 'agent-script'));
+          out.ok = Boolean(r.ok);
+          out.ms = r.ms || null;
+          out.series = r.ok ? r.series.length : 0;
+          out.onCanvas = r.ok ? (r.verified || null) : null;
+          out.detail = r.ok ? window.TraderRun.summarize(r) : r.reason;
+          if (!r.ok) out.error = r.error || null;
           break;
         }
         case 'mode': {
-          /* Likewise gone with the editor: the console only has the chart surface now. */
-          out.detail = 'this build has no script panel (the Pine editor was removed, 17 Sep) — ' +
-            'the console shows the chart, the Library and the detail panel';
+          out.ok = true;
+          out.detail = 'the console is chart-first: the <> Script pane, the Library and Details ' +
+            'open from the topbar; every door runs the same landasan (window.TraderRun)';
           break;
         }
         case 'reload': {

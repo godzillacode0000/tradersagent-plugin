@@ -17,6 +17,7 @@ const el = {
   chartLog: $('#chart-log'), chartOrigin: $('#chart-origin'), toast: $('#toast'),
   libraryPanel: $('.panel--left'), libraryToggle: $('#library-toggle'),
   main: $('.main'), libraryOpen: $('#library-open'), detailOpen: $('#detail-open'),
+  scriptOpen: $('#script-open'),
   statusbar: $('.statusbar'),
 };
 
@@ -31,14 +32,52 @@ function readPanelPrefs() {
   try { return JSON.parse(localStorage.getItem(PANELS_KEY)) || {}; } catch { return {}; }
 }
 
+/* The right column is ONE track (data-detail) carrying two views: the picked result and the
+   script editor (restored 23 Sep). Opening either opens the column; the buttons follow the view
+   that is actually showing, and clicking the showing one closes the column. */
+function rightViewIs(name) {
+  const v = document.getElementById('view-script');
+  if (!v) return name === 'detail';
+  return name === 'script'
+    ? !v.classList.contains('view--hidden')
+    : v.classList.contains('view--hidden');
+}
+
+function showRightView(which) {
+  const v = document.getElementById('view-script');
+  if (v) v.classList.toggle('view--hidden', which !== 'script');
+  el.detail.classList.toggle('view--hidden', which === 'script');
+  try {
+    localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), rightview: which }));
+  } catch { /* private mode */ }
+}
+
+function syncRightButtons() {
+  const col = el.main.dataset.detail === 'on';
+  el.detailOpen.setAttribute('aria-pressed', String(col && rightViewIs('detail')));
+  el.scriptOpen.setAttribute('aria-pressed', String(col && rightViewIs('script')));
+}
+
 function setPanel(name, on) {
-  const btn = name === 'library' ? el.libraryOpen : el.detailOpen;
+  if (name === 'detail' || name === 'script') {
+    on = Boolean(on);
+    if (on) showRightView(name);
+    el.main.dataset.detail = on ? 'on' : 'off';
+    syncRightButtons();
+    try { localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), detail: on })); } catch { /* private mode */ }
+    return;
+  }
   el.main.dataset[name] = on ? 'on' : 'off';
-  if (btn) btn.setAttribute('aria-pressed', String(Boolean(on)));
+  if (el.libraryOpen) el.libraryOpen.setAttribute('aria-pressed', String(Boolean(on)));
   try { localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), [name]: Boolean(on) })); } catch { /* private mode */ }
 }
 
 function togglePanel(name) {
+  if (name === 'detail' || name === 'script') {
+    const open = el.main.dataset.detail === 'on' && rightViewIs(name);
+    setPanel(name, !open);
+    return;
+  }
   setPanel(name, el.main.dataset[name] !== 'on');
 }
 
@@ -424,10 +463,16 @@ function studiesOnChart() {
 function refreshIndicatorCount() {
   const onChart = studiesOnChart();
   const names = onChart || mounted;
-  const n = names.length;
+  /* Overlay runs are not Vela studies, so inspect() never lists them — yet SMC sitting on screen
+     while the chip read "0 indicators" was the confusion of 23 Sep. Count them here. */
+  const overlay = (window.TraderRun ? window.TraderRun.list() : [])
+    .filter((n) => !names.includes(n));
+  const all = names.concat(overlay);
+  const n = all.length;
   el.count.textContent = n + (n === 1 ? ' indicator' : ' indicators');
   el.count.title = n
-    ? 'On the chart now, per Vela’s own inspect(): ' + names.join(' · ')
+    ? 'On the chart now: ' + (names.join(' · ') || '(none as a Vela study)') +
+      (overlay.length ? ' · overlay: ' + overlay.join(' · ') : '')
     : 'Indicators that actually executed on the chart — a mount that silently did nothing is never counted';
 }
 
@@ -521,7 +566,8 @@ async function openResult(row, button) {
           <button class="btn btn--ghost" id="copy">Copy Pine</button>
         </div>
         <div class="muted" id="pine-headline">PineTS executes the script over this chart's bars and
-        paints the result as native series; “Add to chart” additionally asks Vela's own Pine engine,
+        paints what it makes: plot series as natives, boxes/lines/labels/tables on the overlay.
+        “Add to chart” additionally asks Vela's own Pine engine,
         which stays silent on many scripts in this build.</div>
         <pre>${esc(source.slice(0, 12000))}${source.length > 12000 ? '\n… truncated in preview …' : ''}</pre>`;
       $('#mount').addEventListener('click', async () => {
@@ -538,27 +584,20 @@ async function openResult(row, button) {
         headline.textContent = `Running “${label}” through PineTS… (loading the runtime on first use)`;
         try {
           await chartReady;
-          const bars = await chartBars();
-          const res = await window.PineTSRunner.run(source, bars, { name: label });
-          if (!res.ok) {
-            headline.textContent = res.reason;
-            toast('PineTS: ' + res.reason, true);
+          const r = await window.TraderRun.run(source, label);
+          if (!r.ok) {
+            headline.textContent = r.reason;
+            toast('PineTS: ' + r.reason, true);
             return;
           }
-          const paint = await window.PineTSPaint.paintNative(source);
-          const names = res.series.slice(0, 3).map((s) => s.name).join(', ');
-          const seriesText = res.series.length
-            ? `${res.series.length} series computed (${names}${res.series.length > 3 ? ', …' : ''})`
-            : 'ran, but this script plots nothing';
-          const strat = res.strategy
-            ? ` · strategy: net ${res.strategy.netprofit} over ${res.strategy.closedtrades} closed trades`
-            : '';
-          const drawn = paint.added
-            ? ` · drawn with Vela native “${paint.added.title}”${paint.added.length ? `(${paint.added.length})` : ''} · chart series: ${paint.series}`
-            : ` · not drawn: ${paint.reason}`;
-          headline.textContent = `ran in ${res.ms} ms over ${bars.length} bars · ${seriesText}${strat}${drawn}`;
-          log(`PineTS ran “${label}” in ${res.ms} ms${paint.added ? ` — Vela native “${paint.added.title}” on the chart` : ' — nothing drawn (' + paint.reason + ')'}`);
-          toast(`PineTS: “${label}” ran in ${res.ms} ms`);
+          headline.textContent = window.TraderRun.summarize(r);
+          log(`PineTS ran “${label}” in ${r.ms} ms — ` + (r.drew
+            ? `overlay drew ${r.drew.boxes}/${r.drew.lines}/${r.drew.labels} box/line/label`
+            : (r.paint && r.paint.added)
+              ? `Vela native “${r.paint.added.title}” on the chart`
+              : 'nothing drawn'));
+          refreshIndicatorCount();
+          toast(`PineTS: “${label}” ran in ${r.ms} ms`);
         } catch (err) {
           headline.textContent = 'PineTS failed: ' + err.message;
           toast('PineTS failed: ' + err.message, true);
@@ -648,9 +687,53 @@ async function main() {
      the toggle if he asks for it. (setPanel persists, so a stale `detail: true` is cleaned up here.) */
   const panelPrefs = readPanelPrefs();
   setPanel('library', panelPrefs.library === true);
-  setPanel('detail', false);
+  setPanel('detail', false);   // never restore the column open (his 17 Sep complaint)
+  showRightView(panelPrefs.rightview === 'script' ? 'script' : 'detail');
   el.libraryOpen.addEventListener('click', () => togglePanel('library'));
   el.detailOpen.addEventListener('click', () => togglePanel('detail'));
+  el.scriptOpen.addEventListener('click', () => togglePanel('script'));
+
+  // Script pane (restored 23 Sep) — Run goes through the one landasan; the draft survives reloads.
+  const srcBox = $('#script-src'), outBox = $('#script-out'), nameBox = $('#script-name'), runBtn = $('#script-run');
+  try {
+    const draft = JSON.parse(localStorage.getItem('luxalgo-web:script') || 'null');
+    if (draft && typeof draft === 'object') {
+      if (typeof draft.src === 'string') srcBox.value = draft.src;
+      if (typeof draft.name === 'string' && draft.name.trim()) nameBox.value = draft.name;
+    }
+  } catch { /* private mode */ }
+  let draftTimer;
+  const saveDraft = () => {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => {
+      try { localStorage.setItem('luxalgo-web:script', JSON.stringify({ src: srcBox.value, name: nameBox.value })); } catch { /* private mode */ }
+    }, 400);
+  };
+  srcBox.addEventListener('input', saveDraft);
+  nameBox.addEventListener('input', saveDraft);
+  $('#script-close').addEventListener('click', () => setPanel('script', false));
+  runBtn.addEventListener('click', async () => {
+    const source = srcBox.value;
+    const label = nameBox.value.trim() || 'Untitled script';
+    runBtn.disabled = true;
+    outBox.textContent = `Running “${label}”…`;
+    try {
+      await chartReady;
+      const r = await window.TraderRun.run(source, label);
+      if (!r.ok) {
+        outBox.textContent = '✗ ' + r.reason;
+        toast('Pine: ' + r.reason, true);
+      } else {
+        outBox.textContent = window.TraderRun.summarize(r);
+        log(`“${label}” ran in ${r.ms} ms`);
+        refreshIndicatorCount();
+        toast(`“${label}” ran in ${r.ms} ms`);
+      }
+    } catch (err) {
+      outBox.textContent = '✗ ' + err.message;
+      toast('Run failed: ' + err.message, true);
+    } finally { runBtn.disabled = false; }
+  });
 
   el.form.addEventListener('submit', runSearch);
   $('#chips').addEventListener('click', (ev) => {

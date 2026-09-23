@@ -24,6 +24,13 @@
               aria-pressed="false" title="Show the indicator Library">☰ Library</button>
       <button type="button" class="btn btn--ghost btn--toggle" id="detail-open"
               aria-pressed="false" title="Show the Pine source / write-up panel">▤ Details</button>
+      <!-- Restored 23 Sep (operator's call): the LuxAlgo-style "paste and Run" pane, back as a
+           view of the right-hand track. It runs through the same landasan as chat and Library. -->
+      <button type="button" class="btn btn--ghost btn--toggle" id="script-open"
+              aria-pressed="false" title="Write and run Pine on this chart">&lt;&gt; Script</button>
+      <!-- Names whose overlay geometry is on screen — set by the unified landasan. Lives HERE,
+           not in .chart-head: workspace mode hides that row (body.has-workspace .chart-head). -->
+      <span class="chart-legend" id="script-legend" hidden></span>
       <span id="mcp-status" class="pill pill--wait" title="LuxAlgo MCP backend">MCP: checking…</span>
       <span id="bars-status" class="pill pill--wait" title="Where the candles come from">bars: loading…</span>
       <span id="indicator-count" class="pill" title="Indicators that actually executed on the chart — a mount that silently did nothing is never counted">0 indicators</span>
@@ -77,24 +84,25 @@
           indicators the MCP server serves — then read the write-up, or copy an indicator's Pine
           source.</p>
           <p class="muted"><strong>Run PineTS</strong> is the reliable path: the script is executed
-          by LuxAlgo's own PineTS runtime over the chart's bars and painted as native series, and it
-          says so when a script uses something PineTS has not implemented yet (<em>import</em>,
-          <em>while</em>, <em>for…in</em>).</p>
+          by LuxAlgo's own PineTS runtime over the chart's bars and painted where it lands — plot
+          series as natives, boxes/lines/labels/tables on the overlay — and it says so when a
+          script uses something PineTS has not implemented yet (<em>import</em>, <em>while</em>,
+          <em>for…in</em>).</p>
           <p class="muted"><strong>Add to chart</strong> additionally hands the script to Vela's own
           Pine engine, which is experimental here — it often stays silent, and the app reports that
           rather than pretending. Charts, bars and every other panel are unaffected.</p>
-          <p class="muted">Try a chip above, or type “ict killzones”.</p>
+          <p class="muted">Try a chip above, or type “ict killzones”. Prefer your own code? The
+          <strong>&lt;&gt; Script</strong> button up top is the paste-and-Run pane.</p>
         </div>
       </div>
       </div><!-- /view-library -->
 
     </section>
 
-    <!-- The Pine script surface (Script mode) used to sit here. Removed on the operator's call
-         (17 Sep): the console is the chart, the Library and the detail panel. Scripts still run —
-         through the detail panel's Run PineTS, the CLI, or the MCP tools — they just do not get a
-         text box of their own. The editor lives in git history (commit b30222c) if it is ever wanted
-         back. -->
+    <!-- The Pine editor that used to sit between the Library and the chart (removed 17 Sep,
+         git history b30222c) is BACK — the operator asked for the LuxAlgo-style paste-and-Run
+         pane on 23 Sep. It lives as a view of the right-hand track, next to the picked result;
+         the topbar's `<> Script` button opens it. -->
 
     <!-- CENTER: the chart -->
     <section class="panel panel--chart">
@@ -107,8 +115,23 @@
       <div class="chart-foot muted" id="chart-log" aria-live="polite"></div>
     </section>
 
-    <!-- RIGHT: detail / source -->
+    <!-- RIGHT: two views on one track — the script editor, then the picked result -->
     <section class="panel panel--right">
+      <!-- VIEW: the script editor (restored 23 Sep) — Run goes through window.TraderRun. -->
+      <div class="view script view--hidden" id="view-script">
+        <div class="script__bar">
+          <input id="script-name" class="script__name" type="text" value="Untitled script"
+                 aria-label="Script name" spellcheck="false" />
+          <button type="button" class="btn btn--primary" id="script-run"
+                  title="Run this script on the chart">▶ Run</button>
+          <button type="button" class="btn btn--ghost" id="script-close"
+                  title="Close the script pane" aria-label="Close the script pane">✕</button>
+        </div>
+        <textarea id="script-src" class="script__src" spellcheck="false" autocapitalize="off"
+                  placeholder="// Paste LuxAlgo Pine here. Run paints whatever it builds:&#10;// boxes, lines and labels on the overlay; plot series as a native."></textarea>
+        <pre class="script__out" id="script-out" aria-live="polite">Ready — paste Pine and press Run.</pre>
+      </div>
+      <!-- VIEW: the picked result / concept write-up -->
       <div class="detail" id="detail">
         <h2 class="detail__title">Nothing selected</h2>
         <p class="muted">Pick a result on the left. Indicators show their Pine source and can be
@@ -132,6 +155,9 @@
 <script src="./pinets-layer.js"></script>
 <script src="./pinets-runner.js"></script>
 <script src="./overlay.js"></script>
+<!-- unified.js: the ONE landasan (window.TraderRun) every door runs through —
+     the bridge (chat/MCP), the Library's Run PineTS, and the script editor. -->
+<script src="./unified.js"></script>
 <script src="./chart-bridge.js"></script>
 <!-- chart-palette before workspace.js: it parks a hand-made chart palette BEFORE the workspace is
      constructed, since Vela replaces the renderer config during creation. -->

@@ -631,3 +631,37 @@ pre {
    console is the chart, the Library and the detail panel. Scripts still run — the detail
    panel's Run PineTS, console/bin/trader-chart, and the trader-chart MCP tools — they just do
    not get a text box of their own. The editor and its styles are in git history (b30222c). */
+
+
+/* ── Script pane (restored 23 Sep — the operator asked the paste-and-Run editor back;
+      it shares the right-hand track with the picked-result view) ────────────────── */
+.script__bar {
+  display: flex; align-items: center; gap: var(--lx-space-2);
+  padding: var(--lx-space-2) var(--lx-space-3);
+  border-bottom: 1px solid var(--lx-border);
+}
+.script__name { flex: 1; min-width: 0; }
+.script__src {
+  flex: 1; min-height: 120px; width: 100%; box-sizing: border-box;
+  padding: var(--lx-space-2) var(--lx-space-3);
+  border: 0; border-bottom: 1px solid var(--lx-border);
+  background: transparent; color: inherit; resize: vertical;
+  font-family: ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace;
+  font-size: 12.5px; line-height: 1.55; tab-size: 2;
+}
+.script__out {
+  margin: 0; max-height: 34%; overflow: auto;
+  padding: var(--lx-space-2) var(--lx-space-3);
+  font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+/* The legend must NOT set `display`: hiding is the [hidden] attribute (UA display:none), and an
+   author display would win, leaving an empty pill on every chart. */
+.chart-legend {
+  padding: 1px 8px; max-width: 150px;
+  border: 1px solid var(--lx-border); border-radius: 999px;
+  color: var(--lx-accent-ink); font-size: 11px;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+/* The top row must never pay for the legend with the indicator count — that pill IS the
+   trust signal ("1 indicator" while SMC draws), so the verbose bars pill yields instead. */
+#bars-status { max-width: 78px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

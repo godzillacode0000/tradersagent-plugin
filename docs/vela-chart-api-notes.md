@@ -38,9 +38,10 @@ the chart is empty or a pass changes nothing.
 **Draw price levels (PDH/PDL and friends)** — the two bridges differ, and knowing which is which saves
 a cycle:
 
-* `apply <file.pine>` runs Pine and paints a **Vela native** matching what the script computes. A plain
-  price level has **no** matching native in this build, and the answer says so:
-  *"2 series · not drawn: no Vela native in this build expresses what this script computes … overlay needed"*.
+* `apply <file.pine>` runs Pine and paints what it makes: geometry (boxes/lines/labels/tables) on our
+  overlay, plot series as a **Vela native** matching the script. When a plain price level has **no**
+  matching native, the answer still says so:
+  *"2 series · not drawn: no Vela native in this build expresses what this script computes"*.
 * `draw <file.pine>` runs Pine and paints the **geometry the script builds** (lines/labels/boxes/tables)
   on our overlay layer. This is the one that shows a level.
 

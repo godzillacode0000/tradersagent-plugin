@@ -111,10 +111,12 @@
    * from the same exchange (verified: 500 bars, last close within 4 cents of the chart's), so
    * it is the default and custom bars stay as the offline fallback.
    */
-  function newEngine(mod, bars) {
+  function newEngine(mod, bars, forceBars) {
     const ctx = marketContext(bars);
     const Provider = mod.Provider || {};
-    if (Provider.Binance) {
+    /* `forceBars` (23 Sep) skips the provider: its clean return can lie — a run over the
+       provider's own fetch drew NOTHING while the chart's own bars sat right there. */
+    if (!forceBars && Provider.Binance) {
       try {
         const engine = new mod.PineTS(Provider.Binance, ctx.symbol, ctx.timeframe, Math.max(30, bars.length));
         return { engine, ctor: 'provider', context: ctx.symbol + '@' + ctx.timeframe };
@@ -282,7 +284,7 @@
     const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
     const t0 = performance.now();
     const label = 'PineTS' + (opts.name ? ` (${opts.name})` : '');
-    let built = newEngine(mod, bars);
+    let built = newEngine(mod, bars, opts.forceBars);
     try {
       let out;
       try {
