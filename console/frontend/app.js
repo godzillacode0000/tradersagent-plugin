@@ -563,6 +563,7 @@ async function runSearch(event) {
     const rows = data.results || [];
     renderResults(rows);
     toast(`${rows.length} result${rows.length === 1 ? '' : 's'} for “${term}”`);
+    checkHealth();   // this search just moved the backend's MCP counter — the pill must follow
   } catch (err) {
     el.results.innerHTML = `<div class="empty"><p>Search failed.</p><p class="muted">${esc(err.message)}</p>
       <p class="muted">Is the backend running? <code>./console/start.sh</code> (or the luxalgo-web user unit)</p></div>`;
@@ -641,6 +642,7 @@ async function openResult(row, button) {
         try { await navigator.clipboard.writeText(source); toast('Pine source copied'); }
         catch { toast('Clipboard blocked by the browser', true); }
       });
+      checkHealth();   // the source fetch moved the counter — refresh the pill before leaving
       return;
     }
 
@@ -654,6 +656,7 @@ async function openResult(row, button) {
         <a class="badge" href="${esc(row.url || '#')}" target="_blank" rel="noreferrer">Library page</a>
       </div>
       <div class="detail__text">${esc(body.slice(0, 14000))}</div>`;
+    checkHealth();   // the concept fetch moved the counter — refresh the pill
   } catch (err) {
     el.detail.innerHTML = `<h2 class="detail__title">Failed</h2><p class="muted">${esc(err.message)}</p>`;
     toast('Could not load detail: ' + err.message, true);

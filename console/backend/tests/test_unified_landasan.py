@@ -162,6 +162,12 @@ class TheScriptControlRidesVelaToolbar(unittest.TestCase):
         self.assertIn("view--hidden", body)
         self.assertIn("colOff", body)
 
+    def test_mcp_pill_follows_the_calls_it_reports(self):
+        """The Library panel proved the connection live (health: connected true, calls
+        moved 0->1) while the pill still read boot's number — checkHealth ran exactly
+        once, at boot. Every door that moves the backend's MCP counter refreshes it."""
+        self.assertGreaterEqual(APP.count("checkHealth()"), 4)   # boot + search + 2 details
+
     def test_where_the_control_lives_is_stated_honestly(self):
         self.assertIn("rides Vela", BRIDGE)              # mode() no longer claims topbar-only
         self.assertNotIn("the <> Script pane, the Library and Details", BRIDGE)
