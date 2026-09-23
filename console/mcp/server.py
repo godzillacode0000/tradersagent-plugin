@@ -112,6 +112,16 @@ def _call(path: str, payload: dict | None = None, timeout: float = 20.0) -> dict
     try:
         with urllib.request.urlopen(req, timeout=timeout) as res:
             body = json.loads(res.read().decode("utf-8"))
+    except TimeoutError as exc:
+        # Not an URLError: py3.13 surfaces a response-read timeout unwrapped, so the handler
+        # below never sees it and the agent would get a traceback instead of the sentence this
+        # docstring promises. Caught live by the preflight evidence run, whose stub accepted
+        # the socket and then went silent.
+        raise RuntimeError(
+            f"the console accepted the connection but did not reply within {timeout:.0f}s — "
+            f"it may be wedged or mid-restart; call chart_state, or restart the console's "
+            f"service (luxalgo-web / traders-agent unit)"
+        ) from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(
             f"the console is not answering at {BASE} ({exc.reason}) — is the console running? "

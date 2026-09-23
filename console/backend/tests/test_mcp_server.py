@@ -12,9 +12,11 @@ Skipped when fastmcp is not installed (the console itself does not need it; only
 import importlib.util
 import json
 import os
+import socket
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import unittest.mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -171,6 +173,26 @@ class MCPToolsTest(unittest.TestCase):
         out = self.mcp.chart_add_indicator("supertrend")
         self.assertIn("had not answered within", out)
         self.assertIn("chart_state", out)
+
+    def test_a_console_that_accepts_but_never_replies_is_a_sentence(self):
+        # _call's own promise: "the tools below turn that into a sentence rather than a
+        # traceback." A response-read timeout arrives as a RAW TimeoutError on py3.13 — not
+        # the URLError the handler expects — so without its own clause the promise breaks.
+        # Found by the preflight evidence run: its frozen-page stub accepted the socket and
+        # went quiet, and the tool crashed instead of reporting.
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)   # handshake completes, nobody accepts — the read just waits
+        try:
+            mod = load_mcp(f"http://127.0.0.1:{listener.getsockname()[1]}", self.shots)
+            t0 = time.monotonic()
+            with self.assertRaises(RuntimeError) as caught:
+                mod._call("/api/chart/command", {"action": "add", "native": "ema"}, timeout=0.5)
+            took = time.monotonic() - t0
+        finally:
+            listener.close()
+        self.assertIn("did not reply within", str(caught.exception))
+        self.assertLess(took, 2.0, "the timeout must bound the call — and the test with it")
 
     def test_a_frozen_page_is_refused_before_anything_is_queued(self):
         # The failure this exists for: the view is still registered (so pushed=1) but its
