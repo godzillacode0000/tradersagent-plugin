@@ -17,6 +17,10 @@ const el = {
   chartLog: $('#chart-log'), chartOrigin: $('#chart-origin'), toast: $('#toast'),
   libraryPanel: $('.panel--left'), libraryToggle: $('#library-toggle'),
   main: $('.main'), libraryOpen: $('#library-open'), detailOpen: $('#detail-open'),
+  libOpen: $('#lib-open'),
+  browse: $('#browse'), browseToggle: $('#browse-toggle'), browseBody: $('#browse-body'),
+  browseList: $('#browse-list'), browseFamilies: $('#browse-families'),
+  browseCount: $('#browse-count'), browseMore: $('#browse-more'),
   scriptOpen: $('#script-open'),
   statusbar: $('.statusbar'),
 };
@@ -114,14 +118,27 @@ function dockScriptButton() {
       if (home) (mcp ? home.insertBefore(btn, mcp) : home.appendChild(btn));
       btn.style.removeProperty('--vela-tool-color');
     }
+    // The catalogue button travels with it: both live on Vela's row when there is one.
+    const lib = el.libOpen, libHome = document.querySelector('.topbar__right');
+    if (lib && !lib.isConnected && libHome) libHome.insertBefore(lib, btn.nextSibling);
+    if (lib) lib.style.removeProperty('--vela-tool-color');
     return false;
   }
   if (btn.parentElement !== slot) {
     const cam = slot.querySelector('.vela-widget-screenshot');
     if (cam) slot.insertBefore(btn, cam); else slot.appendChild(btn);
   }
+  // Beside `<>`, same slot, same colour read — one dock, two doors.
+  const lib = el.libOpen;
+  if (lib && lib.parentElement !== slot) {
+    slot.insertBefore(lib, btn.nextSibling);
+  }
   const sib = slot.querySelector('.vela-widget-tool');
-  if (sib) btn.style.setProperty('--vela-tool-color', getComputedStyle(sib).color);
+  if (sib) {
+    const colour = getComputedStyle(sib).color;
+    btn.style.setProperty('--vela-tool-color', colour);
+    if (lib) lib.style.setProperty('--vela-tool-color', colour);
+  }
   return true;
 }
 setInterval(dockScriptButton, 4000);
@@ -524,6 +541,123 @@ async function queueMount(source, name) {
   return mountIndicator(source, name);
 }
 
+/* ---------------------------------------------------------------- browse all */
+/* The catalogue as clickable rows. Search needs a name to start from; this needs nothing — open
+   it, pick a family, read down the list. Paging is server-side (page_size caps at 100), and the
+   families come from /api/families so the chip row cannot drift from the catalogue's own keys. */
+const BROWSE_PAGE = 100;
+let browseState = { page: 0, family: '', rows: [] };
+/* The newest load wins; older in-flight ones must not append into the list the newer one reset. */
+let browseToken = 0;
+
+function browseRow(row) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'row';
+  button.dataset.slug = row.slug;
+  button.dataset.kind = 'indicator';       // a catalogue entry is always an indicator
+  button.innerHTML = `
+    <div class="row__top">
+      <span class="row__name">${esc(row.name || row.slug)}</span>
+      <span class="row__kind row__kind--indicator">indicator</span>
+    </div>
+    ${row.description ? `<div class="row__desc">${esc(row.description)}</div>` : ''}
+    <div class="row__meta">${esc(row.family || 'unclassified')}${row.date_displayed ? ' · ' + esc(row.date_displayed) : ''}</div>`;
+  // The same door a search hit uses — one landasan, one executor.
+  button.addEventListener('click', () => openResult({ ...row, kind: 'indicator' }, button));
+  return button;
+}
+
+async function loadBrowse(reset = false) {
+  if (!el.browseList) return;
+  // One load at a time. Two overlapping calls append into the same list, so a family switch
+  // measured 118 rows for a 59-indicator family: the new page landed beside the old family's rows.
+  // A later request always wins, so a second call waits for the first to finish and then resets.
+  const token = ++browseToken;
+  if (reset) {
+    browseState.page = 0;
+    browseState.rows = [];
+    el.browseList.innerHTML = '<div class="browse__note">Loading the catalogue…</div>';
+  }
+  el.browseMore?.classList.remove('is-done');
+  try {
+    const data = await api('/api/indicators', {
+      page: browseState.page, page_size: BROWSE_PAGE,
+      ...(browseState.family ? { family: browseState.family } : {}),
+    });
+    if (token !== browseToken) return;   // a newer load already reset the list
+    const rows = data.indicators || [];
+    if (reset) el.browseList.innerHTML = '';
+    if (!rows.length && !browseState.rows.length) {
+      el.browseList.innerHTML = '<div class="browse__note">Nothing in this family.</div>';
+      el.browseMore?.classList.add('is-done');
+      return;
+    }
+    browseState.rows.push(...rows);
+    rows.forEach((row) => el.browseList.appendChild(browseRow(row)));
+    browseState.page += 1;
+    const total = data.total ?? browseState.rows.length;
+    if (el.browseCount) {
+      el.browseCount.textContent = browseState.family
+        ? `${browseState.rows.length} of ${total} · ${browseState.family}`
+        : `${browseState.rows.length} of ${total}`;
+    }
+    // The endpoint reports the page count; when it does not, a short page is the last page.
+    const more = data.pages ? browseState.page < data.pages : rows.length === BROWSE_PAGE;
+    if (!more) el.browseMore?.classList.add('is-done');
+    checkHealth();   // this read moved the backend's MCP counter
+  } catch (err) {
+    el.browseList.innerHTML = `<div class="browse__note">Catalogue unavailable: ${esc(err.message)}<br>
+      Is the console backend running? <code>./console/start.sh</code> (or the luxalgo-web user unit)</div>`;
+  }
+}
+
+async function loadFamilies() {
+  if (!el.browseFamilies) return;
+  try {
+    const data = await api('/api/families', {});
+    const fams = data.families || [];
+    el.browseFamilies.innerHTML = '';
+    const all = document.createElement('button');
+    all.type = 'button'; all.className = 'browse__fam is-on'; all.dataset.family = '';
+    all.textContent = 'all 805';
+    all.addEventListener('click', () => pickFamily('', all));
+    el.browseFamilies.appendChild(all);
+    fams.forEach((f) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'browse__fam'; b.dataset.family = f.key;
+      // Concept counts, not indicator counts — say which, or the numbers read as a partition.
+      b.textContent = `${f.name}${f.concept_count ? ' ' + f.concept_count : ''}`;
+      b.title = `${f.name} — ${f.concept_count || 0} library concepts, upstream`;
+      b.addEventListener('click', () => pickFamily(f.key, b));
+      el.browseFamilies.appendChild(b);
+    });
+  } catch (err) {
+    el.browseFamilies.innerHTML = `<span class="browse__note">Families unavailable: ${esc(err.message)}</span>`;
+  }
+}
+
+function pickFamily(key, button) {
+  document.querySelectorAll('.browse__fam').forEach((n) => n.classList.remove('is-on'));
+  button?.classList.add('is-on');
+  browseState.family = key || '';      // '' is a real choice here: every family
+  loadBrowse(true);                    // state first, reset second — the load reads what we just set
+  checkHealth();
+}
+
+function toggleBrowse(on) {
+  const open = typeof on === 'boolean' ? on : el.browseBody.classList.contains('view--hidden');
+  el.browseBody.classList.toggle('view--hidden', !open);
+  el.browseToggle?.classList.toggle('is-on', open);
+  el.browseToggle?.setAttribute('aria-expanded', String(open));
+  el.libOpen?.setAttribute('aria-pressed', String(open && (el.main.dataset.library === 'on')));
+  try { localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), browse: open })); } catch { /* private mode */ }
+  if (open) {
+    if (!el.browseFamilies.children.length) loadFamilies();
+    if (!browseState.rows.length) loadBrowse(true);
+  }
+}
+
 /* ---------------------------------------------------------------- library UI */
 function skeletons(n = 4) {
   el.results.innerHTML = Array.from({ length: n }, () => '<div class="skeleton"></div>').join('');
@@ -729,11 +863,25 @@ async function main() {
      the toggle if he asks for it. (setPanel persists, so a stale `detail: true` is cleaned up here.) */
   const panelPrefs = readPanelPrefs();
   setPanel('library', panelPrefs.library === true);
+  toggleBrowse(panelPrefs.browse === true);
   setPanel('detail', false);   // never restore the column open (his 17 Sep complaint)
   showRightView(panelPrefs.rightview === 'script' ? 'script' : 'detail');
   el.libraryOpen.addEventListener('click', () => togglePanel('library'));
   el.detailOpen.addEventListener('click', () => togglePanel('detail'));
   el.scriptOpen.addEventListener('click', () => togglePanel('script'));
+
+  // The chart-side catalogue button: it is a door, not a toggle — a click always lands on the
+  // open list (panel out, browse body out, list filled), because "nothing happened" is what the
+  // operator reported the last time a row only revealed a collapsed surface.
+  el.browseToggle?.addEventListener('click', () => toggleBrowse());
+  el.browseMore?.addEventListener('click', () => loadBrowse(false));
+  el.libOpen?.addEventListener('click', () => {
+    setPanel('library', true);
+    setLibraryCollapsed(false);
+    toggleBrowse(true);
+    toast('LuxAlgo Library — 805 indicators');
+    checkHealth();
+  });
 
   // Script pane (restored 23 Sep) — Run goes through the one landasan; the draft survives reloads.
   const srcBox = $('#script-src'), outBox = $('#script-out'), nameBox = $('#script-name'), runBtn = $('#script-run');

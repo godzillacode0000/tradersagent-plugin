@@ -193,6 +193,9 @@ def record_result(root: str | Path, payload: dict) -> dict:
         "bars": payload.get("bars"),
         "symbol": payload.get("symbol"),
         "timeframe": payload.get("timeframe"),
+        # A surface's own after-state. Same lesson as `onCanvas`: the store whitelists, so a new
+        # field the page correctly reports arrives empty and reads as "no answer".
+        "browse": payload.get("browse"),
     }
     if payload.get("shot"):
         path = _decode_shot(root, f"shot-{rid}", str(payload["shot"]))

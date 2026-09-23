@@ -660,6 +660,35 @@ pre {
 .vela-mark-note { font-size: var(--lx-fs-2xs); color: var(--lx-fg-faint); }
 
 
+/* ── Browse: the whole catalogue as clickable rows ────────────────────────────────────────────
+   Search answers "I know the name"; this answers "what is there". Families are a row of chips
+   (the endpoint validates slug keys, not display names), the list pages 100 at a time, and a
+   pick hands off to the SAME openResult() path a search hit uses — one run landasan, no second
+   executor. Rows reuse .row so a catalogue pick looks like a search result, which it is. */
+.browse { border-bottom: 1px solid var(--lx-border); }
+.browse__bar { display: flex; align-items: center; gap: var(--lx-space-2); padding: var(--lx-space-2) var(--lx-space-3); }
+.browse__tab { flex: 0 0 auto; }
+.browse__tab.is-on { color: var(--lx-fg-bright); border-color: var(--lx-border-strong); background: var(--lx-bg-hover); }
+.browse__count { font-size: var(--lx-fs-xs); margin-left: auto; }
+.browse__body { display: flex; flex-direction: column; min-height: 0; }
+/* The body is toggled by .view--hidden (display:none !important), so no `display` here. */
+.browse__families {
+  display: flex; flex-wrap: wrap; gap: var(--lx-space-1);
+  padding: var(--lx-space-2) var(--lx-space-3) var(--lx-space-1);
+  max-height: 96px; overflow: auto; border-bottom: 1px solid var(--lx-border);
+}
+.browse__fam {
+  font-size: var(--lx-fs-xs); padding: 2px var(--lx-space-2);
+  border: 1px solid var(--lx-border-soft); border-radius: 999px;
+  background: transparent; color: var(--lx-fg-muted); cursor: pointer;
+}
+.browse__fam:hover { color: var(--lx-fg-bright); border-color: var(--lx-border-strong); }
+.browse__fam.is-on { color: var(--lx-fg-bright); border-color: var(--lx-accent-line); background: var(--lx-accent-soft); }
+.browse__list { flex: 1; min-height: 0; overflow: auto; padding: var(--lx-space-2); max-height: 46vh; }
+.browse__more { padding: 0 var(--lx-space-3) var(--lx-space-2); }
+.browse__more.is-done { display: none; }
+.browse__note { padding: var(--lx-space-3); color: var(--lx-fg-muted); font-size: var(--lx-fs-sm); }
+
 /* ── Script surface (removed on the operator's call, 17 Sep) ─────────────────────────────────
    The Pine editor that used to live here (and the Chart | Script mode switch) is gone: the
    console is the chart, the Library and the detail panel. Scripts still run — the detail

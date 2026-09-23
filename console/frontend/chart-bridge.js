@@ -38,7 +38,7 @@
      200 with nothing done). So the page publishes its real list in every heartbeat and the server
      validates against that instead of trusting a constant. */
   const ACTIONS = ['apply', 'add', 'remove', 'draw', 'clear', 'probe', 'market', 'shot', 'reload',
-                   'mode', 'script', 'palette'];
+                   'mode', 'script', 'palette', 'browse'];
 
   const api = async (path, body) => {
     const res = await fetch(path, body
@@ -639,6 +639,58 @@
           out.onCanvas = r.ok ? (r.verified || null) : null;
           out.detail = r.ok ? window.TraderRun.summarize(r) : r.reason;
           if (!r.ok) out.error = r.error || null;
+          break;
+        }
+        case 'browse': {
+          /* Open the catalogue (or read what it is showing). The 805 are a list the agent should be
+             able to reach without clicking: `show: true` opens it, `family` narrows it, and the
+             detail reports the count the list actually holds — a surface the agent can only reach
+             by clicking is a surface it cannot verify. */
+          const body = document.getElementById('browse-body');
+          const list = document.getElementById('browse-list');
+          if (!body || !list) {
+            out.detail = 'this build has no catalogue list — the Library search is the door';
+            break;
+          }
+          // Selection first, then wait for the fetch the selection starts: the list fills
+          // asynchronously, so reading it in the same tick reports the PREVIOUS family's rows —
+          // measured as "0 row(s) · family smc-ict" right after asking for all families.
+          if (command.family !== undefined) {
+            const want = String(command.family || '');
+            const chip = document.querySelector('.browse__fam[data-family="' + want + '"]');
+            if (chip) chip.click();
+          }
+          if (command.show) {
+            const chip = document.getElementById('lib-open');
+            if (chip) chip.click(); else if (typeof toggleBrowse === 'function') toggleBrowse(true);
+          }
+          // Paging is a door too: "load more" appends the next page rather than being click-only.
+          if (command.more) {
+            const more = document.getElementById('browse-more');
+            if (more && !more.classList.contains('is-done')) more.click();
+            else out.noMore = true;
+          }
+          // Settle: a family switch CLEARS the list before it refills, so "same count twice" fires
+          // while it is still empty and reports 0 rows for a family that has 55. Wait for the reset
+          // to have happened (empty, or a new first row) and then for the count to hold still.
+          // Move `more` above the settle so the appended page is counted, not the one before it.
+          const count = () => list.querySelectorAll('.row').length;
+          let last = count();
+          let sawChange = false;
+          for (let i = 0; i < 40; i++) {
+            await new Promise((r) => setTimeout(r, 150));
+            const now = count();
+            if (now !== last) { sawChange = true; last = now; continue; }
+            if (sawChange && now > 0) break;   // filled and settled
+            if (sawChange && now === 0) break; // genuinely empty family ("Nothing in this family")
+            if (!sawChange && i === 12 && count() === 0) break;  // nothing came: report the truth
+          }
+          out.ok = true;
+          const fam = (document.querySelector('.browse__fam.is-on') || {}).dataset || {};
+          out.detail = 'catalogue: ' + count() + ' row(s) on screen'
+            + (new Set(['', undefined]).has(fam.family) ? ' · all families' : ' · family ' + fam.family)
+            + (body.classList.contains('view--hidden') ? ' · closed' : ' · open');
+          out.browse = { rows: count(), family: fam.family || '', open: !body.classList.contains('view--hidden') };
           break;
         }
         case 'mode': {

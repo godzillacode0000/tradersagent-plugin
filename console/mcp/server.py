@@ -387,6 +387,22 @@ def chart_palette(try_apply: bool = False) -> str:
     return _command("palette", **fields)
 
 
+@mcp.tool(annotations=_ann("Open the indicator catalogue"))
+def chart_browse(family: str = "", show: bool = True) -> str:
+    """Open the 805-indicator LuxAlgo catalogue list in the chart pane, optionally on one family.
+
+    `chart_library_list` reads the same catalogue server-side; this one is about the SURFACE — it
+    opens the list in the pane and answers with the row count actually painted, so an agent can put
+    the catalogue in front of the operator and say what they are looking at. `family` is a slug
+    (trend, smc-ict, momentum, …); empty means all families. Pass show=False to only read the list's
+    current state without opening anything.
+    """
+    fields = {"show": bool(show)}
+    # An explicit family narrows; an omitted one means "all families", not "leave the last filter".
+    fields["family"] = family.strip()
+    return _command("browse", **fields)
+
+
 # ── LuxAlgo Library tools ───────────────────────────────────────────────────────────────────────
 @mcp.tool(annotations=_ann("Search the LuxAlgo Library", read_only=True, open_world=True))
 def library_search(query: str, kind: str = "", limit: int = 8) -> str:

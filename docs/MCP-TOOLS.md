@@ -1,4 +1,4 @@
-# Trader's Agent — MCP tools (28)
+# Trader's Agent — MCP tools (29)
 
 The `traders-chart` MCP server exposes the live LuxAlgo **Vela** chart as native tools.
 Every tool talks to the local console (`http://127.0.0.1:8787`) over its push channel (SSE), so a
@@ -20,6 +20,7 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | `chart_state` | — | Symbol, timeframe, last price, bars, indicators on the chart, plus `build`/`viewer` when the page publishes them (stale-frame check). |
 | `chart_shot` | `name: str = ""` | One PNG of the chart. Returned as an image when the client takes images, plus the path on disk. |
 | `chart_palette` | `try_apply: bool = false` | What colours the chart is actually wearing (background, candles, console theme). `try_apply=true` asserts the console's palette and reports what landed 300 ms later. |
+| `chart_browse` | `family: str = ""`, `show: bool = true` | Open the 805-indicator LuxAlgo catalogue list in the pane, optionally narrowed to one family slug. Answers with the rows actually painted. The catalogue itself is `chart_library_list`; this one is the *surface*. |
 | `library_search` | `query: str`, `kind: str = ""` (`concept`/`indicator`), `limit: int = 8` | Search the LuxAlgo Library (concepts + indicators). See the Library section below for the other nine. |
 | `library_indicator` | `query: str` | One indicator by name or slug: summary, licence, and its full Pine source. |
 

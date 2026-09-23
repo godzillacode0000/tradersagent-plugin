@@ -257,6 +257,27 @@ def cmd_mode(args) -> int:
     return 0 if result.get("ok") else 1
 
 
+def cmd_browse(args) -> int:
+    """Open the catalogue list in the console pane, narrow it, or read what it is showing.
+
+    The 805 library indicators are a list, and a list the agent can only reach by clicking is a list
+    it cannot verify. So this is a command like every other surface the agent must change: the page
+    opens the panel, optionally picks a family, and answers with the row count it actually painted.
+    """
+    payload = {"action": "browse"}
+    if args.show:
+        payload["show"] = True
+    # Always send the selection: an omitted --family means every family, and a stale filter must
+    # not survive a call that did not ask for one.
+    payload["family"] = args.family or ""
+    result = send(args, payload)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
 def cmd_reload(args) -> int:
     """Reload the console page — picks up changed frontend files without restarting the app.
 
@@ -361,6 +382,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("what", choices=["show", "draw", "native", "clear"])
     s.add_argument("--pine", help="a .pine file to load into the editor first")
     s.set_defaults(func=cmd_script)
+
+    s = sub.add_parser("browse", help="open the 805-indicator catalogue list, optionally on one family")
+    s.add_argument("--show", action="store_true", help="open the panel and the list, then report the rows")
+    s.add_argument("--family", default=None, help="narrow to one family slug (trend, smc-ict, …)")
+    s.set_defaults(func=cmd_browse)
 
     s = sub.add_parser("mode", help="show the chart, or the Pine script the engine is given")
     s.add_argument("value", choices=["chart", "script"])

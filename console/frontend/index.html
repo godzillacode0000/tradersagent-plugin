@@ -28,6 +28,12 @@
            view of the right-hand track. It runs through the same landasan as chat and Library. -->
       <button type="button" class="btn btn--ghost btn--toggle" id="script-open"
               aria-pressed="false" title="Write and run Pine on this chart">&lt;&gt;<span class="btn__label"> Script</span></button>
+      <!-- The catalogue, one click from the chart. Rides Vela's own toolbar row beside `<>`
+           (same dock, same self-heal) — Vela's own "Indicators" menu lists only ITS ~76 natives,
+           so the 805 from the LuxAlgo Library need their own door. -->
+      <button type="button" class="btn btn--ghost btn--toggle" id="lib-open"
+              aria-pressed="false" title="Browse the 805 LuxAlgo Library indicators">☰<span class="btn__label"> 805</span></button>
+      <span class="chart-legend" id="lib-legend" hidden></span>
       <!-- Names whose overlay geometry is on screen — set by the unified landasan. Lives HERE,
            not in .chart-head: workspace mode hides that row (body.has-workspace .chart-head). -->
       <span class="chart-legend" id="script-legend" hidden></span>
@@ -77,6 +83,25 @@
           <button type="button" class="chip" data-q="supertrend">supertrend</button>
         </div>
       </form>
+
+      <!-- BROWSE: the whole catalogue, clickable. Search answers "I know the name"; this answers
+           "show me what there is" — the operator asked for the 805 to be reachable by clicking,
+           not only by typing. Same run landasan as a search result: picking here opens the same
+           Details panel with the same Run PineTS / Add to chart buttons. -->
+      <div class="browse" id="browse">
+        <div class="browse__bar">
+          <button type="button" class="btn btn--ghost browse__tab is-on" id="browse-toggle"
+                  aria-expanded="false" title="Browse all 805 library indicators by family">☰ Browse all</button>
+          <span class="browse__count muted" id="browse-count"></span>
+        </div>
+        <div class="browse__body view--hidden" id="browse-body">
+          <div class="browse__families" id="browse-families"></div>
+          <div class="browse__list" id="browse-list" aria-live="polite"></div>
+          <div class="browse__more">
+            <button type="button" class="btn btn--ghost" id="browse-more">Load more</button>
+          </div>
+        </div>
+      </div>
 
       <div class="results" id="results" aria-live="polite">
         <div class="empty">
