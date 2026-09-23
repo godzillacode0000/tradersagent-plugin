@@ -487,6 +487,20 @@ input[type="search"], select {
 input[type="search"]:hover, select:hover { border-color: var(--lx-border-strong); }
 input::placeholder { color: var(--lx-fg-faint); }
 
+/* The script-name field is a plain text input, and the rule above only dresses search inputs —
+   so it rendered as the browser's default white box inside the dark bar (23 Sep pane audit: a
+   white rectangle in the topbar of a dark app). Same field dressing as search/select, without
+   width:100% — its width comes from the flex row it lives in. */
+input[type="text"] {
+  height: var(--lx-control-h);
+  padding: 0 var(--lx-space-25);
+  background: var(--lx-field-bg); color: var(--lx-fg);
+  border: 1px solid var(--lx-border); border-radius: var(--lx-radius-md);
+  font: inherit; font-size: var(--lx-fs-md);
+  transition: border-color var(--lx-dur-150) var(--lx-ease), box-shadow var(--lx-dur-150) var(--lx-ease);
+}
+input[type="text"]:hover { border-color: var(--lx-border-strong); }
+
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--lx-space-1);
   height: var(--lx-control-h); padding: 0 var(--lx-space-3);

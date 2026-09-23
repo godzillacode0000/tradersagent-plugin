@@ -615,7 +615,16 @@
           const pane = document.getElementById('view-script');
           const track = document.querySelector('.main');
           const colOff = !track || track.dataset.detail !== 'on';
-          if (openBtn && pane && (colOff || pane.classList.contains('view--hidden'))) openBtn.click();
+          const closed = colOff || (pane && pane.classList.contains('view--hidden'));
+          /* The bridge could open the editor but never close it (23 Sep pane audit). `close: true`
+             makes the door symmetric: the button toggles, so clicking an open pane closes it. */
+          if (command.close) {
+            if (openBtn && pane && !closed) openBtn.click();
+            out.ok = true;
+            out.detail = 'script pane closed';
+            break;
+          }
+          if (openBtn && pane && closed) openBtn.click();
           const pine = String(command.pine || '');
           if (!pine.trim()) {
             out.ok = true;

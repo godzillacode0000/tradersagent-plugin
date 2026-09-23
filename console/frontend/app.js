@@ -241,19 +241,24 @@ function newChart(host, options) {
 }
 
 /* The bars pill is the longest thing in the top row, and the pane the plugin docks is ~620px wide —
-   at that width the row has almost no slack left. So at narrow widths the pill shows its short form
-   and the detail moves into the tooltip; wide windows keep the full sentence. Everything the pill
-   knows is still in `title`, so nothing is actually lost. */
+   at that width the row has almost no slack left. The pill carries a hard CSS cap (#bars-status),
+   and the old window-width heuristic missed the real pane width: the operator saw "bars: live ·
+   wo…", a word cut in half (23 Sep pane audit). So don't guess — measure: if the full sentence
+   cannot fit its own pill, show the short form. Everything the pill knows stays in `title`. */
+let barsLast = null;
 function setBars(text, detail) {
+  barsLast = { text, detail };
   const full = detail ? text + ' · ' + detail : text;
-  const narrow = typeof window !== 'undefined' && window.innerWidth <= 780;
-  el.bars.textContent = narrow && detail ? text : full;
+  el.bars.textContent = full;
   el.bars.title = full;
+  if (detail && el.bars.scrollWidth > el.bars.clientWidth) el.bars.textContent = text;
 }
+/* The pane can be resized while the page stays open — re-measure rather than keep a stale form. */
+window.addEventListener('resize', () => { if (barsLast) setBars(barsLast.text, barsLast.detail); });
 
 async function bootChart() {
   const host = $('#chart');
-  el.bars.textContent = 'bars: loading…';
+  setBars('bars: loading…');
   el.bars.className = 'pill pill--wait';
 
   // Preferred path: the FULL Vela application (workspace.js). It brings the real
@@ -314,7 +319,7 @@ async function bootChart() {
   }
 
   chart = newChart(host, { data: syntheticBars(400), timeframe: '1h' });
-  el.bars.textContent = 'bars: offline synthetic';
+  setBars('bars: offline', 'synthetic bars');
   el.bars.className = 'pill pill--bad';
   el.chartOrigin.textContent = 'provider: none (offline bars)';
   unblockPineEngine();
