@@ -120,6 +120,34 @@ class TheLandingHandsTheWorkspaceBack(unittest.TestCase):
         self.assertRegex(self.code, r"if \(!paneUp\) return")
 
 
+class TheConsoleNeverLeavesHermes(unittest.TestCase):
+    """Operator, 24 Sep: "Always inside the Hermes for this plugin...never show me external
+    browser." The plugin used to carry THREE exits — a card button, the docked card's button,
+    and a palette command, all through ctx.os.openExternal — plus the shim feeding them.
+    Removed; pinned here so an 'escape hatch' cannot walk back in."""
+
+    def _src(self):
+        with open(PLUGIN, encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_no_external_browser_exit_in_the_plugin(self):
+        src = self._src()
+        for needle in ("Open in a browser", "openExternal", "openInBrowser", "ctx_os_open"):
+            self.assertNotIn(needle, src)
+
+    def test_reveal_paths_stay_in_app(self):
+        src = self._src()
+        self.assertIn("host.navigate", src)    # row/chip/palette commands navigate in-app
+        self.assertIn("revealPane", src)       # the pane door is the app's own
+
+    def test_docs_do_not_advertise_one(self):
+        for rel in ("README.md", "docs/HANDOFF.md"):
+            with open(os.path.join(ROOT, rel), encoding="utf-8") as fh:
+                text = fh.read()
+            self.assertNotIn("open console in browser", text)
+            self.assertNotIn("open in browser", text.lower())
+
+
 class TheManifestStaysHonest(unittest.TestCase):
     def test_expected_renders_match_what_the_plugin_contributes(self):
         # plugin.expect.json is what tools/verify-plugin.mjs checks against the rendered output, and

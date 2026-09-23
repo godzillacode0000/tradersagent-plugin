@@ -166,7 +166,7 @@ explicit apply leaves behind 300 ms later.
 | `chart` | `panes` | the chart itself, docked right of the conversation (`PANES_AREA`), iframe on `APP_URL` |
 | `nav` | `sidebar.nav` | the "Trader's Agent" row (order 40) |
 | `chip` | `statusBar.right` | status chip, click opens the console |
-| 4 commands | `palette` | open console · **reload the chart pane** · toggle auto-reveal · open in browser |
+| 3 commands | `palette` | open console · **reload the chart pane** · toggle auto-reveal — no browser exit (operator's rule, 24 Sep: the plugin never leaves Hermes) |
 
 Notable behaviour: the pane remounts itself when it is revealed after being hidden (a renderer keeps its
 last painted frame while occluded, and a frozen page cannot act on the console's own reload command), and

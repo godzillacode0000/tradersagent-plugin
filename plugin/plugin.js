@@ -11,7 +11,8 @@
  *   PANES_AREA        the chart itself, docked to the right of the conversation
  *   SIDEBAR_NAV_AREA  the row itself
  *   PALETTE_AREA      commands: open the console · reload the chart pane · toggle the reveal on
- *                     launch · open in a browser
+ *                     launch — all in-app; the operator's rule (24 Sep) is that this plugin
+ *                     never leaves Hermes, so no command or button opens an external browser
  *   STATUSBAR_AREAS   a chip that opens the console on click, and does the launch reveal
  *
  * One console, one view: when the chart pane is on screen the page shows a short status card instead
@@ -124,9 +125,9 @@ const S = {
   }
 }
 
-/* ctx.os is handed to us at register time; this shim lets the component call it without threading
-   the context through props. Same for the auto-reveal setting. */
-let ctx_os_open = () => Promise.resolve(false)
+/* ctx.storage is handed to us at register time; this shim lets components read the auto-reveal
+   setting without threading the context through props. (No ctx.os shim: the operator's rule is
+   that this plugin never opens an external browser — 24 Sep.) */
 let ctx_storage = null
 let autoRevealOn = false      /* off by default: the pane opens on a click, not at boot */
 let reveal_attempted = false
@@ -436,15 +437,6 @@ function PaneHint({ onRetry }) {
           }),
           jsx('button', {
             type: 'button',
-            style: S.cardBtn,
-            onClick: () => {
-              haptic()
-              ctx_os_open(CONSOLE_ORIGIN)
-            },
-            children: 'Open in a browser ↗'
-          }),
-          jsx('button', {
-            type: 'button',
             style: S.hintClose,
             title: 'Hide this note',
             onClick: () => setHidden(true),
@@ -480,15 +472,6 @@ function ChartDocked({ note }) {
               revealChart()
             },
             children: 'Show the chart pane'
-          }),
-          jsx('button', {
-            type: 'button',
-            style: S.cardBtn,
-            onClick: () => {
-              haptic()
-              ctx_os_open(CONSOLE_ORIGIN)
-            },
-            children: 'Open in a browser'
           })
         ]
       })
@@ -525,8 +508,6 @@ export default {
   id: 'traders-desk',
   name: "Trader's Agent",
   register(ctx) {
-    if (ctx.os) ctx_os_open = (url) => ctx.os.openExternal(url)
-
     if (ctx.storage) {
       ctx_storage = ctx.storage
       Promise.resolve(ctx.storage.get('autoReveal'))
@@ -617,21 +598,6 @@ export default {
                 ? 'The console will open by itself when the app starts.'
                 : 'Launch reveal is off — the row and the chip still open the console.'
             })
-          }
-        }
-      },
-      {
-        /* The page itself is chart-only now, so the escape hatch to a real browser window lives
-           here instead of in a header row above the chart. */
-        id: 'openInBrowser',
-        area: PALETTE_AREA,
-        data: {
-          id: 'tradingDesk.browser',
-          label: 'Trading: open console in browser ↗',
-          keywords: ['trading', 'trader', 'browser', 'external', 'console', 'chrome', 'firefox'],
-          run: () => {
-            haptic()
-            return Promise.resolve(ctx_os_open(CONSOLE_ORIGIN))
           }
         }
       }
