@@ -546,9 +546,8 @@ async function queueMount(source, name) {
    it, pick a family, read down the list. Paging is server-side (page_size caps at 100), and the
    families come from /api/families so the chip row cannot drift from the catalogue's own keys. */
 const BROWSE_PAGE = 100;
-let browseState = { page: 0, family: '', rows: [] };
-/* The newest load wins; older in-flight ones must not append into the list the newer one reset. */
-let browseToken = 0;
+/* `loading` guards the fetch, `queued` remembers what arrived while it ran. */
+let browseState = { page: 0, family: '', rows: [], loading: false, queued: null };
 
 function browseRow(row) {
   const button = document.createElement('button');
@@ -570,27 +569,38 @@ function browseRow(row) {
 
 async function loadBrowse(reset = false) {
   if (!el.browseList) return;
-  // One load at a time. Two overlapping calls append into the same list, so a family switch
-  // measured 118 rows for a 59-indicator family: the new page landed beside the old family's rows.
-  // A later request always wins, so a second call waits for the first to finish and then resets.
-  const token = ++browseToken;
-  if (reset) {
+  // One load at a time. Two overlapping calls appended into one list (a 59-indicator family
+  // measured 118 rows), and guarding that with a "newest wins" token cancelled the winning paint
+  // instead — two triggers on one open left the list blank. So join instead of race: while a load
+  // is in flight the same request reuses it, and a genuine change (family/append) queues behind it.
+  if (browseState.loading) {
+    browseState.queued = reset ? 'reset' : 'more';
+    return;
+  }
+  browseState.loading = true;
+  browseState.queued = null;
+  const resetting = reset;
+  if (resetting) {
     browseState.page = 0;
     browseState.rows = [];
     el.browseList.innerHTML = '<div class="browse__note">Loading the catalogue…</div>';
   }
   el.browseMore?.classList.remove('is-done');
+  const wantedFamily = browseState.family;
   try {
     const data = await api('/api/indicators', {
       page: browseState.page, page_size: BROWSE_PAGE,
-      ...(browseState.family ? { family: browseState.family } : {}),
+      ...(wantedFamily ? { family: wantedFamily } : {}),
     });
-    if (token !== browseToken) return;   // a newer load already reset the list
     const rows = data.indicators || [];
-    if (reset) el.browseList.innerHTML = '';
+    // The family moved while this was in flight — drop it; the queued load has the right filter.
+    if (wantedFamily !== browseState.family) { browseState.loading = false; return drainBrowse(); }
+    if (resetting) el.browseList.innerHTML = '';
     if (!rows.length && !browseState.rows.length) {
       el.browseList.innerHTML = '<div class="browse__note">Nothing in this family.</div>';
       el.browseMore?.classList.add('is-done');
+      browseState.loading = false;
+      drainBrowse();
       return;
     }
     browseState.rows.push(...rows);
@@ -607,9 +617,21 @@ async function loadBrowse(reset = false) {
     if (!more) el.browseMore?.classList.add('is-done');
     checkHealth();   // this read moved the backend's MCP counter
   } catch (err) {
+    browseState.loading = false;
     el.browseList.innerHTML = `<div class="browse__note">Catalogue unavailable: ${esc(err.message)}<br>
       Is the console backend running? <code>./console/start.sh</code> (or the luxalgo-web user unit)</div>`;
+    return;
   }
+  browseState.loading = false;
+  drainBrowse();
+}
+
+/* Run whatever arrived while a load was in flight — a family change wins over a plain append. */
+function drainBrowse() {
+  const q = browseState.queued;
+  browseState.queued = null;
+  if (q === 'reset') loadBrowse(true);
+  else if (q === 'more') loadBrowse(false);
 }
 
 async function loadFamilies() {
@@ -654,7 +676,9 @@ function toggleBrowse(on) {
   try { localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), browse: open })); } catch { /* private mode */ }
   if (open) {
     if (!el.browseFamilies.children.length) loadFamilies();
-    if (!browseState.rows.length) loadBrowse(true);
+    // Only the FIRST open loads. pickFamily starts its own reset-load, so starting one here too
+    // made two overlapping requests and the token guard cancelled the winning paint.
+    if (!browseState.rows.length && !browseState.loading) loadBrowse(true);
   }
 }
 

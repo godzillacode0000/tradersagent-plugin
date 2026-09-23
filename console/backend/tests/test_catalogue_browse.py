@@ -66,12 +66,15 @@ class TheListCannotDoubleCount(unittest.TestCase):
     shape rather than by racing the app.
     """
 
-    def test_a_newer_load_wins(self):
+    def test_overlapping_loads_join_instead_of_racing(self):
+        # A "newest wins" token cancelled the winning paint (two triggers on one open left the list
+        # blank); a join-and-queue keeps the list filled and still prevents double-appending.
         app = read(APP)
-        self.assertIn("browseToken", app)
-        block = app.split("async function loadBrowse", 1)[1].split("\n}", 1)[0]
-        self.assertIn("token !== browseToken", block,
-                      "an in-flight older load must not append into a list the newer one reset")
+        block = app.split("async function loadBrowse", 1)[1].split("\n\n/* Run whatever", 1)[0]
+        self.assertIn("browseState.loading", block)
+        self.assertIn("drainBrowse", app)
+        self.assertIn("browseState.queued", app)
+        self.assertNotIn("browseToken", app, "the cancelling token is gone — do not bring it back")
 
     def test_a_reset_clears_before_it_fills(self):
         app = read(APP)

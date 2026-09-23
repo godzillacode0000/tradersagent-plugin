@@ -657,6 +657,15 @@
           // measured as "0 row(s) · family smc-ict" right after asking for all families.
           if (command.family !== undefined) {
             const want = String(command.family || '');
+            // The chip row is built from /api/families on first open — a call that arrives before
+            // that fetch lands finds no chip and silently selects nothing (measured: 0 rows for a
+            // family that has 59). Open the surface, give the row a moment to exist, then click.
+            if (typeof toggleBrowse === 'function' && !document.querySelector('.browse__fam')) {
+              toggleBrowse(true);
+              for (let i = 0; i < 20 && !document.querySelector('.browse__fam'); i++) {
+                await new Promise((rr) => setTimeout(rr, 150));
+              }
+            }
             const chip = document.querySelector('.browse__fam[data-family="' + want + '"]');
             if (chip) chip.click();
           }
@@ -675,15 +684,18 @@
           // to have happened (empty, or a new first row) and then for the count to hold still.
           // Move `more` above the settle so the appended page is counted, not the one before it.
           const count = () => list.querySelectorAll('.row').length;
+          const busy = () => !!(typeof browseState !== 'undefined' && browseState.loading);
           let last = count();
           let sawChange = false;
           for (let i = 0; i < 40; i++) {
             await new Promise((r) => setTimeout(r, 150));
             const now = count();
             if (now !== last) { sawChange = true; last = now; continue; }
-            if (sawChange && now > 0) break;   // filled and settled
-            if (sawChange && now === 0) break; // genuinely empty family ("Nothing in this family")
-            if (!sawChange && i === 12 && count() === 0) break;  // nothing came: report the truth
+            // Never call it empty while the page says a load is still running, and never call it
+            // settled while more rows are still queued behind an in-flight fetch.
+            if (busy() || (typeof browseState !== 'undefined' && browseState.queued)) continue;
+            if (now > 0) break;                 // filled and settled
+            if (sawChange || i >= 12) break;    // empty, or nothing is coming
           }
           out.ok = true;
           const fam = (document.querySelector('.browse__fam.is-on') || {}).dataset || {};
