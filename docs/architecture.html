@@ -3,312 +3,324 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>tradersagent-plugin Architecture Diagram</title>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>Trader's Agent — Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-
     body {
-      font-family: 'JetBrains Mono', monospace;
-      background: #020617;
-      min-height: 100vh;
-      padding: 2rem;
-      color: white;
+      font-family: 'Geist', sans-serif;
+      background: #f5f5f5; color: #2d3142;
+      min-height: 100vh; padding: 3rem 2rem;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; }
+
+    .eyebrow {
+      font-family: 'Geist Mono', monospace; font-size: 8px; font-weight: 500;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: #7a8399; margin-bottom: 0.75rem;
+    }
+    h1 {
+      font-family: 'Instrument Serif', serif; font-size: 1.75rem; font-weight: 400;
+      letter-spacing: -0.01em; margin-bottom: 0.5rem;
+    }
+    .sub { font-size: 0.875rem; color: #4f5d75; max-width: 64ch; line-height: 1.65; }
+    .meta {
+      font-family: 'Geist Mono', monospace; font-size: 8px; color: #7a8399;
+      letter-spacing: 0.06em; margin-top: 0.875rem;
     }
 
-    .container { max-width: 1200px; margin: 0 auto; }
-    .header { margin-bottom: 2rem; }
-    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
-
-    .pulse-dot {
-      width: 12px; height: 12px;
-      background: #22d3ee;
-      border-radius: 50%;
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-
-    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.025em; }
-    .subtitle { color: #94a3b8; font-size: 0.875rem; margin-left: 1.75rem; }
-
-    .diagram-container {
-      background: rgba(15, 23, 42, 0.5);
-      border-radius: 1rem;
-      border: 1px solid #1e293b;
-      padding: 1.5rem;
-      overflow-x: auto;
-    }
-
-    svg { width: 100%; min-width: 900px; display: block; }
+    .figure { margin: 2.5rem 0 0; overflow-x: auto; }
+    svg { display: block; }
 
     .cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1rem;
-      margin-top: 2rem;
+      display: grid; grid-template-columns: 1.1fr 1fr 0.9fr;
+      gap: 1rem; margin-top: 2.5rem;
     }
-
     .card {
-      background: rgba(15, 23, 42, 0.5);
-      border-radius: 0.75rem;
-      border: 1px solid #1e293b;
-      padding: 1.25rem;
+      background: #ffffff; border: 1px solid rgba(45,49,66,0.12);
+      border-radius: 6px; padding: 1.25rem;
     }
-
+    .card .eyebrow { margin-bottom: 0.75rem; }
     .card-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
-    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
-    .card-dot.cyan { background: #22d3ee; }
-    .card-dot.emerald { background: #34d399; }
-    .card-dot.violet { background: #a78bfa; }
-    .card-dot.amber { background: #fbbf24; }
-    .card-dot.rose { background: #fb7185; }
-    .card-dot.orange { background: #fb923c; }
-    .card h3 { font-size: 0.875rem; font-weight: 600; }
-    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; }
-    .card li { margin-bottom: 0.375rem; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+    .dot.coral { background: #eb6c36; }
+    .dot.ink { background: #2d3142; }
+    .dot.muted { background: #4f5d75; }
+    .card h3 { font-size: 0.8125rem; font-weight: 600; }
+    .card ul { list-style: none; }
+    .card li {
+      font-size: 0.75rem; color: #4f5d75; line-height: 1.7;
+      padding-left: 0.875rem; position: relative;
+    }
+    .card li::before {
+      content: ''; position: absolute; left: 0; top: 0.65em;
+      width: 4px; height: 1px; background: #bfc0c0;
+    }
+    .card code { font-family: 'Geist Mono', monospace; font-size: 0.6875rem; color: #2d3142; }
 
-    .footer { text-align: center; margin-top: 1.5rem; color: #475569; font-size: 0.75rem; }
+    footer {
+      margin-top: 2.5rem; padding-top: 1.25rem;
+      border-top: 1px solid rgba(45,49,66,0.10);
+      font-family: 'Geist Mono', monospace; font-size: 8px;
+      color: #7a8399; letter-spacing: 0.06em; line-height: 2;
+    }
   </style>
 </head>
 <body>
-  <div class="container">
-    <!-- Header -->
-    <div class="header">
-      <div class="header-row">
-        <div class="pulse-dot"></div>
-        <h1>Trader's Agent Plugin — Architecture</h1>
-      </div>
-      <p class="subtitle">Hermes Desktop plugin · Vela console · LuxAlgo MCP — the command path from chat composer to candles</p>
-    </div>
+<div class="wrap">
+  <p class="eyebrow">Trader's Agent · Hermes Desktop plugin</p>
+  <h1>One chart, three doors, one bridge</h1>
+  <p class="sub">Hermes is the brain; the chart is its controllable visual workspace. The plugin never
+    reaches the chart directly — it frames a local console, and every caller (CLI, MCP client, chat
+    agent) pushes through a single durable bridge that the page executes and answers.</p>
+  <p class="meta">6,670 LOC · 29 MCP tools · 14 CLI subcommands · 163 tests green</p>
 
-    <!-- Main Diagram -->
-    <div class="diagram-container">
-      <svg viewBox="0 0 1140 740">
-        <!-- Definitions -->
-        <defs>
-          <marker id="ah-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" />
-          </marker>
-          <marker id="ah-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#34d399" />
-          </marker>
-          <marker id="ah-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#fb923c" />
-          </marker>
-          <marker id="ah-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
-          </marker>
-          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
-          </pattern>
-        </defs>
+  <div class="figure">
+    <svg viewBox="0 0 1140 620" width="100%" role="img" aria-labelledby="arch-title arch-desc">
+      <title id="arch-title">Trader's Agent plugin architecture — three caller doors feeding one command bridge</title>
+      <desc id="arch-desc">Hermes Desktop contributes a sidebar row, a CLI, an MCP client entry point
+        and a chat agent, plus a chart pane docked right that frames a local console on port 8787.
+        Inside the console an HTTP API server and a 29-tool MCP server both land on one command
+        bridge backed by durable JSON state. The bridge pushes each command over SSE to the chart
+        pane, where one view claims it and executes it in the browser, then returns a result. The MCP
+        server also proxies the remote LuxAlgo library. Upstream at right, the hosted LuxAlgo MCP
+        serves the 805-indicator library and jsDelivr serves the Vela and PineTS runtime.</desc>
 
-        <!-- Background Grid -->
-        <rect width="100%" height="100%" fill="url(#grid)" />
+      <defs>
+        <marker id="a-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+        </marker>
+        <marker id="a-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/>
+        </marker>
+        <marker id="a-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+        </marker>
+      </defs>
 
-        <!-- Region boundary: the machine's UI shell -->
-        <rect x="24" y="56" width="340" height="400" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
-        <text x="36" y="74" fill="#fbbf24" font-size="10" font-weight="600">HERMES DESKTOP — Omarchy / Linux (plugin shell)</text>
+      <rect width="1140" height="620" fill="#f5f5f5"/>
 
-        <!-- Boundary: the Hermes-only UI rule (a boundary the tests enforce) -->
-        <rect x="40" y="194" width="310" height="248" rx="8" fill="transparent" stroke="#fb7185" stroke-width="1" stroke-dasharray="4,4"/>
-        <text x="50" y="208" fill="#fb7185" font-size="8">UI SURFACE: HERMES ONLY — browser exits removed + test-pinned</text>
+      <!-- ═══ ZONES ═══ -->
+      <rect x="24" y="48" width="212" height="424" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <rect x="62" y="52" width="136" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="130" y="61" fill="rgba(45,49,66,0.40)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">HERMES DESKTOP</text>
 
-        <!-- ===================== ARROWS (behind boxes) ===================== -->
+      <rect x="272" y="48" width="532" height="424" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <rect x="462" y="52" width="152" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="538" y="61" fill="rgba(45,49,66,0.40)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">CONSOLE 127.0.0.1:8787</text>
 
-        <!-- chat composer -> MCP tool call -->
-        <line x1="340" y1="132" x2="418" y2="132" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah-cyan)"/>
-        <text x="379" y="124" fill="#94a3b8" font-size="8" text-anchor="middle">tool call</text>
+      <rect x="840" y="48" width="276" height="424" rx="8" fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <rect x="930" y="52" width="96" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="978" y="61" fill="rgba(45,49,66,0.40)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">UPSTREAM</text>
 
-        <!-- sidebar card -> pane: reveal -->
-        <line x1="195" y1="298" x2="195" y2="338" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah-cyan)"/>
-        <text x="203" y="322" fill="#94a3b8" font-size="8">reveal (no session switch)</text>
+      <!-- ═══ ARROWS (drawn before boxes) ═══ -->
 
-        <!-- pane -> page: iframe loads -->
-        <path d="M 340 386 L 380 386 L 380 506 L 418 506" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#ah-cyan)"/>
-        <text x="374" y="452" fill="#94a3b8" font-size="7" text-anchor="middle" transform="rotate(-90, 374, 452)">iframe loads :8787</text>
+      <!-- CLI -> API server -->
+      <path d="M 176,178 H 248 Q 256,178 256,186 V 214 Q 256,222 264,222 H 304"
+            fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#a-arrow)"/>
+      <rect x="186" y="158" width="40" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="206" y="167" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">POST</text>
 
-        <!-- MCP -> backend: command -->
-        <line x1="545" y1="230" x2="545" y2="296" stroke="#fb923c" stroke-width="1.5" marker-end="url(#ah-orange)"/>
-        <text x="554" y="258" fill="#94a3b8" font-size="8">POST /command</text>
-        <text x="554" y="272" fill="#fb923c" font-size="7">(heartbeat gate first)</text>
+      <!-- MCP client -> MCP server -->
+      <path d="M 176,224 H 304" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#a-arrow)"/>
+      <rect x="202" y="204" width="48" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="226" y="213" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">STDIO</text>
 
-        <!-- backend -> MCP: reply -->
-        <line x1="625" y1="296" x2="625" y2="232" stroke="#fb923c" stroke-width="1.5" marker-end="url(#ah-orange)"/>
-        <text x="634" y="258" fill="#94a3b8" font-size="8">✓ / ✗ reply</text>
-        <text x="634" y="272" fill="#fb923c" font-size="7">as one sentence</text>
+      <!-- Chat agent -> API server -->
+      <path d="M 176,314 H 248 Q 256,314 256,306 V 240 Q 256,232 264,232 H 304"
+            fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#a-arrow)"/>
+      <rect x="180" y="294" width="56" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="208" y="303" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">PROMPT</text>
 
-        <!-- backend -> page: SSE push + claim -->
-        <line x1="545" y1="420" x2="545" y2="476" stroke="#34d399" stroke-width="1.5" marker-end="url(#ah-emerald)"/>
-        <text x="554" y="444" fill="#94a3b8" font-size="8">SSE push</text>
-        <text x="554" y="458" fill="#34d399" font-size="7">first claim wins</text>
+      <!-- Sidebar row -> pane: down over the top walls, into pane top edge -->
+      <path d="M 176,108 H 190 Q 198,108 198,116 V 128 Q 198,136 206,136 H 592 Q 600,136 600,144 V 152"
+            fill="none" stroke="#7a8399" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#a-arrow)"/>
+      <rect x="234" y="106" width="54" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="261" y="115" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">REVEAL</text>
 
-        <!-- page -> backend: heartbeat + results -->
-        <line x1="625" y1="478" x2="625" y2="424" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ah-orange)"/>
-        <text x="634" y="444" fill="#94a3b8" font-size="8">state every 4s</text>
-        <text x="634" y="458" fill="#fb923c" font-size="7">age_s + result</text>
+      <!-- API server -> Bridge -->
+      <path d="M 368,264 V 288" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#a-arrow)"/>
+      <rect x="324" y="264" width="58" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="353" y="273" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">ENQUEUE</text>
 
-        <!-- backend -> LuxAlgo MCP cloud -->
-        <path d="M 750 330 L 775 330 L 775 145 L 818 145" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ah-slate)"/>
-        <text x="770" y="250" fill="#94a3b8" font-size="7" text-anchor="middle" transform="rotate(-90, 770, 250)">GET /search · /source</text>
+      <!-- MCP server -> Bridge -->
+      <path d="M 436,264 V 288" fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#a-arrow)"/>
+      <rect x="394" y="264" width="52" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="420" y="273" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">SAME</text>
 
-        <!-- CDN -> page -->
-        <path d="M 820 360 L 780 360 L 780 502 L 754 502" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ah-slate)"/>
-        <text x="774" y="436" fill="#94a3b8" font-size="7" text-anchor="middle" transform="rotate(-90, 774, 436)">ESM on load</text>
+      <!-- Bridge -> Chart pane (FOCAL accent) -->
+      <path d="M 472,346 H 512" fill="none" stroke="#eb6c36" stroke-width="1.6" marker-end="url(#a-arrow-accent)"/>
+      <rect x="444" y="326" width="60" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="474" y="335" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">SSE PUSH</text>
 
-        <!-- Binance -> page -->
-        <path d="M 820 475 L 795 475 L 795 572 L 754 572" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ah-slate)"/>
-        <text x="768" y="588" fill="#94a3b8" font-size="7">bars</text>
+      <!-- Chart pane -> Bridge (result) -->
+      <path d="M 512,392 H 472" fill="none" stroke="#7a8399" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#a-arrow)"/>
+      <rect x="446" y="402" width="56" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="474" y="411" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">RESULT</text>
 
-        <!-- ===================== COMPONENTS ===================== -->
+      <!-- Bridge <-> State store -->
+      <path d="M 320,372 V 396" fill="none" stroke="#7a8399" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#a-arrow)"/>
+      <rect x="264" y="372" width="44" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="286" y="381" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">FSYNC</text>
 
-        <!-- Chat composer (frontend) -->
-        <rect x="50" y="100" width="290" height="64" rx="6" fill="#0f172a"/>
-        <rect x="50" y="100" width="290" height="64" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="195" y="127" fill="white" font-size="11" font-weight="600" text-anchor="middle">Chat composer</text>
-        <text x="195" y="145" fill="#94a3b8" font-size="9" text-anchor="middle">any session (incl. brand-new) · no slash command</text>
+      <!-- MCP server -> LuxAlgo MCP: up, then east above the zones -->
+      <path d="M 432,148 V 30 Q 432,22 440,22 H 956 Q 964,22 964,30 V 132"
+            fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#a-arrow-link)"/>
+      <rect x="650" y="10" width="78" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="689" y="19" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">MCP PROXY</text>
 
-        <!-- plugin.js -->
-        <rect x="50" y="210" width="290" height="88" rx="6" fill="#0f172a"/>
-        <rect x="50" y="210" width="290" height="88" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="195" y="234" fill="white" font-size="11" font-weight="600" text-anchor="middle">plugin/plugin.js</text>
-        <text x="195" y="252" fill="#94a3b8" font-size="9" text-anchor="middle">sidebar row → revealPane → right pane</text>
-        <text x="195" y="266" fill="#94a3b8" font-size="9" text-anchor="middle">bounce back to chat (reactive useValue)</text>
-        <text x="195" y="280" fill="#94a3b8" font-size="9" text-anchor="middle">cards: “Show the chart pane” only</text>
-        <text x="195" y="293" fill="#fb7185" font-size="7" text-anchor="middle">no external-browser exits — pinned by test</text>
+      <!-- Chart pane -> jsDelivr -->
+      <path d="M 776,230 H 800 Q 808,230 808,222 V 92 Q 808,84 816,84 H 956"
+            fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#a-arrow-link)"/>
+      <rect x="816" y="72" width="44" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="838" y="81" fill="#2e5aa8" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.06em">CDN</text>
 
-        <!-- Pane -->
-        <rect x="50" y="340" width="290" height="90" rx="6" fill="#0f172a"/>
-        <rect x="50" y="340" width="290" height="90" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="195" y="364" fill="white" font-size="11" font-weight="600" text-anchor="middle">Pane traders-desk:chart</text>
-        <text x="195" y="382" fill="#94a3b8" font-size="9" text-anchor="middle">defaultCollapsed · iframe → 127.0.0.1:8787</text>
-        <text x="195" y="396" fill="#94a3b8" font-size="9" text-anchor="middle">survives session switches</text>
-        <text x="195" y="414" fill="#22d3ee" font-size="7" text-anchor="middle">never auto-opens (standing rule)</text>
+      <!-- ═══ NODES ═══ -->
 
-        <!-- MCP server (message bus) -->
-        <rect x="420" y="100" width="330" height="130" rx="6" fill="#0f172a"/>
-        <rect x="420" y="100" width="330" height="130" rx="6" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1.5"/>
-        <text x="585" y="126" fill="white" font-size="11" font-weight="600" text-anchor="middle">MCP server — traders-chart</text>
-        <text x="585" y="146" fill="#94a3b8" font-size="9" text-anchor="middle">28 tools · uvx fastmcp run (repo file, stdio)</text>
-        <text x="585" y="161" fill="#94a3b8" font-size="9" text-anchor="middle">registered GLOBAL in ~/.hermes/config.yaml</text>
-        <text x="585" y="182" fill="#fbbf24" font-size="8" text-anchor="middle">preflight: age_s &gt; 10s → refused in &lt;1s</text>
-        <text x="585" y="196" fill="#fbbf24" font-size="8" text-anchor="middle">freshness.py gate — queue never touched</text>
-        <text x="585" y="215" fill="#94a3b8" font-size="7" text-anchor="middle">auto-present in every session — no /tradersagent needed</text>
+      <!-- Sidebar row -->
+      <rect x="40" y="92" width="136" height="32" rx="6" fill="rgba(79,93,117,0.10)" stroke="#7a8399" stroke-width="1"/>
+      <text x="108" y="112" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Sidebar row</text>
 
-        <!-- Backend -->
-        <rect x="420" y="300" width="330" height="120" rx="6" fill="#0f172a"/>
-        <rect x="420" y="300" width="330" height="120" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
-        <text x="585" y="326" fill="white" font-size="11" font-weight="600" text-anchor="middle">Console backend — server.py :8787</text>
-        <text x="585" y="346" fill="#94a3b8" font-size="9" text-anchor="middle">command queue + inline wait (8s default)</text>
-        <text x="585" y="361" fill="#94a3b8" font-size="9" text-anchor="middle">SSE /api/chart/stream · claim first-wins</text>
-        <text x="585" y="381" fill="#34d399" font-size="8" text-anchor="middle">GET /state → age_s · viewer · actions[13]</text>
-        <text x="585" y="395" fill="#94a3b8" font-size="8" text-anchor="middle">library proxy: /search · /source · /concepts</text>
-        <text x="585" y="412" fill="#94a3b8" font-size="7" text-anchor="middle">luxalgo-web.service (this machine) · traders-agent.service (fresh install)</text>
+      <!-- CLI -->
+      <rect x="40" y="160" width="136" height="36" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="108" y="175" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">CLI</text>
+      <text x="108" y="188" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">14 subcommands</text>
 
-        <!-- Webapp page (frontend) -->
-        <rect x="420" y="480" width="330" height="130" rx="6" fill="#0f172a"/>
-        <rect x="420" y="480" width="330" height="130" rx="6" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
-        <text x="585" y="506" fill="white" font-size="11" font-weight="600" text-anchor="middle">Console webapp — the page inside the pane</text>
-        <text x="585" y="526" fill="#94a3b8" font-size="9" text-anchor="middle">app.js + unified.js → window.TraderRun</text>
-        <text x="585" y="541" fill="#94a3b8" font-size="9" text-anchor="middle">chart-bridge.js: SSE client · heartbeat 4s</text>
-        <text x="585" y="556" fill="#94a3b8" font-size="9" text-anchor="middle">overlay.js · badge · topbar · &lt;&gt; editor (docked)</text>
-        <text x="585" y="576" fill="#fbbf24" font-size="8" text-anchor="middle">Vela0.7.3 + PineTS via CDN — pinned, never vendored</text>
-        <text x="585" y="596" fill="#94a3b8" font-size="7" text-anchor="middle">one run path: chat = library “Run PineTS” = script editor</text>
+      <!-- MCP client -->
+      <rect x="40" y="208" width="136" height="32" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="108" y="228" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">MCP client</text>
 
-        <!-- LuxAlgo MCP cloud (external) -->
-        <rect x="820" y="100" width="290" height="80" rx="6" fill="#0f172a"/>
-        <rect x="820" y="100" width="290" height="80" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="965" y="126" fill="white" font-size="11" font-weight="600" text-anchor="middle">LuxAlgo MCP — cloud</text>
-        <text x="965" y="146" fill="#94a3b8" font-size="9" text-anchor="middle">mcp.luxalgo.com/mcp · search / source / concepts</text>
-        <text x="965" y="164" fill="#94a3b8" font-size="7" text-anchor="middle">separate Hermes MCP entry: “luxalgo”</text>
+      <!-- Chat agent -->
+      <rect x="40" y="296" width="136" height="36" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="108" y="311" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Chat agent</text>
+      <text x="108" y="324" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">chat.py</text>
 
-        <!-- jsDelivr CDN (external) -->
-        <rect x="820" y="300" width="290" height="70" rx="6" fill="#0f172a"/>
-        <rect x="820" y="300" width="290" height="70" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="965" y="326" fill="white" font-size="11" font-weight="600" text-anchor="middle">jsDelivr CDN</text>
-        <text x="965" y="346" fill="#94a3b8" font-size="9" text-anchor="middle">@luxalgo/vela@0.7.3 · vela-pinets · pinets</text>
-        <text x="965" y="362" fill="#94a3b8" font-size="7" text-anchor="middle">Apache-2.0 (Vela) · AGPL (PineTS) — loaded, never copied</text>
+      <!-- API server -->
+      <rect x="304" y="210" width="128" height="54" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="312" y="216" width="30" height="12" rx="2" fill="none" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="327" y="225" fill="rgba(45,49,66,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HTTP</text>
+      <text x="368" y="242" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">API server</text>
+      <text x="368" y="255" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">server.py</text>
 
-        <!-- Binance (external) -->
-        <rect x="820" y="440" width="290" height="70" rx="6" fill="#0f172a"/>
-        <rect x="820" y="440" width="290" height="70" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="965" y="466" fill="white" font-size="11" font-weight="600" text-anchor="middle">Binance REST</text>
-        <text x="965" y="486" fill="#94a3b8" font-size="9" text-anchor="middle">bars via PineTS Provider.Binance</text>
-        <text x="965" y="502" fill="#94a3b8" font-size="7" text-anchor="middle">_live_market() feeds the heartbeat price</text>
+      <!-- MCP server -->
+      <rect x="304" y="104" width="128" height="54" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="312" y="110" width="30" height="12" rx="2" fill="none" stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="327" y="119" fill="rgba(45,49,66,0.8)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">MCP</text>
+      <text x="368" y="136" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">MCP server</text>
+      <text x="368" y="149" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">29 tools · stdio</text>
 
-        <!-- ===================== LEGEND (outside all boundaries) ===================== -->
-        <text x="420" y="648" fill="white" font-size="10" font-weight="600">Legend</text>
+      <!-- FOCAL 1: Command bridge -->
+      <rect x="304" y="288" width="168" height="84" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.2"/>
+      <rect x="312" y="296" width="44" height="12" rx="2" fill="none" stroke="rgba(235,108,54,0.40)" stroke-width="0.8"/>
+      <text x="334" y="305" fill="rgba(235,108,54,0.9)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">BRIDGE</text>
+      <text x="388" y="330" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Command bridge</text>
+      <text x="388" y="345" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">push → claim → run</text>
+      <text x="388" y="359" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">first claim wins</text>
 
-        <rect x="420" y="660" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
-        <text x="442" y="668" fill="#94a3b8" font-size="8">Frontend / UI</text>
+      <!-- State store -->
+      <rect x="304" y="396" width="168" height="56" rx="6" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+      <rect x="312" y="404" width="40" height="12" rx="2" fill="none" stroke="rgba(79,93,117,0.40)" stroke-width="0.8"/>
+      <text x="332" y="413" fill="rgba(79,93,117,0.9)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">STATE</text>
+      <text x="388" y="430" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">_chart/*.json</text>
+      <text x="388" y="443" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">durable · tmp+rename</text>
 
-        <rect x="420" y="676" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
-        <text x="442" y="684" fill="#94a3b8" font-size="8">Local backend</text>
+      <!-- FOCAL 2: Chart pane -->
+      <rect x="512" y="152" width="264" height="264" rx="6" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1.2"/>
+      <rect x="520" y="160" width="32" height="12" rx="2" fill="none" stroke="rgba(235,108,54,0.40)" stroke-width="0.8"/>
+      <text x="536" y="169" fill="rgba(235,108,54,0.9)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PANE</text>
+      <text x="644" y="192" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Vela chart pane</text>
+      <text x="644" y="207" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">iframe · 620px · right dock</text>
+      <line x1="528" y1="222" x2="760" y2="222" stroke="rgba(235,108,54,0.25)" stroke-width="0.8"/>
+      <text x="644" y="248" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">chart-bridge.js · SSE client</text>
+      <text x="644" y="264" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">unified.js · window.TraderRun</text>
+      <text x="644" y="280" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">app.js · overlay.js</text>
+      <text x="644" y="302" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">13 actions · heartbeat 4s</text>
+      <text x="644" y="318" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">reports before → after</text>
+      <line x1="528" y1="334" x2="760" y2="334" stroke="rgba(235,108,54,0.25)" stroke-width="0.8"/>
+      <text x="644" y="354" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Vela 0.7.3 + PineTS from CDN</text>
+      <text x="644" y="370" fill="#7a8399" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">pinned, never vendored</text>
+      <text x="644" y="392" fill="#eb6c36" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">never auto-opens</text>
 
-        <rect x="560" y="660" width="16" height="10" rx="2" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1"/>
-        <text x="582" y="668" fill="#94a3b8" font-size="8">MCP message layer</text>
+      <!-- LuxAlgo hosted MCP -->
+      <rect x="884" y="132" width="188" height="52" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+      <rect x="892" y="140" width="44" height="12" rx="2" fill="none" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+      <text x="914" y="149" fill="rgba(45,49,66,0.6)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">REMOTE</text>
+      <text x="978" y="166" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">LuxAlgo MCP</text>
+      <text x="978" y="178" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">805 indicators</text>
 
-        <rect x="560" y="676" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
-        <text x="582" y="684" fill="#94a3b8" font-size="8">External service</text>
+      <!-- jsDelivr -->
+      <rect x="884" y="84" width="188" height="36" rx="6" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+      <rect x="892" y="90" width="44" height="12" rx="2" fill="none" stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+      <text x="914" y="99" fill="rgba(45,49,66,0.6)" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">REMOTE</text>
+      <text x="978" y="110" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">jsDelivr CDN</text>
 
-        <line x1="720" y1="665" x2="736" y2="665" stroke="#fb923c" stroke-width="1" stroke-dasharray="3,3"/>
-        <text x="742" y="668" fill="#94a3b8" font-size="8">Async heartbeat / proxy</text>
+      <!-- ═══ LEGEND ═══ -->
+      <line x1="24" y1="520" x2="1116" y2="520" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <text x="24" y="538" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">LEGEND</text>
 
-        <rect x="720" y="676" width="16" height="10" rx="2" fill="transparent" stroke="#fb7185" stroke-width="1" stroke-dasharray="3,3"/>
-        <text x="742" y="684" fill="#94a3b8" font-size="8">Enforced-by-test boundary</text>
+      <rect x="110" y="528" width="12" height="12" rx="2" fill="rgba(235,108,54,0.08)" stroke="#eb6c36" stroke-width="1"/>
+      <text x="130" y="538" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">FOCAL (2)</text>
 
-        <rect x="890" y="660" width="16" height="10" rx="2" fill="transparent" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4,4"/>
-        <text x="912" y="668" fill="#94a3b8" font-size="8">Hermes Desktop</text>
-      </svg>
-    </div>
+      <rect x="228" y="528" width="12" height="12" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="248" y="538" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">SERVICE</text>
 
-    <!-- Info Cards -->
-    <div class="cards">
-      <div class="card">
-        <div class="card-header">
-          <div class="card-dot cyan"></div>
-          <h3>How a session invokes it</h3>
-        </div>
-        <ul>
-          <li>• MCP “traders-chart” is global in Hermes config — a brand-new session already has all 28 chart tools</li>
-          <li>• No /tradersagent command exists or is needed; the sidebar row only reveals the pane</li>
-          <li>• Reveal never changes your chat session, then bounces focus back to the composer</li>
-          <li>• Pane is defaultCollapsed — it never opens itself (standing rule)</li>
-        </ul>
-      </div>
+      <rect x="336" y="528" width="12" height="12" rx="2" fill="rgba(45,49,66,0.05)" stroke="#4f5d75" stroke-width="1"/>
+      <text x="356" y="538" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">STATE</text>
 
-      <div class="card">
-        <div class="card-header">
-          <div class="card-dot orange"></div>
-          <h3>Command lifecycle (one request)</h3>
-        </div>
-        <ul>
-          <li>• chat → MCP tool → POST /command (preflight gate) → SSE push → first claim wins → run → result → one sentence back</li>
-          <li>• Preflight reads the 4s heartbeat: age_s &gt; 10s refuses in milliseconds, queue untouched</li>
-          <li>• Window maths: inline wait 8s · reads 5–6s · gate 10s · stale-warn 30s · dead 300s</li>
-          <li>• Wedged console = sentence, never a traceback (raw TimeoutError handled)</li>
-        </ul>
-      </div>
+      <rect x="428" y="528" width="12" height="12" rx="2" fill="rgba(45,49,66,0.03)" stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+      <text x="448" y="538" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">EXTERNAL</text>
 
-      <div class="card">
-        <div class="card-header">
-          <div class="card-dot rose"></div>
-          <h3>Ground rules the tests enforce</h3>
-        </div>
-        <ul>
-          <li>• Hermes-only UI: every “open in a browser” exit removed, absence pinned by test</li>
-          <li>• One indicator per chart at a time — apply, screenshot, then the next</li>
-          <li>• Vela Apache-2.0 + PineTS AGPL stay on the CDN — nothing vendored into the repo</li>
-          <li>• SMC reference (CC BY-NC-SA) sits off the import path, license intact</li>
-        </ul>
-      </div>
-    </div>
+      <rect x="544" y="528" width="12" height="12" rx="2" fill="rgba(79,93,117,0.10)" stroke="#7a8399" stroke-width="1"/>
+      <text x="564" y="538" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">UI ENTRY</text>
 
-    <!-- Footer -->
-    <p class="footer">
-      tradersagent-plugin • main@a088ddd • 147 tests • 28 MCP tools • diagram generated 23 Sep 2026
-    </p>
+      <line x1="662" y1="534" x2="692" y2="534" stroke="#4f5d75" stroke-width="1.2"/>
+      <text x="700" y="538" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">REQUEST</text>
+
+      <line x1="790" y1="534" x2="820" y2="534" stroke="#7a8399" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="828" y="538" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">RETURN</text>
+
+      <line x1="906" y1="534" x2="936" y2="534" stroke="#2e5aa8" stroke-width="1.2"/>
+      <text x="944" y="538" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">UPSTREAM</text>
+
+      <text x="24" y="570" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.06em">Every door lands on the same bridge. The page is the final authority on what may run — there is no exec endpoint anywhere.</text>
+    </svg>
   </div>
+
+  <div class="cards">
+    <div class="card">
+      <p class="eyebrow">Three doors</p>
+      <div class="card-header"><span class="dot coral"></span><h3>Who can command the chart</h3></div>
+      <ul>
+        <li><code>trader-chart</code> — 14 subcommands; polls for the answer</li>
+        <li><code>MCP</code> — 29 tools, global in Hermes config, so a brand-new session already has them</li>
+        <li><code>chat.py</code> — the desk agent, spawned via <code>CHAT_CLI</code></li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="eyebrow">Lifecycle</p>
+      <div class="card-header"><span class="dot ink"></span><h3>One command, end to end</h3></div>
+      <ul>
+        <li>Caller → bridge → SSE push → one view claims it → runs in the browser → result returns</li>
+        <li>A preflight refuses if no page checked in within <code>10s</code>, so the queue is never touched</li>
+        <li>SSE is the fast path; a <code>2s</code> poll is the fallback — a dropped stream is not a lost command</li>
+      </ul>
+    </div>
+    <div class="card">
+      <p class="eyebrow">The honest edges</p>
+      <div class="card-header"><span class="dot muted"></span><h3>What it will not do</h3></div>
+      <ul>
+        <li>No orders, account or positions — read-only market data</li>
+        <li>No browser exit anywhere in the UI; absence is pinned by test</li>
+        <li>PineTS is a Pine subset — <code>import</code>, <code>while</code>, <code>for…in</code> are refused out loud</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>
+    Verified against main@8b98e94 · 163 tests green (35 skipped) · LOC counted, not estimated<br>
+    Vela &amp; PineTS load from jsDelivr (Vela Apache-2.0, PineTS AGPL-3.0-only) · Library content is LuxAlgo's, CC BY-NC-SA 4.0
+  </footer>
+</div>
 </body>
 </html>

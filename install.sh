@@ -66,6 +66,41 @@ if [[ "${1:-}" == "--vendor" ]]; then
   echo "fetched LuxAlgo's pinned builds into console/frontend/vendor/ (local offline copy, git-ignored)"
 fi
 
+# Restart the console if a user unit is running it.
+#
+# A running console keeps its Python in memory: editing chart_bridge.py (or any backend module) and
+# reloading the browser frame changes NOTHING, because the process is still serving the old code.
+# That failure is silent and specific — new command fields arrive empty, new endpoints 404 — and it
+# reads as "the plugin is broken" rather than "the process is stale". Cost an hour of debugging here
+# (a catalogue panel that returned nothing until the unit was restarted), so the installer closes it
+# instead of documenting it.
+UNIT=""
+if systemctl --user list-unit-files luxalgo-web.service >/dev/null 2>&1; then
+  UNIT="luxalgo-web.service"
+elif systemctl --user list-unit-files traders-agent.service >/dev/null 2>&1; then
+  UNIT="traders-agent.service"
+fi
+
+if [[ -n "$UNIT" ]] && systemctl --user is-active --quiet "$UNIT"; then
+  systemctl --user restart "$UNIT"
+  # Give it a moment, then confirm it actually came back rather than assuming the restart worked:
+  # a unit that fails to start would otherwise be reported as a successful install.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -fsS --max-time 2 http://127.0.0.1:8787/api/health >/dev/null 2>&1; then break; fi
+    sleep 0.5
+  done
+  if curl -fsS --max-time 2 http://127.0.0.1:8787/api/health >/dev/null 2>&1; then
+    echo "console restarted  -> $UNIT (backend changes are now live)"
+  else
+    echo "warning: $UNIT restarted but the console is not answering on 127.0.0.1:8787"
+    echo "         check: journalctl --user -u $UNIT -n 30"
+  fi
+elif [[ -n "$UNIT" ]]; then
+  echo "console not running -> $UNIT (start it before using the pane)"
+else
+  echo "no user unit found — start the console yourself with ./console/start.sh"
+fi
+
 cat <<'EOF'
 
 Next:
