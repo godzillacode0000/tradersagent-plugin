@@ -83,16 +83,19 @@ fi
 
 if [[ -n "$UNIT" ]] && systemctl --user is-active --quiet "$UNIT"; then
   systemctl --user restart "$UNIT"
-  # Give it a moment, then confirm it actually came back rather than assuming the restart worked:
-  # a unit that fails to start would otherwise be reported as a successful install.
-  for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if curl -fsS --max-time 2 http://127.0.0.1:8787/api/health >/dev/null 2>&1; then break; fi
+  # Wait for it to actually answer before judging it. Measured on this machine: the console needs
+  # ~7s to come up (it opens an MCP session with a remote server, then binds the port). An earlier
+  # 5s budget made this block print a FALSE warning on a healthy restart — the same "output that
+  # lies" defect this block exists to prevent, so the budget now exceeds the real boot time.
+  ready=0
+  for _ in $(seq 1 30); do   # 30 x 0.5s = 15s
+    if curl -fsS --max-time 2 http://127.0.0.1:8787/api/health >/dev/null 2>&1; then ready=1; break; fi
     sleep 0.5
   done
-  if curl -fsS --max-time 2 http://127.0.0.1:8787/api/health >/dev/null 2>&1; then
+  if [[ $ready -eq 1 ]]; then
     echo "console restarted  -> $UNIT (backend changes are now live)"
   else
-    echo "warning: $UNIT restarted but the console is not answering on 127.0.0.1:8787"
+    echo "warning: $UNIT restarted but the console is still not answering after 15s"
     echo "         check: journalctl --user -u $UNIT -n 30"
   fi
 elif [[ -n "$UNIT" ]]; then
