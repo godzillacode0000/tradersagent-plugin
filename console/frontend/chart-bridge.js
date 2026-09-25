@@ -641,6 +641,30 @@
           if (!r.ok) out.error = r.error || null;
           break;
         }
+        case 'rect': {
+          /* Read-only geometry for the agent: where does a selector sit on screen? Clicks are real
+             (ydotool), so they need real coordinates — OCR guesses land on the wrong element when
+             the layout shifts (Vela's row hides its cluster while the Details column is open).
+             Page CSS pixels map 1:1 to logical screen pixels here: the console fills the window. */
+          const sel = String(command.selector || '').trim();
+          const node = sel ? document.querySelector(sel) : null;
+          if (!node) {
+            out.ok = false;
+            out.detail = 'no node for ' + (sel || '(empty selector)');
+            break;
+          }
+          const r = node.getBoundingClientRect();
+          out.ok = true;
+          out.rect = {
+            x: Math.round(r.x), y: Math.round(r.y),
+            w: Math.round(r.width), h: Math.round(r.height),
+            cx: Math.round(r.x + r.width / 2), cy: Math.round(r.y + r.height / 2),
+            hidden: !(r.width && r.height) || getComputedStyle(node).visibility === 'hidden',
+          };
+          out.detail = sel + ' at ' + out.rect.x + ',' + out.rect.y +
+            ' ' + out.rect.w + 'x' + out.rect.h;
+          break;
+        }
         case 'browse': {
           /* Family bubbles disclose concept lists; the separate "Browse all" button holds indicator
              scripts. Empty `family` means the all-concepts bubble. Keep the agent readout aligned with

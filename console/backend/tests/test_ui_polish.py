@@ -19,6 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 CSS = os.path.join(ROOT, "console", "frontend", "styles.css")
 APP = os.path.join(ROOT, "console", "frontend", "app.js")
+BRIDGE = os.path.join(ROOT, "console", "frontend", "chart-bridge.js")
 HTML = os.path.join(ROOT, "console", "frontend", "index.html")
 
 
@@ -297,3 +298,10 @@ class TheOverlayPanelKeepsTheTopbarReachable(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_the_bridge_can_report_where_a_control_sits(self):
+        # The agent clicks for real (ydotool): a geometry read beats guessing from a screenshot.
+        bridge = read(BRIDGE)
+        self.assertIn("case 'rect'", bridge)
+        self.assertIn("getBoundingClientRect", bridge)
+        self.assertIn("cx:", bridge)
