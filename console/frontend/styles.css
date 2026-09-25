@@ -352,8 +352,11 @@ input:focus-visible, textarea:focus-visible {
   .main[data-library="on"] { grid-template-columns: 260px minmax(0, 1fr); }
   /* The detail panel overlays here, so it costs the chart nothing. */
   .main[data-detail="on"] { grid-template-columns: minmax(0, 1fr); }
+  /* The overlay must not swallow the topbar: the Library and Details toggles live up there, and a
+     covered toggle leaves no visible way to close this panel (operator's stills, 25 Sep: "≡ Libr"
+     clipped mid-word). It starts under the bar instead. */
   .panel--right {
-    position: fixed; inset-block: 0; inset-inline-end: 0;
+    position: fixed; inset-block: var(--lx-topbar-h) 0; inset-inline-end: 0;
     width: min(420px, 46vw);
     box-shadow: var(--lx-shadow-4);
     z-index: var(--lx-z-overlay);

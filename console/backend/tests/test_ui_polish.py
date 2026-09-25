@@ -276,5 +276,16 @@ class TheAgentCanOpenOneRow(unittest.TestCase):
             self.assertNotIn(forbidden, block, "opening a row must never run or mount anything")
 
 
+class TheOverlayPanelKeepsTheTopbarReachable(unittest.TestCase):
+    def test_the_fixed_detail_panel_starts_below_the_topbar(self):
+        css = read(CSS)
+        block = css.split("@media (max-width: 1239px)", 1)[1].split("@media", 1)[0]
+        self.assertIn("inset-block: var(--lx-topbar-h) 0", block,
+                      "a covered Details toggle leaves no way to close the panel")
+
+    def test_the_topbar_toggle_still_exists(self):
+        self.assertIn('id="detail-open"', read(HTML))
+
+
 if __name__ == "__main__":
     unittest.main()
