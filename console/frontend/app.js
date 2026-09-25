@@ -948,6 +948,15 @@ async function runSearch(event) {
   }
 }
 
+/* One place that puts a button into a running state: the label stays, a spinner is added and the
+   button is disabled, so a second click can never double-run a script. */
+function setActionState(button, state, label) {
+  if (!button) return;
+  button.classList.toggle('is-busy', state === 'busy');
+  button.disabled = state === 'busy';
+  if (label) button.textContent = label;
+}
+
 function licenseLine(source = '') {
   const first = source.split('\n').slice(0, 3).join(' ');
   const match = first.match(/(CC BY-NC-SA 4\.0|MPL-2\.0|Mozilla Public License 2\.0|AGPL[^ ]*|MIT|Apache-2\.0)/i);
@@ -965,34 +974,41 @@ async function openResult(row, button) {
       const source = data.source || '';
       const lic = licenseLine(source);
       el.detail.innerHTML = `
-        <h2 class="detail__title">${esc(data.name || row.slug)}</h2>
-        <div class="detail__meta">
-          <span class="badge badge--ok">source: public</span>
-          <span class="badge">${source.length.toLocaleString()} chars</span>
-          ${lic ? `<span class="badge badge--lic">${esc(lic)}</span>` : '<span class="badge badge--lic">no licence header</span>'}
-          <a class="badge" href="${esc(row.url || '#')}" target="_blank" rel="noreferrer">Library page</a>
+        <div class="detail__head">
+          <h2 class="detail__title">${esc(data.name || row.slug)}</h2>
+          <div class="detail__meta">
+            <span class="badge badge--ok">source: public</span>
+            <span class="badge">${source.length.toLocaleString()} chars</span>
+            ${lic ? `<span class="badge badge--lic">${esc(lic)}</span>` : '<span class="badge badge--lic">no licence header</span>'}
+            <a class="badge" href="${esc(row.url || '#')}" target="_blank" rel="noreferrer">Library page ↗</a>
+          </div>
+          <div class="detail__actions">
+            <button class="btn btn--primary" id="run-pinets">▶ Run PineTS</button>
+            <button class="btn btn--ghost" id="mount">＋ Add to chart</button>
+            <button class="btn btn--ghost" id="copy">⧉ Copy Pine</button>
+          </div>
         </div>
-        <div class="detail__actions">
-          <button class="btn btn--primary" id="run-pinets">Run PineTS</button>
-          <button class="btn btn--ghost" id="mount">Add to chart</button>
-          <button class="btn btn--ghost" id="copy">Copy Pine</button>
-        </div>
-        <div class="muted" id="pine-headline">PineTS executes the script over this chart's bars and
+        <div class="muted detail__note" id="pine-headline">PineTS executes the script over this chart's bars and
         paints what it makes: plot series as natives, boxes/lines/labels/tables on the overlay.
         “Add to chart” additionally asks Vela's own Pine engine,
         which stays silent on many scripts in this build.</div>
         <pre>${esc(source.slice(0, 12000))}${source.length > 12000 ? '\n… truncated in preview …' : ''}</pre>`;
       $('#mount').addEventListener('click', async () => {
         const label = data.name || row.slug;
+        const button = $('#mount');
+        setActionState(button, 'busy');
         toast(`Mounting “${label}”… waiting for the engine`);
         try {
           await queueMount(source, label);
           toast(`“${label}” is running on the chart`);
         } catch (err) { toast('Not mounted: ' + err.message, true); }
+        finally { setActionState(button, 'idle'); }
       });
       $('#run-pinets').addEventListener('click', async () => {
         const label = data.name || row.slug;
+        const button = $('#run-pinets');
         const headline = $('#pine-headline');
+        setActionState(button, 'busy');
         headline.textContent = `Running “${label}” through PineTS… (loading the runtime on first use)`;
         try {
           await chartReady;
@@ -1013,6 +1029,8 @@ async function openResult(row, button) {
         } catch (err) {
           headline.textContent = 'PineTS failed: ' + err.message;
           toast('PineTS failed: ' + err.message, true);
+        } finally {
+          setActionState(button, 'idle');
         }
       });
       $('#copy').addEventListener('click', async () => {

@@ -203,5 +203,16 @@ class TheConceptListShowsItsEdges(unittest.TestCase):
                       "the local/scroll gradient pair is the classic 'more above/below' cue")
 
 
+class TheDetailPaneHoldsItsPlace(unittest.TestCase):
+    def test_sticky_head_and_action_states(self):
+        css = read(CSS)
+        self.assertIn("position: sticky", rule(css, ".detail__head"))
+        self.assertIn(".btn.is-busy", css)
+        self.assertIn("function setActionState", read(APP))
+
+    def test_the_head_wraps_title_meta_and_actions(self):
+        self.assertIn('class="detail__head"', read(APP))
+
+
 if __name__ == "__main__":
     unittest.main()

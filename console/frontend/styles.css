@@ -705,6 +705,27 @@ body.has-workspace .chart-head { display: none; }
 .detail__meta { display: flex; flex-wrap: wrap; gap: var(--lx-space-1); }
 .detail__actions { display: flex; gap: var(--lx-space-2); }
 
+/* The head sticks so the title, the licence badges and the two actions stay reachable while a
+   12,000-character Pine preview scrolls under them. Negative margins bleed it to the panel edge. */
+.detail__head {
+  position: sticky; top: 0; z-index: var(--lx-z-sticky);
+  display: flex; flex-direction: column; gap: var(--lx-space-2);
+  margin: calc(var(--lx-space-3) * -1) calc(var(--lx-space-3) * -1) 0;
+  padding: var(--lx-space-3);
+  background: var(--lx-surface-1); border-bottom: 1px solid var(--lx-border);
+}
+.detail__note { font-size: var(--lx-fs-sm); }
+
+/* A button that is working: the label stays, a spinner appears, and the button is disabled so the
+   same script can never be started twice by an impatient second click. */
+.btn.is-busy { opacity: .75; cursor: progress; }
+.btn.is-busy::after {
+  content: ''; display: inline-block; width: 9px; height: 9px; margin-left: var(--lx-space-15);
+  vertical-align: -1px; border: 1.5px solid currentColor; border-right-color: transparent;
+  border-radius: 50%; animation: lx-spin 700ms linear infinite;
+}
+@keyframes lx-spin { to { transform: rotate(360deg); } }
+
 .badge {
   display: inline-flex; align-items: center;
   padding: 1px var(--lx-space-15); border-radius: var(--lx-radius-xs);
