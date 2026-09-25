@@ -21,18 +21,18 @@
       <!-- Chart-first (operator's call, 16 Sep): the library and the detail panel are opt-in from
            these two toggles, so the Vela chart owns the whole pane by default. -->
       <button type="button" class="btn btn--ghost btn--toggle" id="library-open"
-              aria-pressed="false" title="Show the indicator Library">☰ Library</button>
+              aria-pressed="false" aria-label="Show the indicator Library" data-tip="Library — browse the LuxAlgo catalogue">☰ Library</button>
       <button type="button" class="btn btn--ghost btn--toggle" id="detail-open"
-              aria-pressed="false" title="Show the Pine source / write-up panel">▤ Details</button>
+              aria-pressed="false" aria-label="Show the Pine source / write-up panel" data-tip="Details — the Pine source / write-up for the open row">▤ Details</button>
       <!-- Restored 23 Sep (operator's call): the LuxAlgo-style "paste and Run" pane, back as a
            view of the right-hand track. It runs through the same landasan as chat and Library. -->
       <button type="button" class="btn btn--ghost btn--toggle" id="script-open"
-              aria-pressed="false" title="Write and run Pine on this chart">&lt;&gt;<span class="btn__label"> Script</span></button>
+              aria-pressed="false" aria-label="Write and run Pine on this chart" data-tip="Script — write or paste Pine, then Run it on this chart">&lt;&gt;<span class="btn__label"> Script</span></button>
       <!-- The catalogue, one click from the chart. Rides Vela's own toolbar row beside `<>`
            (same dock, same self-heal) — Vela's own "Indicators" menu lists only ITS ~76 natives,
            so the catalogue from the LuxAlgo Library needs its own door. -->
       <button type="button" class="btn btn--ghost btn--toggle" id="lib-open"
-              aria-pressed="false" title="Browse the LuxAlgo Library indicator catalogue">☰<span class="btn__label"> catalogue</span></button>
+              aria-pressed="false" aria-label="Browse the LuxAlgo Library indicator catalogue" data-tip="Catalogue — every LuxAlgo Library indicator, one click from the chart">☰<span class="btn__label"> catalogue</span></button>
       <span class="chart-legend" id="lib-legend" hidden></span>
       <!-- Names whose overlay geometry is on screen — set by the unified landasan. Lives HERE,
            not in .chart-head: workspace mode hides that row (body.has-workspace .chart-head). -->

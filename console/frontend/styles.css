@@ -574,7 +574,10 @@ input[type="text"]:hover { border-color: var(--lx-border-strong); }
   font-size: 13px;
 }
 .vela-topbar-right #script-open:hover { background: var(--lx-bg-hover-strong); }
-.vela-topbar-right #script-open .btn__label { display: none; }
+/* The label stays visible in Vela's row (F2, 25 Sep): the operator's recording showed a bare `<>`
+   that read as punctuation, so nobody could tell the control opens the Pine editor. */
+.vela-topbar-right #script-open .btn__label,
+.vela-topbar-right #lib-open .btn__label { display: inline; margin-inline-start: 4px; }
 .vela-topbar-right #script-open[aria-pressed="true"] {
   color: var(--lx-accent-ink); background: var(--lx-surface-3);
 }
@@ -984,4 +987,26 @@ pre {
    the operator allows motion — declared after the component rules so it never shadows them. */
 @media (prefers-reduced-motion: no-preference) {
   .browse__families { scroll-behavior: smooth; }
+}
+
+/* Hover labels for the docked controls (F2, 25 Sep: "can they understand what to see or click or
+   hover?"). CSS only — no dependency, no layout shift, and it never swallows a click. */
+.btn--toggle[data-tip] { position: relative; }
+.btn--toggle[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; top: calc(100% + 7px); right: 0;
+  padding: 5px 9px; border-radius: var(--lx-radius-2, 6px);
+  background: var(--lx-surface-3); color: var(--lx-text-1);
+  border: 1px solid var(--lx-border-2); box-shadow: var(--lx-shadow-3);
+  font-size: 11px; font-weight: 500; line-height: 1.25; white-space: nowrap;
+  pointer-events: none; opacity: 0; z-index: 999;
+}
+.btn--toggle[data-tip]:hover::after,
+.btn--toggle[data-tip]:focus-visible::after {
+  animation: lx-tip-in 140ms 130ms var(--lx-ease) forwards;
+}
+@keyframes lx-tip-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .btn--toggle[data-tip]:hover::after,
+  .btn--toggle[data-tip]:focus-visible::after { animation: none; opacity: 1; }
 }
