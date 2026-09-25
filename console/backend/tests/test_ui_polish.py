@@ -256,6 +256,13 @@ class TheAgentCanOpenOneRow(unittest.TestCase):
         self.assertIn("def cmd_open", cli)
         self.assertIn('"open"', cli)
 
+    def test_open_is_announced_in_the_actions_list(self):
+        # The backend refuses any action the page's heartbeat does not claim — an unannounced op is a
+        # 400, not a silent no-op.
+        bridge = read(os.path.join(ROOT, "console", "frontend", "chart-bridge.js"))
+        announced = bridge.split("const ACTIONS", 1)[1].split("];", 1)[0]
+        self.assertIn("'open'", announced)
+
     def test_open_is_browsing_only(self):
         bridge = read(os.path.join(ROOT, "console", "frontend", "chart-bridge.js"))
         block = bridge.split("case 'open':", 1)[1].split("case 'mode':", 1)[0]
