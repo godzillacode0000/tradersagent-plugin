@@ -157,7 +157,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_set_market` | switch symbol / timeframe |
 | `chart_reload` | remount every attached console (picks up new frontend files) |
 | `chart_palette` | what colours the chart is wearing (`try_apply` asserts the console theme) |
-| `chart_browse` | open the 805-indicator LuxAlgo catalogue as a list in the pane (optional `family`) |
+| `chart_browse` | open the Library concept list in the pane (optional `family`) |
 | `chart_draw` | run Pine and paint the boxes/lines/labels it builds on the chart overlay |
 | `chart_clear` | clear the overlay and the indicators our paint layer added (then report what is left) |
 | `chart_batch` | run several chart actions in ONE call, in order (`[{"action": "market", …}, …]`), stopping at the first failure unless told otherwise |

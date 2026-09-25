@@ -137,6 +137,14 @@ class ThePopoverClosesTheWayPeopleExpect(unittest.TestCase):
         self.assertIn("pointerdown", app)
 
 
+class TheDocsDoNotBakeCounts(unittest.TestCase):
+    def test_docs_do_not_quote_the_stale_catalogue_size(self):
+        """The docs quoted "805" for a year while the catalogue moved to 806 indicators / 853
+        concepts. A doc that states a moving number is a doc that goes wrong quietly."""
+        for path in (os.path.join(ROOT, "README.md"), os.path.join(ROOT, "docs", "MCP-TOOLS.md")):
+            self.assertNotIn("805", read(path), f"{path} must not bake a catalogue count")
+
+
 class TheConceptListShowsItsEdges(unittest.TestCase):
     def test_the_list_has_local_scroll_shadows(self):
         lst = rule(read(CSS), ".browse__concepts-list")
