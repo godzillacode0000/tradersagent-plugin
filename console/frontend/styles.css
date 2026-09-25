@@ -773,6 +773,9 @@ pre {
    popover: two lists and two "Load more" buttons on one screen. */
 .browse__body.is-concepts .browse__list,
 .browse__body.is-concepts .browse__more { display: none; }
+/* ...and the panel's empty-state copy ("Start here…") peeked out under the popover's bottom edge
+   for the same reason. While a family is open, the popover is the only surface. */
+.view.is-concepts .results .empty { display: none; }
 .browse__note { padding: var(--lx-space-3); color: var(--lx-fg-muted); font-size: var(--lx-fs-sm); }
 
 .browse__concepts {

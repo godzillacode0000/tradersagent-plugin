@@ -151,6 +151,10 @@ class TheDisclosureReadsAsOneSurface(unittest.TestCase):
         self.assertIn(".browse__body.is-concepts .browse__list", read(CSS))
         self.assertIn("is-concepts", read(APP), "the body class is what the CSS rule hangs off")
 
+    def test_the_empty_state_hides_while_concepts_are_disclosed(self):
+        self.assertIn(".view.is-concepts .results .empty", read(CSS))
+        self.assertIn("closest('.view')", read(APP))
+
 
 class TheDocsDoNotBakeCounts(unittest.TestCase):
     def test_docs_do_not_quote_the_stale_catalogue_size(self):

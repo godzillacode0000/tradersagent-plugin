@@ -683,6 +683,9 @@ function setFamilyDisclosure(activeButton = null, open = false) {
      without this the script list behind it — and that list's own "Load more" — showed through under
      the popover: two lists and two "Load more" buttons on one screen. */
   el.browseBody?.classList.toggle('is-concepts', open);
+  // The panel's own empty-state copy sits under the browse block and peeked out below the popover's
+  // bounded bottom edge — same leak, different element. The whole view carries the flag.
+  el.browseBody?.closest('.view')?.classList.toggle('is-concepts', open);
   /* Bring the open bubble into the row's view. The row scrolls sideways, so a family past the fold
      (Wyckoff, Validation) left the operator looking at unselected chips with no sign of which one
      was on. Nearest, not center: the row should move as little as it takes. */
