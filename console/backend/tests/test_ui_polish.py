@@ -153,6 +153,10 @@ class TheRowsReadAsCards(unittest.TestCase):
         self.assertIn(".row__sub", css)
         self.assertIn("class=\"row__sub\"", read(APP))
 
+    def test_concept_rows_carry_no_kind_pill(self):
+        """Operator: "Buang tag concept" — the glyph colour already says what the row is."""
+        self.assertNotIn('row__kind row__kind--concept">concept</span>', read(APP))
+
     def test_the_kind_tag_is_a_pill(self):
         self.assertIn("border-radius: 999px", rule(read(CSS), ".row__kind"))
 

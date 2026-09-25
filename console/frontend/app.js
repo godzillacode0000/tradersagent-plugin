@@ -612,7 +612,6 @@ function browseConceptRow(row) {
     </div>
     <div class="row__sub">
       ${meta ? `<span class="row__meta">${esc(meta)}</span>` : '<span class="row__meta"></span>'}
-      <span class="row__kind row__kind--concept">concept</span>
     </div>
     ${aliasText}`;
   button.addEventListener('click', () => openResult({ ...row, kind: 'concept' }, button));
