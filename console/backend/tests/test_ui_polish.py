@@ -242,7 +242,8 @@ class TheCodeBlockIsDressed(unittest.TestCase):
     def test_code_bar_with_label_and_copy(self):
         app = read(APP)
         self.assertIn('class="code__bar"', app)
-        self.assertIn('class="code__label"', app)
+        # the label is the collapse toggle now (25 Sep) — same class, a button so it is reachable
+        self.assertIn('class="code__toggle code__label"', app)
         css = read(CSS)
         self.assertIn(".code__bar", css)
         self.assertIn(".code__label", css)
@@ -360,6 +361,32 @@ class ContrastClearsAA(unittest.TestCase):
         for name in ("accent", "warn", "loss"):
             r = self._ratio(self._token("light", name), self.SURFACES["light"])
             self.assertGreaterEqual(r, 4.5, "--lx-%s is %.2f:1 on paper" % (name, r))
+
+
+class ThePineBlockCollapsesWithoutTouchingTheChart(unittest.TestCase):
+    """A 22,729-char script used to push the whole Details pane down. Long sources now arrive
+    collapsed and open on click. Two things this must never become: a JS height measurement, or an
+    animation on a panel's own grid tracks — that is the defect that once shrank the chart to a
+    blank canvas. Copy still hands over the FULL source, not the preview slice."""
+
+    def test_long_sources_arrive_collapsed(self):
+        app = read(APP)
+        self.assertIn("code--collapsed", app)
+        self.assertIn("source.length > 1200", app)
+        self.assertIn("aria-expanded", app)
+
+    def test_the_collapse_is_css_only(self):
+        css = read(CSS)
+        self.assertIn("grid-template-rows: 0fr", css)
+        self.assertIn(".code__body", css)
+        # the toggle must not measure heights or run timers
+        app = read(APP)
+        toggle = app.split("$('#code-toggle')", 1)[1].split("});", 1)[0]
+        self.assertNotIn("setTimeout", toggle)
+        self.assertNotIn("clientHeight", toggle)
+
+    def test_copy_still_takes_the_whole_source(self):
+        self.assertIn("writeText(source)", read(APP))
 
 
 if __name__ == "__main__":

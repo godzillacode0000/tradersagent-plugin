@@ -1111,13 +1111,17 @@ async function openResult(row, button) {
         paints what it makes: plot series as natives, boxes/lines/labels/tables on the overlay.
         “Add to chart” additionally asks Vela's own Pine engine,
         which stays silent on many scripts in this build.</div>
-        <div class="code">
+        <div class="code${source.length > 1200 ? ' code--collapsed' : ''}" id="code-block">
           <div class="code__bar">
-            <span class="code__label">Pine</span>
+            <button type="button" class="code__toggle code__label" id="code-toggle" aria-expanded="${source.length > 1200 ? 'false' : 'true'}" aria-controls="code-body">
+              <span class="code__chev" aria-hidden="true">▸</span>Pine
+            </button>
             <span class="code__meta muted">${source.length.toLocaleString()} chars${source.length > 12000 ? ' · preview truncated' : ''}</span>
             <button type="button" class="btn btn--ghost code__copy" id="copy">⧉ Copy</button>
           </div>
-          <pre>${esc(source.slice(0, 12000))}${source.length > 12000 ? '\n… truncated in preview …' : ''}</pre>
+          <div class="code__body" id="code-body">
+            <pre>${esc(source.slice(0, 12000))}${source.length > 12000 ? '\n… truncated in preview …' : ''}</pre>
+          </div>
         </div>`;
       $('#mount').addEventListener('click', async () => {
         const label = data.name || row.slug;
@@ -1158,6 +1162,10 @@ async function openResult(row, button) {
         } finally {
           setActionState(button, 'idle');
         }
+      });
+      $('#code-toggle').addEventListener('click', (event) => {
+        const collapsed = $('#code-block').classList.toggle('code--collapsed');
+        event.currentTarget.setAttribute('aria-expanded', String(!collapsed));
       });
       $('#copy').addEventListener('click', async (event) => {
         const button = event.currentTarget;

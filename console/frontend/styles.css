@@ -886,7 +886,7 @@ pre {
   animation: pop-in var(--lx-dur-pop) var(--lx-ease-spring);
 }
 @keyframes pop-in {
-  from { opacity: 0; transform: translateY(-6px) scale(.985); }
+  from { opacity: 0; transform: translateY(-4px) scale(.96); }
   to   { opacity: 1; transform: none; }
 }
 .browse__concepts.view--hidden { display: none !important; }
@@ -1050,3 +1050,19 @@ pre {
 .toast {
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Collapse (25 Sep) — a bounded reveal that never animates a PANEL's grid tracks (that is what
+   once shrank the chart and stopped Vela painting). It animates an inner wrapper only, with
+   grid-template-rows 0fr→1fr, which needs no JS height measurement. */
+.code__body {
+  display: grid; grid-template-rows: 1fr;
+  transition: grid-template-rows var(--lx-dur-240) var(--lx-ease), opacity var(--lx-dur-240) var(--lx-ease);
+}
+.code--collapsed .code__body { grid-template-rows: 0fr; opacity: 0; }
+.code__body > pre { min-height: 0; overflow: hidden; }
+.code__toggle {
+  display: inline-flex; align-items: center; gap: var(--lx-space-15);
+  background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer;
+}
+.code__chev { display: inline-block; width: 1ch; transition: transform var(--lx-dur-240) var(--lx-ease); }
+.code:not(.code--collapsed) .code__chev { transform: rotate(90deg); }
