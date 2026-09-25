@@ -809,6 +809,19 @@ pre {
 .browse__concepts-list {
   flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain;
   padding: var(--lx-space-2);
+  /* The local/scroll gradient pair is the classic "there is more above/below" cue: the top pair
+     scrolls with the content, the bottom pair is pinned to the viewport of the list, so the shadows
+     appear only while the list actually overflows. The cover stops use the popover's own glass
+     colour, or the gradients would sit on the glass as visible bands. */
+  background-image:
+    linear-gradient(var(--lx-surface-glass) 30%, rgba(19, 19, 23, 0)),
+    linear-gradient(rgba(19, 19, 23, 0), var(--lx-surface-glass) 70%),
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, .45), rgba(0, 0, 0, 0)),
+    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, .45), rgba(0, 0, 0, 0));
+  background-position: top, bottom, top, bottom;
+  background-size: 100% 18px, 100% 18px, 100% 8px, 100% 8px;
+  background-repeat: no-repeat;
+  background-attachment: local, local, scroll, scroll;
 }
 .browse__concepts-list .row { width: 100%; text-align: left; }
 .browse__group {
