@@ -280,8 +280,10 @@ class TheOverlayPanelKeepsTheTopbarReachable(unittest.TestCase):
     def test_the_fixed_detail_panel_starts_below_the_topbar(self):
         css = read(CSS)
         block = css.split("@media (max-width: 1239px)", 1)[1].split("@media", 1)[0]
-        self.assertIn("inset-block: var(--lx-topbar-h) 0", block,
-                      "a covered Details toggle leaves no way to close the panel")
+        self.assertIn("inset-block: var(--lx-topbar-h) var(--lx-statusbar-h)", block,
+                      "a covered Details toggle leaves no way to close the panel, and a covered "
+                      "statusbar cuts the toast mid-word")
+        self.assertIn("--lx-statusbar-h", read(CSS))
 
     def test_the_topbar_toggle_still_exists(self):
         self.assertIn('id="detail-open"', read(HTML))
