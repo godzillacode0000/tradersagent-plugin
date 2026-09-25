@@ -924,6 +924,9 @@ function toggleBrowse(on) {
   const open = typeof on === 'boolean' ? on : el.browseBody.classList.contains('view--hidden');
   if (!open) closeFamilyConcepts();
   el.browseBody.classList.toggle('view--hidden', !open);
+  // The search empty state is a welcome, not part of the catalogue: with the catalogue open it read
+  // as a stray paragraph under the list (operator's still, 25 Sep).
+  document.getElementById('view-library')?.classList.toggle('is-browsing', open);
   el.browseToggle?.classList.toggle('is-on', open);
   el.browseToggle?.setAttribute('aria-expanded', String(open));
   el.libOpen?.setAttribute('aria-pressed', String(open && (el.main.dataset.library === 'on')));

@@ -856,6 +856,9 @@ pre {
 /* ...and the panel's empty-state copy ("Start here…") peeked out under the popover's bottom edge
    for the same reason. While a family is open, the popover is the only surface. */
 .view.is-concepts .results .empty { display: none; }
+/* …and the same welcome blurb must not sit under the catalogue list either — it belongs to an empty
+   SEARCH, and under the rows it reads like part of the list. */
+.view.is-browsing .results .empty { display: none; }
 .browse__note { padding: var(--lx-space-3); color: var(--lx-fg-muted); font-size: var(--lx-fs-sm); }
 
 .browse__concepts {

@@ -289,5 +289,11 @@ class TheOverlayPanelKeepsTheTopbarReachable(unittest.TestCase):
         self.assertIn('id="detail-open"', read(HTML))
 
 
+    def test_the_welcome_blurb_hides_while_the_catalogue_is_open(self):
+        block = read(APP).split("function toggleBrowse", 1)[1].split("\n}", 1)[0]
+        self.assertIn("is-browsing", block, "the catalogue open state must mark the view")
+        self.assertIn(".view.is-browsing .results .empty", read(CSS))
+
+
 if __name__ == "__main__":
     unittest.main()
