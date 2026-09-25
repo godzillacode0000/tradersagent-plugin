@@ -768,6 +768,11 @@ pre {
 .browse__list { flex: 1; min-height: 0; overflow: auto; padding: var(--lx-space-2); max-height: 46vh; }
 .browse__more { padding: 0 var(--lx-space-3) var(--lx-space-2); }
 .browse__more.is-done { display: none; }
+/* While a family bubble is open, the popover is the surface. Its bottom edge is bounded (46vh), so
+   the script list behind it — and that list's own "Load more" — otherwise leaked out below the
+   popover: two lists and two "Load more" buttons on one screen. */
+.browse__body.is-concepts .browse__list,
+.browse__body.is-concepts .browse__more { display: none; }
 .browse__note { padding: var(--lx-space-3); color: var(--lx-fg-muted); font-size: var(--lx-fs-sm); }
 
 .browse__concepts {
@@ -875,3 +880,9 @@ pre {
 /* The top row must never pay for the legend with the indicator count — that pill IS the
    trust signal ("1 indicator" while SMC draws), so the verbose bars pill yields instead. */
 #bars-status { max-width: 78px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* The open family bubble is scrolled into the row's view (setFamilyDisclosure). Smooth only when
+   the operator allows motion — declared after the component rules so it never shadows them. */
+@media (prefers-reduced-motion: no-preference) {
+  .browse__families { scroll-behavior: smooth; }
+}

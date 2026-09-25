@@ -137,6 +137,21 @@ class ThePopoverClosesTheWayPeopleExpect(unittest.TestCase):
         self.assertIn("pointerdown", app)
 
 
+class TheDisclosureReadsAsOneSurface(unittest.TestCase):
+    def test_the_header_does_not_repeat_the_family_name(self):
+        """The popover title names the family; the count line repeated it ("Wyckoff" twice)."""
+        self.assertIn("const scope = wantedFamily ? '' : ' · all families';", read(APP))
+
+    def test_the_open_bubble_is_brought_into_view(self):
+        app = read(APP)
+        self.assertIn("scrollIntoView", app, "a family past the fold left no visible active chip")
+        self.assertIn("scroll-behavior: smooth", read(CSS))
+
+    def test_the_script_list_hides_while_concepts_are_disclosed(self):
+        self.assertIn(".browse__body.is-concepts .browse__list", read(CSS))
+        self.assertIn("is-concepts", read(APP), "the body class is what the CSS rule hangs off")
+
+
 class TheDocsDoNotBakeCounts(unittest.TestCase):
     def test_docs_do_not_quote_the_stale_catalogue_size(self):
         """The docs quoted "805" for a year while the catalogue moved to 806 indicators / 853

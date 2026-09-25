@@ -679,6 +679,14 @@ function setFamilyDisclosure(activeButton = null, open = false) {
     button.classList.toggle('is-on', expanded);
     button.setAttribute('aria-expanded', String(expanded));
   });
+  /* While a family is disclosed the popover IS the surface. Its bottom edge is bounded (46vh), so
+     without this the script list behind it — and that list's own "Load more" — showed through under
+     the popover: two lists and two "Load more" buttons on one screen. */
+  el.browseBody?.classList.toggle('is-concepts', open);
+  /* Bring the open bubble into the row's view. The row scrolls sideways, so a family past the fold
+     (Wyckoff, Validation) left the operator looking at unselected chips with no sign of which one
+     was on. Nearest, not center: the row should move as little as it takes. */
+  if (open && activeButton) activeButton.scrollIntoView({ inline: 'nearest', block: 'nearest' });
 }
 
 function closeFamilyConcepts() {
@@ -751,7 +759,8 @@ async function loadFamilyConcepts(reset = false) {
     state.page += 1;
     state.total = total;
     if (el.browseConceptsCount) {
-      const scope = wantedFamily ? ` · ${wantedLabel}` : ' · all families';
+      // The title above already names the family; only the all-families case needs the scope.
+      const scope = wantedFamily ? '' : ' · all families';
       el.browseConceptsCount.textContent = `${state.rows.length} of ${state.total} concepts${scope}`;
     }
     const more = rows.length > 0 && state.rows.length < state.total;
