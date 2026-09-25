@@ -773,7 +773,9 @@ async function loadFamilies() {
       b.setAttribute('aria-controls', 'browse-concepts');
       b.setAttribute('aria-expanded', 'false');
       // Concept counts, not indicator counts — say which, or the numbers read as a partition.
-      b.textContent = `${f.name}${f.concept_count ? ' ' + f.concept_count : ''}`;
+      b.innerHTML = `<span class="browse__fam-label">${esc(f.name)}</span>`
+        + (f.concept_count ? `<span class="browse__fam-count">${esc(String(f.concept_count))}</span>` : '')
+        + `<span class="browse__fam-caret" aria-hidden="true">▾</span>`;
       b.title = `${f.name} — ${f.concept_count || 0} library concepts, upstream`;
       b.addEventListener('click', () => pickFamily(f.key, b));
       el.browseFamilies.appendChild(b);
