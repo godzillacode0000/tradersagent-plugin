@@ -24,6 +24,7 @@ const el = {
   browseConcepts: $('#browse-concepts'), browseConceptsTitle: $('#browse-concepts-title'),
   browseConceptsCount: $('#browse-concepts-count'), browseConceptsList: $('#browse-concepts-list'),
   browseConceptsMore: $('#browse-concepts-more'),
+  browseConceptsClose: $('#browse-concepts-close'),
   scriptOpen: $('#script-open'),
   statusbar: $('.statusbar'),
 };
@@ -1059,6 +1060,7 @@ async function main() {
   el.browseToggle?.addEventListener('click', () => toggleBrowse());
   el.browseMore?.addEventListener('click', () => loadBrowse(false));
   el.browseConceptsMore?.addEventListener('click', () => loadFamilyConcepts(false));
+  el.browseConceptsClose?.addEventListener('click', () => closeFamilyConcepts());
   el.libOpen?.addEventListener('click', () => {
     setPanel('library', true);
     setLibraryCollapsed(false);
