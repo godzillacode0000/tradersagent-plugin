@@ -121,6 +121,19 @@
   --lx-shadow-sheen:  inset 0 1px 0 rgba(255, 255, 255, .04),
                       0 1px 2px rgba(0, 0, 0, .25);
 
+  /* Polish pass (25 Sep): motion + elevation for popovers, rows and toasts. Deliberately small
+     values — this app runs on a 2016 Pavilion, so every animation is transform/opacity only and
+     every blur stays at 12px or less. */
+  --lx-surface-glass:   rgba(19, 19, 23, .88);   /* surface-2 at 88 percent, for the popover */
+  --lx-blur-pop:        12px;
+  --lx-radius-pop:      12px;
+  --lx-shadow-pop:      0 16px 48px rgba(0, 0, 0, .55),
+                        0 2px 8px rgba(0, 0, 0, .35),
+                        inset 0 1px 0 rgba(255, 255, 255, .05);
+  --lx-ease-spring:     cubic-bezier(.22, 1.2, .36, 1);   /* gentle overshoot for entry */
+  --lx-dur-pop:         180ms;
+  --lx-dur-fast:        120ms;
+
   --lx-ease:      cubic-bezier(0.22, 1, 0.36, 1);
   --lx-ease-out:  cubic-bezier(0, 0, .2, 1);
   --lx-ease-in:   cubic-bezier(.4, 0, 1, 1);
@@ -204,6 +217,16 @@
                     0 4px 12px rgba(0, 0, 0, .08);
   --lx-shadow-sheen: inset 0 1px 0 rgba(255, 255, 255, .80),
                      0 1px 2px rgba(0, 0, 0, .05);
+
+  --lx-surface-glass:   rgba(252, 252, 251, .92);
+  --lx-blur-pop:        12px;
+  --lx-radius-pop:      12px;
+  --lx-shadow-pop:      0 16px 44px rgba(0, 0, 0, .14),
+                        0 2px 8px rgba(0, 0, 0, .06),
+                        inset 0 1px 0 rgba(255, 255, 255, .80);
+  --lx-ease-spring:     cubic-bezier(.22, 1.2, .36, 1);
+  --lx-dur-pop:         180ms;
+  --lx-dur-fast:        120ms;
 }
 
 /* ── Layer 3 — VELA MAPPING (on the chart region, not :root) ─────────────── */
