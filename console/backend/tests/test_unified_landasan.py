@@ -26,6 +26,7 @@ def read(rel):
 
 
 UNIFIED = read("console/frontend/unified.js")
+RUNNER = read("console/frontend/pinets-runner.js")
 BRIDGE = read("console/frontend/chart-bridge.js")
 APP = read("console/frontend/app.js")
 HTML = read("console/frontend/index.html")
@@ -172,6 +173,61 @@ class TheScriptControlRidesVelaToolbar(unittest.TestCase):
         self.assertIn("rides Vela", BRIDGE)              # mode() no longer claims topbar-only
         self.assertNotIn("the <> Script pane, the Library and Details", BRIDGE)
         self.assertIn("docked onto Vela", HTML)
+
+
+class TheChartBarsFallbackIsNotSilentlyBroken(unittest.TestCase):
+    """Operator, 24 Sep: the editor's run line ended in
+    `chart-bars retry failed: PineTS error: Cannot read properties of undefined (reading 'slice')`.
+    Two defects sat behind it, both in the fallback engine only, because the fallback passed the
+    chart's bars with no market context and with `time` instead of `openTime`:
+
+    - PineTS's `timeframe` helper slices `context.timeframe`, so a bars-only engine throws the
+      moment a script touches `timeframe.period` / `timeframe.in_seconds()` — which the AMD POC
+      setup script does on line 13;
+    - `time(...)` and session calls read candle `openTime`; bars keyed `time` made every bar
+      answer na, so a session-gated script would have drawn nothing even after the crash was fixed
+      (measured: 0/500 bars in session vs 185/500, same candles).
+
+    The provider form must stay first — it is the one that returns live exchange data — and the
+    fallback must now be the same shape as it, just with the chart's own bars.
+    """
+
+    def test_fallback_engine_gets_symbol_and_timeframe_not_bars_alone(self):
+        self.assertIn("function normalizeBars", RUNNER)
+        self.assertIn("new mod.PineTS(normalizeBars(bars), ctx.symbol, ctx.timeframe", RUNNER)
+        self.assertNotIn("new mod.PineTS(bars)", RUNNER)
+        self.assertNotIn("context: null", RUNNER)
+
+    def test_bars_are_keyed_openTime_and_closeTime(self):
+        self.assertIn("openTime", RUNNER)
+        self.assertIn("closeTime", RUNNER)
+        self.assertIn("normalizeBars", RUNNER.split("window.PineTSRunner", 1)[1])  # exported for tests
+
+    def test_provider_form_is_still_tried_first(self):
+        i = RUNNER.index("function newEngine")
+        body = RUNNER[i:i + 1200]
+        self.assertLess(body.index("ctor: 'provider'"), body.index("ctor: 'custom-bars'"))
+        self.assertIn("if (!forceBars && Provider.Binance)", body)
+
+    def test_the_inner_provider_retry_uses_the_same_fallback(self):
+        self.assertIn("built = newEngine(mod, bars, true)", RUNNER)
+
+
+class ADrawNothingRunIsReportedAsSuch(unittest.TestCase):
+    """`engine stored 6 raw row(s) but none survived the filters` described a script that simply
+    found no setup: the six rows are the six drawing containers' own empty placeholder rows
+    (`value: []`), not data that got lost. Name the placeholders, so an operator can tell
+    "the script's conditions never fired" from "the engine dropped my data"."""
+
+    def test_placeholders_are_counted(self):
+        self.assertIn("function engineRows", UNIFIED)
+        body = UNIFIED[UNIFIED.index("function engineRows"):UNIFIED.index("function record")]
+        self.assertIn("Array.isArray(v) ? v.length === 0", body)
+
+    def test_empty_rows_reach_the_summary(self):
+        self.assertIn("emptyN: stored.empty", UNIFIED)
+        self.assertIn("r.emptyN === r.engineN", UNIFIED)
+        self.assertIn("empty placeholder row", UNIFIED)
 
 
 if __name__ == "__main__":

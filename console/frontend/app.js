@@ -21,6 +21,9 @@ const el = {
   browse: $('#browse'), browseToggle: $('#browse-toggle'), browseBody: $('#browse-body'),
   browseList: $('#browse-list'), browseFamilies: $('#browse-families'),
   browseCount: $('#browse-count'), browseMore: $('#browse-more'),
+  browseConcepts: $('#browse-concepts'), browseConceptsTitle: $('#browse-concepts-title'),
+  browseConceptsCount: $('#browse-concepts-count'), browseConceptsList: $('#browse-concepts-list'),
+  browseConceptsMore: $('#browse-concepts-more'),
   scriptOpen: $('#script-open'),
   statusbar: $('.statusbar'),
 };
@@ -548,6 +551,12 @@ async function queueMount(source, name) {
 const BROWSE_PAGE = 100;
 /* `loading` guards the fetch, `queued` remembers what arrived while it ran. */
 let browseState = { page: 0, family: '', rows: [], loading: false, queued: null };
+/* The family chips describe concept taxonomy, not indicator-script families. Keep their disclosure
+   and paging separate from the indicator list behind "Browse all". */
+let familyConceptState = {
+  page: 0, family: '', label: 'All library concepts', rows: [], total: 0,
+  loading: false, queued: null, open: false,
+};
 
 function browseRow(row) {
   const button = document.createElement('button');
@@ -564,6 +573,28 @@ function browseRow(row) {
     <div class="row__meta">${esc(row.family || 'unclassified')}${row.date_displayed ? ' · ' + esc(row.date_displayed) : ''}</div>`;
   // The same door a search hit uses — one landasan, one executor.
   button.addEventListener('click', () => openResult({ ...row, kind: 'indicator' }, button));
+  return button;
+}
+
+function browseConceptRow(row) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'row';
+  button.dataset.slug = row.slug;
+  button.dataset.kind = 'concept';
+  const aliases = Array.isArray(row.aliases) ? row.aliases.filter(Boolean).slice(0, 3) : [];
+  const aliasText = aliases.length
+    ? `<div class="row__desc">Also: ${esc(aliases.join(' · '))}${row.aliases.length > aliases.length ? ' · …' : ''}</div>`
+    : '';
+  const meta = [row.family || familyConceptState.label, row.cluster].filter(Boolean).join(' · ');
+  button.innerHTML = `
+    <div class="row__top">
+      <span class="row__name">${esc(row.name || row.slug)}</span>
+      <span class="row__kind row__kind--concept">concept</span>
+    </div>
+    ${meta ? `<div class="row__meta">${esc(meta)}</div>` : ''}
+    ${aliasText}`;
+  button.addEventListener('click', () => openResult({ ...row, kind: 'concept' }, button));
   return button;
 }
 
@@ -634,6 +665,92 @@ function drainBrowse() {
   else if (q === 'more') loadBrowse(false);
 }
 
+function setFamilyDisclosure(activeButton = null, open = false) {
+  document.querySelectorAll('.browse__fam').forEach((button) => {
+    const expanded = open && button === activeButton;
+    button.classList.toggle('is-on', expanded);
+    button.setAttribute('aria-expanded', String(expanded));
+  });
+}
+
+function closeFamilyConcepts() {
+  familyConceptState.open = false;
+  el.browseConcepts?.classList.add('view--hidden');
+  setFamilyDisclosure();
+}
+
+async function loadFamilyConcepts(reset = false) {
+  const state = familyConceptState;
+  if (!el.browseConceptsList || (!reset && !state.open)) return;
+  if (state.loading) {
+    state.queued = reset ? 'reset' : 'more';
+    return;
+  }
+  state.loading = true;
+  state.queued = null;
+  const resetting = reset;
+  if (resetting) {
+    state.page = 0;
+    state.rows = [];
+    state.total = 0;
+    el.browseConceptsList.innerHTML = '<div class="browse__note">Loading concepts…</div>';
+  }
+  const moreWrap = el.browseConceptsMore?.parentElement;
+  moreWrap?.classList.remove('is-done');
+  if (el.browseConceptsMore) el.browseConceptsMore.disabled = true;
+  const wantedFamily = state.family;
+  const wantedLabel = state.label;
+  try {
+    const data = await api('/api/concepts', {
+      page: state.page, page_size: BROWSE_PAGE,
+      ...(wantedFamily ? { family: wantedFamily } : {}),
+    });
+    const rows = data.concepts || [];
+    if (wantedFamily !== state.family) { state.loading = false; return drainFamilyConcepts(); }
+    if (resetting) el.browseConceptsList.innerHTML = '';
+    const total = Number(data.total ?? (state.rows.length + rows.length));
+    if (!rows.length && !state.rows.length) {
+      state.total = total;
+      el.browseConceptsList.innerHTML = `<div class="browse__note">No concepts found for ${esc(wantedLabel)}.</div>`;
+      if (el.browseConceptsCount) el.browseConceptsCount.textContent = `0 of ${total} concepts`;
+      moreWrap?.classList.add('is-done');
+      state.queued = null;
+      state.loading = false;
+      drainFamilyConcepts();
+      return;
+    }
+    state.rows.push(...rows);
+    rows.forEach((row) => el.browseConceptsList.appendChild(browseConceptRow(row)));
+    state.page += 1;
+    state.total = total;
+    if (el.browseConceptsCount) {
+      const scope = wantedFamily ? ` · ${wantedLabel}` : ' · all families';
+      el.browseConceptsCount.textContent = `${state.rows.length} of ${state.total} concepts${scope}`;
+    }
+    const more = rows.length > 0 && state.rows.length < state.total;
+    moreWrap?.classList.toggle('is-done', !more);
+    if (el.browseConceptsMore) el.browseConceptsMore.disabled = !more;
+    checkHealth();
+  } catch (err) {
+    state.loading = false;
+    if (wantedFamily !== state.family) return drainFamilyConcepts();
+    state.queued = null;
+    el.browseConceptsList.innerHTML = `<div class="browse__note">Concept list unavailable: ${esc(err.message)}</div>`;
+    if (el.browseConceptsCount) el.browseConceptsCount.textContent = 'Concepts unavailable';
+    moreWrap?.classList.add('is-done');
+    return;
+  }
+  state.loading = false;
+  drainFamilyConcepts();
+}
+
+function drainFamilyConcepts() {
+  const queued = familyConceptState.queued;
+  familyConceptState.queued = null;
+  if (queued === 'reset') loadFamilyConcepts(true);
+  else if (queued === 'more') loadFamilyConcepts(false);
+}
+
 async function loadFamilies() {
   if (!el.browseFamilies) return;
   try {
@@ -641,13 +758,20 @@ async function loadFamilies() {
     const fams = data.families || [];
     el.browseFamilies.innerHTML = '';
     const all = document.createElement('button');
-    all.type = 'button'; all.className = 'browse__fam is-on'; all.dataset.family = '';
+    all.type = 'button'; all.className = 'browse__fam'; all.dataset.family = '';
+    all.dataset.label = 'All library concepts';
+    all.setAttribute('aria-controls', 'browse-concepts');
+    all.setAttribute('aria-expanded', 'false');
     all.textContent = 'all 805';
+    all.title = 'Show all library concepts';
     all.addEventListener('click', () => pickFamily('', all));
     el.browseFamilies.appendChild(all);
     fams.forEach((f) => {
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'browse__fam'; b.dataset.family = f.key;
+      b.dataset.label = f.name;
+      b.setAttribute('aria-controls', 'browse-concepts');
+      b.setAttribute('aria-expanded', 'false');
       // Concept counts, not indicator counts — say which, or the numbers read as a partition.
       b.textContent = `${f.name}${f.concept_count ? ' ' + f.concept_count : ''}`;
       b.title = `${f.name} — ${f.concept_count || 0} library concepts, upstream`;
@@ -660,15 +784,28 @@ async function loadFamilies() {
 }
 
 function pickFamily(key, button) {
-  document.querySelectorAll('.browse__fam').forEach((n) => n.classList.remove('is-on'));
-  button?.classList.add('is-on');
-  browseState.family = key || '';      // '' is a real choice here: every family
-  loadBrowse(true);                    // state first, reset second — the load reads what we just set
+  const family = key || '';
+  if (familyConceptState.open && familyConceptState.family === family) {
+    closeFamilyConcepts();
+    return;
+  }
+  familyConceptState.family = family;
+  familyConceptState.label = button?.dataset.label || (family || 'All library concepts');
+  familyConceptState.open = true;
+  familyConceptState.page = 0;
+  familyConceptState.rows = [];
+  familyConceptState.total = 0;
+  if (el.browseConceptsTitle) el.browseConceptsTitle.textContent = familyConceptState.label;
+  if (el.browseConceptsCount) el.browseConceptsCount.textContent = `Loading ${familyConceptState.label}…`;
+  el.browseConcepts?.classList.remove('view--hidden');
+  setFamilyDisclosure(button, true);
+  loadFamilyConcepts(true);
   checkHealth();
 }
 
 function toggleBrowse(on) {
   const open = typeof on === 'boolean' ? on : el.browseBody.classList.contains('view--hidden');
+  if (!open) closeFamilyConcepts();
   el.browseBody.classList.toggle('view--hidden', !open);
   el.browseToggle?.classList.toggle('is-on', open);
   el.browseToggle?.setAttribute('aria-expanded', String(open));
@@ -676,8 +813,8 @@ function toggleBrowse(on) {
   try { localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), browse: open })); } catch { /* private mode */ }
   if (open) {
     if (!el.browseFamilies.children.length) loadFamilies();
-    // Only the FIRST open loads. pickFamily starts its own reset-load, so starting one here too
-    // made two overlapping requests and the token guard cancelled the winning paint.
+    // The indicator catalogue loads independently; family bubbles fetch concepts into their own
+    // disclosure list and never filter or clear these indicator rows.
     if (!browseState.rows.length && !browseState.loading) loadBrowse(true);
   }
 }
@@ -899,6 +1036,7 @@ async function main() {
   // operator reported the last time a row only revealed a collapsed surface.
   el.browseToggle?.addEventListener('click', () => toggleBrowse());
   el.browseMore?.addEventListener('click', () => loadBrowse(false));
+  el.browseConceptsMore?.addEventListener('click', () => loadFamilyConcepts(false));
   el.libOpen?.addEventListener('click', () => {
     setPanel('library', true);
     setLibraryCollapsed(false);

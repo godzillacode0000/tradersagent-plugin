@@ -91,11 +91,25 @@
       <div class="browse" id="browse">
         <div class="browse__bar">
           <button type="button" class="btn btn--ghost browse__tab is-on" id="browse-toggle"
-                  aria-expanded="false" title="Browse all 805 library indicators by family">☰ Browse all</button>
+                  aria-expanded="false" title="Browse the indicator script catalogue">☰ Browse all</button>
           <span class="browse__count muted" id="browse-count"></span>
         </div>
         <div class="browse__body view--hidden" id="browse-body">
-          <div class="browse__families" id="browse-families"></div>
+          <div class="browse__taxonomy">
+            <div class="browse__families" id="browse-families"
+                 role="group" aria-label="Library concept families"></div>
+            <section class="browse__concepts view--hidden" id="browse-concepts"
+                     role="region" aria-labelledby="browse-concepts-title">
+              <div class="browse__concepts-head">
+                <strong id="browse-concepts-title">Library concepts</strong>
+                <span class="browse__count muted" id="browse-concepts-count"></span>
+              </div>
+              <div class="browse__concepts-list" id="browse-concepts-list" aria-live="polite"></div>
+              <div class="browse__concepts-more">
+                <button type="button" class="btn btn--ghost" id="browse-concepts-more">Load more concepts</button>
+              </div>
+            </section>
+          </div>
           <div class="browse__list" id="browse-list" aria-live="polite"></div>
           <div class="browse__more">
             <button type="button" class="btn btn--ghost" id="browse-more">Load more</button>

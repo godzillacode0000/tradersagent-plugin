@@ -258,11 +258,10 @@ def cmd_mode(args) -> int:
 
 
 def cmd_browse(args) -> int:
-    """Open the catalogue list in the console pane, narrow it, or read what it is showing.
+    """Open the Library's concept-family list, narrow it, or read what it is showing.
 
-    The 805 library indicators are a list, and a list the agent can only reach by clicking is a list
-    it cannot verify. So this is a command like every other surface the agent must change: the page
-    opens the panel, optionally picks a family, and answers with the row count it actually painted.
+    Family bubbles expose Library concepts (not indicator scripts); the empty family opens all
+    concepts. The separate "Browse all" button in the pane lists indicator scripts.
     """
     payload = {"action": "browse"}
     if args.show:
@@ -383,9 +382,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--pine", help="a .pine file to load into the editor first")
     s.set_defaults(func=cmd_script)
 
-    s = sub.add_parser("browse", help="open the 805-indicator catalogue list, optionally on one family")
-    s.add_argument("--show", action="store_true", help="open the panel and the list, then report the rows")
-    s.add_argument("--family", default=None, help="narrow to one family slug (trend, smc-ict, …)")
+    s = sub.add_parser("browse", help="open the Library concept list, optionally on one family")
+    s.add_argument("--show", action="store_true", help="open the panel and concept list, then report the rows")
+    s.add_argument("--family", default=None, help="show one concept family slug (trend, smc-ict, …)")
     s.set_defaults(func=cmd_browse)
 
     s = sub.add_parser("mode", help="show the chart, or the Pine script the engine is given")

@@ -284,6 +284,14 @@ class MCPToolsTest(unittest.TestCase):
         self.assertIn("[indicator] Dynamic Order Blocks (dynamic-order-blocks)", out)
         self.assertIn("[concept] Order block anatomy", out)
 
+    def test_library_search_maps_singular_kind_to_console_filter(self):
+        reply = {"results": [{"title": "Liquidity Sweeps", "type": "indicator", "slug": "liquidity-sweeps"}]}
+        with unittest.mock.patch.object(self.mcp, "_call", return_value=reply) as call:
+            out = self.mcp.library_search("liquidity sweep", kind="indicator", limit=3)
+        self.assertIn("Liquidity Sweeps (liquidity-sweeps)", out)
+        self.assertEqual(call.call_args.args[0],
+                         "/api/search?q=liquidity+sweep&limit=3&type=indicators")
+
     def test_library_search_with_no_hits_says_no_hits(self):
         _Stub.routes = {"/api/search": {"ok": True, "data": {"results": []}}}
         self.assertIn("no hits for", self.mcp.library_search("nothing at all"))
@@ -300,6 +308,30 @@ class MCPToolsTest(unittest.TestCase):
         self.assertIn("CC BY-NC-SA 4.0", out)
         self.assertIn("not redistributable", out)
         self.assertIn("```pine", out)
+
+    def test_library_indicator_name_lookup_uses_plural_console_filter(self):
+        replies = [
+            {"results": [{"slug": "ict-killzones"}]},
+            {"indicator": {"title": "ICT Killzones", "license": "CC BY-NC-SA 4.0"}},
+            {"source": "//@version=6\nindicator('ICT Killzones')"},
+        ]
+        with unittest.mock.patch.object(self.mcp, "_call", side_effect=replies) as call:
+            out = self.mcp.library_indicator("ICT Killzones")
+        self.assertIn("# ICT Killzones (ict-killzones)", out)
+        self.assertEqual(call.call_args_list[0].args[0],
+                         "/api/search?q=ICT+Killzones&type=indicators&limit=1")
+
+    def test_library_indicator_resolves_mixed_case_single_word_name(self):
+        replies = [
+            {"results": [{"slug": "supertrend"}]},
+            {"indicator": {"title": "SuperTrend", "license": "CC BY-NC-SA 4.0"}},
+            {"source": "//@version=6\nindicator('SuperTrend')"},
+        ]
+        with unittest.mock.patch.object(self.mcp, "_call", side_effect=replies) as call:
+            out = self.mcp.library_indicator("SuperTrend")
+        self.assertIn("# SuperTrend (supertrend)", out)
+        self.assertEqual(call.call_args_list[0].args[0],
+                         "/api/search?q=SuperTrend&type=indicators&limit=1")
 
     # ── chart_alert: the market, not the chart ───────────────────────────────
 

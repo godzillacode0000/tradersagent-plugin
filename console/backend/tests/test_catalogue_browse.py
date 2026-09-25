@@ -40,15 +40,15 @@ class TheListIsReal(unittest.TestCase):
         for needle in ('id="browse"', 'id="browse-list"', 'id="browse-families"', 'id="browse-more"'):
             self.assertIn(needle, html, f"{needle} is the browsable list")
 
-    def test_it_pages_and_filters_server_side(self):
+    def test_indicator_scripts_and_family_concepts_use_distinct_endpoints(self):
         app = read(APP)
         self.assertIn("/api/indicators", app)
         self.assertIn("page_size: BROWSE_PAGE", app)
-        self.assertIn("browseState.family", app, "the family filter must travel to the endpoint")
+        self.assertIn("browseState.family", app, "indicator browsing keeps its own state")
+        self.assertIn("api('/api/concepts'", app, "family bubbles must fetch their concept taxonomy")
 
     def test_the_family_row_comes_from_the_catalogue(self):
-        # Hand-typed family lists drift from the upstream keys; the endpoints validates slugs, so a
-        # stale chip silently filters to nothing.
+        # Hand-typed family lists drift from upstream keys; a stale chip silently opens no concepts.
         app = read(APP)
         self.assertIn("/api/families", app)
 
@@ -110,10 +110,12 @@ class ItIsCommandableNotJustClickable(unittest.TestCase):
     def test_the_page_publishes_the_action(self):
         self.assertIn("'browse'", read(BRIDGE))
 
-    def test_the_bridge_reports_what_it_painted(self):
+    def test_the_bridge_reports_the_visible_concept_list(self):
         bridge = read(BRIDGE)
         self.assertIn("out.browse", bridge)
-        self.assertIn("row(s) on screen", bridge)
+        self.assertIn("browse-concepts-list", bridge)
+        self.assertIn("concept(s) on screen", bridge)
+        self.assertIn("kind: conceptMode ? 'concepts' : 'indicators'", bridge)
 
     def test_the_cli_has_a_subcommand(self):
         cli = read(CLI)
@@ -134,6 +136,39 @@ class TheDocsSayWhatItIsNot(unittest.TestCase):
         # The whole reason this door exists: Vela's ⊕ lists its own ~76 natives, never the 805.
         html = read(HTML)
         self.assertIn("Vela's own \"Indicators\" menu lists only ITS", html)
+
+
+class FamilyChipsRevealConcepts(unittest.TestCase):
+    def test_family_chips_disclose_the_matching_concept_list(self):
+        html = read(HTML)
+        self.assertIn('id="browse-concepts"', html)
+        self.assertIn('id="browse-concepts-list"', html)
+        self.assertIn('id="browse-concepts-count"', html)
+
+        app = read(APP)
+        self.assertIn("async function loadFamilyConcepts", app)
+        self.assertIn("api('/api/concepts'", app,
+                      "family chips count concepts, not indicator scripts")
+        family = app.split("function pickFamily", 1)[1].split("\n}\n\nfunction toggleBrowse", 1)[0]
+        self.assertIn("familyConceptState.open", family,
+                      "clicking the expanded family again must collapse its list")
+        self.assertIn("loadFamilyConcepts", family)
+        self.assertNotIn("loadBrowse", family,
+                         "a concept-family click must not filter the indicator-script list")
+        family_buttons = app.split("async function loadFamilies", 1)[1].split("\n}\n\nfunction pickFamily", 1)[0]
+        self.assertIn("aria-controls", family_buttons)
+        self.assertIn("aria-expanded", family_buttons)
+        self.assertIn("aria-controls", app)
+        self.assertIn("aria-expanded", app)
+
+        bridge = read(BRIDGE).split("case 'browse':", 1)[1].split("case 'mode':", 1)[0]
+        self.assertIn("browse-concepts-list", bridge)
+        self.assertIn("state.loading || state.queued", bridge)
+
+        row = app.split("function browseConceptRow", 1)[1].split("\n}", 1)[0]
+        self.assertIn("kind: 'concept'", row)
+        self.assertIn("openResult(", row,
+                      "concepts use the existing Library details path")
 
 
 if __name__ == "__main__":

@@ -670,8 +670,13 @@ pre {
 .browse__tab { flex: 0 0 auto; }
 .browse__tab.is-on { color: var(--lx-fg-bright); border-color: var(--lx-border-strong); background: var(--lx-bg-hover); }
 .browse__count { font-size: var(--lx-fs-xs); margin-left: auto; }
-.browse__body { display: flex; flex-direction: column; min-height: 0; }
+/* The family chips are disclosure triggers, not indicator filters: their counts come from the
+   concept taxonomy. A bounded popover keeps the chart in place while the selected family's
+   concept rows scroll inside it. The trigger/content state follows ObsidianUI's Collapsible pattern
+   using this app's existing vanilla-DOM stack and tokens. */
 /* The body is toggled by .view--hidden (display:none !important), so no `display` here. */
+.browse__body { display: flex; flex-direction: column; min-height: 0; }
+.browse__taxonomy { position: relative; z-index: var(--lx-z-overlay); }
 .browse__families {
   display: flex; flex-wrap: wrap; gap: var(--lx-space-1);
   padding: var(--lx-space-2) var(--lx-space-3) var(--lx-space-1);
@@ -688,6 +693,31 @@ pre {
 .browse__more { padding: 0 var(--lx-space-3) var(--lx-space-2); }
 .browse__more.is-done { display: none; }
 .browse__note { padding: var(--lx-space-3); color: var(--lx-fg-muted); font-size: var(--lx-fs-sm); }
+
+.browse__concepts {
+  position: absolute; inset-inline: var(--lx-space-3); top: 100%; z-index: var(--lx-z-overlay);
+  display: flex; flex-direction: column; min-width: 0; max-height: min(46vh, 420px);
+  overflow: hidden; color: var(--lx-fg); background: var(--lx-surface-2);
+  border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-lg);
+  box-shadow: var(--lx-shadow-3);
+}
+.browse__concepts.view--hidden { display: none !important; }
+.browse__concepts-head {
+  display: flex; align-items: center; gap: var(--lx-space-2); flex: 0 0 auto;
+  padding: var(--lx-space-2) var(--lx-space-3); border-bottom: 1px solid var(--lx-border);
+  font-size: var(--lx-fs-sm);
+}
+.browse__concepts-head strong { font-weight: var(--lx-fw-semibold); }
+.browse__concepts-list {
+  flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain;
+  padding: var(--lx-space-2);
+}
+.browse__concepts-list .row { width: 100%; text-align: left; }
+.browse__concepts-more { flex: 0 0 auto; padding: var(--lx-space-2); border-top: 1px solid var(--lx-border); }
+.browse__concepts-more.is-done { display: none; }
+@media (max-width: 640px) {
+  .browse__concepts { inset-inline: var(--lx-space-2); max-height: 50vh; }
+}
 
 /* ── Script surface (removed on the operator's call, 17 Sep) ─────────────────────────────────
    The Pine editor that used to live here (and the Chart | Script mode switch) is gone: the

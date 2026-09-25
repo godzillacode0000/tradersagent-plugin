@@ -642,67 +642,71 @@
           break;
         }
         case 'browse': {
-          /* Open the catalogue (or read what it is showing). The 805 are a list the agent should be
-             able to reach without clicking: `show: true` opens it, `family` narrows it, and the
-             detail reports the count the list actually holds — a surface the agent can only reach
-             by clicking is a surface it cannot verify. */
+          /* Family bubbles disclose concept lists; the separate "Browse all" button holds indicator
+             scripts. Empty `family` means the all-concepts bubble. Keep the agent readout aligned with
+             the exact list visible in the pane rather than counting the hidden indicator list. */
           const body = document.getElementById('browse-body');
-          const list = document.getElementById('browse-list');
-          if (!body || !list) {
+          const indicatorList = document.getElementById('browse-list');
+          const conceptsList = document.getElementById('browse-concepts-list');
+          if (!body || !indicatorList || !conceptsList) {
             out.detail = 'this build has no catalogue list — the Library search is the door';
             break;
           }
-          // Selection first, then wait for the fetch the selection starts: the list fills
-          // asynchronously, so reading it in the same tick reports the PREVIOUS family's rows —
-          // measured as "0 row(s) · family smc-ict" right after asking for all families.
-          if (command.family !== undefined) {
-            const want = String(command.family || '');
-            // The chip row is built from /api/families on first open — a call that arrives before
-            // that fetch lands finds no chip and silently selects nothing (measured: 0 rows for a
-            // family that has 59). Open the surface, give the row a moment to exist, then click.
+          const conceptMode = command.family !== undefined;
+          const want = String(command.family || '');
+          if (conceptMode) {
+            // Family bubbles are built from /api/families on first open; wait for that fetch before
+            // looking up the requested key so a first-use browse cannot silently select nothing.
             if (typeof toggleBrowse === 'function' && !document.querySelector('.browse__fam')) {
               toggleBrowse(true);
               for (let i = 0; i < 20 && !document.querySelector('.browse__fam'); i++) {
                 await new Promise((rr) => setTimeout(rr, 150));
               }
             }
-            const chip = document.querySelector('.browse__fam[data-family="' + want + '"]');
-            if (chip) chip.click();
+            const chip = Array.from(document.querySelectorAll('.browse__fam'))
+              .find((button) => button.dataset.family === want);
+            if (!chip) {
+              out.detail = 'no Library family bubble for "' + want + '"';
+              break;
+            }
+            const alreadyOpen = typeof familyConceptState !== 'undefined' &&
+              familyConceptState.open && familyConceptState.family === want;
+            if (!alreadyOpen) chip.click();
           }
           if (command.show) {
-            const chip = document.getElementById('lib-open');
-            if (chip) chip.click(); else if (typeof toggleBrowse === 'function') toggleBrowse(true);
+            const openButton = document.getElementById('lib-open');
+            if (openButton) openButton.click();
+            else if (typeof toggleBrowse === 'function') toggleBrowse(true);
           }
-          // Paging is a door too: "load more" appends the next page rather than being click-only.
+          const list = conceptMode ? conceptsList : indicatorList;
+          const state = conceptMode ? familyConceptState : browseState;
+          // Paging is a door too: page the same list the operator can see, never its hidden sibling.
           if (command.more) {
-            const more = document.getElementById('browse-more');
-            if (more && !more.classList.contains('is-done')) more.click();
+            const more = document.getElementById(conceptMode ? 'browse-concepts-more' : 'browse-more');
+            if (more && !more.disabled && !more.parentElement.classList.contains('is-done')) more.click();
             else out.noMore = true;
           }
-          // Settle: a family switch CLEARS the list before it refills, so "same count twice" fires
-          // while it is still empty and reports 0 rows for a family that has 55. Wait for the reset
-          // to have happened (empty, or a new first row) and then for the count to hold still.
-          // Move `more` above the settle so the appended page is counted, not the one before it.
           const count = () => list.querySelectorAll('.row').length;
-          const busy = () => !!(typeof browseState !== 'undefined' && browseState.loading);
           let last = count();
           let sawChange = false;
           for (let i = 0; i < 40; i++) {
             await new Promise((r) => setTimeout(r, 150));
             const now = count();
             if (now !== last) { sawChange = true; last = now; continue; }
-            // Never call it empty while the page says a load is still running, and never call it
-            // settled while more rows are still queued behind an in-flight fetch.
-            if (busy() || (typeof browseState !== 'undefined' && browseState.queued)) continue;
-            if (now > 0) break;                 // filled and settled
-            if (sawChange || i >= 12) break;    // empty, or nothing is coming
+            if (state.loading || state.queued) continue;
+            if (now > 0) break;
+            if (sawChange || i >= 12) break;
           }
           out.ok = true;
-          const fam = (document.querySelector('.browse__fam.is-on') || {}).dataset || {};
-          out.detail = 'catalogue: ' + count() + ' row(s) on screen'
-            + (new Set(['', undefined]).has(fam.family) ? ' · all families' : ' · family ' + fam.family)
-            + (body.classList.contains('view--hidden') ? ' · closed' : ' · open');
-          out.browse = { rows: count(), family: fam.family || '', open: !body.classList.contains('view--hidden') };
+          const family = conceptMode ? familyConceptState.family : browseState.family;
+          const open = !body.classList.contains('view--hidden') &&
+            (!conceptMode || familyConceptState.open);
+          out.detail = (conceptMode ? 'library concepts: ' : 'indicator catalogue: ') + count() +
+            (conceptMode ? ' concept(s) on screen' : ' indicator(s) on screen') +
+            (family ? ' · family ' + family : ' · all families') + (open ? ' · open' : ' · closed');
+          out.browse = {
+            kind: conceptMode ? 'concepts' : 'indicators', rows: count(), family: family || '', open,
+          };
           break;
         }
         case 'mode': {

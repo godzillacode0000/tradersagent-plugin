@@ -50,16 +50,25 @@ window.TraderRun = (function () {
   const fieldN = (v) => (Array.isArray(v) ? v.length : (typeof v === 'number' ? v : (v ? 1 : 0)));
   const counts = (o) => (o ? fieldN(o.boxes) + fieldN(o.lines) + fieldN(o.labels) + fieldN(o.tables) : 0);
 
-  /* Rows the engine actually stored across every drawing container — before filters, before shape. */
+  /* Rows the engine actually stored across every drawing container — before filters, before
+     shape — and how many of them came back EMPTY. A container that was constructed but never
+     written to keeps one placeholder row whose `value` is an empty array; that is what a script
+     whose own conditions never fired looks like, and it must not be reported as lost data
+     (measured 24 Sep: the AMD POC setup script on ETHUSDT 1h — 6 containers, 6 placeholders). */
   function engineRows(raw) {
     const plots = (raw && raw.plots) || {};
     let n = 0;
+    let empty = 0;
     for (const k of Object.keys(plots)) {
       if (!k.startsWith('__')) continue;
       const rows = plots[k] && Array.isArray(plots[k].data) ? plots[k].data : [];
-      n += rows.length;
+      for (const row of rows) {
+        n++;
+        const v = row && row.value;
+        if (Array.isArray(v) ? v.length === 0 : !(v && typeof v === 'object')) empty++;
+      }
     }
-    return n;
+    return { n, empty };
   }
 
   function record(name, drew) {
@@ -113,7 +122,8 @@ window.TraderRun = (function () {
 
     /* ── surface 1: geometry -> our overlay, read back after drawing ── */
     const geo = flatten(res.raw);
-    const engineN = engineRows(res.raw);
+    const stored = engineRows(res.raw);
+    const engineN = stored.n;
     const containers = counts(geo) > 0;
     let drew = null;
     let verified = null;
@@ -152,7 +162,7 @@ window.TraderRun = (function () {
       context: res.context || null,
       containers, drew, verified, drawFail, paint,
       drawingKeys: res.drawings || [],   // which __*__ containers the engine declared at all
-      rawRows: geo.rawRows, engineN, retried, retryFail,
+      rawRows: geo.rawRows, engineN, emptyN: stored.empty, retried, retryFail,
     };
   }
 
@@ -195,7 +205,11 @@ window.TraderRun = (function () {
     } else if (r.containers) {
       s += ' \u00b7 overlay: ' + (r.drawFail || 'nothing landed');
     } else if (!r.series.length) {
-      if (r.engineN) {
+      if (r.engineN && r.emptyN === r.engineN) {
+        s += ' \u00b7 the script drew nothing: every one of its ' + r.engineN +
+          ' drawing container(s) still holds an empty placeholder row \u2014 its own conditions' +
+          ' never fired on these bars' + (r.retried ? ' (chart-bars retry: same)' : '');
+      } else if (r.engineN) {
         s += ' \u00b7 engine stored ' + r.engineN + ' raw row(s) but none survived the filters' +
           ' (raw: ' + Object.entries(r.rawRows || {}).filter(([, n]) => n).map(([k, n]) => k + '=' + n).join(' ') + ')';
       } else if (r.drawingKeys && r.drawingKeys.length) {

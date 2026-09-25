@@ -101,15 +101,52 @@
              reported: m.timeframe ? String(m.timeframe) : null };
   }
 
+  /** The bar's open time, whichever key the chart's own bars use. */
+  function barTime(b) {
+    const t = b && (b.openTime != null ? b.openTime : (b.time != null ? b.time : b.t));
+    return t == null ? null : Number(t);
+  }
+
+  /**
+   * The chart's own bars, in the shape PineTS's candle objects actually use.
+   *
+   * PineTS keys candles `openTime`/`closeTime`; Vela's bars (and the Binance fallback in
+   * app.js) carry `time`. A run built on `time` bars still executes — but every `time(...)`
+   * and session call reads `undefined` bar times and quietly answers na, so session-gated
+   * scripts silently do nothing. Measured 24 Sep on the AMD POC setup script: 0 of 500 bars
+   * "in session" with `time` bars, 185 of 500 with `openTime` bars, same candles.
+   */
+  function normalizeBars(bars) {
+    const list = Array.isArray(bars) ? bars : [];
+    const gaps = [];
+    for (let i = 1; i < list.length && gaps.length < 60; i++) {
+      const a = barTime(list[i - 1]);
+      const b = barTime(list[i]);
+      if (a != null && b != null && b > a) gaps.push(b - a);
+    }
+    gaps.sort((x, y) => x - y);
+    const step = gaps.length ? gaps[Math.floor(gaps.length / 2)] : 0;
+    return list.map((b) => {
+      const t = barTime(b);
+      return Object.assign({}, b, {
+        openTime: t != null ? t : b.openTime,
+        closeTime: b.closeTime != null ? Number(b.closeTime) : (t != null ? t + step : undefined),
+        volume: b.volume != null ? b.volume : 0,
+      });
+    });
+  }
+
   /**
    * PineTS has TWO documented constructors:
    *   new PineTS(Provider.Binance, symbol, timeframe, limit)   // market context present
-   *   new PineTS(candles)                                      // your own OHLCV, NO context
-   * Only the first defines syminfo/tickerid, so any Library script that touches them throws
-   * "Cannot read properties of undefined (reading 'ticker')" on the second — measured on
-   * buyside-sellside-liquidity and liquidity-swings. The provider form returns the same bars
-   * from the same exchange (verified: 500 bars, last close within 4 cents of the chart's), so
-   * it is the default and custom bars stay as the offline fallback.
+   *   new PineTS(candles, symbol, timeframe, limit)            // your own OHLCV, context still passed
+   * Only a context defines syminfo/tickerid — and, less obviously, `timeframe.*`: PineTS's
+   * timeframe helper slices `context.timeframe`, so a bars-only engine throws
+   * "Cannot read properties of undefined (reading 'slice')" the moment a script touches
+   * `timeframe.period` or `timeframe.in_seconds()`. Measured 24 Sep: the AMD POC setup script's
+   * chart-bars retry died on exactly that line, and the same script with the context passed ran
+   * to completion. So the custom-bars form carries the same ctx as the provider form, and the
+   * bars are normalised first.
    */
   function newEngine(mod, bars, forceBars) {
     const ctx = marketContext(bars);
@@ -124,7 +161,10 @@
         /* fall through to custom bars */
       }
     }
-    return { engine: new mod.PineTS(bars), ctor: 'custom-bars', context: null };
+    return {
+      engine: new mod.PineTS(normalizeBars(bars), ctx.symbol, ctx.timeframe, Math.max(30, bars.length)),
+      ctor: 'custom-bars', context: ctx.symbol + '@' + ctx.timeframe,
+    };
   }
 
   function withTimeout(promise, ms, label) {
@@ -294,7 +334,7 @@
         // Retry the documented provider form before reporting a failure.
         const msg = String((err && err.message) || err);
         if (built.ctor === 'custom-bars' || !/ticker|syminfo/i.test(msg)) throw err;
-        built = { engine: new mod.PineTS(bars), ctor: 'custom-bars', context: null };
+        built = newEngine(mod, bars, true);
         out = await withTimeout(built.engine.run(source), timeoutMs, label);
       }
       const ms = Math.round(performance.now() - t0);
@@ -308,6 +348,6 @@
     }
   }
 
-  window.PineTSRunner = { run, runnable, loadPineTS, toSeries, marketContext, newEngine };
+  window.PineTSRunner = { run, runnable, loadPineTS, toSeries, marketContext, newEngine, normalizeBars };
   console.log('[pinets-runner] ready — PineTS loads on first run (independent of Vela’s Pine engine)');
 })();

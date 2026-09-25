@@ -387,15 +387,15 @@ def chart_palette(try_apply: bool = False) -> str:
     return _command("palette", **fields)
 
 
-@mcp.tool(annotations=_ann("Open the indicator catalogue"))
+@mcp.tool(annotations=_ann("Open a Library concept-family list"))
 def chart_browse(family: str = "", show: bool = True) -> str:
-    """Open the 805-indicator LuxAlgo catalogue list in the chart pane, optionally on one family.
+    """Open the Library's concept dropdown in the chart pane, optionally on one family.
 
-    `chart_library_list` reads the same catalogue server-side; this one is about the SURFACE — it
-    opens the list in the pane and answers with the row count actually painted, so an agent can put
-    the catalogue in front of the operator and say what they are looking at. `family` is a slug
-    (trend, smc-ict, momentum, …); empty means all families. Pass show=False to only read the list's
-    current state without opening anything.
+    The family bubbles are concept taxonomy (for example, Wyckoff's count is concepts), not an
+    indicator-script filter. Empty `family` opens all concepts; a slug (trend, smc-ict, momentum, …)
+    opens that family's concepts. For indicator scripts and server-side filtering, use
+    `library_list`. This command reports the rows actually painted and never applies an indicator.
+    Pass show=False to read without opening a collapsed Library pane.
     """
     fields = {"show": bool(show)}
     # An explicit family narrows; an omitted one means "all families", not "leave the last filter".
@@ -410,8 +410,13 @@ def library_search(query: str, kind: str = "", limit: int = 8) -> str:
     if not query.strip():
         return "✗ empty query"
     params = {"q": query.strip(), "limit": max(1, min(int(limit or 8), 25))}
-    if kind.strip():
-        params["type"] = kind.strip()
+    selected_kind = kind.strip().lower()
+    if selected_kind:
+        api_type = {"concept": "concepts", "concepts": "concepts",
+                    "indicator": "indicators", "indicators": "indicators"}.get(selected_kind)
+        if not api_type:
+            return "✗ kind must be concept or indicator"
+        params["type"] = api_type
     try:
         data = _call("/api/search?" + urllib.parse.urlencode(params), timeout=25.0)
     except RuntimeError as exc:
@@ -433,8 +438,8 @@ def library_indicator(query: str) -> str:
         return "✗ empty query"
     slug = query.strip()
     try:
-        if " " in slug or slug.lower() != slug.lower():  # a name, not a slug: resolve it first
-            found = _call("/api/search?" + urllib.parse.urlencode({"q": slug, "type": "indicator", "limit": 1}),
+        if " " in slug or slug.lower() != slug:  # a name, not a slug: resolve it first
+            found = _call("/api/search?" + urllib.parse.urlencode({"q": slug, "type": "indicators", "limit": 1}),
                           timeout=25.0)
             rows = found.get("results") or []
             if not rows:

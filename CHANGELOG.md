@@ -4,6 +4,25 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Fixed
+
+- **The chart-bars fallback ran with no market context and the wrong bar keys.** The editor's run
+  line ended in `chart-bars retry failed: PineTS error: Cannot read properties of undefined
+  (reading 'slice')`, and the fallback could not have worked even without the crash. PineTS's
+  `timeframe` helper slices `context.timeframe`, and `new PineTS(bars)` passes none, so the first
+  `timeframe.period` / `timeframe.in_seconds()` in a script threw — the AMD POC setup script hits
+  it on its line 13. Separately, the bars handed over carry `time` while PineTS's candles are keyed
+  `openTime`, so every `time(...)`/session call read `undefined` and answered na (measured on the
+  same 500 candles: 0/500 bars in session vs 185/500). `pinets-runner.js` now normalises the bars to
+  `openTime`/`closeTime` and builds the fallback as
+  `new PineTS(bars, symbol, timeframe, limit)` — the provider form's own context, the chart's own
+  bars. Verified live: the retry no longer crashes and returns the same geometry as the provider run.
+- **"engine stored 6 raw row(s) but none survived the filters" described a script that drew
+  nothing, not lost data.** Those rows are the drawing containers' own empty placeholder rows
+  (`value: []`) — what a script whose conditions never fired leaves behind. `unified.js` counts the
+  placeholders and says so: `the script drew nothing: every one of its 6 drawing container(s) still
+  holds an empty placeholder row — its own conditions never fired on these bars`.
+
 ### Added
 
 - **`bin/is-enabled.sh` — ask whether the app has actually enabled the plugin.** `install.sh --doctor`
