@@ -756,6 +756,19 @@ pre {
   white-space: pre; overflow: auto; max-height: 60vh;
 }
 
+.code { display: flex; flex-direction: column; min-height: 0; }
+.code__bar {
+  display: flex; align-items: center; gap: var(--lx-space-2);
+  padding: var(--lx-space-1) var(--lx-space-2) var(--lx-space-1) var(--lx-space-3);
+  border: 1px solid var(--lx-border-soft); border-bottom: 0;
+  border-radius: var(--lx-radius-md) var(--lx-radius-md) 0 0;
+  background: var(--lx-surface-3);
+}
+.code__label { font-size: var(--lx-fs-2xs); text-transform: uppercase; letter-spacing: var(--lx-ls-wide); color: var(--lx-fg-muted); }
+.code__meta { font-size: var(--lx-fs-2xs); margin-left: auto; }
+.code__copy { height: 24px; padding: 0 var(--lx-space-2); font-size: var(--lx-fs-xs); }
+.code pre { border-radius: 0 0 var(--lx-radius-md) var(--lx-radius-md); }
+
 /* ── Layer 5g — stats (edge panel) + firm cards ──────────────────────────── */
 .stat {
   padding: var(--lx-space-3); margin-bottom: var(--lx-space-2);

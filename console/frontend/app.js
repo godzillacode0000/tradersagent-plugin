@@ -1036,14 +1036,20 @@ async function openResult(row, button) {
           <div class="detail__actions">
             <button class="btn btn--primary" id="run-pinets">▶ Run PineTS</button>
             <button class="btn btn--ghost" id="mount">＋ Add to chart</button>
-            <button class="btn btn--ghost" id="copy">⧉ Copy Pine</button>
           </div>
         </div>
         <div class="muted detail__note" id="pine-headline">PineTS executes the script over this chart's bars and
         paints what it makes: plot series as natives, boxes/lines/labels/tables on the overlay.
         “Add to chart” additionally asks Vela's own Pine engine,
         which stays silent on many scripts in this build.</div>
-        <pre>${esc(source.slice(0, 12000))}${source.length > 12000 ? '\n… truncated in preview …' : ''}</pre>`;
+        <div class="code">
+          <div class="code__bar">
+            <span class="code__label">Pine</span>
+            <span class="code__meta muted">${source.length.toLocaleString()} chars${source.length > 12000 ? ' · preview truncated' : ''}</span>
+            <button type="button" class="btn btn--ghost code__copy" id="copy">⧉ Copy</button>
+          </div>
+          <pre>${esc(source.slice(0, 12000))}${source.length > 12000 ? '\n… truncated in preview …' : ''}</pre>
+        </div>`;
       $('#mount').addEventListener('click', async () => {
         const label = data.name || row.slug;
         const button = $('#mount');
@@ -1084,9 +1090,14 @@ async function openResult(row, button) {
           setActionState(button, 'idle');
         }
       });
-      $('#copy').addEventListener('click', async () => {
-        try { await navigator.clipboard.writeText(source); toast('Pine source copied'); }
-        catch { toast('Clipboard blocked by the browser', true); }
+      $('#copy').addEventListener('click', async (event) => {
+        const button = event.currentTarget;
+        try {
+          await navigator.clipboard.writeText(source);
+          setActionState(button, 'idle', '✓ Copied');
+          setTimeout(() => setActionState(button, 'idle', '⧉ Copy'), 1400);
+          toast('Pine source copied');
+        } catch { toast('Clipboard blocked by the browser', true); }
       });
       checkHealth();   // the source fetch moved the counter — refresh the pill before leaving
       return;

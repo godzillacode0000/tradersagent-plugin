@@ -230,5 +230,19 @@ class TheConceptWriteUpIsRendered(unittest.TestCase):
         self.assertIn(".detail__text h3", read(CSS))
 
 
+class TheCodeBlockIsDressed(unittest.TestCase):
+    def test_code_bar_with_label_and_copy(self):
+        app = read(APP)
+        self.assertIn('class="code__bar"', app)
+        self.assertIn('class="code__label"', app)
+        css = read(CSS)
+        self.assertIn(".code__bar", css)
+        self.assertIn(".code__label", css)
+
+    def test_one_copy_button_only(self):
+        app = read(APP)
+        self.assertEqual(app.count('id="copy"'), 1, "copy lives on the code bar — not twice")
+
+
 if __name__ == "__main__":
     unittest.main()
