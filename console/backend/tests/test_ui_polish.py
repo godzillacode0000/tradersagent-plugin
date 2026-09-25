@@ -312,6 +312,17 @@ class TheOverlayPanelKeepsTheTopbarReachable(unittest.TestCase):
         self.assertIn(".view.is-browsing .results .empty", read(CSS))
 
 
+class EscapeHidesTheRightColumn(unittest.TestCase):
+    def test_escape_hides_the_right_column(self):
+        # Operator's note in the app's chat (25 Sep): the PineTS pane opened, but Escape did not
+        # hide it again. One document-level listener, guarded so it acts only while the column is
+        # open — the draft is saved as you type, so hiding the pane loses nothing.
+        app = read(APP)
+        block = app.split("ev.key !== 'Escape'", 1)[1].split("});", 1)[0]
+        self.assertIn("el.main.dataset.detail !== 'on'", block)
+        self.assertIn("setPanel('script', false)", block)
+
+
 if __name__ == "__main__":
     unittest.main()
 

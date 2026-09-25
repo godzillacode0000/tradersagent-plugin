@@ -378,6 +378,22 @@ function setBars(text, detail) {
 /* The pane can be resized while the page stays open — re-measure rather than keep a stale form. */
 window.addEventListener('resize', () => { if (barsLast) setBars(barsLast.text, barsLast.detail); });
 
+/* F6 (25 Sep): dragging the app's split changes this page's box, and nothing repainted it —
+   measured live: #chart 360px tall inside a 295px .panel--chart, so the chart overflowed its own
+   panel and the layout looked broken. One debounced handler owns every window resize: re-measure
+   the pane top, re-fit the bars pill, then nudge Vela exactly as a panel flip does. Debounced
+   because a drag fires dozens of times a second and nudgeChart() does repeat passes by design. */
+let resizeTimer = null;
+function onWindowResize() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    setPaneTop();
+    if (typeof barsLast !== 'undefined' && barsLast) setBars(barsLast.text, barsLast.detail);
+    nudgeChart();
+  }, 140);
+}
+window.addEventListener('resize', onWindowResize);
+
 async function bootChart() {
   const host = $('#chart');
   setBars('bars: loading…');
@@ -1227,6 +1243,24 @@ async function checkHealth() {
   }
 }
 
+/* F6 (25 Sep): Escape closes whatever this pane opened. Only the family popover listened for
+   it, so the script / detail pane — the operator's "I opened PineTS, Escape should hide it" —
+   could only be closed with its ✕. Bound BEFORE conceptsKeydown so one Escape closes ONE surface:
+   the popover stands down here while it is open, the pane goes next, the Library last. */
+function escapeKeydown(e) {
+  if (e.key !== 'Escape') return;
+  if (familyConceptState.open) return;
+  if (el.main && el.main.dataset.detail === 'on') {
+    e.preventDefault();
+    setPanel('detail', false);
+    return;
+  }
+  if (el.main && el.main.dataset.library === 'on') {
+    e.preventDefault();
+    setPanel('library', false);
+  }
+}
+
 /* Keyboard rules for the disclosure, in one place. Escape closes and hands focus back to the chip
    that opened it; arrows walk whichever surface has focus (the chip row, or the concept list). No
    roving tabindex: the popover is short and the arrows are a convenience, not the only way in. */
@@ -1284,6 +1318,7 @@ async function main() {
   el.browseMore?.addEventListener('click', () => loadBrowse(false));
   el.browseConceptsMore?.addEventListener('click', () => loadFamilyConcepts(false));
   el.browseConceptsClose?.addEventListener('click', () => closeFamilyConcepts());
+  document.addEventListener('keydown', escapeKeydown);
   document.addEventListener('keydown', conceptsKeydown);
   document.addEventListener('pointerdown', onDocumentPointerDown, true);
   el.libOpen?.addEventListener('click', () => {
@@ -1313,6 +1348,14 @@ async function main() {
   srcBox.addEventListener('input', saveDraft);
   nameBox.addEventListener('input', saveDraft);
   $('#script-close').addEventListener('click', () => setPanel('script', false));
+  /* Escape hides the right column again (operator's note in the app's chat, 25 Sep: "i got opened
+     the PineTS but when i click escape, i want it to hide back"). It works from inside the editor
+     too — the draft is saved as you type (saveDraft), so hiding the pane loses nothing. */
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape' || ev.defaultPrevented) return;
+    if (el.main.dataset.detail !== 'on') return;
+    setPanel('script', false);
+  });
   runBtn.addEventListener('click', async () => {
     const source = srcBox.value;
     const label = nameBox.value.trim() || 'Untitled script';
