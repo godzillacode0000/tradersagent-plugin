@@ -214,5 +214,21 @@ class TheDetailPaneHoldsItsPlace(unittest.TestCase):
         self.assertIn('class="detail__head"', read(APP))
 
 
+class TheConceptWriteUpIsRendered(unittest.TestCase):
+    def test_markdown_renderer_exists_and_is_used(self):
+        app = read(APP)
+        self.assertIn("function renderMarkdown", app)
+        branch = app.split("const data = await api('/api/concept'", 1)[1]
+        self.assertIn("renderMarkdown(", branch[:900])
+        self.assertNotIn("esc(body.slice(0, 14000))", app)
+
+    def test_renderer_escapes_before_it_formats(self):
+        fn = read(APP).split("function renderMarkdown", 1)[1].split("\n}", 1)[0]
+        self.assertIn("esc(", fn, "upstream text is data — escape first, then format")
+
+    def test_detail_text_styles_exist(self):
+        self.assertIn(".detail__text h3", read(CSS))
+
+
 if __name__ == "__main__":
     unittest.main()

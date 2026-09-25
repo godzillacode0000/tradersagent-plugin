@@ -716,6 +716,19 @@ body.has-workspace .chart-head { display: none; }
 }
 .detail__note { font-size: var(--lx-fs-sm); }
 
+.detail__text { font-size: var(--lx-fs-md); line-height: 1.6; }
+.detail__text h3, .detail__text h4 { margin: var(--lx-space-4) 0 var(--lx-space-1); font-size: var(--lx-fs-lg); font-weight: var(--lx-fw-semibold); letter-spacing: var(--lx-ls-tight); }
+.detail__text h5, .detail__text h6 { margin: var(--lx-space-3) 0 var(--lx-space-1); font-size: var(--lx-fs-md); font-weight: var(--lx-fw-semibold); }
+.detail__text p { margin: 0 0 var(--lx-space-2); }
+.detail__text ul, .detail__text ol { margin: 0 0 var(--lx-space-2); padding-left: 18px; }
+.detail__text li { margin: 3px 0; }
+.detail__text code { padding: 1px 5px; border-radius: var(--lx-radius-sm); background: var(--lx-surface-3); font: var(--lx-fs-xs)/1.4 var(--lx-font-mono); }
+.detail__text a { color: var(--lx-accent-ink); text-decoration: none; }
+.detail__text a:hover { text-decoration: underline; }
+.detail__text blockquote { margin: 0 0 var(--lx-space-2); padding-left: var(--lx-space-25); border-left: 2px solid var(--lx-accent-soft); color: var(--lx-fg-muted); }
+.detail__text hr { border: 0; border-top: 1px solid var(--lx-border-soft); margin: var(--lx-space-4) 0; }
+.detail__text .md-code { margin: 0 0 var(--lx-space-2); }
+
 /* A button that is working: the label stays, a spinner appears, and the button is disabled so the
    same script can never be started twice by an impatient second click. */
 .btn.is-busy { opacity: .75; cursor: progress; }

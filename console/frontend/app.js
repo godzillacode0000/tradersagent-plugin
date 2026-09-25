@@ -173,6 +173,57 @@ function log(message, quiet = false) {
 }
 const esc = (s = '') => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+/* A tiny, safe markdown subset for Library concept write-ups: headings, bold/italic, inline code,
+   fenced code, links, lists, blockquotes and rules. Escapes FIRST, then formats — the write-up is
+   upstream data and nothing in it may execute. No dependency: the whole renderer is smaller than
+   any library's loader and this page ships without a bundler. */
+function renderMarkdown(markdown) {
+  const lines = String(markdown || '').replace(/\r\n?/g, '\n').split('\n');
+  const out = [];
+  let inCode = false;
+  let list = null;
+  const inline = (text) => esc(text)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|\W)\*([^*]+)\*(?=\W|$)/g, '$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    let m;
+    if (/^```/.test(line)) {
+      closeList();
+      out.push(inCode ? '</code></pre>' : '<pre class="md-code"><code>');
+      inCode = !inCode;
+      continue;
+    }
+    if (inCode) { out.push(esc(raw) + '\n'); continue; }
+    if (!line.trim()) { closeList(); continue; }
+    if ((m = line.match(/^(#{1,4})\s+(.*)$/))) {
+      closeList();
+      out.push(`<h${Math.min(m[1].length + 2, 6)}>${inline(m[2])}</h${Math.min(m[1].length + 2, 6)}>`);
+      continue;
+    }
+    if ((m = line.match(/^\s*[-*]\s+(.*)$/))) {
+      if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
+      out.push(`<li>${inline(m[1])}</li>`);
+      continue;
+    }
+    if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))) {
+      if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
+      out.push(`<li>${inline(m[1])}</li>`);
+      continue;
+    }
+    if (/^>\s?/.test(line)) { closeList(); out.push(`<blockquote>${inline(line.replace(/^>\s?/, ''))}</blockquote>`); continue; }
+    if (/^(---|\*\*\*)\s*$/.test(line)) { closeList(); out.push('<hr>'); continue; }
+    closeList();
+    out.push(`<p>${inline(line)}</p>`);
+  }
+  closeList();
+  if (inCode) out.push('</code></pre>');
+  return out.join('\n');
+}
+
 async function api(path, params = {}) {
   const url = new URL(path, location.origin);
   Object.entries(params).forEach(([k, v]) => { if (v !== '' && v != null) url.searchParams.set(k, v); });
@@ -1050,7 +1101,7 @@ async function openResult(row, button) {
         <span class="badge">${esc(data.family || row.family || '')}</span>
         <a class="badge" href="${esc(row.url || '#')}" target="_blank" rel="noreferrer">Library page</a>
       </div>
-      <div class="detail__text">${esc(body.slice(0, 14000))}</div>`;
+      <div class="detail__text">${renderMarkdown(body.slice(0, 14000))}</div>`;
     checkHealth();   // the concept fetch moved the counter — refresh the pill
   } catch (err) {
     el.detail.innerHTML = `<h2 class="detail__title">Failed</h2><p class="muted">${esc(err.message)}</p>`;
