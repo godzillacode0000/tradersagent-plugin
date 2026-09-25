@@ -622,6 +622,9 @@ input[type="text"]:hover { border-color: var(--lx-border-strong); }
   background: linear-gradient(90deg, var(--lx-surface-3) 0%, var(--lx-bg-hover) 50%, var(--lx-surface-3) 100%);
   animation: shimmer 1.4s var(--lx-ease) infinite;
 }
+/* The two-line row is ~52px; a placeholder of the same height means the list does not jump when
+   the real rows land. */
+.skeleton--row { height: 52px; border-radius: var(--lx-radius-lg); }
 @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
 
 /* ── Layer 5e — chart region ─────────────────────────────────────────────── */

@@ -614,7 +614,7 @@ async function loadBrowse(reset = false) {
   if (resetting) {
     browseState.page = 0;
     browseState.rows = [];
-    el.browseList.innerHTML = '<div class="browse__note">Loading the catalogue…</div>';
+    el.browseList.innerHTML = skeletonRows(5);
   }
   el.browseMore?.classList.remove('is-done');
   const wantedFamily = browseState.family;
@@ -699,7 +699,7 @@ async function loadFamilyConcepts(reset = false) {
     state.page = 0;
     state.rows = [];
     state.total = 0;
-    el.browseConceptsList.innerHTML = '<div class="browse__note">Loading concepts…</div>';
+    el.browseConceptsList.innerHTML = skeletonRows(4);
   }
   const moreWrap = el.browseConceptsMore?.parentElement;
   moreWrap?.classList.remove('is-done');
@@ -837,6 +837,13 @@ function toggleBrowse(on) {
 /* ---------------------------------------------------------------- library UI */
 function skeletons(n = 4) {
   el.results.innerHTML = Array.from({ length: n }, () => '<div class="skeleton"></div>').join('');
+}
+
+/* Row-shaped placeholders for any list that is about to be replaced. The old text note ("Loading
+   the catalogue…") told the eye nothing about what was coming; a skeleton of the same height keeps
+   the list from jumping when the rows land. */
+function skeletonRows(n = 5) {
+  return Array.from({ length: n }, () => '<div class="skeleton skeleton--row"></div>').join('');
 }
 
 function renderResults(rows) {
