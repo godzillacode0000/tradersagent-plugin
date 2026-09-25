@@ -36,7 +36,7 @@
 
   --lx-fg:              #f4f4f4;
   --lx-fg-muted:        #9c9ca6;
-  --lx-fg-faint:        #6b6b74;
+  --lx-fg-faint:        #82828b;
   --lx-fg-bright:       #f0f3fa;
   --lx-chart-ink:       #d1d4dc;
   --lx-fg-on-fill:      #ffffff;
@@ -51,7 +51,7 @@
   /* P&L / direction — the same pair trade-journal hands to Vela, so
      candles and chips agree */
   --lx-profit:          #0ca30c;
-  --lx-loss:            #d03b3b;
+  --lx-loss:            #e44f4f;
   --lx-profit-soft:     rgba(12, 163, 12, .14);
   --lx-loss-soft:       rgba(208, 59, 59, .14);
   --lx-neutral:         #8b8b95;
@@ -189,20 +189,20 @@
   --lx-chart-ink:     #0b0b0b;
   --lx-fg-on-fill:    #ffffff;
 
-  --lx-accent:        #0b7cbd;
+  --lx-accent:        #0071b2;
   --lx-accent-hover:  #0a6ba3;
   --lx-accent-soft:   rgba(11, 124, 189, .10);
   --lx-accent-line:   #0b7cbd;
   --lx-accent-ink:    #0b6ba3;
 
   --lx-profit:        #006300;
-  --lx-loss:          #d03b3b;
+  --lx-loss:          #c93434;
   --lx-profit-soft:   rgba(0, 99, 0, .10);
   --lx-loss-soft:     rgba(208, 59, 59, .10);
   --lx-neutral:       #686760;
 
-  --lx-info:          #0b7cbd;
-  --lx-warn:          #a37800;
+  --lx-info:          #0071b2;
+  --lx-warn:          #906500;
   --lx-info-soft:     rgba(11, 124, 189, .10);
   --lx-warn-soft:     rgba(163, 120, 0, .12);
 
@@ -1037,3 +1037,16 @@ pre {
   100% { box-shadow: inset 0 0 0 2px transparent; }
 }
 @media (prefers-reduced-motion: reduce) { #chart.is-painted { animation: none; } }
+
+/* Alignment (25 Sep): every number in the chrome is tabular, so counts and dates stop jittering as
+   they change and line up column-wise. No font swap — the list design language stays as validated. */
+.row__meta-date,
+.row__sub .pill,
+.browse__concepts-head strong,
+.chart-legend,
+#indicator-count,
+#mcp-status,
+.statusbar,
+.toast {
+  font-variant-numeric: tabular-nums;
+}

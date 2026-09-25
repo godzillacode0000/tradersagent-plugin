@@ -323,6 +323,45 @@ class EscapeHidesTheRightColumn(unittest.TestCase):
         self.assertIn("setPanel('script', false)", block)
 
 
+class ContrastClearsAA(unittest.TestCase):
+    """The audit of 25 Sep found --lx-fg-faint at 3.60:1 and --lx-loss at 3.95:1 in the dark theme,
+    and accent / warn below 4.5 on paper. This pins the CONTRACT (every text token clears AA on the
+    worst surface it is used on), not the current hexes — any palette may ship if it passes."""
+
+    SURFACES = {"dark": "#1b1b20", "light": "#f0efec"}
+
+    @staticmethod
+    def _ratio(fg, bg):
+        def lin(c):
+            c /= 255
+            return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+        def lum(h):
+            h = h.lstrip("#")
+            r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+            return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+
+        a, b = lum(fg), lum(bg)
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+
+    def _token(self, theme, name):
+        """The dark theme defines each token first; the light theme redefines it later. Read them in
+        file order instead of slicing blocks on braces, which silently picked the wrong value."""
+        hits = re.findall(r"--lx-%s:\s*(#[0-9a-fA-F]{6})" % name, read(CSS))
+        self.assertTrue(hits, "--lx-%s has no solid value" % name)
+        return hits[0] if theme == "dark" else hits[-1]
+
+    def test_dark_text_tokens_clear_aa(self):
+        for name in ("fg-faint", "loss"):
+            r = self._ratio(self._token("dark", name), self.SURFACES["dark"])
+            self.assertGreaterEqual(r, 4.5, "--lx-%s is %.2f:1 on a raised row" % (name, r))
+
+    def test_light_text_tokens_clear_aa(self):
+        for name in ("accent", "warn", "loss"):
+            r = self._ratio(self._token("light", name), self.SURFACES["light"])
+            self.assertGreaterEqual(r, 4.5, "--lx-%s is %.2f:1 on paper" % (name, r))
+
+
 if __name__ == "__main__":
     unittest.main()
 
