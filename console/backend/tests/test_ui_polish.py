@@ -227,6 +227,12 @@ class TheConceptWriteUpIsRendered(unittest.TestCase):
         fn = read(APP).split("function renderMarkdown", 1)[1].split("\n}", 1)[0]
         self.assertIn("esc(", fn, "upstream text is data — escape first, then format")
 
+    def test_the_concept_branch_reads_the_field_the_api_returns(self):
+        # The pane read `body_markdown`; the API answers `content_markdown`. Every concept showed
+        # "No write-up returned." until this matched.
+        branch = read(APP).split("const data = await api('/api/concept'", 1)[1][:400]
+        self.assertIn("content_markdown", branch)
+
     def test_detail_text_styles_exist(self):
         self.assertIn(".detail__text h3", read(CSS))
 

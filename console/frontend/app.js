@@ -1104,7 +1104,7 @@ async function openResult(row, button) {
     }
 
     const data = await api('/api/concept', { slug: row.slug });
-    const body = data.body_markdown || data.raw || 'No write-up returned.';
+    const body = data.content_markdown || data.body_markdown || data.raw || 'No write-up returned.';
     el.detail.innerHTML = `
       <h2 class="detail__title">${esc(data.name || row.slug)}</h2>
       <div class="detail__meta">
