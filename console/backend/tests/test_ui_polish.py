@@ -313,3 +313,11 @@ if __name__ == "__main__":
         self.assertIn("mode === 'show'", bridge)
         cli = read(os.path.join(ROOT, "console", "bin", "trader-chart"))
         self.assertIn('command["source"]', cli)
+
+    def test_every_panel_flip_nudges_the_chart_to_repaint(self):
+        # Operator's recording: open the Script pane -> the chart went white. Vela must be nudged
+        # after the layout flip, or the run's paint lands on a canvas nobody repainted.
+        app = read(APP)
+        self.assertIn("function nudgeChart()", app)
+        self.assertIn("chart.resize()", app)
+        self.assertGreaterEqual(app.count("nudgeChart();"), 3)   # both branches of setPanel + the helper

@@ -66,6 +66,20 @@ function syncRightButtons() {
   el.scriptOpen.setAttribute('aria-pressed', String(col && rightViewIs('script')));
 }
 
+/* Vela repaints through its own resize observer, but a panel flip (the right column opening or
+   closing, the Library appearing) can land between its frames and leave the canvas blank — the
+   operator's recording showed exactly that: open the Script pane and the chart goes white, so the
+   run paints onto an invisible chart. Nudge it on the next frames after every flip. */
+function nudgeChart() {
+  const kick = () => {
+    window.dispatchEvent(new Event('resize'));
+    if (chart && typeof chart.resize === 'function') {
+      try { chart.resize(); } catch { /* older Vela build */ }
+    }
+  };
+  requestAnimationFrame(() => { kick(); setTimeout(kick, 90); setTimeout(kick, 320); });
+}
+
 function setPanel(name, on) {
   if (name === 'detail' || name === 'script') {
     on = Boolean(on);
@@ -73,11 +87,13 @@ function setPanel(name, on) {
     el.main.dataset.detail = on ? 'on' : 'off';
     syncRightButtons();
     try { localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), detail: on })); } catch { /* private mode */ }
+    nudgeChart();
     return;
   }
   el.main.dataset[name] = on ? 'on' : 'off';
   if (el.libraryOpen) el.libraryOpen.setAttribute('aria-pressed', String(Boolean(on)));
   try { localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), [name]: Boolean(on) })); } catch { /* private mode */ }
+  nudgeChart();
 }
 
 function togglePanel(name) {
