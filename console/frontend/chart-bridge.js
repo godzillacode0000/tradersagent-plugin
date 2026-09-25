@@ -38,7 +38,7 @@
      200 with nothing done). So the page publishes its real list in every heartbeat and the server
      validates against that instead of trusting a constant. */
   const ACTIONS = ['apply', 'add', 'remove', 'draw', 'clear', 'probe', 'market', 'shot', 'reload',
-                   'mode', 'script', 'palette', 'browse', 'open'];
+                   'mode', 'script', 'palette', 'browse', 'open', 'rect'];
 
   const api = async (path, body) => {
     const res = await fetch(path, body
