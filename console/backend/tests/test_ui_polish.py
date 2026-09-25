@@ -7,7 +7,8 @@ upstream, a popover that cannot be closed from the keyboard.
 
 Scope (operator, 25 Sep — "I am talking part only"): the Library part of the pane — search block,
 filter row, suggestion chips, "Browse all" bar, the family bubble row and the concept popover it
-opens. Phases 4-5 of the plan (detail pane, global toast layer) are optional and not pinned here.
+opens. Phase 4 of the plan (the detail pane) is pinned here from T4.1 on; Phase 5 (the global toast
+layer) stays optional.
 """
 
 import os
@@ -242,6 +243,24 @@ class TheCodeBlockIsDressed(unittest.TestCase):
     def test_one_copy_button_only(self):
         app = read(APP)
         self.assertEqual(app.count('id="copy"'), 1, "copy lives on the code bar — not twice")
+
+
+class TheAgentCanOpenOneRow(unittest.TestCase):
+    """Phase 4's verification door: a screenshot of the detail pane has to come from a real click."""
+
+    def test_open_op_exists_in_bridge_and_cli(self):
+        bridge = read(os.path.join(ROOT, "console", "frontend", "chart-bridge.js"))
+        self.assertIn("case 'open':", bridge)
+        self.assertIn("dataset.slug === command.slug", bridge, "the op clicks the row, it does not fake it")
+        cli = read(os.path.join(ROOT, "console", "bin", "trader-chart"))
+        self.assertIn("def cmd_open", cli)
+        self.assertIn('"open"', cli)
+
+    def test_open_is_browsing_only(self):
+        bridge = read(os.path.join(ROOT, "console", "frontend", "chart-bridge.js"))
+        block = bridge.split("case 'open':", 1)[1].split("case 'mode':", 1)[0]
+        for forbidden in ("TraderRun.run", "queueMount", "apply("):
+            self.assertNotIn(forbidden, block, "opening a row must never run or mount anything")
 
 
 if __name__ == "__main__":

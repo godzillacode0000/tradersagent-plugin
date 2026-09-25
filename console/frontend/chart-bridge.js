@@ -709,6 +709,45 @@
           };
           break;
         }
+        case 'open': {
+          /* Open one Library row's detail pane — the agent's version of clicking a result. Reading
+             only: nothing is run, mounted or ordered, and the pane's action buttons stay untouched. */
+          const kind = command.kind === 'indicator' ? 'indicator' : 'concept';
+          if (typeof toggleBrowse === 'function') toggleBrowse(true);
+          if (kind === 'concept') {
+            for (let i = 0; i < 20 && !document.querySelector('.browse__fam'); i++) {
+              await new Promise((r) => setTimeout(r, 150));
+            }
+            const want = String(command.family || '');
+            const chip = Array.from(document.querySelectorAll('.browse__fam'))
+              .find((button) => button.dataset.family === want);
+            const alreadyOpen = typeof familyConceptState !== 'undefined' &&
+              familyConceptState.open && familyConceptState.family === want;
+            if (chip && !alreadyOpen) chip.click();
+          }
+          const scope = kind === 'concept' ? '#browse-concepts-list' : '#browse-list';
+          let row = null;
+          for (let i = 0; i < 40 && !row; i++) {
+            await new Promise((r) => setTimeout(r, 150));
+            row = Array.from(document.querySelectorAll(scope + ' .row'))
+              .find((button) => button.dataset.slug === command.slug);
+          }
+          if (!row) {
+            out.detail = 'no ' + kind + ' row for "' + command.slug + '" is on screen';
+            break;
+          }
+          row.click();
+          const detail = document.getElementById('detail');
+          const titleOf = () => ((detail && detail.querySelector('.detail__title')) || {}).textContent || '';
+          for (let i = 0; i < 40; i++) {
+            await new Promise((r) => setTimeout(r, 150));
+            if (titleOf() && !/Loading…/.test(titleOf())) break;
+          }
+          out.ok = true;
+          out.detail = 'opened ' + kind + ' “' + titleOf() + '” in the detail pane';
+          out.opened = { slug: command.slug, kind, title: titleOf() };
+          break;
+        }
         case 'mode': {
           out.ok = true;
           out.detail = 'the console is chart-first: the <> control rides Vela\'s own toolbar ' +
