@@ -341,30 +341,32 @@ input:focus-visible, textarea:focus-visible {
   background: var(--lx-border-soft);
 }
 .main[data-library="on"] { grid-template-columns: 300px minmax(0, 1fr); }
-.main[data-detail="on"]  { grid-template-columns: minmax(0, 1fr) 380px; }
-.main[data-library="on"][data-detail="on"] { grid-template-columns: 300px minmax(0, 1fr) 380px; }
+/* The right column never takes grid space (operator's recording, 25 Sep): when it did, the chart
+   shrank and Vela's canvas came back blank — the run's paint landed on a white area, so nobody
+   could see that PineTS had drawn anything. As an overlay it costs the chart nothing, at any
+   width, and the paint stays visible beside it. */
+.main[data-detail="on"],
+.main[data-library="on"][data-detail="on"] { grid-template-columns: minmax(0, 1fr); }
+.panel--right {
+  position: fixed; inset-block: var(--lx-topbar-h) var(--lx-statusbar-h); inset-inline-end: 0;
+  width: min(420px, 46vw);
+  box-shadow: var(--lx-shadow-4);
+  z-index: var(--lx-z-overlay);
+  transform: translateX(100%);
+  transition: transform var(--lx-dur-240) var(--lx-ease);
+}
+.main[data-detail="on"] .panel--right { transform: none; }
 
 @media (max-width: 1439px) {
   .main[data-library="on"] { grid-template-columns: 280px minmax(0, 1fr); }
-  .main[data-detail="on"]  { grid-template-columns: minmax(0, 1fr) 340px; }
-  .main[data-library="on"][data-detail="on"] { grid-template-columns: 280px minmax(0, 1fr) 340px; }
+  .main[data-library="on"] { grid-template-columns: 280px minmax(0, 1fr); }
 }
 @media (max-width: 1239px) {
   .main[data-library="on"] { grid-template-columns: 260px minmax(0, 1fr); }
   /* The detail panel overlays here, so it costs the chart nothing. */
-  .main[data-detail="on"] { grid-template-columns: minmax(0, 1fr); }
   /* The overlay must not swallow the topbar: the Library and Details toggles live up there, and a
      covered toggle leaves no visible way to close this panel (operator's stills, 25 Sep: "≡ Libr"
-     clipped mid-word). It starts under the bar instead. */
-  .panel--right {
-    position: fixed; inset-block: var(--lx-topbar-h) var(--lx-statusbar-h); inset-inline-end: 0;
-    width: min(420px, 46vw);
-    box-shadow: var(--lx-shadow-4);
-    z-index: var(--lx-z-overlay);
-    transform: translateX(100%);
-    transition: transform var(--lx-dur-240) var(--lx-ease);
-  }
-  .main[data-detail="on"] .panel--right { transform: none; }
+     clipped mid-word). It starts under the bar instead — see the global .panel--right rule above. */
 }
 @media (max-width: 1099px) {
   /* The chart keeps the height (operator's call, 15 Sep): the app stays viewport-tall and the

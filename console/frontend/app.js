@@ -72,12 +72,22 @@ function syncRightButtons() {
    run paints onto an invisible chart. Nudge it on the next frames after every flip. */
 function nudgeChart() {
   const kick = () => {
+    /* The workspace owns the cells (and the resize observer that watches them); the chart owns its
+       canvas. A panel flip changes the column the chart lives in, so both have to be told, and the
+       page must land on the new size before the paint — hence the repeat passes. */
     window.dispatchEvent(new Event('resize'));
-    if (chart && typeof chart.resize === 'function') {
-      try { chart.resize(); } catch { /* older Vela build */ }
+    try { const ws = window.__wsApp && window.__wsApp.ws; if (ws && typeof ws.resize === 'function') ws.resize(); } catch { /* bare chart */ }
+    const c = chart || (window.__wsApp && window.__wsApp.activeChart && window.__wsApp.activeChart());
+    if (c && typeof c.resize === 'function') {
+      try { c.resize(); } catch { /* older Vela build */ }
+    }
+    /* resize() alone leaves the canvas blank after the column changes (proved on the live page):
+       re-applying the SAME visible range forces a full redraw without moving the user's view. */
+    if (c && typeof c.getVisibleRange === 'function' && typeof c.setVisibleRange === 'function') {
+      try { c.setVisibleRange(c.getVisibleRange()); } catch { /* older Vela build */ }
     }
   };
-  requestAnimationFrame(() => { kick(); setTimeout(kick, 90); setTimeout(kick, 320); });
+  requestAnimationFrame(() => { kick(); setTimeout(kick, 90); setTimeout(kick, 320); setTimeout(kick, 700); });
 }
 
 function setPanel(name, on) {

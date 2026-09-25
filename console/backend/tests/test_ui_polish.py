@@ -279,12 +279,28 @@ class TheAgentCanOpenOneRow(unittest.TestCase):
 
 class TheOverlayPanelKeepsTheTopbarReachable(unittest.TestCase):
     def test_the_fixed_detail_panel_starts_below_the_topbar(self):
+        # The overlay is global now (F1, 25 Sep): it must cost the chart nothing at ANY width, so the
+        # rule lives outside the narrow media query — and it still has to start under the topbar and
+        # stop above the statusbar, or a covered toggle/toast leaves no way out and cuts words.
         css = read(CSS)
-        block = css.split("@media (max-width: 1239px)", 1)[1].split("@media", 1)[0]
+        block = css.split(".panel--right {", 1)[1].split("}", 1)[0]
+        self.assertIn("position: fixed", block, "the right column must be an overlay, not a grid column")
         self.assertIn("inset-block: var(--lx-topbar-h) var(--lx-statusbar-h)", block,
                       "a covered Details toggle leaves no way to close the panel, and a covered "
                       "statusbar cuts the toast mid-word")
-        self.assertIn("--lx-statusbar-h", read(CSS))
+        self.assertIn("--lx-statusbar-h", css)
+
+    def test_the_right_column_never_takes_grid_space(self):
+        # F1 (operator's recording, 25 Sep): when the column took a grid column the chart shrank and
+        # Vela's canvas came back blank — the run's paint landed on a white area nobody could see.
+        # It must be an overlay at every width, so no grid rule may name the panel column.
+        css = read(CSS)
+        for rule in css.split(".main[")[1:]:
+            head = rule.split("}", 1)[0]
+            if "grid-template-columns" in head:
+                self.assertNotIn("380px", head, "the right column must not take grid space")
+                self.assertNotIn("340px", head, "the right column must not take grid space")
+        self.assertIn(".main[data-detail=\"on\"] .panel--right { transform: none; }", css)
 
     def test_the_topbar_toggle_still_exists(self):
         self.assertIn('id="detail-open"', read(HTML))
