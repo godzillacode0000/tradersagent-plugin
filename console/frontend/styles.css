@@ -637,6 +637,10 @@ input[type="text"]:hover { border-color: var(--lx-border-strong); }
   display: flex; align-items: center; gap: var(--lx-space-2); min-width: 0;
 }
 .row__sub .row__meta { flex: 1 1 auto; min-width: 0; }
+/* The date is the part worth keeping whole, so the family name yields to it. */
+.row__meta { display: flex; align-items: baseline; gap: 4px; }
+.row__meta-fam { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.row__meta-date { flex: 0 0 auto; }
 .row__desc {
   font-size: var(--lx-fs-sm); color: var(--lx-fg-muted); line-height: 1.45;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;

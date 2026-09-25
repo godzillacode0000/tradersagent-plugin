@@ -581,7 +581,10 @@ function browseRow(row) {
       <span class="row__name">${esc(row.name || row.slug)}</span>
     </div>
     <div class="row__sub">
-      <span class="row__meta">${esc(row.family || 'unclassified')}${row.date_displayed ? ' · ' + esc(row.date_displayed) : ''}</span>
+      <span class="row__meta">
+        <span class="row__meta-fam">${esc(row.family || 'unclassified')}</span>
+        ${row.date_displayed ? `<span class="row__meta-date">· ${esc(row.date_displayed)}</span>` : ''}
+      </span>
       <span class="row__kind row__kind--indicator">indicator</span>
     </div>
     ${row.description ? `<div class="row__desc">${esc(row.description)}</div>` : ''}`;
