@@ -638,6 +638,12 @@ async function loadBrowse(reset = false) {
     rows.forEach((row) => el.browseList.appendChild(browseRow(row)));
     browseState.page += 1;
     const total = data.total ?? browseState.rows.length;
+    // The topbar door carried a baked count ("805"); it is 806 now. Read it once, from the API.
+    if (el.libOpen && !el.libOpen.dataset.counted && data.total) {
+      const label = el.libOpen.querySelector('.btn__label');
+      if (label) label.textContent = ` ${data.total}`;
+      el.libOpen.dataset.counted = '1';
+    }
     if (el.browseCount) {
       el.browseCount.textContent = browseState.family
         ? `${browseState.rows.length} of ${total} · ${browseState.family}`
@@ -756,13 +762,20 @@ async function loadFamilies() {
   try {
     const data = await api('/api/families', {});
     const fams = data.families || [];
+    // The family counts are concepts; the ALL chip needs the catalogue's own total, which no
+    // family carries. One 1-row read answers it exactly (and never drifts like a baked number).
+    let conceptTotal = 0;
+    try { conceptTotal = Number((await api('/api/concepts', { page_size: 1 })).total || 0); }
+    catch { /* the chip falls back to a bare label — never a wrong number */ }
     el.browseFamilies.innerHTML = '';
     const all = document.createElement('button');
     all.type = 'button'; all.className = 'browse__fam'; all.dataset.family = '';
     all.dataset.label = 'All library concepts';
     all.setAttribute('aria-controls', 'browse-concepts');
     all.setAttribute('aria-expanded', 'false');
-    all.textContent = 'all 805';
+    all.innerHTML = `<span class="browse__fam-label">All concepts</span>`
+      + (conceptTotal ? `<span class="browse__fam-count">${esc(String(conceptTotal))}</span>` : '')
+      + `<span class="browse__fam-caret" aria-hidden="true">▾</span>`;
     all.title = 'Show all library concepts';
     all.addEventListener('click', () => pickFamily('', all));
     el.browseFamilies.appendChild(all);
@@ -1043,7 +1056,7 @@ async function main() {
     setPanel('library', true);
     setLibraryCollapsed(false);
     toggleBrowse(true);
-    toast('LuxAlgo Library — 805 indicators');
+    toast('LuxAlgo Library ready');
     checkHealth();
   });
 
