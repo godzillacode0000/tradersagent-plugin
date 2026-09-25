@@ -758,6 +758,13 @@ pre {
 .browse__fam-caret { font-size: 9px; opacity: .65; transition: transform var(--lx-dur-fast) var(--lx-ease); }
 .browse__fam[aria-expanded="true"] .browse__fam-caret { transform: rotate(180deg); opacity: 1; }
 .browse__fam-count { color: var(--lx-fg-faint); }
+/* Keyboard focus must be visible on every surface the disclosure touches — the ring is suppressed
+   for mouse users by :focus-visible itself, so this costs the pointer path nothing. */
+.row:focus-visible,
+.browse__fam:focus-visible,
+.browse__concepts-close:focus-visible {
+  outline: 2px solid var(--lx-accent-line); outline-offset: 2px;
+}
 .browse__list { flex: 1; min-height: 0; overflow: auto; padding: var(--lx-space-2); max-height: 46vh; }
 .browse__more { padding: 0 var(--lx-space-3) var(--lx-space-2); }
 .browse__more.is-done { display: none; }

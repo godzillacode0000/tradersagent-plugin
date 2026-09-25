@@ -1060,6 +1060,42 @@ async function checkHealth() {
   }
 }
 
+/* Keyboard rules for the disclosure, in one place. Escape closes and hands focus back to the chip
+   that opened it; arrows walk whichever surface has focus (the chip row, or the concept list). No
+   roving tabindex: the popover is short and the arrows are a convenience, not the only way in. */
+function conceptsKeydown(e) {
+  if (e.key === 'Escape' && familyConceptState.open) {
+    e.preventDefault();
+    closeFamilyConcepts();
+    el.browseFamilies?.querySelector('.browse__fam.is-on')?.focus();
+    return;
+  }
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+  const inPopover = familyConceptState.open && el.browseConcepts?.contains(e.target);
+  const onChip = e.target instanceof Element && !!e.target.closest('.browse__fam');
+  const scope = inPopover ? el.browseConceptsList : (onChip ? el.browseFamilies : null);
+  if (!scope) return;
+  const items = Array.from(scope.querySelectorAll(inPopover ? '.row' : '.browse__fam'));
+  if (!items.length) return;
+  const index = items.indexOf(document.activeElement);
+  let next;
+  if (e.key === 'Home') next = 0;
+  else if (e.key === 'End') next = items.length - 1;
+  else if (e.key === 'ArrowDown') next = index < 0 ? 0 : Math.min(items.length - 1, index + 1);
+  else next = index < 0 ? items.length - 1 : Math.max(0, index - 1);
+  e.preventDefault();
+  items[next].focus();
+}
+
+/* Click-away, bound in the capture phase so a click that lands on the chart or the chat still
+   closes the disclosure before anything else reacts to it. The chip itself is exempt: it toggles. */
+function onDocumentPointerDown(e) {
+  if (!familyConceptState.open) return;
+  if (el.browseConcepts?.contains(e.target)) return;
+  if (e.target instanceof Element && e.target.closest('.browse__fam')) return;
+  closeFamilyConcepts();
+}
+
 async function main() {
   /* Chart-first: the LIBRARY starts where he left it. The DETAIL panel deliberately never restores
      open: nothing is selected at load time, so it would paint an empty "Nothing selected" column
@@ -1081,6 +1117,8 @@ async function main() {
   el.browseMore?.addEventListener('click', () => loadBrowse(false));
   el.browseConceptsMore?.addEventListener('click', () => loadFamilyConcepts(false));
   el.browseConceptsClose?.addEventListener('click', () => closeFamilyConcepts());
+  document.addEventListener('keydown', conceptsKeydown);
+  document.addEventListener('pointerdown', onDocumentPointerDown, true);
   el.libOpen?.addEventListener('click', () => {
     setPanel('library', true);
     setLibraryCollapsed(false);
