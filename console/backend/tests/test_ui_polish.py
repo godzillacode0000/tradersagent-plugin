@@ -305,3 +305,11 @@ if __name__ == "__main__":
         self.assertIn("case 'rect'", bridge)
         self.assertIn("getBoundingClientRect", bridge)
         self.assertIn("cx:", bridge)
+
+    def test_the_cli_and_the_bridge_agree_on_what_a_script_command_carries(self):
+        # `trader-chart script show --pine FILE` sends `source`; the bridge must read it too.
+        bridge = read(BRIDGE)
+        self.assertIn("command.pine || command.source", bridge)
+        self.assertIn("mode === 'show'", bridge)
+        cli = read(os.path.join(ROOT, "console", "bin", "trader-chart"))
+        self.assertIn('command["source"]', cli)

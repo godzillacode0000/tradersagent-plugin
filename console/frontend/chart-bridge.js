@@ -625,11 +625,29 @@
             break;
           }
           if (openBtn && pane && closed) openBtn.click();
-          const pine = String(command.pine || '');
+          /* The CLI speaks `source` (bin/trader-chart), the MCP tools speak `pine`: read both, or
+             `trader-chart script show --pine FILE` silently opened an empty editor. `mode: show`
+             loads the editor and stops there — running is `draw`/`native`/no mode at all. */
+          const pine = String(command.pine || command.source || '');
+          const mode = String(command.mode || '');
           if (!pine.trim()) {
             out.ok = true;
             out.detail = 'script pane opened — paste Pine and press Run, or send ' +
               '{"action":"script","pine":"…"} to run it right away';
+            break;
+          }
+          if (mode === 'show') {
+            const box = document.getElementById('script-src');
+            if (!box) {
+              out.ok = false;
+              out.detail = 'no editor on this page — the script pane did not open';
+              break;
+            }
+            box.value = pine;
+            box.dispatchEvent(new Event('input', { bubbles: true }));
+            out.ok = true;
+            out.lines = pine.split('\n').length;
+            out.detail = 'loaded ' + out.lines + ' line(s) into the editor — press Run to execute';
             break;
           }
           const r = await window.TraderRun.run(pine, String(command.name || 'agent-script'));
@@ -654,15 +672,26 @@
             break;
           }
           const r = node.getBoundingClientRect();
+          /* This console can sit inside the app shell's frame: add the frame's own offset so the
+             numbers are SCREEN pixels, not just this document's. Cross-origin frames stay at 0. */
+          let ox = 0, oy = 0;
+          try {
+            const fe = window.frameElement;
+            if (fe) { const f = fe.getBoundingClientRect(); ox = f.x; oy = f.y; }
+          } catch (err) { ox = 0; oy = 0; }
           out.ok = true;
           out.rect = {
             x: Math.round(r.x), y: Math.round(r.y),
             w: Math.round(r.width), h: Math.round(r.height),
             cx: Math.round(r.x + r.width / 2), cy: Math.round(r.y + r.height / 2),
+            sx: Math.round(r.x + ox), sy: Math.round(r.y + oy),
+            scx: Math.round(r.x + r.width / 2 + ox), scy: Math.round(r.y + r.height / 2 + oy),
+            frame: [Math.round(ox), Math.round(oy)],
             hidden: !(r.width && r.height) || getComputedStyle(node).visibility === 'hidden',
           };
           out.detail = sel + ' at ' + out.rect.x + ',' + out.rect.y +
-            ' ' + out.rect.w + 'x' + out.rect.h;
+            ' ' + out.rect.w + 'x' + out.rect.h + ' · screen ' + out.rect.scx + ',' + out.rect.scy +
+            ' · frame ' + out.rect.frame.join(',');
           break;
         }
         case 'browse': {
