@@ -557,6 +557,7 @@ let browseState = { page: 0, family: '', rows: [], loading: false, queued: null 
 let familyConceptState = {
   page: 0, family: '', label: 'All library concepts', rows: [], total: 0,
   loading: false, queued: null, open: false,
+  clusters: new Set(),   // cluster names already headed in the popover (pages must not repeat them)
 };
 
 function browseRow(row) {
@@ -686,6 +687,24 @@ function closeFamilyConcepts() {
   setFamilyDisclosure();
 }
 
+/* Concepts arrive family-filtered but not grouped, and the popover is long: cluster headings break
+   the wall of names into runs you can skim. Headings are decorative (aria-hidden) so the list's own
+   roles stay simple, and a cluster that continues onto the next page keeps the heading it got. */
+function appendConceptRows(rows) {
+  rows.forEach((row) => {
+    const cluster = row.cluster || '';
+    if (cluster && !familyConceptState.clusters.has(cluster)) {
+      familyConceptState.clusters.add(cluster);
+      const head = document.createElement('div');
+      head.className = 'browse__group';
+      head.setAttribute('aria-hidden', 'true');
+      head.textContent = cluster;
+      el.browseConceptsList.appendChild(head);
+    }
+    el.browseConceptsList.appendChild(browseConceptRow(row));
+  });
+}
+
 async function loadFamilyConcepts(reset = false) {
   const state = familyConceptState;
   if (!el.browseConceptsList || (!reset && !state.open)) return;
@@ -700,6 +719,7 @@ async function loadFamilyConcepts(reset = false) {
     state.page = 0;
     state.rows = [];
     state.total = 0;
+    state.clusters.clear();
     el.browseConceptsList.innerHTML = skeletonRows(4);
   }
   const moreWrap = el.browseConceptsMore?.parentElement;
@@ -727,7 +747,7 @@ async function loadFamilyConcepts(reset = false) {
       return;
     }
     state.rows.push(...rows);
-    rows.forEach((row) => el.browseConceptsList.appendChild(browseConceptRow(row)));
+    appendConceptRows(rows);
     state.page += 1;
     state.total = total;
     if (el.browseConceptsCount) {

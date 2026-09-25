@@ -804,6 +804,12 @@ pre {
   padding: var(--lx-space-2);
 }
 .browse__concepts-list .row { width: 100%; text-align: left; }
+.browse__group {
+  padding: var(--lx-space-2) var(--lx-space-2) var(--lx-space-1);
+  font-size: var(--lx-fs-xs); text-transform: uppercase; letter-spacing: .06em;
+  color: var(--lx-fg-faint);
+}
+.browse__concepts-list .browse__group:first-child { padding-top: 0; }
 .browse__concepts-more { flex: 0 0 auto; padding: var(--lx-space-2); border-top: 1px solid var(--lx-border); }
 .browse__concepts-more.is-done { display: none; }
 @media (max-width: 640px) {
