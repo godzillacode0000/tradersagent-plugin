@@ -147,6 +147,12 @@ class TheRowsReadAsCards(unittest.TestCase):
                        '.row[data-kind="indicator"] .row__glyph'):
             self.assertIn(needle, css)
 
+    def test_the_name_line_owns_its_width(self):
+        """The pill used to sit on the name line and ellipsized names at ~10 characters."""
+        css = read(CSS)
+        self.assertIn(".row__sub", css)
+        self.assertIn("class=\"row__sub\"", read(APP))
+
     def test_the_kind_tag_is_a_pill(self):
         self.assertIn("border-radius: 999px", rule(read(CSS), ".row__kind"))
 

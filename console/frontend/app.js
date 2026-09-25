@@ -579,10 +579,12 @@ function browseRow(row) {
     <div class="row__top">
       <span class="row__glyph" aria-hidden="true">${esc(glyphFor(row))}</span>
       <span class="row__name">${esc(row.name || row.slug)}</span>
+    </div>
+    <div class="row__sub">
+      <span class="row__meta">${esc(row.family || 'unclassified')}${row.date_displayed ? ' · ' + esc(row.date_displayed) : ''}</span>
       <span class="row__kind row__kind--indicator">indicator</span>
     </div>
-    ${row.description ? `<div class="row__desc">${esc(row.description)}</div>` : ''}
-    <div class="row__meta">${esc(row.family || 'unclassified')}${row.date_displayed ? ' · ' + esc(row.date_displayed) : ''}</div>`;
+    ${row.description ? `<div class="row__desc">${esc(row.description)}</div>` : ''}`;
   // The same door a search hit uses — one landasan, one executor.
   button.addEventListener('click', () => openResult({ ...row, kind: 'indicator' }, button));
   return button;
@@ -604,9 +606,11 @@ function browseConceptRow(row) {
     <div class="row__top">
       <span class="row__glyph" aria-hidden="true">${esc(glyphFor(row))}</span>
       <span class="row__name">${esc(row.name || row.slug)}</span>
+    </div>
+    <div class="row__sub">
+      ${meta ? `<span class="row__meta">${esc(meta)}</span>` : '<span class="row__meta"></span>'}
       <span class="row__kind row__kind--concept">concept</span>
     </div>
-    ${meta ? `<div class="row__meta">${esc(meta)}</div>` : ''}
     ${aliasText}`;
   button.addEventListener('click', () => openResult({ ...row, kind: 'concept' }, button));
   return button;
@@ -908,10 +912,12 @@ function renderResults(rows) {
       <div class="row__top">
         <span class="row__glyph" aria-hidden="true">${esc(glyphFor(row))}</span>
         <span class="row__name">${esc(row.name || row.slug)}</span>
+      </div>
+      <div class="row__sub">
+        <span class="row__meta">${esc(row.family || '')}${row.family ? ' · ' : ''}${esc(row.slug)}</span>
         <span class="row__kind row__kind--${esc(row.kind)}">${esc(row.kind)}</span>
       </div>
-      ${row.description ? `<div class="row__desc">${esc(row.description)}</div>` : ''}
-      <div class="row__meta">${esc(row.family || '')}${row.family ? ' · ' : ''}${esc(row.slug)}</div>`;
+      ${row.description ? `<div class="row__desc">${esc(row.description)}</div>` : ''}`;
     button.addEventListener('click', () => openResult(row, button));
     el.results.appendChild(button);
   });
