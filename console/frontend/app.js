@@ -95,6 +95,7 @@ function setPanel(name, on) {
     on = Boolean(on);
     if (on) showRightView(name);
     el.main.dataset.detail = on ? 'on' : 'off';
+    if (on) setPaneTop();
     syncRightButtons();
     try { localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), detail: on })); } catch { /* private mode */ }
     nudgeChart();
@@ -172,6 +173,29 @@ function dockScriptButton() {
   return true;
 }
 setInterval(dockScriptButton, 4000);
+
+
+/* F5 (25 Sep): the right column must never sit on top of the chart's own toolbar row — that is
+   where Vela keeps its controls and where our Script / catalogue buttons are docked. The row is
+   real DOM, so measure it; the CSS fallback covers a bare chart with no row at all. */
+function setPaneTop() {
+  const row = document.querySelector('.vela-widget-topbar');
+  const h = row ? Math.ceil(row.getBoundingClientRect().height) : 0;
+  document.documentElement.style.setProperty(
+    '--lx-pane-top', `calc(var(--lx-topbar-h) + ${h > 0 ? h : 44}px)`);
+}
+window.addEventListener('resize', setPaneTop);
+
+/* F3 (25 Sep): one short pulse on the chart after a successful Run, so "did it draw anything?"
+   has an answer on screen even while the pane is open. */
+function flashChart() {
+  const host = document.getElementById('chart');
+  if (!host) return;
+  host.classList.remove('is-painted');
+  void host.offsetWidth;
+  host.classList.add('is-painted');
+  setTimeout(() => host.classList.remove('is-painted'), 1600);
+}
 
 /* ------------------------------------------------------------------ helpers */
 function toast(message, bad = false) {
@@ -1304,7 +1328,13 @@ async function main() {
         outBox.textContent = window.TraderRun.summarize(r);
         log(`“${label}” ran in ${r.ms} ms`);
         refreshIndicatorCount();
-        toast(`“${label}” ran in ${r.ms} ms`);
+        /* F3 (25 Sep): say where the paint went, and point at it — the operator's recording showed
+           a run finishing with nothing visibly changing, because the chart behind the pane was
+           blank. A pulse on the chart closes that loop. */
+        const n = Array.isArray(r.series) ? r.series.length : (r.series || 0);
+        toast(`“${label}” ran in ${r.ms} ms · ${n} series · the paint is on the chart`);
+        nudgeChart();
+        flashChart();
       }
     } catch (err) {
       outBox.textContent = '✗ ' + err.message;

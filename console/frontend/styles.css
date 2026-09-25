@@ -356,6 +356,10 @@ input:focus-visible, textarea:focus-visible {
   transition: transform var(--lx-dur-240) var(--lx-ease);
 }
 .main[data-detail="on"] .panel--right { transform: none; }
+/* F5 (25 Sep): the pane starts BELOW the chart's own toolbar row, measured at runtime from the row
+   itself (--lx-pane-top, set in app.js) — so Vela's controls and our docked Script / catalogue
+   buttons stay reachable while the pane is open. The fallback keeps the old topbar offset. */
+.panel--right { inset-block-start: var(--lx-pane-top, calc(var(--lx-topbar-h) + 44px)); }
 
 @media (max-width: 1439px) {
   .main[data-library="on"] { grid-template-columns: 280px minmax(0, 1fr); }
@@ -1010,3 +1014,22 @@ pre {
   .btn--toggle[data-tip]:hover::after,
   .btn--toggle[data-tip]:focus-visible::after { animation: none; opacity: 1; }
 }
+
+/* F4 (25 Sep): the pane says where the paint lands — the question the operator asked of the
+   recording ("I want to see if it shown in chart or not") is answered inside the pane itself. */
+.script__hint { margin: 8px 0 0; color: var(--lx-text-2); font-size: 11.5px; line-height: 1.5; }
+.script__hint em { font-style: normal; color: var(--lx-text-1); }
+.script__hint kbd {
+  font: inherit; padding: 0 4px; border: 1px solid var(--lx-border-2);
+  border-radius: 4px; background: var(--lx-surface-2);
+}
+
+/* F3 (25 Sep): after a successful Run the chart itself says "the paint landed here" — a short
+   outline pulse, no motion, nothing that touches the data. */
+#chart.is-painted { animation: lx-chart-painted 1500ms var(--lx-ease) 1; }
+@keyframes lx-chart-painted {
+  0%   { box-shadow: inset 0 0 0 2px var(--lx-accent); }
+  70%  { box-shadow: inset 0 0 0 2px var(--lx-accent); }
+  100% { box-shadow: inset 0 0 0 2px transparent; }
+}
+@media (prefers-reduced-motion: reduce) { #chart.is-painted { animation: none; } }
