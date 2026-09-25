@@ -594,25 +594,44 @@ input[type="text"]:hover { border-color: var(--lx-border-strong); }
 
 .row {
   display: flex; flex-direction: column; align-items: stretch; justify-content: center;
-  gap: 3px;
-  width: 100%; min-height: var(--lx-row-h); padding: var(--lx-space-2) var(--lx-space-25);
+  gap: 4px;
+  width: 100%; min-height: var(--lx-row-h); padding: 9px 10px;
   text-align: left; font: inherit; cursor: pointer;
   color: var(--lx-fg); background: transparent;
-  border: 0; border-left: 2px solid transparent; border-radius: var(--lx-radius-lg);
+  border: 1px solid transparent; border-left: 2px solid transparent;
+  border-radius: var(--lx-radius-lg);
   transition: background var(--lx-dur-fast) var(--lx-ease),
+              border-color var(--lx-dur-fast) var(--lx-ease),
               transform var(--lx-dur-fast) var(--lx-ease);
 }
-.row:hover { background: var(--lx-bg-hover); }
+.row + .row { margin-top: 2px; }   /* the rows are cards, not one grey paragraph */
+.row:hover { background: var(--lx-bg-hover); border-color: var(--lx-border); }
 .row:active { transform: translateY(1px); }
 /* selection = accent tint + 2px bar, a NON-colour cue, not Vela's filled chip */
 .row--active { background: var(--lx-accent-soft); border-left-color: var(--lx-accent-line); }
 /* The two-line anatomy every row in this app renders: name + kind on line 1, description and meta
    below. app.js has emitted these classes since the catalogue shipped; they had no rules, so the
    rows read as flat text and their lines sat side by side. */
+/* The one-letter mark: a small rounded tile whose colour is the row's kind (amber = concept,
+   blue = indicator). It is what gives the list a column to scan down. */
+.row__glyph {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 7px;
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: var(--lx-fw-semibold);
+  color: var(--lx-fg-muted); background: var(--lx-surface-3);
+  border: 1px solid var(--lx-border);
+}
+.row[data-kind="concept"] .row__glyph {
+  color: var(--lx-warn); background: rgba(224, 180, 0, .12); border-color: rgba(224, 180, 0, .28);
+}
+.row[data-kind="indicator"] .row__glyph {
+  color: var(--lx-accent-ink); background: var(--lx-accent-soft); border-color: rgba(17, 151, 226, .32);
+}
 .row__top {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center;
   gap: var(--lx-space-2); min-width: 0;
 }
+.row__top .row__name { flex: 1 1 auto; min-width: 0; }
 .row__desc {
   font-size: var(--lx-fs-sm); color: var(--lx-fg-muted); line-height: 1.45;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -622,8 +641,9 @@ input[type="text"]:hover { border-color: var(--lx-border-strong); }
 .row__name { font-size: var(--lx-fs-md); font-weight: var(--lx-fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row__meta { font-size: var(--lx-fs-xs); color: var(--lx-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row__kind {
-  flex: 0 0 auto; padding: 1px var(--lx-space-1); border-radius: var(--lx-radius-xs);
+  flex: 0 0 auto; padding: 2px 7px; border-radius: 999px;
   border: 1px solid var(--lx-border-strong); color: var(--lx-fg-muted);
+  background: var(--lx-surface-2);
   font-size: var(--lx-fs-2xs); text-transform: uppercase; letter-spacing: var(--lx-ls-wide);
 }
 .row__kind--indicator { color: var(--lx-accent-ink); border-color: rgba(17, 151, 226, .45); }
@@ -796,10 +816,17 @@ pre {
 .browse__concepts.view--hidden { display: none !important; }
 .browse__concepts-head {
   display: flex; align-items: center; gap: var(--lx-space-2); flex: 0 0 auto;
+  flex-wrap: nowrap;
   padding: var(--lx-space-2) var(--lx-space-3); border-bottom: 1px solid var(--lx-border);
   font-size: var(--lx-fs-sm);
 }
-.browse__concepts-head strong { font-weight: var(--lx-fw-semibold); }
+/* Title ellipsizes; the count and the close button keep their space, so the header never wraps
+   into the ragged two-line block it used to. */
+.browse__concepts-head strong {
+  font-weight: var(--lx-fw-semibold);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.browse__concepts-head .browse__count { flex: 0 0 auto; white-space: nowrap; }
 .browse__concepts-close {
   margin-left: auto; flex: 0 0 auto;
   width: 24px; height: 24px; display: grid; place-items: center;
@@ -833,9 +860,13 @@ pre {
 }
 .browse__concepts-list .row { width: 100%; text-align: left; }
 .browse__group {
+  /* Sticky: in a 100-row list the heading is the only thing that says where you are. */
+  position: sticky; top: 0; z-index: 1;
   padding: var(--lx-space-2) var(--lx-space-2) var(--lx-space-1);
   font-size: var(--lx-fs-xs); text-transform: uppercase; letter-spacing: .06em;
   color: var(--lx-fg-faint);
+  background: var(--lx-surface-glass);
+  backdrop-filter: blur(6px);
 }
 .browse__concepts-list .browse__group:first-child { padding-top: 0; }
 .browse__concepts-more { flex: 0 0 auto; padding: var(--lx-space-2); border-top: 1px solid var(--lx-border); }

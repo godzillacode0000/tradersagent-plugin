@@ -137,6 +137,28 @@ class ThePopoverClosesTheWayPeopleExpect(unittest.TestCase):
         self.assertIn("pointerdown", app)
 
 
+class TheRowsReadAsCards(unittest.TestCase):
+    def test_every_row_carries_a_kind_coloured_glyph(self):
+        app = read(APP)
+        self.assertIn("function glyphFor", app)
+        self.assertIn('class="row__glyph"', app)
+        css = read(CSS)
+        for needle in (".row__glyph", '.row[data-kind="concept"] .row__glyph',
+                       '.row[data-kind="indicator"] .row__glyph'):
+            self.assertIn(needle, css)
+
+    def test_the_kind_tag_is_a_pill(self):
+        self.assertIn("border-radius: 999px", rule(read(CSS), ".row__kind"))
+
+    def test_group_headings_stick_while_the_list_scrolls(self):
+        self.assertIn("position: sticky", rule(read(CSS), ".browse__group"))
+
+    def test_the_popover_header_never_wraps(self):
+        css = read(CSS)
+        self.assertIn("flex-wrap: nowrap", rule(css, ".browse__concepts-head"))
+        self.assertIn("text-overflow: ellipsis", rule(css, ".browse__concepts-head strong"))
+
+
 class TheDisclosureReadsAsOneSurface(unittest.TestCase):
     def test_the_header_does_not_repeat_the_family_name(self):
         """The popover title names the family; the count line repeated it ("Wyckoff" twice)."""

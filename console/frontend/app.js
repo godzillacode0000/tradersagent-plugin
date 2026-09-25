@@ -560,14 +560,24 @@ let familyConceptState = {
   clusters: new Set(),   // cluster names already headed in the popover (pages must not repeat them)
 };
 
+/* The one-letter mark at the head of every row. It gives the list a column the eye can run down
+   (a wall of same-shaped text is what "flat" meant), and it carries the kind in its colour:
+   amber for a concept, blue for an indicator script. */
+function glyphFor(row) {
+  const name = String(row.name || row.slug || '?').trim();
+  return name ? name[0].toUpperCase() : '?';
+}
+
 function browseRow(row) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'row';
   button.dataset.slug = row.slug;
   button.dataset.kind = 'indicator';       // a catalogue entry is always an indicator
+  button.title = row.name || row.slug;     // the name ellipsizes; the tooltip keeps it readable
   button.innerHTML = `
     <div class="row__top">
+      <span class="row__glyph" aria-hidden="true">${esc(glyphFor(row))}</span>
       <span class="row__name">${esc(row.name || row.slug)}</span>
       <span class="row__kind row__kind--indicator">indicator</span>
     </div>
@@ -584,6 +594,7 @@ function browseConceptRow(row) {
   button.className = 'row';
   button.dataset.slug = row.slug;
   button.dataset.kind = 'concept';
+  button.title = row.name || row.slug;
   const aliases = Array.isArray(row.aliases) ? row.aliases.filter(Boolean).slice(0, 3) : [];
   const aliasText = aliases.length
     ? `<div class="row__desc">Also: ${esc(aliases.join(' · '))}${row.aliases.length > aliases.length ? ' · …' : ''}</div>`
@@ -591,6 +602,7 @@ function browseConceptRow(row) {
   const meta = [row.family || familyConceptState.label, row.cluster].filter(Boolean).join(' · ');
   button.innerHTML = `
     <div class="row__top">
+      <span class="row__glyph" aria-hidden="true">${esc(glyphFor(row))}</span>
       <span class="row__name">${esc(row.name || row.slug)}</span>
       <span class="row__kind row__kind--concept">concept</span>
     </div>
@@ -750,7 +762,7 @@ async function loadFamilyConcepts(reset = false) {
     if (!rows.length && !state.rows.length) {
       state.total = total;
       el.browseConceptsList.innerHTML = `<div class="browse__note">No concepts found for ${esc(wantedLabel)}.</div>`;
-      if (el.browseConceptsCount) el.browseConceptsCount.textContent = `0 of ${total} concepts`;
+      if (el.browseConceptsCount) el.browseConceptsCount.textContent = `0 of ${total}`;
       moreWrap?.classList.add('is-done');
       state.queued = null;
       state.loading = false;
@@ -764,7 +776,7 @@ async function loadFamilyConcepts(reset = false) {
     if (el.browseConceptsCount) {
       // The title above already names the family; only the all-families case needs the scope.
       const scope = wantedFamily ? '' : ' · all families';
-      el.browseConceptsCount.textContent = `${state.rows.length} of ${state.total} concepts${scope}`;
+      el.browseConceptsCount.textContent = `${state.rows.length} of ${state.total}${scope}`;
     }
     const more = rows.length > 0 && state.rows.length < state.total;
     moreWrap?.classList.toggle('is-done', !more);
@@ -891,8 +903,10 @@ function renderResults(rows) {
     button.className = 'row';
     button.dataset.slug = row.slug;
     button.dataset.kind = row.kind;
+    button.title = row.name || row.slug;
     button.innerHTML = `
       <div class="row__top">
+        <span class="row__glyph" aria-hidden="true">${esc(glyphFor(row))}</span>
         <span class="row__name">${esc(row.name || row.slug)}</span>
         <span class="row__kind row__kind--${esc(row.kind)}">${esc(row.kind)}</span>
       </div>
