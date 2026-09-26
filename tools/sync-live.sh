@@ -17,7 +17,7 @@ fi
 
 cp "$HERE"/console/frontend/*.js "$HERE"/console/frontend/*.css "$HERE"/console/frontend/index.html \
   "$LIVE/frontend/"
-cp "$HERE"/console/backend/{server.py,chart_bridge.py,chart_stream.py,agents_store.py,chat.py} \
+cp "$HERE"/console/backend/{server.py,chart_bridge.py,chart_stream.py,agents_store.py,chat.py,backtest_service.py} \
   "$LIVE/backend/"
 cp "$HERE"/console/bin/trader-chart "$LIVE/bin/trader-chart"
 chmod +x "$LIVE/bin/trader-chart"

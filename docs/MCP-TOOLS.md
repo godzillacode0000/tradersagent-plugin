@@ -1,4 +1,4 @@
-# Trader's Agent — MCP tools (29)
+# Trader's Agent — MCP tools (33)
 
 The `traders-chart` MCP server exposes the live LuxAlgo **Vela** chart as native tools.
 Every tool talks to the local console (`http://127.0.0.1:8787`) over its push channel (SSE), so a
@@ -96,3 +96,19 @@ When no view is attached the command tools answer `✗ no chart view is attached
   painted pane.
 - `docs/vela-chart-api-notes.md` records which Vela calls actually work and which return cleanly while
   doing nothing (the trap that made indicator removal slow).
+
+## Backtesting tools (the vectorbt tier)
+
+The engine is a separate process in its own venv (`console/backend/backtest_service.py`,
+`127.0.0.1:8788`); the console proxies it, and these are thin HTTP clients like every other tool.
+Results are saved under `_chart/backtest/<run_id>.json` — their own namespace, never the live
+chart's `state.json`. Start it with
+`~/.local/share/traders-agent/bt/venv/bin/python console/backend/backtest_service.py --port 8788`
+(it warms the numba JIT at start-up: measured 6.5 s once, then ~30 ms a run).
+
+| Tool | Arguments | What it does |
+|---|---|---|
+| `bt_run` | `source: str = "binance:BTCUSDT:30m"`, `fast: int = 20`, `slow: int = 50`, `fee: float = 0.001`, `bars: int = 1000` | One MA-cross backtest: return, max drawdown, Sharpe, Sortino, trade count, win rate, profit factor, expectancy. `source` is `binance:SYMBOL:TF` (public klines) or `local:NAME` (a CSV/Parquet in the operator's data dir). |
+| `bt_optimize` | `source: str`, `lo: int = 5`, `hi: int = 60`, `fee: float`, `bars: int`, `top: int = 10` | Sweep **every** MA pair in `[lo, hi]` at once and rank by return. Reports the median and worst combo too — a top result far above the median is usually overfitting, not edge. |
+| `bt_status` | `run_id: str = ""` | Read a saved backtest: the newest, or the run you name. |
+| `bt_data_list` | — | The operator's own OHLC files and the schema the engine expects: a DatetimeIndex (UTC) plus open/high/low/close/volume. |
