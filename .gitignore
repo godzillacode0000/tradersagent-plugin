@@ -20,3 +20,6 @@ venv/
 /tmp/
 # local test screenshots (grim captures from UI verification runs)
 /shots/
+
+# PR Lens writes its previews here. They are rebuilt on demand.
+.pr-lens/
