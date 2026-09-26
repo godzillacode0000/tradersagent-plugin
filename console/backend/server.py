@@ -1245,6 +1245,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _backtest_proxy(self, path: str, payload: dict):
         import urllib.request as _u
+        if path == "/api/backtest/health":
+            # the service answers /health on GET, not POST
+            import urllib.request as _u
+            try:
+                with _u.urlopen(self.BACKTEST_BASE + "/health", timeout=8) as res:
+                    self._ok(json.load(res))
+            except Exception as exc:  # noqa: BLE001
+                self._fail(f"backtest service unreachable ({type(exc).__name__})",
+                           HTTPStatus.SERVICE_UNAVAILABLE, "backtest_down")
+            return
         route = {"/api/backtest": "/run", "/api/backtest/sweep": "/sweep"}.get(path)
         if route is None:
             if path == "/api/backtest/results":
