@@ -45,6 +45,10 @@ capabilities:
     - edge_report
     - edge_symbols
     - propfirms
+    - bt_run
+    - bt_optimize
+    - bt_status
+    - bt_data_list
     - propfirm_offers
     - chart_batch
     - chart_snapshot

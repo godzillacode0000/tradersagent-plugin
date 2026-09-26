@@ -175,6 +175,10 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `edge_report` | one preset's measured edge on one symbol |
 | `edge_symbols` | which symbols the edge reports cover |
 | `propfirms` | prop-firm directory, with an optional filter |
+| `bt_run` | run one vectorbt MA-cross backtest; returns metrics |
+| `bt_optimize` | sweep MA pairs at once and rank by return |
+| `bt_status` | read a saved backtest result (run_id or newest) |
+| `bt_data_list` | list the operator's local OHLC files |
 | `propfirm_offers` | current prop-firm offers from LuxAlgo's own tracker |
 
 Same surface from a shell: `trader-chart remove MACD | --all`, `add ema`, `apply file.pine`,

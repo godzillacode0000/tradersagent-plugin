@@ -1602,6 +1602,7 @@ def load_backtest_result(root: str = "", run_id: str = "") -> dict:
         Path(os.environ["LUXALGO_CHART_ROOT"]) / "_chart" / "backtest"
         if os.environ.get("LUXALGO_CHART_ROOT") else None,
         Path(AGENTS_ROOT) / "_chart" / "backtest",
+        Path(AGENTS_ROOT).parent / "_chart" / "backtest",   # live tree: agents/ and _chart/ are siblings
         Path(__file__).resolve().parent.parent / "_chart" / "backtest",
     ]
     base = None
