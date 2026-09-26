@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Changed
+
+- **The Indicators catalogue takes the surface.** It was `min(920px, 72vh)` with 96 px banners — a
+  list of names with a hint of chart. The panel is now the window minus its padding
+  (`min(1720px, 100%)`, full height), the grid fits two big cards across in the app's own pane and four
+  or five on a wide screen, and each preview is a 16:10 picture the card's own width instead of a
+  strip. Lists without pictures (BUILT-INS, a favourites row with no shots) keep the old dense grid —
+  the page says which kind of list it just painted. Previews are cached at the 480 px a card actually
+  paints, and the Details pane's copy went from 260 px to 380 px tall.
+
 ### Fixed
 
 - **The catalogue previews load now.** They always worked and were always slow: sixty cards pulled

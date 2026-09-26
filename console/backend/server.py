@@ -1038,6 +1038,9 @@ def _library_pairs(params: dict) -> list[tuple[str, str]]:
 
 
 WARM_PAGE_SIZE = 60
+# The card's own width: the modal takes the screen now, so a card is up to ~430 px wide and the
+# picture is asked for at 480. Warming a width nobody paints would just fill the disk twice.
+WARM_WIDTH = 480
 # Guard rail, not a policy: the catalogue is 806 rows on this build, so 40 pages is room to grow.
 MAX_WARM_PAGES = 40
 # What the warmer is doing right now, for /api/library/thumbs. A cold machine warms the whole
@@ -1096,7 +1099,7 @@ def warm_catalogue_thumbs(pages: int = 0) -> None:
             break
         pairs = _thumb_pairs(rows)
         if pairs:
-            library_thumbs.warm(pairs, 320)
+            library_thumbs.warm(pairs, WARM_WIDTH)
         _WARM.update(page=page + 1, rows=_WARM["rows"] + len(pairs))
         page += 1
         if len(rows) < WARM_PAGE_SIZE:

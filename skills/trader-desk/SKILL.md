@@ -123,6 +123,9 @@ byte per picture, six connections per host, sixty cards. The console fetches eac
 with `vips` (fallback ImageMagick/`ffmpeg`) into `~/.local/share/traders-agent/thumbs/`, and serves it
 from `/api/library/thumb?slug=&u=&w=` (3.6 ms warm vs ~2 s from S3). `/api/library/thumbs` reports
 what the cache holds; the server warms the catalogue's first three pages at start-up.
+The modal takes the pane (`width: min(1720px, 100%)`, full height) and cards are 16:10 pictures —
+cards are asked for at 480 px, the Details pane at 960. Warm the width the card paints (`WARM_WIDTH`),
+not a width nobody sees.
 
 - A **new backend module must be added to `tools/sync-live.sh`**: its copy list is explicit, and a
   module left out makes the live server die on `ModuleNotFoundError` while systemd restarts it forever

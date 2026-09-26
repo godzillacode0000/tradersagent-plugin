@@ -23,6 +23,7 @@ SERVER = os.path.join(BACKEND, "server.py")
 THUMBS = os.path.join(BACKEND, "library_thumbs.py")
 SYNC = os.path.join(ROOT, "tools", "sync-live.sh")
 APP = os.path.join(ROOT, "console", "frontend", "app.js")
+CSS = os.path.join(ROOT, "console", "frontend", "styles.css")
 
 # Live-machine launchers: never copied by design (see the sync script's own note).
 NOT_SYNCED = {"mvp_server.py"}
@@ -141,9 +142,29 @@ class ThePageUsesIt(unittest.TestCase):
     def test_cards_point_at_the_local_endpoint(self):
         app = read(APP)
         self.assertIn("function thumbUrl(", app)
-        self.assertIn("{ shot: thumbUrl(r.slug, r.image_url, 320), raw: r.image_url }", app,
+        self.assertIn("shot: thumbUrl(r.slug, r.image_url, CARD_SHOT_W)", app,
                       "the card paints the local thumb and keeps the raw URL for the star")
-        self.assertIn("thumbUrl(row.slug, shot, 960)", app, "the Details pane asks for a bigger one")
+        self.assertIn("thumbUrl(row.slug, shot, DETAIL_SHOT_W)", app, "the Details pane asks bigger")
+        self.assertIn("const CARD_SHOT_W = 480;", app, "the card is ~430 px wide since 27 Sep")
+        self.assertIn("const DETAIL_SHOT_W = 960;", app)
+
+    def test_the_modal_takes_the_screen_and_the_cards_are_pictures(self):
+        """The operator's ask, 27 Sep: a bigger surface and previews you can actually read."""
+        css = read(CSS)
+        self.assertIn("width: min(1720px, 100%); height: 100%;", css,
+                      "the panel used to be min(920px, 72vh) with 96 px banners")
+        self.assertIn(".ind-grid.is-pictures { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));",
+                      css, "a list with pictures gets wide cards, a list of names stays dense")
+        self.assertIn("aspect-ratio: 16 / 10;", css, "the preview follows the card, not a fixed strip")
+        self.assertNotIn("height: 96px;", css, "the old banner height must not come back")
+        app = read(APP)
+        self.assertIn("grid.classList.toggle('is-pictures'", app,
+                      "the page must say which kind of list it just painted")
+
+    def test_the_warmer_warms_the_width_the_card_paints(self):
+        src = read(SERVER)
+        self.assertIn("WARM_WIDTH = 480", src)
+        self.assertIn("library_thumbs.warm(pairs, WARM_WIDTH)", src)
 
     def test_the_page_warms_what_it_laid_out(self):
         app = read(APP)

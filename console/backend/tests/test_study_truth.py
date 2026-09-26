@@ -99,7 +99,7 @@ class ThePreviewPicturesAreUsed(unittest.TestCase):
     def test_the_card_renders_the_catalogue_shot(self):
         src = read(APP)
         self.assertIn("ind-card__shot", src, "the LIBRARY card must render the preview")
-        self.assertIn("shot: thumbUrl(r.slug, r.image_url, 320)", src,
+        self.assertIn("shot: thumbUrl(r.slug, r.image_url, CARD_SHOT_W)", src,
                       "…through the LOCAL cache (26 Sep latency fix), not straight from S3")
         self.assertIn("function indicatorShot(", src, "the Details pane resolves it the same way")
 

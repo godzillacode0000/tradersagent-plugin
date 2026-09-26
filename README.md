@@ -270,7 +270,7 @@ The Indicators modal shows each card the way LuxAlgo's own library does, with a 
 pictures are 1600×1000 PNGs on LuxAlgo's S3 (~29 KB each) and they are **slow to fetch one by one** —
 about 1–2 s each from a home connection, and a browser only opens six connections per host, so sixty
 cards used to fill in while you watched. The console therefore fetches each picture **once**, shrinks
-it to the width it is actually painted at (320 px for a card, 960 px for the Details pane), and serves
+it to the width it is actually painted at (480 px for a card, 960 px for the Details pane), and serves
 it from `http://127.0.0.1:8787/api/library/thumb`: **~5 ms warm instead of ~2 s**.
 
 - **Every machine keeps its own copy.** A fresh install warms the whole catalogue (806 rows, roughly

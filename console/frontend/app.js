@@ -1132,8 +1132,15 @@ function indicatorShot(slug, row) {
 
 /** The local preview endpoint. The catalogue's picture is fetched and shrunk ONCE by the console and
  *  served from here: sixty cards straight from S3 meant sixty ~0.8 s waits over six connections
- *  (measured 26 Sep), which is why the grid looked empty while it filled. */
-function thumbUrl(slug, rawUrl, width = 320) {
+ *  (measured 26 Sep), which is why the grid looked empty while it filled.
+ *
+ *  Two widths, because the card grew (27 Sep): a card is up to ~430 px wide and asked for 480, the
+ *  Details pane takes 960. Asking for the size actually painted is the whole point — the source is
+ *  1600 px wide whatever we do. */
+const CARD_SHOT_W = 480;
+const DETAIL_SHOT_W = 960;
+
+function thumbUrl(slug, rawUrl, width = CARD_SHOT_W) {
   if (!slug) return '';
   const params = new URLSearchParams({ slug: String(slug), w: String(width) });
   if (rawUrl) params.set('u', String(rawUrl));
@@ -1154,7 +1161,7 @@ async function openResult(row, button) {
          thing the Library page shows, and the answer to "how does this look on a chart?" before
          running anything. Its own row is the authority; a star remembers it for later. */
       const shot = indicatorShot(row.slug, row);
-      const local = thumbUrl(row.slug, shot, 960);
+      const local = thumbUrl(row.slug, shot, DETAIL_SHOT_W);
       if (shot) rememberShot(favId('library', row.slug), shot);
       el.detail.innerHTML = `
         <div class="detail__head">
@@ -1445,7 +1452,7 @@ function renderIndicators() {
         const hit = bySlug.get(id);
         const raw = (hit && hit.image_url) || readShots()[key] || '';
         html.push(indCard('library', id, hit ? hit.name : id, hit ? hit.family : 'library',
-          { missing: !hit, shot: raw ? thumbUrl(id, raw, 320) : '', raw: raw }));
+          { missing: !hit, shot: raw ? thumbUrl(id, raw, CARD_SHOT_W) : '', raw: raw }));
       }
     });
   } else if (indState.section === 'builtins') {
@@ -1474,16 +1481,18 @@ function renderIndicators() {
       ? libRows.filter((r) => (r.name + ' ' + r.slug + ' ' + (r.family || '')).toLowerCase().includes(q))
       : libRows;
     shown.forEach((r) => html.push(indCard('library', r.slug, r.name || r.slug, r.family,
-      { shot: thumbUrl(r.slug, r.image_url, 320), raw: r.image_url })));
+      { shot: thumbUrl(r.slug, r.image_url, CARD_SHOT_W), raw: r.image_url })));
     /* Warm the rest of this page in the background — the pictures the operator has not scrolled to
-       yet. Fire-and-forget: the console fetches 8 at a time and keeps them, so the second open (and
+       yet. Fire-and-forget: the console fetches 16 at a time and keeps them, so the second open (and
        the first scroll) is served from disk. */
     const pending = shown.filter((r) => r.slug && r.image_url)
       .map((r) => r.slug + ':' + r.image_url).join('|');
-    if (pending) api('/api/library/warm', { slugs: pending, w: 320 }).catch(() => {});
+    if (pending) api('/api/library/warm', { slugs: pending, w: CARD_SHOT_W }).catch(() => {});
   }
 
   grid.innerHTML = html.join('');
+  /* Pictures want room, names do not: the grid sizes itself to what this render put in it. */
+  grid.classList.toggle('is-pictures', html.join('').includes('ind-card__shot'));
   const counts = {
     favorites: favs.length,
     builtins: natives.length,

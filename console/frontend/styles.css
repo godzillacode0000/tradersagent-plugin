@@ -1105,14 +1105,19 @@ pre {
    pane already carries two columns' worth of opinions. */
 .ind-modal {
   position: fixed; inset: 0; z-index: var(--lx-z-overlay, 40);
-  display: flex; align-items: flex-start; justify-content: center;
-  padding: clamp(12px, 6vh, 72px) var(--lx-space-4);
+  display: flex; align-items: stretch; justify-content: center;
+  padding: clamp(10px, 3vh, 40px) clamp(10px, 2vw, 40px);
   background: var(--lx-backdrop);
   backdrop-filter: blur(2px);
 }
+/* The catalogue is a picture book: the panel takes the screen (27 Sep, the operator's ask — "expand
+   wider and taller so we can see the preview in better penuh view"). It was min(920px,72vh) with
+   96 px banners, which is a list of names with a hint of chart. Now it is the window minus its
+   padding, the grid fits four or five cards across on a 1920 screen, and each preview is a 16:10
+   picture rather than a strip. */
 .ind-modal__panel {
   display: flex; flex-direction: column; min-height: 0;
-  width: min(920px, 100%); max-height: min(72vh, 720px);
+  width: min(1720px, 100%); height: 100%;
   background: var(--lx-surface-2);
   border: 1px solid var(--lx-border-strong);
   border-radius: var(--lx-radius-pop, 12px);
@@ -1132,7 +1137,7 @@ pre {
 .ind-modal__body { display: flex; min-height: 0; flex: 1 1 auto; }
 
 .ind-nav {
-  flex: 0 0 168px; display: flex; flex-direction: column; gap: 2px;
+  flex: 0 0 176px; display: flex; flex-direction: column; gap: 2px;
   padding: var(--lx-space-3) var(--lx-space-2);
   border-right: 1px solid var(--lx-border);
   background: var(--lx-surface-1);
@@ -1165,6 +1170,9 @@ pre {
   padding: var(--lx-space-1) var(--lx-space-4) var(--lx-space-4);
   align-content: start;
 }
+/* A list with pictures in it wants wide cards; a list of names (BUILT-INS, a favourites row with no
+   shots) wants many. The page says which it is, per render. */
+.ind-grid.is-pictures { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--lx-space-3); }
 .ind-card {
   position: relative; display: flex; flex-direction: column; gap: 2px;
   padding: var(--lx-space-3) var(--lx-space-3) var(--lx-space-2);
@@ -1199,15 +1207,18 @@ pre {
 /* The modal owns the screen while it is up: the chart underneath does not need to scroll away. */
 body.has-ind-modal { overflow: hidden; }
 
-/* ── Indicator previews (26 Sep) ─────────────────────────────────────────────
-   The catalogue ships a chart shot per indicator (`image_url`, 1600×1000 on LuxAlgo's S3). The
-   LIBRARY cards show it as a banner — the operator asked for "how does this look on the chart?"
-   before running anything, the way the Library page answers it. Lazy-loaded and decoded off the
-   main thread: 60 cards on a page is 60 pictures, and this box has 8 GB. */
+/* ── Indicator previews (26 Sep, made big 27 Sep) ────────────────────────────
+   The catalogue ships a chart shot per indicator (`image_url`, 1600×1000 on LuxAlgo's S3; the console
+   keeps a local 480 px copy). The LIBRARY cards show it as the card's own picture — the operator asked
+   for "how does this look on the chart?" before running anything, the way the Library page answers it.
+   The height follows the card's width (16:10, the source's own shape) so the tier of the card we are
+   showing is what decides how much chart you see. Lazy-loaded and decoded off the main thread: 60
+   cards on a page is 60 pictures, and this box has 8 GB. */
 .ind-card__shot {
   display: block;
   width: 100%;
-  height: 96px;
+  height: auto;
+  aspect-ratio: 16 / 10;
   object-fit: cover;
   object-position: top left;
   border-radius: var(--lx-radius-2, 6px);
@@ -1219,7 +1230,7 @@ body.has-ind-modal { overflow: hidden; }
 .detail__shot {
   display: block;
   width: 100%;
-  max-height: 260px;
+  max-height: 380px;
   object-fit: cover;
   object-position: top left;
   border-radius: var(--lx-radius-3, 10px);
