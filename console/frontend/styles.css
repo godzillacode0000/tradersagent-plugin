@@ -1074,4 +1074,7 @@ pre {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .last-action:empty { display: none; }
+/* The footer only showed while a toast was live, so the activity line vanished with it. A mutation
+   now keeps the bar up on its own: the spec wants this line ALWAYS on (audit, not workspace). */
+.statusbar.has-activity { display: flex; }
 .toast:not(:empty) { flex: 0 1 auto; }

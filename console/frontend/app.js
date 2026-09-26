@@ -206,6 +206,8 @@ function noteActivity(text, tool) {
   if (!line) return;
   line.textContent = text;
   line.title = tool ? tool + ' · ' + text : text;
+  const bar = line.closest('.statusbar');
+  if (bar) bar.classList.add('has-activity');
 }
 
 function toast(message, bad = false) {
