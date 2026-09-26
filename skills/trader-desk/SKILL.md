@@ -127,6 +127,10 @@ what the cache holds; the server warms the catalogue's first three pages at star
 - A **new backend module must be added to `tools/sync-live.sh`**: its copy list is explicit, and a
   module left out makes the live server die on `ModuleNotFoundError` while systemd restarts it forever
   (`test_preview_cache.py` now fails if the list drifts).
+- The warmer walks **every page** by default (806 rows, ~5 MB, ~2 min once per machine, progress in
+  `/api/library/thumbs`). A job retries twice on failure — four rows of the first full warm came back
+  empty purely from S3 throttling under a sixteen-way burst. The cache key carries a tag of the source
+  URL, so replaced artwork is never served stale from disk.
 - Previews are the catalogue's SAMPLE chart, not the operator's own chart — say so; never present a
   thumbnail as "your chart with this on it".
 
