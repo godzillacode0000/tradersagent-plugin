@@ -1592,8 +1592,27 @@ def _backtest_dir() -> "Path":
 
 
 def load_backtest_result(root: str = "", run_id: str = "") -> dict:
-    """The newest saved backtest, or one by run_id."""
-    base = Path(root) / "_chart" / "backtest" if root else _backtest_dir()
+    """The newest saved backtest, or one by run_id.
+
+    Two candidate roots: the console's own agents dir, and the tree the engine was pointed at
+    (LUXALGO_CHART_ROOT). Whichever holds the newest run wins — the engine may live outside the
+    console's tree, and a reader that guesses wrong is worse than one that looks.
+    """
+    cands = [Path(root) / "_chart" / "backtest"] if root else [
+        Path(os.environ["LUXALGO_CHART_ROOT"]) / "_chart" / "backtest"
+        if os.environ.get("LUXALGO_CHART_ROOT") else None,
+        Path(AGENTS_ROOT) / "_chart" / "backtest",
+        Path(__file__).resolve().parent.parent / "_chart" / "backtest",
+    ]
+    base = None
+    for c in cands:
+        if c and c.is_dir() and any(c.glob("*.json")):
+            if base is None or max(f.stat().st_mtime for f in c.glob("*.json")) > \
+                    max(f.stat().st_mtime for f in base.glob("*.json")):
+                base = c
+    if base is None:
+        return {"ok": False, "error": "no backtest results found in " +
+                ", ".join(str(c) for c in cands if c)}
     try:
         if not run_id:
             latest = base / "latest.json"
