@@ -194,6 +194,89 @@ def _command(action: str, timeout: float = INLINE_WAIT + 8.0, **fields) -> str:
 
 
 # ── chart tools ─────────────────────────────────────────────────────────────────────────────────
+# ── vectorbt backtesting (the tier in console/backend/backtest_service.py, own venv, :8788) ──
+# These are thin HTTP clients like every other tool here: the console proxies, the service computes.
+# Read-only by contract for bt_status/bt_data_list; bt_run/bt_optimize write results into
+# _chart/backtest/ (their own namespace) and never touch the live chart's state.
+
+def _bt(path: str, payload: dict | None = None, timeout: float = 240.0) -> dict:
+    return _call(path, payload, timeout=timeout)
+
+
+@mcp.tool(annotations=_ann("Backtest a strategy with vectorbt", read_only=False))
+def bt_run(source: str = "binance:BTCUSDT:30m", fast: int = 20, slow: int = 50,
+           fee: float = 0.001, bars: int = 1000) -> str:
+    """Run one MA-cross backtest and return its metrics (return, Sharpe, drawdown, trades).
+
+    `source` is `binance:SYMBOL:TF` (public klines, no key) or `local:NAME` for a CSV/Parquet in
+    the operator's data dir. The heavy engine lives in its own venv; results are saved under
+    _chart/backtest/<run_id>.json and never written into the live chart's state.
+    """
+    r = _bt("/api/backtest", {"kind": "ma_cross", "source": source, "fast": fast, "slow": slow,
+                              "fee": fee, "bars": bars})
+    if not r.get("ok"):
+        return f"backtest failed: {r.get('error')}"
+    m = r["metrics"]
+    return (f"MA {fast}/{slow} · {source} · {r['bars']} bars · {r['ms']:.0f}ms\n"
+            f"return {m['total_return_pct']:+.2f}% · maxDD {m['max_drawdown_pct']:.2f}% · "
+            f"Sharpe {m['sharpe']:.2f} · Sortino {m['sortino']:.2f}\n"
+            f"trades {m['trades']} · win {m['win_rate_pct']:.0f}% · PF {m['profit_factor']:.2f} · "
+            f"expectancy {m['expectancy']:.2f}\nrun_id {r['run_id']} (trades saved; use bt_status)")
+
+
+@mcp.tool(annotations=_ann("Sweep MA parameters with vectorbt", read_only=False))
+def bt_optimize(source: str = "binance:BTCUSDT:30m", lo: int = 5, hi: int = 60,
+                fee: float = 0.001, bars: int = 1000, top: int = 10) -> str:
+    """Sweep every MA pair in [lo, hi] at once (vectorbt's real strength) and rank by return.
+
+    Also reports the median and worst combo — a top result far above the median is usually
+    overfitting, not edge.
+    """
+    r = _bt("/api/backtest/sweep", {"kind": "ma_cross_sweep", "source": source, "window": [lo, hi],
+                                    "fee": fee, "bars": bars, "top": top})
+    if not r.get("ok"):
+        return f"sweep failed: {r.get('error')}"
+    lines = [f"{r['combos']} combos · {r['bars']} bars · {r['ms']:.0f}ms · fee {fee*100:.2f}%",
+             f"best {r['best_pct']:+.2f}% · median {r['median_pct']:+.2f}% · worst {r['worst_pct']:+.2f}%",
+             f"{'fast/slow':<12}{'return':>9}{'trades':>8}{'win%':>7}{'maxDD':>8}"]
+    for row in r["top"]:
+        lines.append(f"{row['fast']}/{row['slow']:<9}{row['return_pct']:>8.2f}%{row['trades']:>8}"
+                     f"{row['win_rate_pct']:>6.0f}%{row['max_drawdown_pct']:>7.2f}%")
+    lines.append(f"run_id {r['run_id']}")
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations=_ann("Read a saved backtest result", read_only=True))
+def bt_status(run_id: str = "") -> str:
+    """Read a saved backtest result: the newest one, or the run you name.
+
+    Files live in _chart/backtest/<run_id>.json — a namespace of its own, so a live session's
+    state.json is never involved.
+    """
+    r = _bt("/api/backtest/results", {"run_id": run_id})
+    if not r.get("ok"):
+        return f"no result: {r.get('error')}"
+    return json.dumps(r.get("result", r), indent=1)[:4000]
+
+
+@mcp.tool(annotations=_ann("List the operator's local data files", read_only=True))
+def bt_data_list() -> str:
+    """List OHLC files the operator owns (CSV/Parquet) and what the engine expects.
+
+    Expected schema: a DatetimeIndex (UTC) plus open/high/low/close/volume columns. Use them with
+    `source="local:NAME"` in bt_run / bt_optimize.
+    """
+    r = _bt("/api/backtest/data", {})
+    if not r.get("ok"):
+        return f"data dir not readable: {r.get('error')}"
+    files = r.get("files") or []
+    if not files:
+        return (f"no local data yet in {r.get('data_dir')}\n"
+                f"drop a CSV/Parquet there (DatetimeIndex + open/high/low/close/volume) and it "
+                f"appears here; or keep using binance:SYMBOL:TF.")
+    return "\n".join(f"{f['name']}  {f['size_kb']}KB  {f.get('rows', '?')} rows" for f in files)
+
+
 @mcp.tool(annotations=_ann("Chart views attached", read_only=True))
 def chart_views() -> str:
     """Is a chart view attached right now? Every command tool needs one (the chart is not headless)."""

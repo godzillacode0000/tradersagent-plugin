@@ -1239,6 +1239,32 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- POST: the dock's write path -------------------------------------
 
+    # ── the vectorbt tier (console/backend/backtest_service.py, own venv, 127.0.0.1:8788) ──
+    # A proxy, not an import: the console stays stdlib-only and up even when the engine is down.
+    BACKTEST_BASE = os.environ.get("LUXALGO_BACKTEST", "http://127.0.0.1:8788")
+
+    def _backtest_proxy(self, path: str, payload: dict):
+        import urllib.request as _u
+        route = {"/api/backtest": "/run", "/api/backtest/sweep": "/sweep"}.get(path)
+        if route is None:
+            if path == "/api/backtest/results":
+                self._ok(load_backtest_result(AGENTS_ROOT, str(payload.get("run_id", ""))))
+            elif path == "/api/backtest/data":
+                self._ok(list_local_data(os.path.expanduser("~/.local/share/traders-agent/data")))
+            else:
+                self._fail("unknown backtest route", HTTPStatus.NOT_FOUND, "not_found")
+            return
+        req = _u.Request(self.BACKTEST_BASE + route, data=json.dumps(payload).encode("utf-8"),
+                         headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with _u.urlopen(req, timeout=300) as res:
+                self._ok(json.load(res))
+        except Exception as exc:  # noqa: BLE001 — a down engine is a message, not a 500
+            self._fail(f"backtest service unreachable ({type(exc).__name__}: {exc}). Start it: "
+                       f"~/.local/share/traders-agent/bt/venv/bin/python "
+                       f"console/backend/backtest_service.py --port 8788", HTTPStatus.SERVICE_UNAVAILABLE,
+                       "backtest_down")
+
     def do_POST(self):  # noqa: N802
         try:
             length = int(self.headers.get("Content-Length") or 0)
@@ -1287,6 +1313,9 @@ class Handler(BaseHTTPRequestHandler):
                 inline = self._await_chart_result(command, payload) if pushed else None
                 self._ok({"command": command, "views": STREAM.client_count(),
                           "pushed": pushed, "result": inline})
+                return
+            if path.startswith("/api/backtest"):
+                self._backtest_proxy(path, payload)
                 return
             if path == "/api/chart/result":
                 recorded = record_chart_result(AGENTS_ROOT, payload)
@@ -1422,6 +1451,9 @@ class Handler(BaseHTTPRequestHandler):
     def _handle(self, head_only: bool):
         try:
             parsed = urlparse(self.path)
+            if parsed.path.rstrip("/") == "/api/backtest/health":
+                self._backtest_proxy("/api/backtest/health", {})
+                return
             path = parsed.path.rstrip("/") or "/"
             params = parse_qs(parsed.query, keep_blank_values=False)
 
@@ -1541,6 +1573,52 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-mcp", action="store_true",
                         help="start without connecting to MCP (static + /api/health only)")
     return parser
+
+
+def _backtest_dir() -> "Path":
+    """Where the vectorbt tier writes its results — its own namespace, never the live state."""
+    root = os.environ.get("LUXALGO_CHART_ROOT") or AGENTS_ROOT
+    return Path(root) / "_chart" / "backtest"
+
+
+def load_backtest_result(root: str = "", run_id: str = "") -> dict:
+    """The newest saved backtest, or one by run_id."""
+    base = Path(root) / "_chart" / "backtest" if root else _backtest_dir()
+    try:
+        if not run_id:
+            latest = base / "latest.json"
+            if latest.exists():
+                run_id = json.loads(latest.read_text(encoding="utf-8")).get("run_id", "")
+        if not run_id:
+            runs = sorted(base.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+            run_id = next((f.stem for f in runs if f.name != "latest.json"), "")
+        if not run_id:
+            return {"ok": False, "error": f"no saved backtest in {base}"}
+        return {"ok": True, "run_id": run_id,
+                "result": json.loads((base / f"{run_id}.json").read_text(encoding="utf-8"))}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+def list_local_data(data_dir: str = "") -> dict:
+    """The operator's own OHLC files, with the schema the engine expects."""
+    base = Path(data_dir or os.path.expanduser("~/.local/share/traders-agent/data"))
+    out = []
+    try:
+        for f in sorted(base.glob("*")):
+            if f.suffix.lower() in (".csv", ".parquet"):
+                rows = "?"
+                try:
+                    rows = sum(1 for _ in f.open("rb")) - 1 if f.suffix == ".csv" else "?"
+                except OSError:
+                    pass
+                out.append({"name": f.stem, "file": f.name,
+                            "size_kb": round(f.stat().st_size / 1024, 1), "rows": rows})
+    except OSError:
+        pass
+    return {"ok": True, "data_dir": str(base), "files": out,
+            "schema": "DatetimeIndex (UTC) + open/high/low/close/volume",
+            "use": 'source="local:NAME" in bt_run / bt_optimize'}
 
 
 def main(argv=None) -> int:
