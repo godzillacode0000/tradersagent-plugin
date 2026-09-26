@@ -211,6 +211,41 @@ function ConsoleFrame({ title }) {
  * that visible.) So the pane remounts itself: when it is revealed again after being hidden, and on
  * demand from the palette. The chart re-boots in about a second and Vela restores its own workspace.
  */
+/* The watchdog (26 Sep): a frame can die while nobody is looking.
+ *
+ * An iframe whose load was cut short — the console restarted mid-load — stays blank forever, and a
+ * page that never ran cannot act on the console's own reload command. The console's state already
+ * carries the heartbeat time (`at`), so the plugin can tell "the chart is quiet" from "the frame is
+ * dead" without probing a cross-origin document, and remount through the same reloaders the reveal
+ * path uses. Cooldown keeps a genuinely absent chart from turning into a remount loop.
+ */
+const WATCHDOG_EVERY_MS = 20000
+const WATCHDOG_DEAD_S = 75
+let watchdogLastBump = 0
+
+function startChartWatchdog() {
+  if (startChartWatchdog.started) return
+  startChartWatchdog.started = true
+  setInterval(async () => {
+    try {
+      const res = await fetch(CONSOLE_ORIGIN + 'api/chart/state', { cache: 'no-store' })
+      if (!res.ok) return                      // console down: the overlay's own message owns that
+      const body = await res.json()
+      const st = (body && (body.state || body.data)) || body || {}
+      const at = Number(st.at || 0)
+      if (!at) return                          // nothing ever painted: not ours to fix
+      const age = Date.now() / 1000 - at
+      if (age <= WATCHDOG_DEAD_S) return
+      if (Date.now() - watchdogLastBump < 60000) return
+      watchdogLastBump = Date.now()
+      console.warn('[traders-desk] chart frame silent for ' + Math.round(age) + 's — remounting the pane')
+      reloadChartPane()
+    } catch (err) {
+      /* console down or offline: the pane's own overlay says so, and it is not a dead frame */
+    }
+  }, WATCHDOG_EVERY_MS)
+}
+
 const paneReloaders = new Set()
 let paneWasHidden = false
 
@@ -226,6 +261,8 @@ function reloadChartPane() {
   }
   return bumped
 }
+
+startChartWatchdog()
 
 /** The chart, as a pane docked to the right of the conversation. */
 function ConsolePane() {
