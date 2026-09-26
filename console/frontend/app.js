@@ -222,6 +222,32 @@ function toast(message, bad = false) {
     }
   }, 6000);
 }
+/* Phase 1.3 — the stale-legend banner. The chart's own series count against the list the API can
+   name; when the chart draws more than the API knows, the legend is describing a frame the console
+   no longer agrees with (the AMD POC case: the legend said one indicator, the state said zero).
+   A banner, not a toast: this is a state that persists until the frame is reloaded. */
+function checkStaleLegend() {
+  const slot = document.getElementById('stale-legend');
+  if (!slot) return;
+  let counts = null;
+  try {
+    counts = window.ChartBridge && typeof window.ChartBridge.studyCounts === 'function'
+      ? window.ChartBridge.studyCounts() : null;
+  } catch (err) { counts = null; }
+  const bar = slot.closest('.statusbar');
+  if (!counts || !counts.mismatch) {
+    slot.textContent = '';
+    if (bar) bar.classList.remove('has-stale');
+    return;
+  }
+  slot.textContent = `legend shows ${counts.series} studies · the console knows ${counts.natives} — reload`;
+  slot.title = 'The chart legend and the console disagree about what is on this chart';
+  if (bar) bar.classList.add('has-stale');
+}
+setInterval(checkStaleLegend, 3000);
+setTimeout(checkStaleLegend, 1500);
+document.getElementById('stale-legend')?.addEventListener('click', () => window.location.reload());
+
 /* The log line is not furniture either: it shows while it has something to say, then folds away.
    `quiet` is for the boot self-report — kept in the DOM (scripts and window.__app read it) without
    putting a permanent line under the chart. */

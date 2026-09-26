@@ -945,6 +945,17 @@
   connectStream();
   window.ChartBridge = {
     run, capture, heartbeat, poll,
+    /* Phase 1.3 — the two counts the stale-legend banner compares. `series` is what the chart says
+       it is drawing; `natives` is what the API can name. The chart carrying more than the API can
+       name means the legend describes a frame the console no longer agrees with. */
+    studyCounts: () => {
+      const c = chart();
+      const series = (inspect() || {}).series || 0;
+      let natives = 0;
+      try { natives = (c && typeof c.presentNativeIndicators === 'function')
+        ? (c.presentNativeIndicators() || []).length : 0; } catch (err) { natives = 0; }
+      return { series, natives, mismatch: series > natives };
+    },
     streamState: () => ({
       connected: !!stream && stream.readyState === 1,
       pollDelay, lastId: lastCommandId
