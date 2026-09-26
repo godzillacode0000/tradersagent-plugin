@@ -162,7 +162,8 @@ def run_ma_cross(spec: dict) -> dict:
     fee = float(spec.get("fee", 0.001))
     init = float(spec.get("init_cash", 10000))
     freq = spec.get("freq") or None
-    df = load_bars(str(spec.get("source", "binance:BTCUSDT:30m")), int(spec.get("bars", 1000)))
+    df = load_bars(str(spec.get("source", "binance:BTCUSDT:30m")), int(spec.get("bars", 1000)),
+                   inline=spec.get("inline") or None)
     price = df["close"]
 
     t0 = time.time()
@@ -185,7 +186,8 @@ def run_ma_cross_sweep(spec: dict) -> dict:
     fee = float(spec.get("fee", 0.001))
     init = float(spec.get("init_cash", 10000))
     top_n = int(spec.get("top", 10))
-    df = load_bars(str(spec.get("source", "binance:BTCUSDT:30m")), int(spec.get("bars", 1000)))
+    df = load_bars(str(spec.get("source", "binance:BTCUSDT:30m")), int(spec.get("bars", 1000)),
+                   inline=spec.get("inline") or None)
     price = df["close"]
 
     t0 = time.time()

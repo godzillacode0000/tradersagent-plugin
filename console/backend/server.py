@@ -1264,6 +1264,31 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._fail("unknown backtest route", HTTPStatus.NOT_FOUND, "not_found")
             return
+
+        # source "chart:…" = backtest the bars the chart is showing. The page owns the truth, so we
+        # ask it through the same bars op the agent uses — no fourth klines client, no guessing at
+        # a symbol mapping (the chart knows whether it is BTCUSD or BTCUSDT).
+        src = str(payload.get("source") or "")
+        if src.startswith("chart:"):
+            want = int(payload.get("bars") or 1000)
+            queued = enqueue_chart_command(AGENTS_ROOT, {"action": "bars", "count": want})
+            rid = int((queued or {}).get("id") or 0)
+            res = None
+            for _ in range(60):                      # the page answers in ~100 ms; 12 s is the ceiling
+                time.sleep(0.2)
+                res = get_chart_result(AGENTS_ROOT, rid)
+                if res:
+                    break
+            if not res or not res.get("ok") or not res.get("bars"):
+                self._fail(f"the chart did not hand over its bars ({'no view answered' if not res else res.get('detail') or 'refused'})",
+                           HTTPStatus.SERVICE_UNAVAILABLE, "no_chart_bars")
+                return
+            payload = dict(payload)
+            payload["inline"] = res["bars"]
+            payload["source"] = "inline"
+            payload.setdefault("symbol", res.get("symbol") or "")
+            payload.setdefault("timeframe", res.get("timeframe") or "")
+
         req = _u.Request(self.BACKTEST_BASE + route, data=json.dumps(payload).encode("utf-8"),
                          headers={"Content-Type": "application/json"}, method="POST")
         try:
