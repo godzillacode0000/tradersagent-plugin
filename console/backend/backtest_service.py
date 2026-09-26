@@ -89,7 +89,7 @@ def _bars_local(name: str) -> "object":
                             f"(expected {name}.csv or {name}.parquet)")
 
 
-def load_bars(source: str, bars: int), inline: list | None = None):
+def load_bars(source: str, bars: int, inline: list | None = None):
     if inline:
         import pandas as _pd
         df = _pd.DataFrame(inline)
