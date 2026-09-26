@@ -32,6 +32,7 @@ capabilities:
     - chart_add_indicator
     - chart_remove_indicator
     - chart_set_market
+    - chart_set_layout
     - chart_reload
     - chart_palette
     - chart_browse

@@ -40,7 +40,8 @@
   const ACTIONS = ['apply', 'add', 'remove', 'draw', 'clear', 'probe', 'market', 'shot', 'reload',
                    'mode', 'script', 'palette', 'browse', 'open', 'rect',
     'bars',
-                   'signals',];
+                   'signals',
+                   'layout',];
 
   const api = async (path, body) => {
     const res = await fetch(path, body
@@ -574,6 +575,71 @@
           out.detail = 'switched to ' + symbol + ' ' + timeframe +
             (last != null ? ' · last ' + last : '') +
             (nBars != null ? ' · bars ' + nBars : '');
+          break;
+        }
+        case 'layout': {
+          /* The grid. Vela's own layout picker writes through ws.setLayout(), so this door is the
+             same call — and once the page is up it is the ONLY way in: `layout: false` at boot sets
+             monoLayout, which pins the grid for the life of the page (see workspace.js). The preset
+             is validated HERE, before the call, because setLayout() throws on an unknown id. */
+          const wsa = window.__wsApp;
+          const ws = wsa && wsa.ws;
+          if (!ws || typeof ws.setLayout !== 'function') {
+            out.detail = 'this page has no workspace shell (bare chart) — the grid lives in the ' +
+              'workspace, so there is nothing to lay out';
+            break;
+          }
+          if (ws.monoLayout) {
+            out.detail = 'this page booted with layout:false (monoLayout) — setLayout() is a no-op ' +
+              'in this frame; workspace.js must boot with a preset before the grid can change';
+            break;
+          }
+          const readLayout = () => {
+            try {
+              const def = ws.layout || null;
+              const cells = (typeof ws.cells === 'function' ? ws.cells() : []) || [];
+              return {
+                id: (def && def.id) || null,
+                label: (def && def.label) || null,
+                cells: cells.map((c) => ({ id: c && c.id, symbol: (c && c.symbol) || null,
+                                           timeframe: (c && c.timeframe) || null })),
+              };
+            } catch (err) { return null; }
+          };
+          const want = String(command.layout == null ? '' : command.layout).trim().toLowerCase();
+          const PRESETS = ['1', '2h', '2v', '4', '8'];
+          if (!want) {
+            /* No preset = read the grid, don't touch it (a read must never be a write). */
+            const now = readLayout();
+            if (!now) { out.detail = 'the workspace did not answer'; break; }
+            out.ok = true;
+            out.layout = now.id;
+            out.cells = now.cells.length;
+            const cur = now.cells.map((c) => (c.symbol || '?') + ' ' + (c.timeframe || '?')).join(' · ');
+            out.detail = 'layout ' + now.id + (now.label ? ' (' + now.label + ')' : '') + ' · ' +
+              now.cells.length + ' cell(s)' + (cur ? ': ' + cur : ' — none built yet');
+            break;
+          }
+          if (!PRESETS.includes(want) && !/^g[1-4]x[1-4]$/.test(want)) {
+            out.detail = 'unknown layout "' + want + '" — use ' + PRESETS.join(', ') +
+              ', or a custom grid g<cols>x<rows> (1–4 each)';
+            break;
+          }
+          const before = readLayout();
+          ws.setLayout(want);
+          /* Cells build on a bars fetch, so the grid answers a beat later — and the cell's own
+             symbol/timeframe getters are the evidence, not the id we asked for. */
+          const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+          let after = readLayout();
+          for (let i = 0; i < 12 && after && after.cells.length === 0; i++) { await wait(150); after = readLayout(); }
+          if (!after) { out.detail = 'the workspace did not answer after setLayout(' + want + ')'; break; }
+          out.ok = true;
+          out.layout = after.id;
+          out.cells = after.cells.length;
+          const shown = after.cells.map((c) => (c.symbol || '?') + ' ' + (c.timeframe || '?')).join(' · ');
+          out.detail = 'layout ' + (before && before.id ? before.id + ' → ' : '') + after.id +
+            (after.label ? ' (' + after.label + ')' : '') + ' · ' + after.cells.length + ' cell(s)' +
+            (shown ? ': ' + shown : ' — none built yet');
           break;
         }
         case 'palette': {

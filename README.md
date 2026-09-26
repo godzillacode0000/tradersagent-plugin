@@ -114,6 +114,7 @@ systemctl --user enable --now traders-agent.service
 | `Ctrl+K` → **Trading: toggle chart reveal on launch** | stop the console opening by itself at app start |
 | Top bar → `☰ Library` | the Library panel: search 800+ concepts and indicators |
 | Top bar → `▤ Details` | the selected item: write-up, **full Pine source**, licence badge, **Run PineTS** |
+| Chart top bar → **Layout** | Vela's own grid picker — presets and custom `g<cols>x<rows>` grids. The console boots at `2h` (two side by side); the same door is `chart_set_layout` / `trader-chart layout` |
 | The chart's own bottom bar | Vela's range buttons, timezone clock and settings (not ours) |
 
 ### Chat beside the chart
@@ -155,6 +156,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_add_indicator` | add a Vela native (`ema`, `supertrend`, `donchian-channels`, …) |
 | `chart_remove_indicator` | take indicators **off** the chart — one by name, or `all` for every study (reports the chart's before → after list) |
 | `chart_set_market` | switch symbol / timeframe |
+| `chart_set_layout` | read or set the workspace **grid** — `1`, `2h`, `2v`, `4`, `8`, or `g<cols>x<rows>` (no argument reads it) |
 | `chart_reload` | remount every attached console (picks up new frontend files) |
 | `chart_palette` | what colours the chart is wearing (`try_apply` asserts the console theme) |
 | `chart_browse` | open the Library concept list in the pane (optional `family`) |
@@ -182,7 +184,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `propfirm_offers` | current prop-firm offers from LuxAlgo's own tracker |
 
 Same surface from a shell: `trader-chart remove MACD | --all`, `add ema`, `apply file.pine`,
-`draw file.pine`, `shot`, `market SYMBOL TF`, `state`. Which of those actually paint in this Vela build —
+`draw file.pine`, `shot`, `market SYMBOL TF`, `layout 2h`, `layout` (read the grid), `state`. Which of those actually paint in this Vela build —
 and which calls return cleanly while doing nothing — is written down in
 [`docs/vela-chart-api-notes.md`](docs/vela-chart-api-notes.md), measured from the running app.
 

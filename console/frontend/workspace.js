@@ -5,8 +5,16 @@
  * shared chrome — topbar (symbol / timeframe / style / layout / indicator
  * picker / alerts), the drawing toolbar, object tree, data window, bottom bar
  * (session, timezone clock, range), context menus, settings dialog, the `?`
- * shortcut panel, PNG export and mobile chrome. `layout: false` pins it to a
- * single chart, which is what this app wants.
+ * shortcut panel, PNG export and mobile chrome.
+ *
+ * The grid is ON, at 2 side by side (operator's call, 26 Sep). `layout` takes a Vela preset —
+ * `'1' | '2h' | '2v' | '4' | '8'`, or a custom `g<cols>x<rows>` up to 4x4. **`layout: false` is
+ * not just "one chart": it sets `monoLayout`, which pins the grid AND makes `ws.setLayout()` a
+ * no-op for the life of the page** — so a preset here is the only way in at boot, and the
+ * `layout` bridge action (chart-bridge.js) is the way in afterwards. Measured on
+ * @luxalgo/vela 0.7.3: `layout` omitted entirely defaults to `'4'`, and a layout already stored
+ * in this page's state **wins over this constructor value** (`resolveLayout(s?.layout ?? …)`) —
+ * so a grid change made from chat survives a reload, which is the behaviour we want.
  *
  * Loaded as an ES module through an import map because the workspace is NOT in
  * the root global build (`window.Vela.VelaWorkspace` is undefined) — verified,
@@ -20,6 +28,12 @@
  * ------------------------------------------------------------------------- */
 
 const state = { ready: null, ws: null, error: null };
+
+/* The grid this console boots with: a Vela preset, never `false` (see the header — `false` means
+   monoLayout, which also makes the `layout` bridge action a no-op). `'2h'` is 2 side by side;
+   `'1' | '2v' | '4' | '8'` and `g<cols>x<rows>` are the rest. */
+const LAYOUT = '2h';
+
 window.__wsApp = {
   get ws() { return state.ws; },
   get error() { return state.error; },
@@ -67,7 +81,7 @@ state.ready = (async () => {
   }
 
   const ws = new VelaWorkspace('#chart', {
-    layout: false,                                   // single chart, no layout picker
+    layout: LAYOUT,                                  // Vela grid preset — see LAYOUT above
     symbol: 'BTCUSDT',
     timeframe: '60',
     providers: { binance: () => new BinanceProvider() },

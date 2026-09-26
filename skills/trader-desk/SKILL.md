@@ -53,12 +53,32 @@ change — report that, never "done".
 |---|---|
 | what symbol / what's on the chart | `chart_state` then maybe `chart_shot` |
 | open / switch SOLUSDT 1h | `chart_set_market` |
+| split the chart / 2 panes / 4 charts / "multipane" | `chart_set_layout` — no argument **reads** the grid |
 | add EMA / MACD / supertrend | `chart_add_indicator` |
 | remove indicators / clear studies | `chart_remove_indicator(all=True)` |
 | draw PDH/PDL / lines / boxes | `chart_draw` (overlay). Not `chart_apply_pine` for a plain price level. |
 | screenshot | `chart_shot` |
 | chart looks stale / old JS | `chart_reload` |
 | chart is light/dark | `chart_palette` |
+
+## The grid (multi-pane)
+
+Vela's workspace is a real chart grid. `chart_set_layout(layout)` takes `1` (single), `2h` (2 side by
+side), `2v` (2 stacked), `4`, `8`, or a custom `g<cols>x<rows>` (1–4 each); **no argument reads the
+grid** (a read never writes). The answer carries the layout id and every cell's own symbol/timeframe —
+quote those, not the id asked for.
+
+- A console built with `layout: false` sets `monoLayout`, and `setLayout()` is then a **permanent
+  no-op**: the tool answers truthfully that the page must boot with a preset. Do not call it "broken".
+- A grid already in the page's state **wins over the boot preset**, so a change made from chat
+  survives a reload.
+- Cells inherit the active cell's symbol — a wider grid is the same market on other timeframes until
+  something else is asked.
+- `chart_shot` composites only the **visible** cells (`shotCells()` skips hidden hosts), so a capture
+  taken while a cell still fetches bars shows fewer panes than the grid has. Size is the tell: ~75 KB
+  one pane, ~167 KB two.
+- The topbar's own **Layout** and **Sync** controls are the same `setLayout` call — never claim the
+  agent did something the operator's own picker cannot do.
 
 ## When a script fails
 

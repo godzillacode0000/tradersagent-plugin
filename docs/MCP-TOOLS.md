@@ -1,4 +1,4 @@
-# Trader's Agent — MCP tools (33)
+# Trader's Agent — MCP tools (34)
 
 The `traders-chart` MCP server exposes the live LuxAlgo **Vela** chart as native tools.
 Every tool talks to the local console (`http://127.0.0.1:8787`) over its push channel (SSE), so a
@@ -29,6 +29,7 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | Tool | Arguments | What it does |
 |---|---|---|
 | `chart_set_market` | `symbol: str`, `timeframe: str` | Switch the chart. **The answer already carries last price and bar count** — do not follow up with `chart_state`. |
+| `chart_set_layout` | `layout: str = ""` | Read or set the workspace **grid** (multi-pane): `1`, `2h` (side by side), `2v` (stacked), `4`, `8`, or a custom `g<cols>x<rows>` with 1–4 each. No argument = **read** (a read never writes). The answer carries the layout id and every cell's **own** symbol/timeframe. The console boots at `2h`; `layout: false` at boot means `monoLayout`, where `setLayout()` is a no-op — the page must boot with a preset. |
 | `chart_add_indicator` | `native: str` | Add a Vela native (`ema`, `macd`, `supertrend`, `donchian-channels`, …). |
 | `chart_remove_indicator` | `native: str = ""`, `all: bool = false` | Take studies **off** the chart — one by name, or every study with `all=true`. Reports `removed X · chart now carries: Y`. |
 | `chart_apply_pine` | `pine: str` | Run Pine over the chart's live bars and paint what it makes: geometry (boxes/lines/labels/tables) on the console's overlay, plot series as a **matching Vela native** — the same landasan as `chart_draw`, the script pane and the Library. PineTS is a measured subset: `import` is refused outright, while `while`, `for … in`, `request.security`, tuple returns, `box/line/label/table` and `strategy()` all run. |

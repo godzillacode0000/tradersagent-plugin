@@ -345,6 +345,24 @@ def cmd_market(args) -> int:
     return 0 if result.get("ok") else 1
 
 
+def cmd_layout(args) -> int:
+    """Read or change the workspace grid — Vela's own layout presets.
+
+    No preset = read the grid the page is wearing (a read never writes). A preset is `1`, `2h`
+    (side by side), `2v` (stacked), `4`, `8`, or a custom grid `g<cols>x<rows>` with 1-4 each.
+    The grid is part of the page's own state, so a change made here survives a console reload.
+    """
+    payload = {"action": "layout"}
+    if args.preset:
+        payload["layout"] = args.preset
+    result = send(args, payload)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
 def cmd_wait(args) -> int:
     args._payload = {}
     result = wait(args.id, timeout=args.timeout)
@@ -420,6 +438,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("caps", help="what the attached page can execute (from its heartbeat)")
     s.set_defaults(func=cmd_caps)
+
+    s = sub.add_parser("layout", help="read or change the workspace grid (Vela's own presets)")
+    s.add_argument("preset", nargs="?", default="",
+                   help="1 | 2h | 2v | 4 | 8, or g<cols>x<rows> (1-4 each). Omit to read it.")
+    s.set_defaults(func=cmd_layout)
 
     s = sub.add_parser("wait", help="wait for an earlier command's outcome")
     s.add_argument("id", type=int)

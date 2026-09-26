@@ -25,6 +25,15 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **The workspace grid is on, and it has a door.** Vela's workspace is a real multi-pane grid, but
+  this console used to boot with `layout: false` — which is not merely "one chart": it sets
+  `monoLayout`, and `setLayout()` then returns immediately for the life of the page. It now boots at
+  **`2h`** (two side by side), and `chart_set_layout` (MCP) / `trader-chart layout [PRESET]` (CLI) / a
+  `layout` bridge action change it afterwards: `1`, `2h`, `2v`, `4`, `8`, or a custom
+  `g<cols>x<rows>` (1–4 each). No argument **reads** the grid. The answer carries the layout id and
+  every cell's **own** symbol/timeframe, because the id asked for is not the evidence — the cells are.
+  Measured live: `layout` read 1 cell, `layout 2h` → `2 cell(s): SOLUSDT 4h · SOLUSDT 1D`, `layout 4`
+  → 4 cells, `layout 9` refused without touching the chart.
 - **`bin/is-enabled.sh` — ask whether the app has actually enabled the plugin.** `install.sh --doctor`
   answers "are the files in place"; it cannot answer "is it on", because that decision lives in the
   app's own store (a LevelDB under `~/.config/Hermes/…`). This reads it and says `on` / `OFF` / `?`

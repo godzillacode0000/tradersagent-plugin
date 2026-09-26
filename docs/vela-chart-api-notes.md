@@ -96,3 +96,34 @@ draw it — the levels get on the chart either way, and the answer says which ro
   check the heartbeat's `build`/`viewer` against `/api/build` before debugging anything else.
 * `trader-chart reload` reaches **every** view (once-per-view command); a single reload only touched the
   view that claimed it first.
+
+## The workspace grid (multi-pane) — measured
+
+`@luxalgo/vela@0.7.3` ships a real chart grid; this console had it switched off. Everything below was
+measured from the running page, not read off the docs.
+
+| Where | Result |
+| --- | --- |
+| Presets (`ws.setLayout(id)`) | `"1"` Single · `"2h"` 2 side by side · `"2v"` 2 stacked · `"4"` 4 grid · `"8"` 8 grid |
+| Custom grid | `g<cols>x<rows>` with **1–4 each** (`g2x3` = 6 cells). `setLayout` resolves it through the same registry the presets use |
+| Layout omitted at construction | Vela's own default is **`"4"`** — a four-chart grid |
+| `layout: false` | sets `monoLayout`, and `setLayout()` **returns immediately** — pinned for the life of the page, not just at boot |
+| A layout already in page state | **wins over the constructor value** (`resolveLayout(s?.layout ?? fallback)`), so a grid set from chat survives a reload — measured: set `2h`, reloaded, still `2h` |
+| `ws.layout` | the current def: `.id`, `.label` (`"2 side by side"`), `.cells` |
+| `ws.cells()` | the evidence: each cell carries `.id`, `.chart`, and its **own** `.symbol` / `.timeframe` |
+| `ws.monoLayout` | `true` only when the page was built with `layout: false` |
+| `ws.screenshot()` | **composite** when more than one cell is visible (`compositeLayoutShot`): the same capture grew 75 KB → 167 KB at 2 cells. `shotCells()` filters `host.style.visibility === "hidden"`, so a cell still fetching its bars is simply **absent** from the picture — 83 KB meant one cell, not a broken grid |
+| Topbar | a **Layout** button + picker appears with the grid (plus `Sync` for symbol/timeframe/interval/crosshair/style), which is the same `setLayout` call this door makes |
+
+Live proof, in order:
+
+```
+trader-chart layout          → layout 1 (Single) · 1 cell(s): SOLUSDT 240
+trader-chart layout 2h       → layout 1 → 2h (2 side by side) · 2 cell(s): SOLUSDT 240 · SOLUSDT D
+trader-chart layout 4        → layout 2h → 4 (4 grid) · 4 cell(s): SOLUSDT 240 · SOLUSDT D · SOLUSDT 30 · SOLUSDT 240
+trader-chart layout 9        → unknown layout "9" — use 1, 2h, 2v, 4, 8, or a custom grid g<cols>x<rows> (1–4 each)  (exit 1, chart untouched)
+trader-chart shot --out …    → two panes: SOLUSDT 4h (left) and SOLUSDT 1D (right)
+```
+
+Cells inherit the active cell's symbol when the grid grows — a new pane is the same market on another
+timeframe until something else is asked for.

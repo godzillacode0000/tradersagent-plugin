@@ -445,6 +445,25 @@ def chart_set_market(symbol: str, timeframe: str) -> str:
     return _command("market", symbol=symbol.strip().upper(), timeframe=timeframe.strip())
 
 
+@mcp.tool(annotations=_ann("Read or set the workspace grid", destructive=True))
+def chart_set_layout(layout: str = "") -> str:
+    """Read or change the chart grid — Vela's own workspace layout presets.
+
+    Presets: '1' (single), '2h' (2 side by side), '2v' (2 stacked), '4' (2x2), '8' (4x2), or a
+    custom grid 'g<cols>x<rows>' with 1-4 each. No argument = read the grid the page is wearing
+    (a read never writes). The answer carries the layout id and every cell's own symbol/timeframe.
+
+    This is the door the chart's own Layout button writes through (`ws.setLayout()`), and it is the
+    only way in after boot: a page built with `layout: false` sets monoLayout, where setLayout() is
+    a no-op — workspace.js must boot with a preset. The grid is part of the page's own state, so a
+    change here survives a console reload.
+    """
+    want = (layout or "").strip().lower()
+    if not want:
+        return _command("layout")
+    return _command("layout", layout=want)
+
+
 @mcp.tool(annotations=_ann("Reload every chart view", destructive=True))
 def chart_reload() -> str:
     """Reload every attached console page so it picks up current frontend files.
