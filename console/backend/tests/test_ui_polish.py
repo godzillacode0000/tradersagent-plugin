@@ -451,3 +451,30 @@ if __name__ == "__main__":
         self.assertIn("function nudgeChart()", app)
         self.assertIn("chart.resize()", app)
         self.assertGreaterEqual(app.count("nudgeChart();"), 3)   # both branches of setPanel + the helper
+
+
+class TheDockedDoorsAreOneControlShape(unittest.TestCase):
+    """26 Sep: the operator circled the chart row. `<> Script` was clipped to `Scri...` inside a
+    fixed 32px box, and the catalogue door wore a pill with a baked count (`806`) because it had
+    no dock rule at all. Spec §4: a count in the chrome is telemetry. One geometry for both doors,
+    the label never cut, the number in the tooltip."""
+
+    HERE = os.path.dirname(os.path.abspath(__file__))
+    FRONTEND = os.path.join(os.path.dirname(os.path.dirname(HERE)), "frontend")
+
+    def _read(self, name):
+        with open(os.path.join(self.FRONTEND, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_a_fixed_box_can_never_clip_the_label_again(self):
+        css = self._read("styles.css")
+        self.assertNotIn("width: 32px; height: 30px", css,
+                         "a fixed 32px docked box clips `Script` again")
+        self.assertIn(".vela-topbar-right #lib-open", css, "the catalogue door needs the dock shape")
+        self.assertIn("white-space: nowrap", css)
+
+    def test_the_count_left_the_chrome(self):
+        app = self._read("app.js")
+        self.assertNotIn("label.textContent = ` ${data.total}`", app,
+                         "the door label was overwritten with the count again")
+        self.assertIn("el.libOpen.setAttribute('data-tip'", app)

@@ -787,10 +787,12 @@ async function loadBrowse(reset = false) {
     rows.forEach((row) => el.browseList.appendChild(browseRow(row)));
     browseState.page += 1;
     const total = data.total ?? browseState.rows.length;
-    // The topbar door carried a baked count ("805"); it is 806 now. Read it once, from the API.
+    // The count is telemetry, not a label (26 Sep — the operator circled `☰ 806` on the chart row:
+    // a number in the chrome reads as a foreign element, spec §4). The door says WHAT it opens and
+    // the number lives in its tooltip; the label is never overwritten.
     if (el.libOpen && !el.libOpen.dataset.counted && data.total) {
-      const label = el.libOpen.querySelector('.btn__label');
-      if (label) label.textContent = ` ${data.total}`;
+      el.libOpen.setAttribute('data-tip',
+        `Catalogue — all ${data.total} LuxAlgo Library indicators, one click from the chart`);
       el.libOpen.dataset.counted = '1';
     }
     if (el.browseCount) {
