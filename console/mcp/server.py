@@ -464,6 +464,45 @@ def chart_set_layout(layout: str = "") -> str:
     return _command("layout", layout=want)
 
 
+@mcp.tool(annotations=_ann("List the chart's built-in indicators", read_only=True))
+def chart_natives() -> str:
+    """What Vela can put on THIS chart from its own side: the built-ins for the current market.
+
+    Returns the count, which are already on the chart, and each entry's type/title/supported/beta.
+    The console's Indicators panel shows the same list (BUILT-INS), so a name that works here is a
+    name that panel offers — and `chart_add_indicator` takes these `type` values.
+    """
+    return _command("natives")
+
+
+@mcp.tool(annotations=_ann("Open the Indicators surface", read_only=False))
+def chart_indicators(section: str = "", q: str = "", star: str = "", unstar: str = "",
+                     mount: str = "", show: bool = True) -> str:
+    """The console's Indicators surface: BUILT-INS + LIBRARY + favourites behind one search.
+
+    `section` is 'favorites', 'builtins' or 'library'; `q` fills the search box; `star`/`unstar`
+    take 'KIND:ID' ('native:supertrend', 'library:order-blocks') and use the same favourites the
+    operator's ☆ writes; `mount` mounts a built-in through the surface itself ('supertrend' or
+    'native:supertrend') — library rows keep the Details pane, since they carry Pine. `show=False`
+    closes it. The answer carries the rows the grid painted, so a panel that opened empty cannot
+    read as a filled one.
+    """
+    fields = {}
+    if section.strip():
+        fields["section"] = section.strip().lower()
+    if q:
+        fields["q"] = q
+    if star.strip():
+        fields["star"] = star.strip()
+    if unstar.strip():
+        fields["unstar"] = unstar.strip()
+    if mount.strip():
+        fields["mount"] = mount.strip()
+    if not show:
+        fields["show"] = False
+    return _command("indicators", **fields)
+
+
 @mcp.tool(annotations=_ann("Reload every chart view", destructive=True))
 def chart_reload() -> str:
     """Reload every attached console page so it picks up current frontend files.

@@ -33,6 +33,8 @@ capabilities:
     - chart_remove_indicator
     - chart_set_market
     - chart_set_layout
+    - chart_natives
+    - chart_indicators
     - chart_reload
     - chart_palette
     - chart_browse

@@ -1097,3 +1097,104 @@ pre {
   color: var(--lx-warn); border: 1px solid currentColor; font-size: 11px; line-height: 1.5;
 }
 .statusbar.has-stale { display: flex; }   /* a stale frame is worth showing the bar for */
+
+/* ── The Indicators surface (26 Sep) ─────────────────────────────────────────
+   One modal for both halves of "what can go on this chart": Vela's natives (BUILT-INS) and the
+   LuxAlgo catalogue (LIBRARY), behind one search box, with ☆ favourites kept in this console.
+   It floats over the chart rather than taking a column — the chart is what is being read, and the
+   pane already carries two columns' worth of opinions. */
+.ind-modal {
+  position: fixed; inset: 0; z-index: var(--lx-z-overlay, 40);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: clamp(12px, 6vh, 72px) var(--lx-space-4);
+  background: var(--lx-backdrop);
+  backdrop-filter: blur(2px);
+}
+.ind-modal__panel {
+  display: flex; flex-direction: column; min-height: 0;
+  width: min(920px, 100%); max-height: min(72vh, 720px);
+  background: var(--lx-surface-2);
+  border: 1px solid var(--lx-border-strong);
+  border-radius: var(--lx-radius-pop, 12px);
+  box-shadow: var(--lx-shadow-pop, var(--lx-shadow-4));
+  overflow: hidden;
+  animation: ind-pop var(--lx-dur-pop, 160ms) var(--lx-ease-spring, ease-out);
+}
+@keyframes ind-pop { from { opacity: 0; transform: translateY(-6px) scale(.99); } to { opacity: 1; transform: none; } }
+
+.ind-modal__head {
+  display: flex; align-items: center; gap: var(--lx-space-3);
+  padding: var(--lx-space-3) var(--lx-space-4);
+  border-bottom: 1px solid var(--lx-border);
+}
+.ind-modal__head strong { font-size: 14px; letter-spacing: .01em; }
+.ind-modal__head #ind-count { flex: 1 1 auto; font-size: 11px; }
+.ind-modal__body { display: flex; min-height: 0; flex: 1 1 auto; }
+
+.ind-nav {
+  flex: 0 0 168px; display: flex; flex-direction: column; gap: 2px;
+  padding: var(--lx-space-3) var(--lx-space-2);
+  border-right: 1px solid var(--lx-border);
+  background: var(--lx-surface-1);
+}
+.ind-tab {
+  display: flex; align-items: baseline; gap: var(--lx-space-1);
+  padding: 6px var(--lx-space-2); border: 0; border-radius: var(--lx-radius-sm);
+  background: none; color: var(--lx-fg-muted);
+  font: inherit; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  text-align: start; cursor: pointer;
+}
+.ind-tab:hover { background: var(--lx-bg-hover); color: var(--lx-fg); }
+.ind-tab.is-on { background: var(--lx-bg-active); color: var(--lx-fg-bright); font-weight: 600; }
+.ind-tab__n { font-size: 10px; letter-spacing: 0; text-transform: none; }
+
+.ind-main { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.ind-search { padding: var(--lx-space-3) var(--lx-space-4) var(--lx-space-2); }
+.ind-search input {
+  width: 100%; height: 32px; padding: 0 var(--lx-space-2);
+  background: var(--lx-field-bg); color: var(--lx-fg);
+  border: 1px solid var(--lx-border); border-radius: var(--lx-radius-sm);
+  font: inherit; font-size: 12px;
+}
+.ind-search input:focus-visible { outline: 2px solid var(--lx-accent); outline-offset: 1px; }
+
+.ind-grid {
+  flex: 1 1 auto; min-height: 0; overflow: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--lx-space-2);
+  padding: var(--lx-space-1) var(--lx-space-4) var(--lx-space-4);
+  align-content: start;
+}
+.ind-card {
+  position: relative; display: flex; flex-direction: column; gap: 2px;
+  padding: var(--lx-space-3) var(--lx-space-3) var(--lx-space-2);
+  background: var(--lx-surface-1);
+  border: 1px solid var(--lx-border-soft); border-radius: var(--lx-radius-md);
+  cursor: pointer; text-align: start;
+}
+.ind-card:hover { background: var(--lx-surface-3); border-color: var(--lx-border-strong); }
+.ind-card:focus-visible { outline: 2px solid var(--lx-accent); outline-offset: 1px; }
+.ind-card.is-on { border-color: var(--lx-accent-line); }
+.ind-card.is-on::after {
+  content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: 2px;
+  background: var(--lx-accent); border-start-start-radius: var(--lx-radius-md);
+}
+.ind-card__title { font-size: 12px; color: var(--lx-fg-bright); }
+.ind-card__meta { font-size: 10px; color: var(--lx-fg-faint); }
+.ind-card__on { color: var(--lx-accent-ink); }
+.ind-card__off { color: var(--lx-warn); }
+.ind-card__beta { color: var(--lx-fg-muted); }
+.ind-card__star {
+  position: absolute; inset-block-start: 4px; inset-inline-end: 4px;
+  width: 22px; height: 22px; display: grid; place-items: center;
+  background: none; border: 0; border-radius: var(--lx-radius-sm);
+  color: var(--lx-fg-faint); font-size: 12px; line-height: 1; cursor: pointer;
+}
+.ind-card__star:hover { background: var(--lx-bg-hover-strong); color: var(--lx-fg); }
+.ind-card__star.is-starred { color: var(--lx-warn); }
+.ind-note { grid-column: 1 / -1; margin: 0; padding: var(--lx-space-3); color: var(--lx-fg-muted); font-size: 12px; line-height: 1.5; }
+.ind-more { padding: 0 var(--lx-space-4) var(--lx-space-3); }
+.ind-more .btn { width: 100%; }
+
+/* The modal owns the screen while it is up: the chart underneath does not need to scroll away. */
+body.has-ind-modal { overflow: hidden; }

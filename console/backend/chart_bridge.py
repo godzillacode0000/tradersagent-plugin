@@ -196,6 +196,14 @@ def record_result(root: str | Path, payload: dict) -> dict:
         # A surface's own after-state. Same lesson as `onCanvas`: the store whitelists, so a new
         # field the page correctly reports arrives empty and reads as "no answer".
         "browse": payload.get("browse"),
+        # The grid (`layout` door): the id it resolved to and the cells it built.
+        "layout": payload.get("layout"),
+        "cells": payload.get("cells"),
+        # The built-in catalogue (`natives` door) and the Indicators surface's after-state
+        # (`indicators` door): rows the grid actually painted, so a panel that opened empty cannot
+        # read as a filled one.
+        "catalog": payload.get("catalog"),
+        "indicators": payload.get("indicators"),
     }
     if payload.get("shot"):
         path = _decode_shot(root, f"shot-{rid}", str(payload["shot"]))

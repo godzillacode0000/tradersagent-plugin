@@ -1265,6 +1265,350 @@ function showView(name) {
   });
 }
 
+/* -------------------------------------------------------------- indicators (26 Sep) */
+/* LuxAlgo's own modal puts BUILT-INS (their chart's natives) and LIBRARY (their catalogue) behind
+   one search box, with favourites — operator's ask, 26 Sep, after watching the original app.
+   This console had the two halves in two places: Vela's own Indicators menu for natives, the
+   Library panel for the catalogue. Neither knew about the other, and neither remembered what the
+   operator actually reaches for.
+
+   Nothing is copied from the catalogue: natives come from this frame's own
+   `availableNativeIndicators()`, the catalogue from /api/indicators, and mounting a built-in is the
+   SAME `addNativeIndicator()` call the bridge's `add` action makes — then read back with
+   `presentNativeIndicators()`, because a call that returned is not a study that landed. */
+const FAV_KEY = 'luxalgo-web:indicator-favorites';
+
+const indState = {
+  section: 'favorites',
+  q: '',
+  natives: null,        // null = not read yet; [] = this chart truly has none
+  nativesError: '',
+  library: { rows: [], page: 0, size: 60, total: 0, query: '', loading: false, queued: null },
+};
+
+function readFavourites() {
+  try {
+    const v = JSON.parse(localStorage.getItem(FAV_KEY));
+    return Array.isArray(v) ? v.filter((k) => typeof k === 'string') : [];
+  } catch { return []; }
+}
+const favId = (kind, id) => kind + ':' + id;
+const isFavourite = (kind, id) => readFavourites().includes(favId(kind, id));
+
+function toggleFavourite(kind, id, label) {
+  const key = favId(kind, id);
+  const list = readFavourites();
+  const at = list.indexOf(key);
+  if (at === -1) list.push(key); else list.splice(at, 1);
+  try { localStorage.setItem(FAV_KEY, JSON.stringify(list)); } catch { /* private mode */ }
+  toast((at === -1 ? '★ ' : '☆ ') + label + (at === -1 ? ' starred' : ' unstarred'));
+  renderIndicators();
+}
+
+/** The catalogue half: Vela's own natives for this market. */
+async function loadNatives() {
+  const c = chart || (window.__wsApp && window.__wsApp.activeChart && window.__wsApp.activeChart());
+  if (!c || typeof c.availableNativeIndicators !== 'function') {
+    indState.nativesError = 'this chart has no native catalogue to read';
+    indState.natives = [];
+    return;
+  }
+  try {
+    const rows = await c.availableNativeIndicators();
+    indState.natives = (rows || [])
+      .map((r) => ({ type: r.type, title: r.title || r.type, supported: r.supported !== false,
+                     present: Boolean(r.present), beta: Boolean(r.beta) }))
+      .sort((a, b) => String(a.title).localeCompare(String(b.title)));
+  } catch (err) {
+    indState.nativesError = err.message || 'the native catalogue did not answer';
+    indState.natives = [];
+  }
+}
+
+/** The other half: the LuxAlgo Library catalogue, paged and searchable server-side.
+
+    A call already in flight cannot be joined: the door can set the section and the search text in
+    the same breath, and the first load (started by the section change, with the old query) would
+    swallow the second one — measured live on 26 Sep, `--section library --q supertrend` painted
+    `0 row(s)` while the API answered `total 10`. So a request that arrives while one is running is
+    QUEUED and drained after it, exactly as `browse` does. */
+async function loadLibrary(reset = false) {
+  const lib = indState.library;
+  if (lib.loading) { lib.queued = reset ? 'reset' : 'more'; return; }
+  if (reset) { lib.page = 0; lib.rows = []; lib.query = indState.q; }
+  lib.loading = true;
+  try {
+    const data = await api('/api/indicators', { text: indState.q, page: lib.page, page_size: lib.size });
+    lib.rows = lib.page === 0 ? (data.indicators || []) : lib.rows.concat(data.indicators || []);
+    lib.total = data.total || lib.rows.length;
+  } catch (err) {
+    toast('Library: ' + err.message, true);
+  } finally {
+    lib.loading = false;
+    const queued = lib.queued;
+    lib.queued = null;
+    if (queued) loadLibrary(queued === 'reset').then(renderIndicators);
+  }
+}
+
+function indCard(kind, id, title, meta, opts = {}) {
+  const starred = isFavourite(kind, id);
+  const sub = [];
+  if (meta) sub.push(esc(meta));
+  if (opts.present) sub.push('<span class="ind-card__on">on chart</span>');
+  if (opts.unsupported) sub.push('<span class="ind-card__off">not on this market</span>');
+  if (opts.beta) sub.push('<span class="ind-card__beta">beta</span>');
+  if (opts.missing) sub.push('<span class="ind-card__off">not in this build</span>');
+  return `<article class="ind-card${opts.present ? ' is-on' : ''}" data-kind="${esc(kind)}" data-id="${esc(id)}"
+      data-label="${esc(title)}" tabindex="0" role="button"
+      aria-label="${esc(title)} — click to mount, star to keep">
+    <button type="button" class="ind-card__star${starred ? ' is-starred' : ''}" data-star="1"
+            aria-pressed="${starred}" title="${starred ? 'Remove from favourites' : 'Add to favourites'}"
+            aria-label="Favourite ${esc(title)}">${starred ? '★' : '☆'}</button>
+    <span class="ind-card__title">${esc(title)}</span>
+    ${sub.length ? `<span class="ind-card__meta">${sub.join(' · ')}</span>` : ''}
+  </article>`;
+}
+
+function renderIndicators() {
+  const grid = document.getElementById('ind-grid');
+  if (!grid) return;
+  const favs = readFavourites();
+  const natives = indState.natives || [];
+  const byType = new Map(natives.map((n) => [n.type, n]));
+  const libRows = indState.library.rows;
+  const bySlug = new Map(libRows.map((r) => [r.slug, r]));
+  const q = indState.q.trim().toLowerCase();
+  const html = [];
+
+  if (indState.section === 'favorites') {
+    if (!favs.length) {
+      html.push('<p class="ind-note">Nothing starred yet. Open <strong>BUILT-INS</strong> or '
+        + '<strong>LIBRARY</strong>, then click the ☆ on anything worth keeping — '
+        + 'the star is remembered in this console, not on a server.</p>');
+    }
+    favs.forEach((key) => {
+      const [kind, ...rest] = key.split(':');
+      const id = rest.join(':');
+      if (kind === 'native') {
+        const hit = byType.get(id);
+        html.push(indCard('native', id, hit ? hit.title : id, 'built-in',
+          { present: hit && hit.present, missing: !hit }));
+      } else {
+        const hit = bySlug.get(id);
+        html.push(indCard('library', id, hit ? hit.name : id, hit ? hit.family : 'library',
+          { missing: !hit }));
+      }
+    });
+  } else if (indState.section === 'builtins') {
+    if (indState.nativesError) {
+      html.push(`<p class="ind-note">${esc(indState.nativesError)}</p>`);
+    } else if (!natives.length) {
+      html.push('<p class="ind-note">The native catalogue is still loading…</p>');
+    } else {
+      const shown = q ? natives.filter((n) => (n.title + ' ' + n.type).toLowerCase().includes(q)) : natives;
+      if (!shown.length) html.push('<p class="ind-note">No built-in matches “' + esc(indState.q) + '”.</p>');
+      shown.forEach((n) => html.push(indCard('native', n.type, n.title,
+        n.present ? 'built-in' : 'built-in', { present: n.present, unsupported: !n.supported, beta: n.beta })));
+    }
+  } else {
+    if (!libRows.length) {
+      html.push(indState.library.loading
+        ? '<p class="ind-note">Reading the catalogue…</p>'
+        : '<p class="ind-note">No catalogue rows for “' + esc(indState.q) + '”.</p>');
+    }
+    const shown = q && indState.library.query !== indState.q
+      /* These rows are not the server's answer to THIS query (they are a general page), so filter
+         them here. When they ARE the answer, they are painted as they came: the catalogue's own
+         search is not a substring match — `orderblock` answers with two rows whose names say
+         "Order Block" and whose slugs say `order-blocks`, and a local `includes()` re-filter threw
+         both away and reported an empty search against a non-empty answer (measured 26 Sep). */
+      ? libRows.filter((r) => (r.name + ' ' + r.slug + ' ' + (r.family || '')).toLowerCase().includes(q))
+      : libRows;
+    shown.forEach((r) => html.push(indCard('library', r.slug, r.name || r.slug, r.family)));
+  }
+
+  grid.innerHTML = html.join('');
+  const counts = {
+    favorites: favs.length,
+    builtins: natives.length,
+    library: indState.library.total,
+  };
+  document.querySelectorAll('#ind-nav .ind-tab').forEach((tab) => {
+    const on = tab.dataset.section === indState.section;
+    tab.classList.toggle('is-on', on);
+    tab.setAttribute('aria-selected', String(on));
+    const badge = tab.querySelector('.ind-tab__n');
+    if (badge) badge.textContent = counts[tab.dataset.section] ? ' ' + counts[tab.dataset.section] : '';
+  });
+  const more = document.getElementById('ind-more');
+  if (more) {
+    const canPage = indState.section === 'library' && !indState.q
+      && indState.library.rows.length < indState.library.total;
+    more.hidden = !canPage;
+  }
+  const count = document.getElementById('ind-count');
+  if (count) {
+    count.textContent = indState.section === 'builtins'
+      ? `${natives.length} built-in${natives.length === 1 ? '' : 's'} on this build`
+      : (indState.section === 'library' ? `${indState.library.total} in the catalogue` : '');
+  }
+}
+
+/** Mount a built-in and report what the CHART says afterwards, not what we asked for. */
+function mountNative(type, title) {
+  const c = chart || (window.__wsApp && window.__wsApp.activeChart && window.__wsApp.activeChart());
+  if (!c || typeof c.addNativeIndicator !== 'function') { toast('No chart on this page', true); return false; }
+  const before = (typeof c.presentNativeIndicators === 'function') ? c.presentNativeIndicators() : [];
+  if (before.includes(type)) {
+    toast(title + ' is already on the chart — nothing added');
+    return false;
+  }
+  c.addNativeIndicator(type);
+  const after = (typeof c.presentNativeIndicators === 'function') ? c.presentNativeIndicators() : [];
+  const landed = after.includes(type);
+  toast(landed ? 'Added ' + title : title + ' did not land — the chart still does not carry it', !landed);
+  noteActivity((landed ? 'added ' : 'tried to add ') + title + ' from the Indicators panel', 'chart_add_indicator');
+  refreshIndicatorCount();
+  renderIndicators();
+  return landed;
+}
+
+function setIndSection(section) {
+  indState.section = section;
+  if (section === 'library' && !indState.library.rows.length) {
+    loadLibrary(true).then(renderIndicators);
+  }
+  renderIndicators();
+}
+
+/** The bridge's `indicators` door sets the search box and its state in one move. */
+function setIndSearch(q) {
+  const box = document.getElementById('ind-q');
+  const text = String(q == null ? '' : q);
+  if (box) box.value = text;
+  indState.q = text;
+  /* Same rule the typing path uses: a query the catalogue can answer is fetched, and so is clearing
+     it — otherwise the previous search's rows stay on screen under an empty box. */
+  if (indState.section === 'library' && (text.trim().length >= 2 || indState.library.query)) {
+    loadLibrary(true).then(renderIndicators);
+    return;
+  }
+  renderIndicators();
+}
+
+/* The surface's own functions are reachable from the bridge (both files are classic scripts), but
+   the bridge is not allowed to assume that — expose them explicitly so a future bundling step
+   cannot quietly break the agent's door. */
+window.openIndicators = openIndicators;
+window.setIndSection = setIndSection;
+window.setIndSearch = setIndSearch;
+window.indicatorsSurface = () => {
+  const grid = document.getElementById('ind-grid');
+  const cards = Array.from(document.querySelectorAll('#ind-grid .ind-card'));
+  return {
+    section: indState.section,
+    query: indState.q,
+    rows: cards.map((c) => ({ kind: c.dataset.kind, id: c.dataset.id, label: c.dataset.label,
+                              onChart: c.classList.contains('is-on'),
+                              starred: Boolean(c.querySelector('.ind-card__star.is-starred')) })),
+    builtins: (indState.natives || []).length,
+    catalogueTotal: indState.library.total,
+    favourites: readFavourites().length,
+    gridPresent: Boolean(grid),
+    loading: Boolean(indState.library.loading || indState.library.queued),
+  };
+};
+
+/** Star / unstar without a click — the agent's side of the same ☆ the operator presses. */
+window.mountNative = mountNative;
+window.setIndFavourite = (kind, id, on) => {
+  const key = favId(kind, id);
+  const list = readFavourites();
+  const at = list.indexOf(key);
+  if (on && at === -1) list.push(key);
+  if (!on && at !== -1) list.splice(at, 1);
+  try { localStorage.setItem(FAV_KEY, JSON.stringify(list)); } catch { /* private mode */ }
+  renderIndicators();
+  return { starred: list.includes(key), favourites: list.length };
+};
+
+function openIndicators(on) {
+  const modal = document.getElementById('ind-modal');
+  if (!modal) return false;
+  const show = on !== false;
+  modal.classList.toggle('view--hidden', !show);
+  document.body.classList.toggle('has-ind-modal', show);
+  if (!show) return true;
+  if (indState.natives === null) loadNatives().then(renderIndicators);
+  if (!indState.library.rows.length) loadLibrary(true).then(renderIndicators);
+  renderIndicators();
+  const box = document.getElementById('ind-q');
+  if (box) box.focus();
+  return true;
+}
+
+function initIndicators() {
+  const modal = document.getElementById('ind-modal');
+  const open = document.getElementById('ind-open');
+  if (!modal || !open) return;
+  open.addEventListener('click', () => openIndicators(modal.classList.contains('view--hidden')));
+  document.getElementById('ind-close').addEventListener('click', () => openIndicators(false));
+  modal.addEventListener('click', (ev) => {
+    if (ev.target === modal) { openIndicators(false); return; }
+    const tab = ev.target.closest('.ind-tab');
+    if (tab) { setIndSection(tab.dataset.section); return; }
+    const card = ev.target.closest('.ind-card');
+    if (!card) return;
+    if (ev.target.closest('[data-star]')) {
+      toggleFavourite(card.dataset.kind, card.dataset.id, card.dataset.label);
+      return;
+    }
+    const kind = card.dataset.kind;
+    const id = card.dataset.id;
+    const label = card.dataset.label;
+    if (kind === 'native') { mountNative(id, label); return; }
+    /* A catalogue row keeps its own home: the Details pane, with the Pine source and the SAME
+       Run PineTS / Add to chart buttons every other door uses. */
+    const row = indState.library.rows.find((r) => r.slug === id) || { slug: id, name: label, kind: 'indicator' };
+    openIndicators(false);
+    openResult({ ...row, kind: 'indicator' }, card);
+  });
+  modal.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      const card = ev.target.closest('.ind-card');
+      if (card && !ev.target.closest('[data-star]')) { ev.preventDefault(); card.click(); }
+    }
+  });
+  let debounce = null;
+  const box = document.getElementById('ind-q');
+  box.addEventListener('input', () => {
+    indState.q = box.value;
+    clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      if (indState.section !== 'library') { renderIndicators(); return; }
+      /* Any query the catalogue can answer is its own answer to fetch — including a short one.
+         Clearing the box has to fetch too, or the previous search's rows would stay on screen. */
+      if (indState.q.trim().length >= 2 || indState.library.query) loadLibrary(true).then(renderIndicators);
+      else renderIndicators();
+    }, 250);
+  });
+  document.getElementById('ind-more').addEventListener('click', () => {
+    indState.library.page += 1;
+    loadLibrary(false).then(renderIndicators);
+  });
+}
+
+/** Escape: close the surface if it is up, and say whether that consumed the key.
+
+    The F6 rule is one Escape, one surface — so the topmost surface has to answer first, and the
+    listener that owns the right column asks this before it hides that column. */
+function closeIndicatorsIfOpen() {
+  if (!indState.open) return false;
+  openIndicators(false);
+  return true;
+}
+
 /* ------------------------------------------------------------------- wiring */
 async function checkHealth() {
   try {
@@ -1405,6 +1749,12 @@ async function main() {
      too — the draft is saved as you type (saveDraft), so hiding the pane loses nothing. */
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape' || ev.defaultPrevented) return;
+    /* The Indicators surface is the topmost thing when it is up, so it takes the Escape first —
+       one Escape closes ONE surface (the F6 rule below). */
+    if (typeof closeIndicatorsIfOpen === 'function' && closeIndicatorsIfOpen()) {
+      ev.preventDefault();
+      return;
+    }
     if (el.main.dataset.detail !== 'on') return;
     setPanel('script', false);
   });
@@ -1460,6 +1810,7 @@ async function main() {
   });
   document.documentElement.dataset.theme = currentTheme();
 
+  initIndicators();
   await checkHealth();
   try { await bootChart(); }
   catch (err) { console.error(err); log('Chart failed to boot: ' + err.message); toast('Chart failed: ' + err.message, true); }

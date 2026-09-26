@@ -54,6 +54,8 @@ change — report that, never "done".
 | what symbol / what's on the chart | `chart_state` then maybe `chart_shot` |
 | open / switch SOLUSDT 1h | `chart_set_market` |
 | split the chart / 2 panes / 4 charts / "multipane" | `chart_set_layout` — no argument **reads** the grid |
+| which indicators can this chart take | `chart_natives` — Vela's built-ins for this market, read from the frame |
+| open the Indicators panel / star one / search the catalogue | `chart_indicators` — section `favorites`/`builtins`/`library`, `q`, `star`/`unstar KIND:ID`, `mount` |
 | add EMA / MACD / supertrend | `chart_add_indicator` |
 | remove indicators / clear studies | `chart_remove_indicator(all=True)` |
 | draw PDH/PDL / lines / boxes | `chart_draw` (overlay). Not `chart_apply_pine` for a plain price level. |
@@ -79,6 +81,23 @@ quote those, not the id asked for.
   one pane, ~167 KB two.
 - The topbar's own **Layout** and **Sync** controls are the same `setLayout` call — never claim the
   agent did something the operator's own picker cannot do.
+
+## The Indicators surface
+
+One modal in the chart's top bar (`⌗ Indicators`) holds both halves of "which indicator?":☆
+**Favourites**, **BUILT-INS** (Vela's natives for this market, read live from the frame — 76 on this
+build) and **LIBRARY** (the 806-row LuxAlgo catalogue, searched server-side). `chart_indicators` is
+the door: `section`, `q`, `star`/`unstar "native:supertrend"`/`"library:order-blocks"`, `mount
+"native:ema"`, `show=False` to close. Its answer carries the rows the grid **painted** — quote those.
+
+- Clicking a built-in mounts it; a **Library row does not mount** — it opens the Details pane, because
+  its Pine has to go through PineTS. `mount "library:…"` is refused for that reason; use
+  `chart_apply_pine`.
+- The favourites ★ list is one localStorage list shared by both halves, so starring from chat shows
+  up on the operator's screen (and vice versa).
+- Backend changes need a **console restart** (`systemctl --user restart luxalgo-web.service`), not just
+  `chart_reload`: the result store **whitelists** fields, so a new key arrives empty and reads as "no
+  answer". Frontend-only changes are the ones `chart_reload` covers.
 
 ## When a script fails
 

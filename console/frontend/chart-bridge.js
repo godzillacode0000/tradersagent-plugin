@@ -41,7 +41,9 @@
                    'mode', 'script', 'palette', 'browse', 'open', 'rect',
     'bars',
                    'signals',
-                   'layout',];
+                   'layout',
+                   'natives',
+                   'indicators',];
 
   const api = async (path, body) => {
     const res = await fetch(path, body
@@ -640,6 +642,118 @@
           out.detail = 'layout ' + (before && before.id ? before.id + ' → ' : '') + after.id +
             (after.label ? ' (' + after.label + ')' : '') + ' · ' + after.cells.length + ' cell(s)' +
             (shown ? ': ' + shown : ' — none built yet');
+          break;
+        }
+        case 'natives': {
+          /* What this build can put on the chart from its own side — Vela's natives for THIS market.
+             Read-only, and the copy the console's Indicators panel shows (BUILT-INS) comes from the
+             same call, so the panel and this answer cannot drift. */
+          const nc = chart() || (window.__wsApp && window.__wsApp.activeChart && window.__wsApp.activeChart());
+          if (!nc || typeof nc.availableNativeIndicators !== 'function') {
+            out.detail = 'this page has no native catalogue — the frame is on an older frontend build';
+            break;
+          }
+          let cats = [];
+          try { cats = (await nc.availableNativeIndicators()) || []; }
+          catch (err) { out.detail = 'the native catalogue failed: ' + ((err && err.message) || err); break; }
+          const onChart = (typeof nc.presentNativeIndicators === 'function') ? nc.presentNativeIndicators() : [];
+          out.ok = true;
+          out.count = cats.length;
+          out.natives = onChart;
+          out.catalog = cats.map((r) => ({ type: r.type, title: r.title || r.type,
+                                           supported: r.supported !== false, present: Boolean(r.present),
+                                           beta: Boolean(r.beta) }));
+          out.detail = cats.length + ' built-in(s) in this build · on the chart: ' +
+            (onChart.join(', ') || 'none');
+          break;
+        }
+        case 'indicators': {
+          /* The Indicators surface — BUILT-INS + LIBRARY + favourites in one modal (the operator's
+             ask, 26 Sep, after watching the original LuxAlgo app). The door opens it and reports the
+             rows the grid actually painted: a panel that opened is not a panel that filled. */
+          const modal = document.getElementById('ind-modal');
+          const openBtn = document.getElementById('ind-open');
+          if (!modal || !openBtn) {
+            out.detail = 'this page has no Indicators surface — reload the console to pick up the ' +
+              'newer frontend files';
+            break;
+          }
+          if (command.show === false) {
+            if (!modal.classList.contains('view--hidden')) openBtn.click();
+            out.ok = true;
+            out.detail = 'Indicators surface closed';
+            break;
+          }
+          if (modal.classList.contains('view--hidden')) openBtn.click();
+          const section = String(command.section || '').trim().toLowerCase();
+          if (section && typeof window.setIndSection === 'function') window.setIndSection(section);
+          if (command.q != null && typeof window.setIndSearch === 'function') window.setIndSearch(command.q);
+          /* Star / unstar from this side too: `star: "native:supertrend"` (or "library:slug"). The
+             operator's ☆ and this are the same list, so what the agent keeps is what the panel shows. */
+          let starred = null;
+          const starSpec = String(command.star || command.unstar || '').trim();
+          if (starSpec && typeof window.setIndFavourite === 'function') {
+            const cut = starSpec.indexOf(':');
+            if (cut > 0) {
+              const kind = starSpec.slice(0, cut).toLowerCase();
+              const id = starSpec.slice(cut + 1);
+              starred = window.setIndFavourite(kind, id, !command.unstar);
+            }
+          }
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+          /* Mount straight from the surface when asked: this is the SAME function a click on a
+             built-in card runs (`window.mountNative`), so the door cannot pass while the click
+             path is broken. Library rows are not mounted this way — they keep the Details pane
+             with its Run PineTS / Add to chart buttons. */
+          let mounted = null;
+          const mountSpec = String(command.mount || '').trim();
+          if (mountSpec) {
+            const cut = mountSpec.indexOf(':');
+            const kind = cut > 0 ? mountSpec.slice(0, cut).toLowerCase() : 'native';
+            const id = cut > 0 ? mountSpec.slice(cut + 1) : mountSpec;
+            if (kind === 'library') {
+              out.detail = 'library rows mount through the Details pane (open "' + id + '"), not ' +
+                'through this door — they carry Pine that PineTS must run';
+              break;
+            }
+            if (typeof window.mountNative !== 'function') {
+              out.detail = 'this build cannot mount from the surface (older frontend)';
+              break;
+            }
+            mounted = window.mountNative(id, id);
+            out.added = mounted ? id : null;
+          }
+          const deadline = Date.now() + 6000;
+          let seen = null;
+          for (;;) {
+            await pause(150);
+            seen = typeof window.indicatorsSurface === 'function' ? window.indicatorsSurface() : null;
+            if (!seen) break;
+            /* Settled = the right section is showing and nothing is in flight. A search that truly
+               matches nothing settles with zero rows — that is an answer, not a reason to spin. */
+            if (!seen.loading && seen.section === (section || seen.section)) break;
+            if (Date.now() > deadline) break;
+          }
+          if (!seen) { out.detail = 'the surface opened but cannot describe itself (older build)'; break; }
+          out.ok = true;
+          out.indicators = {
+            section: seen.section,
+            query: seen.query,
+            rows: seen.rows.slice(0, 60),
+            builtins: seen.builtins,
+            catalogueTotal: seen.catalogueTotal,
+            favourites: seen.favourites,
+            starred: starred,
+            stillLoading: Boolean(seen.loading),
+          };
+          const labels = seen.rows.slice(0, 8).map((r) => r.label).join(' · ');
+          out.detail = 'Indicators · ' + seen.section + ' · ' + seen.rows.length + ' row(s)' +
+            (seen.query ? ' for "' + seen.query + '"' : '') +
+            ' · built-ins ' + seen.builtins + ' · catalogue ' + seen.catalogueTotal +
+            ' · starred ' + seen.favourites +
+            (starred ? ' (' + (starred.starred ? 'starred' : 'unstarred') + ')' : '') +
+            (mountSpec ? ' · ' + (mounted ? 'mounted ' + mountSpec : 'mount failed: ' + mountSpec) : '') +
+            (labels ? ' ⇒ ' + labels : '');
           break;
         }
         case 'palette': {

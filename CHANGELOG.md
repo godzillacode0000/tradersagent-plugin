@@ -25,6 +25,22 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **One surface for both halves of "which indicator?" — Favourites, BUILT-INS and the LIBRARY
+  catalogue.** Vela's menu lists its natives, the Library panel lists 806 catalogue rows, and
+  neither remembered what the operator reaches for; the original LuxAlgo app puts both behind one
+  modal with **Favourites** on top, and this is that surface (`⌗ Indicators` in the chart top bar,
+  door: `chart_indicators` / `trader-chart indicators`). BUILT-INS is read **live from the frame**
+  (`availableNativeIndicators()` → 76 on this build), so it cannot drift from what the chart can
+  actually mount; LIBRARY is searched server-side through `/api/indicators` (measured: `q=supertrend`
+  → `total 10`); ★ writes one localStorage list that both halves read. Clicking a built-in mounts it
+  (`addNativeIndicator()`, then a read-back that the chart carries it) — a Library row keeps the
+  Details pane, because its Pine has to go through PineTS. Two things had to be fixed to make the
+  door honest: the store **whitelists** result fields, so new keys (`layout`, `cells`, `catalog`,
+  `indicators`) arrived empty and read as "no answer"; and a section change plus a search text in the
+  same breath raced — the first load (old query) swallowed the second, reporting `0 row(s)` while the
+  API answered `total 10`, so a request that arrives while one is in flight is now **queued and
+  drained**, exactly as `browse` does.
+
 - **The workspace grid is on, and it has a door.** Vela's workspace is a real multi-pane grid, but
   this console used to boot with `layout: false` — which is not merely "one chart": it sets
   `monoLayout`, and `setLayout()` then returns immediately for the life of the page. It now boots at

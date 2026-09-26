@@ -1,4 +1,4 @@
-# Trader's Agent — MCP tools (34)
+# Trader's Agent — MCP tools (36)
 
 The `traders-chart` MCP server exposes the live LuxAlgo **Vela** chart as native tools.
 Every tool talks to the local console (`http://127.0.0.1:8787`) over its push channel (SSE), so a
@@ -17,6 +17,7 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 |---|---|---|
 | `chart_views` | — | Is a chart view attached right now? Every command tool needs one (the chart is not headless). |
 | `chart_caps` | — | What the attached page will actually execute. Read this before drawing: an action this build does not have fails at the page, not here. |
+| `chart_natives` | — | What Vela can put on **this** chart from its own side: the built-ins for the current market (`catalog`, count, which are already on the chart). The console's Indicators panel shows the same list, and `chart_add_indicator` takes these `type` values. |
 | `chart_state` | — | Symbol, timeframe, last price, bars, indicators on the chart, plus `build`/`viewer` when the page publishes them (stale-frame check). |
 | `chart_shot` | `name: str = ""` | One PNG of the chart. Returned as an image when the client takes images, plus the path on disk. |
 | `chart_palette` | `try_apply: bool = false` | What colours the chart is actually wearing (background, candles, console theme). `try_apply=true` asserts the console's palette and reports what landed 300 ms later. |
@@ -30,6 +31,7 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 |---|---|---|
 | `chart_set_market` | `symbol: str`, `timeframe: str` | Switch the chart. **The answer already carries last price and bar count** — do not follow up with `chart_state`. |
 | `chart_set_layout` | `layout: str = ""` | Read or set the workspace **grid** (multi-pane): `1`, `2h` (side by side), `2v` (stacked), `4`, `8`, or a custom `g<cols>x<rows>` with 1–4 each. No argument = **read** (a read never writes). The answer carries the layout id and every cell's **own** symbol/timeframe. The console boots at `2h`; `layout: false` at boot means `monoLayout`, where `setLayout()` is a no-op — the page must boot with a preset. |
+| `chart_indicators` | `section: str = ""`, `q: str = ""`, `star: str = ""`, `unstar: str = ""`, `mount: str = ""`, `show: bool = True` | The console's **Indicators** surface: BUILT-INS + LIBRARY + favourites behind one search. `section` is `favorites`/`builtins`/`library`; `star`/`unstar` take `KIND:ID` (`native:supertrend`, `library:order-blocks`) and write the same favourites the operator's ☆ does; `mount` mounts a built-in through the surface (`supertrend`, or `native:supertrend`); `show=False` closes it. The answer carries the rows the grid **painted**. |
 | `chart_add_indicator` | `native: str` | Add a Vela native (`ema`, `macd`, `supertrend`, `donchian-channels`, …). |
 | `chart_remove_indicator` | `native: str = ""`, `all: bool = false` | Take studies **off** the chart — one by name, or every study with `all=true`. Reports `removed X · chart now carries: Y`. |
 | `chart_apply_pine` | `pine: str` | Run Pine over the chart's live bars and paint what it makes: geometry (boxes/lines/labels/tables) on the console's overlay, plot series as a **matching Vela native** — the same landasan as `chart_draw`, the script pane and the Library. PineTS is a measured subset: `import` is refused outright, while `while`, `for … in`, `request.security`, tuple returns, `box/line/label/table` and `strategy()` all run. |

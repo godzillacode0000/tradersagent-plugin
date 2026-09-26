@@ -33,6 +33,12 @@
            so the catalogue from the LuxAlgo Library needs its own door. -->
       <button type="button" class="btn btn--ghost btn--toggle" id="lib-open"
               aria-pressed="false" aria-label="Browse the LuxAlgo Library indicator catalogue" data-tip="Catalogue — every LuxAlgo Library indicator, one click from the chart">☰<span class="btn__label"> catalogue</span></button>
+      <!-- One surface for both halves (26 Sep, after the operator watched the original LuxAlgo
+           app): BUILT-INS are Vela's own natives for this market, LIBRARY is the LuxAlgo catalogue,
+           and ☆ keeps what he actually reaches for. Vela's own menu knows only the first half and
+           this console's Library panel only the second — neither remembers anything. -->
+      <button type="button" class="btn btn--ghost btn--toggle" id="ind-open"
+              aria-pressed="false" aria-label="Open the Indicators surface" data-tip="Indicators — Vela's built-ins and the Library catalogue behind one search, with favourites">⌗<span class="btn__label"> Indicators</span></button>
       <span class="chart-legend" id="lib-legend" hidden></span>
       <!-- Names whose overlay geometry is on screen — set by the unified landasan. Lives HERE,
            not in .chart-head: workspace mode hides that row (body.has-workspace .chart-head). -->
@@ -185,6 +191,39 @@
       </div>
     </section>
   </main>
+
+  <!-- The Indicators surface: a modal over the chart, not a column — Vela's own chrome already has
+       two columns' worth of opinions, and the chart is the thing being read. Favourites, BUILT-INS
+       and LIBRARY are one search box apart, which is what the original app does. -->
+  <div class="ind-modal view--hidden" id="ind-modal" role="dialog" aria-modal="true"
+       aria-labelledby="ind-title">
+    <div class="ind-modal__panel">
+      <div class="ind-modal__head">
+        <strong id="ind-title">Indicators</strong>
+        <span class="muted" id="ind-count"></span>
+        <button type="button" class="btn btn--ghost" id="ind-close" aria-label="Close the Indicators panel">✕</button>
+      </div>
+      <div class="ind-modal__body">
+        <nav class="ind-nav" id="ind-nav" role="tablist" aria-label="Indicator sources">
+          <button type="button" class="ind-tab is-on" role="tab" aria-selected="true"
+                  data-section="favorites">☆ Favorites<span class="ind-tab__n muted"></span></button>
+          <button type="button" class="ind-tab" role="tab" aria-selected="false"
+                  data-section="builtins">BUILT-INS<span class="ind-tab__n muted"></span></button>
+          <button type="button" class="ind-tab" role="tab" aria-selected="false"
+                  data-section="library">LIBRARY<span class="ind-tab__n muted"></span></button>
+        </nav>
+        <div class="ind-main">
+          <div class="ind-search">
+            <input id="ind-q" type="search" placeholder="Search…" autocomplete="off"
+                   aria-label="Search indicators" />
+          </div>
+          <div class="ind-grid" id="ind-grid" aria-live="polite"></div>
+          <div class="ind-more"><button type="button" class="btn btn--ghost" id="ind-more"
+               hidden>Load more</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <footer class="statusbar">
     <!-- The last thing that touched the chart, in one human sentence (spec §5). Telemetry lives in

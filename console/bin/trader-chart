@@ -363,6 +363,69 @@ def cmd_layout(args) -> int:
     return 0 if result.get("ok") else 1
 
 
+def cmd_natives(args) -> int:
+    """What this build can put on the chart from its own side — Vela's natives for this market.
+
+    Read-only. The console's Indicators panel (BUILT-INS) reads the same call, so a name here is a
+    name that panel shows.
+    """
+    result = send(args, {"action": "natives"})
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+        if args.list:
+            for row in (result.get("catalog") or []):
+                marks = []
+                if row.get("present"):
+                    marks.append("on chart")
+                if not row.get("supported", True):
+                    marks.append("not on this market")
+                if row.get("beta"):
+                    marks.append("beta")
+                print(f"  {row.get('type', '?'):<24} {row.get('title', ''):<28}"
+                      f"{' · '.join(marks)}")
+    return 0 if result.get("ok") else 1
+
+
+def cmd_indicators(args) -> int:
+    """The Indicators surface: BUILT-INS + LIBRARY + favourites, opened and read back.
+
+    The door opens the modal, sets the section/search (and optionally a star), then answers with the
+    rows the grid actually painted — a panel that opened is not a panel that filled.
+    """
+    payload = {"action": "indicators"}
+    if args.close:
+        payload["show"] = False
+    if args.section:
+        payload["section"] = args.section
+    # Always send the search text: an omitted --q means "no filter", and a stale one must not
+    # survive a call that did not ask for it (same lesson as `browse --family`).
+    payload["q"] = args.q or ""
+    if args.star:
+        payload["star"] = args.star
+    if args.unstar:
+        payload["unstar"] = args.unstar
+    if args.mount:
+        payload["mount"] = args.mount
+    result = send(args, payload)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+        surface = result.get("indicators") or {}
+        if args.list:
+            for row in (surface.get("rows") or []):
+                marks = []
+                if row.get("onChart"):
+                    marks.append("on chart")
+                if row.get("starred"):
+                    marks.append("★")
+                print(f"  {row.get('kind', '?'):<8} {row.get('id', ''):<34}"
+                      f"{row.get('label', ''):<30}{' · '.join(marks)}")
+    return 0 if result.get("ok") else 1
+
+
 def cmd_wait(args) -> int:
     args._payload = {}
     result = wait(args.id, timeout=args.timeout)
@@ -443,6 +506,22 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("preset", nargs="?", default="",
                    help="1 | 2h | 2v | 4 | 8, or g<cols>x<rows> (1-4 each). Omit to read it.")
     s.set_defaults(func=cmd_layout)
+
+    s = sub.add_parser("natives", help="what this build can put on the chart (Vela's built-ins)")
+    s.add_argument("--list", action="store_true", help="print every built-in, not just the count")
+    s.set_defaults(func=cmd_natives)
+
+    s = sub.add_parser("indicators", help="open the Indicators surface (built-ins + catalogue + stars)")
+    s.add_argument("--section", choices=["favorites", "builtins", "library"], default="",
+                   help="which list to show")
+    s.add_argument("--q", default=None, help="fill the search box with this")
+    s.add_argument("--star", default="", help="star KIND:ID (native:supertrend, library:order-blocks)")
+    s.add_argument("--unstar", default="", help="remove that star")
+    s.add_argument("--mount", default="",
+                   help="mount a built-in from the surface: native:TYPE (library rows keep the Details pane)")
+    s.add_argument("--close", action="store_true", help="close the surface instead")
+    s.add_argument("--list", action="store_true", help="print the rows it painted")
+    s.set_defaults(func=cmd_indicators)
 
     s = sub.add_parser("wait", help="wait for an earlier command's outcome")
     s.add_argument("id", type=int)
