@@ -548,7 +548,22 @@
           let attempt = null;
           let after = before;
           let note = '';
-          if (command.try) {
+          if (command.theme === 'light' || command.theme === 'dark') {
+            /* One verb, both systems — the same call the operator's ◐ toggle makes, so a theme set
+               from the agent's side cannot drift from one set by hand. */
+            if (window.__app && typeof window.__app.applyTheme === 'function') {
+              window.__app.applyTheme(command.theme);
+            } else {
+              document.documentElement.dataset.theme = command.theme;
+              try { localStorage.setItem('luxalgo-web:theme', command.theme); } catch (err) { /* private mode */ }
+              try { const ws = window.__wsApp; if (ws && ws.setTheme) ws.setTheme(command.theme); } catch (err) { /* bare chart */ }
+              if (window.ChartPalette && window.ChartPalette.apply) window.ChartPalette.apply(command.theme);
+            }
+            await new Promise((r) => setTimeout(r, 350));
+            after = read() || before;
+            note = ' · [theme set to ' + command.theme + ' → bg ' + after.background +
+                   ' · stored ' + (localStorage.getItem('luxalgo-web:theme') || 'unset') + ']';
+          } else if (command.try) {
             // What the console *thinks* its theme is, what our dark palette wants, whether the live
             // config is judged to match, and what an explicit apply leaves behind — the whole chain,
             // because "enforced and skipped" reading as "already dark" is only true if the target

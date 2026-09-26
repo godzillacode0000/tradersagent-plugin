@@ -411,6 +411,21 @@ class TheChromeShowsVerbsNotTelemetry(unittest.TestCase):
         self.assertIn("window.TraderRun.summarize = ", app)   # the bridge's own runs land too
 
 
+class TheChartThemeHasAnAgentDoor(unittest.TestCase):
+    """A theme could only be set by clicking the page's 28px glyph — `palette` could read the colours
+    and force dark, nothing else. It now accepts theme: light|dark and runs the page's own
+    applyTheme, so a theme set from the bridge cannot drift from one set by hand."""
+
+    def test_the_op_takes_a_theme(self):
+        bridge = read(BRIDGE)
+        self.assertIn("command.theme === 'light' || command.theme === 'dark'", bridge)
+        self.assertIn("window.__app.applyTheme(command.theme)", bridge)
+        self.assertIn("localStorage.setItem('luxalgo-web:theme'", bridge)   # the fallback path
+
+    def test_the_toggle_action_is_shared(self):
+        self.assertIn("applyTheme,", read(APP))   # exposed, not re-implemented
+
+
 if __name__ == "__main__":
     unittest.main()
 

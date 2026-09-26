@@ -1456,6 +1456,9 @@ async function main() {
   // Exposed for scripted checks (browser automation, console experiments).
   window.__app = {
     get chart() { return chart; }, mountIndicator, queueMount, runSearch, api,
+    /* The bridge's `palette` op needs the SAME action the ◐ toggle runs (our palette + Vela's
+       chrome + the chart's parked colours). Exposing it keeps one implementation. */
+    applyTheme,
     showView,
     get mounted() { return mounted.slice(); },
     get pineReady() { return pineReady; },
