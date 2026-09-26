@@ -1598,9 +1598,14 @@ def load_backtest_result(root: str = "", run_id: str = "") -> dict:
     (LUXALGO_CHART_ROOT). Whichever holds the newest run wins — the engine may live outside the
     console's tree, and a reader that guesses wrong is worse than one that looks.
     """
-    cands = [Path(root) / "_chart" / "backtest"] if root else [
-        Path(os.environ["LUXALGO_CHART_ROOT"]) / "_chart" / "backtest"
-        if os.environ.get("LUXALGO_CHART_ROOT") else None,
+    # Every candidate is tried, even when a root is passed: a caller that hands in the console's
+    # own tree must not stop the reader from finding the engine's tree (and vice versa).
+    cands = []
+    if root:
+        cands.append(Path(root) / "_chart" / "backtest")
+    if os.environ.get("LUXALGO_CHART_ROOT"):
+        cands.append(Path(os.environ["LUXALGO_CHART_ROOT"]) / "_chart" / "backtest")
+    cands += [
         Path(AGENTS_ROOT) / "_chart" / "backtest",
         Path(AGENTS_ROOT).parent / "_chart" / "backtest",   # live tree: agents/ and _chart/ are siblings
         Path(__file__).resolve().parent.parent / "_chart" / "backtest",
