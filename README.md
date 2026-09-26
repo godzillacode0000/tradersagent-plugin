@@ -116,7 +116,7 @@ systemctl --user enable --now traders-agent.service
 | Top bar → `☰ Library` | the Library panel: search 800+ concepts and indicators |
 | Top bar → `▤ Details` | the selected item: write-up, **full Pine source**, licence badge, **Run PineTS** |
 | Chart top bar → **Layout** | Vela's own grid picker — presets and custom `g<cols>x<rows>` grids. The console boots at `2h` (two side by side); the same door is `chart_set_layout` / `trader-chart layout` |
-| Chart top bar → **⌗ Indicators** | One surface for both halves: **Favourites** (your own ☆), **BUILT-INS** (Vela's natives for this market, read live from the frame) and **LIBRARY** (the 806-row LuxAlgo catalogue, searched server-side). Every LIBRARY card carries the catalogue's own **chart preview** above its name — and the Details pane shows it full size — so "how does this look applied?" is answered before running anything. Star the ones you reach for; clicking a built-in mounts it, a Library row opens the Details pane with its Run PineTS / Add to chart. The same door is `chart_indicators` / `trader-chart indicators` |
+| Chart top bar → **⌗ Indicators** | One surface for both halves: **Favourites** (your own ☆), **BUILT-INS** (Vela's natives for this market, read live from the frame) and **LIBRARY** (the 806-row LuxAlgo catalogue). Every LIBRARY card carries the catalogue's own **chart preview** above its name — and the Details pane shows it full size — so "how does this look applied?" is answered before running anything. The LIBRARY arrives **grouped into families** (SMC / ICT 74, Trend 108, Volume & Flow 96, …) with a rail down the left to jump between them, and each family opens into its own **clusters** ("Moving-average lineage", "Candlestick catalog"); every card has a **Reading** button that unfolds what the indicator is and how it is read, in place. Star the ones you reach for; clicking a built-in mounts it, a Library row opens the Details pane with its Run PineTS / Add to chart. The same door is `chart_indicators` / `trader-chart indicators` (`--family trend --reading mlma --fold trend:on`) |
 | The chart's own bottom bar | Vela's range buttons, timezone clock and settings (not ours) |
 
 ### Chat beside the chart
@@ -161,7 +161,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_remove_indicator` | take indicators **off** the chart — one by name, or `all` for every study (reports the chart's before → after list) |
 | `chart_set_market` | switch symbol / timeframe |
 | `chart_set_layout` | read or set the workspace **grid** — `1`, `2h`, `2v`, `4`, `8`, or `g<cols>x<rows>` (no argument reads it) |
-| `chart_indicators` | the **Indicators** surface — sections `favorites`/`builtins`/`library`, `q` for the search box, `star`/`unstar KIND:ID`, `mount` a built-in; answers with the rows it painted |
+| `chart_indicators` | the **Indicators** surface — sections `favorites`/`builtins`/`library`, `q` for the search box, `family` to open one group of the catalogue, `reading SLUG` to unfold a card's write-up, `fold FAMILY[:on]` to fold a group, `star`/`unstar KIND:ID`, `mount` a built-in; answers with the rows it painted, the groups it drew and the reading it left open |
 | `chart_reload` | remount every attached console (picks up new frontend files) |
 | `chart_palette` | what colours the chart is wearing (`try_apply` asserts the console theme) |
 | `chart_browse` | open the Library concept list in the pane (optional `family`) |

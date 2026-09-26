@@ -207,6 +207,9 @@ def record_result(root: str | Path, payload: dict) -> dict:
         # (`indicators` door): rows the grid actually painted, so a panel that opened empty cannot
         # read as a filled one.
         "catalog": payload.get("catalog"),
+        # The Indicators surface's after-state. It is carried whole (a nested dict), so a field the
+        # page adds inside it — `family`, `families`, `groups`, `reading` (27 Sep) — travels with it;
+        # that is why only the key is named here.
         "indicators": payload.get("indicators"),
         # The pane's own "what is on the chart" list (`studies` door): every reader, labelled.
         "studies": payload.get("studies"),

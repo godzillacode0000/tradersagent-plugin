@@ -51,20 +51,24 @@ class TheSurfaceExists(unittest.TestCase):
         self.assertNotRegex(src, r"NATIVE_(TITLES|CATALOG)\s*=\s*\[",
                             "a hard-coded built-in list would drift from what this build can mount")
 
-    def test_a_library_request_arriving_mid_flight_is_queued(self):
+    def test_a_search_cannot_race_a_section_change_any_more(self):
+        """The old paged loader had to queue overlapping asks (26 Sep: `0 row(s)` painted while the
+        API answered `total 10`). The whole catalogue is in memory now, so the filter is a function of
+        state, not a request — the race is not "fixed", it is gone, and the queue must not come back."""
         src = read(APP)
-        self.assertRegex(src, r"if \(lib\.loading\) \{ lib\.queued =",
-                         "a search that lands while a load is running must be queued, not dropped")
-        self.assertIn("loadLibrary(queued === 'reset')", src,
-                      "the queued ask has to actually run once the first load finishes")
-        self.assertIn("queued: null", src, "the queue must exist in the state shape")
+        self.assertIn("function catalogueRows()", src, "filtering happens over the loaded catalogue")
+        self.assertIn("function loadCatalogue()", src)
+        self.assertIn("indState.cat.rows", src)
+        self.assertNotIn("loadLibrary", src, "the paged loader and its queue are gone on purpose")
+        self.assertNotIn("lib.queued", src)
 
-    def test_the_servers_answer_is_not_filtered_again_by_the_page(self):
-        """The catalogue's search is not a substring match: `orderblock` answers with `order-blocks`
-        and "Order Block". A local `includes()` re-filter painted 0 rows over a 2-row answer."""
+    def test_the_local_filter_searches_everything_a_person_would_type(self):
+        """`orderblock` must find "Order Block" and `order-blocks`, and the reading counts too."""
         src = read(APP)
-        self.assertIn("indState.library.query !== indState.q", src,
-                      "client-side filtering may only run on rows the server did not answer for")
+        body = src.split("function catalogueRows()", 1)[1].split("function renderIndicators()", 1)[0]
+        for field in ("r.name", "r.slug", "r.family", "r.description"):
+            self.assertIn(field, body, f"the search must look at {field}")
+        self.assertIn(".toLowerCase().includes(q)", body)
 
 
 class TheDoorIsHonest(unittest.TestCase):

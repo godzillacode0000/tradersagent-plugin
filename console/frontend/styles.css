@@ -1141,7 +1141,24 @@ pre {
   padding: var(--lx-space-3) var(--lx-space-2);
   border-right: 1px solid var(--lx-border);
   background: var(--lx-surface-1);
+  overflow: auto;
 }
+/* The catalogue's families, under the three sources: the "concept / aspect / group" rail (27 Sep).
+   Scrollable on its own so a long catalogue never pushes the sources off the top. */
+.ind-fams {
+  display: flex; flex-direction: column; gap: 1px;
+  margin-top: var(--lx-space-2); padding-top: var(--lx-space-2);
+  border-top: 1px solid var(--lx-border-soft);
+}
+.ind-fam {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--lx-space-2);
+  padding: 4px var(--lx-space-2); border: 0; border-radius: var(--lx-radius-sm);
+  background: none; color: var(--lx-fg-faint);
+  font: inherit; font-size: 11px; text-align: start; cursor: pointer;
+}
+.ind-fam:hover { background: var(--lx-bg-hover); color: var(--lx-fg); }
+.ind-fam.is-on { background: var(--lx-bg-active); color: var(--lx-fg-bright); font-weight: 600; }
+.ind-fam__n { font-size: 10px; color: var(--lx-fg-faint); font-variant-numeric: tabular-nums; }
 .ind-tab {
   display: flex; align-items: baseline; gap: var(--lx-space-1);
   padding: 6px var(--lx-space-2); border: 0; border-radius: var(--lx-radius-sm);
@@ -1204,6 +1221,11 @@ pre {
 .ind-more { padding: 0 var(--lx-space-4) var(--lx-space-3); }
 .ind-more .btn { width: 100%; }
 
+/* `hidden` has to mean hidden. A `<button class="btn">` carries an author `display`, and an author
+   `display` beats the UA sheet's `[hidden]` — so the LIBRARY's page-wide "Load more" kept painting
+   under a grid that has its own per-group doors (found in the 27 Sep screenshot, not in the code). */
+[hidden] { display: none !important; }
+
 /* The modal owns the screen while it is up: the chart underneath does not need to scroll away. */
 body.has-ind-modal { overflow: hidden; }
 
@@ -1238,6 +1260,44 @@ body.has-ind-modal { overflow: hidden; }
   background: var(--lx-field-bg);
   margin-bottom: 10px;
 }
+
+/* ── Groups and readings (27 Sep) ────────────────────────────────────────────
+   Two halves of one ask: "categorize each in the library into each own respective concept or group",
+   and "each should have another button like collapsible that shows reading about each indicator".
+   The group header spans the grid (it is a row of its own), and the reading opens inside its card —
+   never as a door to somewhere else. */
+.ind-group { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--lx-space-2); }
+.ind-group__head {
+  display: flex; align-items: baseline; gap: var(--lx-space-2); flex: 1 1 auto;
+  padding: 6px 2px; border: 0; background: none; color: var(--lx-fg-bright);
+  font: inherit; font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+  cursor: pointer; text-align: start;
+}
+.ind-group__head:hover .ind-group__name { color: var(--lx-accent-ink); }
+.ind-group__caret { color: var(--lx-fg-faint); font-size: 10px; }
+.ind-group__name { font-weight: 600; }
+.ind-group__n { font-size: 10px; color: var(--lx-fg-faint); text-transform: none; letter-spacing: 0; }
+.ind-group__more {
+  grid-column: 1 / -1; margin: 0 0 var(--lx-space-2);
+  padding: 6px var(--lx-space-3); border: 1px dashed var(--lx-border);
+  border-radius: var(--lx-radius-sm); background: none;
+  color: var(--lx-fg-muted); font: inherit; font-size: 11px; cursor: pointer;
+}
+.ind-group__more:hover { background: var(--lx-bg-hover); color: var(--lx-fg); }
+
+.ind-card__more {
+  align-self: flex-start; margin-top: 2px;
+  padding: 2px 6px; border: 0; border-radius: var(--lx-radius-sm);
+  background: none; color: var(--lx-fg-faint);
+  font: inherit; font-size: 10px; letter-spacing: .03em; cursor: pointer;
+}
+.ind-card__more:hover { background: var(--lx-bg-hover); color: var(--lx-fg-bright); }
+.ind-card__about {
+  margin-top: 4px; padding-top: 6px;
+  border-top: 1px solid var(--lx-border-soft);
+  color: var(--lx-fg-muted); font-size: 11px; line-height: 1.5;
+}
+.ind-card__link { display: inline-block; margin-top: 6px; color: var(--lx-accent-ink); font-size: 10px; }
 
 /* A card with a picture reads as one block: keep the name tight under its shot. */
 .ind-card:has(.ind-card__shot) { gap: 6px; }

@@ -220,6 +220,13 @@ class TTLCache:
 
 CACHE = TTLCache()
 
+# The catalogue walk (see ep_catalogue): nine MCP calls cold, then disk. Twelve hours means the
+# families and counts a user browses in a session cannot drift under them mid-session, and a restart
+# is instant.
+CATALOGUE_PAGE = 100
+CATALOGUE_MAX_PAGES = 20
+CATALOGUE_TTL = 12 * 3600
+
 # Per-endpoint TTLs (seconds). 500ms-2s as required.
 TTL = {
     "search": 1.5,
@@ -606,6 +613,116 @@ def ep_indicators(params: dict) -> dict:
         "indicators": indicators,
         "cached": cached,
     }
+
+
+def ep_catalogue(params: dict) -> dict:
+    """Every row of the catalogue in one answer — families, counts, descriptions.
+
+    Why one call instead of paging: the grid wants to group by family and show a reading under each
+    card, and the catalogue is 806 rows, which the MCP will only hand over 100 at a time (nine calls,
+    ~25 s cold). So this walks them once with `sort=family` — the server's own grouping, so the rows
+    arrive already clustered — keeps the answer on disk next to the console's other state, and serves
+    it from there afterwards, across restarts. `?refresh=1` walks it again."""
+    want_refresh = str(_one(params, "refresh") or "") not in ("", "0", "false")
+    path = os.path.join(AGENTS_ROOT, "catalogue.json")
+    if not want_refresh:
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                saved = json.load(fh)
+            if isinstance(saved, dict) and saved.get("rows") and not _stale(saved, CATALOGUE_TTL):
+                saved["cached"] = True
+                return saved
+        except (OSError, ValueError):
+            pass
+
+    rows: list[dict] = []
+    page = 0
+    while page < CATALOGUE_MAX_PAGES:
+        # `ep_indicators` reads the shape a query string produces (a list per key — see `_one`), so
+        # pass lists even though this call never came from HTTP. Handing it bare strings is how
+        # `sort="family"` became `"f"` and every walk died on "sort must be one of: name, date, family".
+        data = ep_indicators({"page": [str(page)], "page_size": [str(CATALOGUE_PAGE)],
+                              "sort": ["family"], "direction": ["asc"]})
+        chunk = (data or {}).get("indicators") or []
+        if not chunk:
+            break
+        rows.extend(chunk)
+        page += 1
+        if len(chunk) < CATALOGUE_PAGE:
+            break
+
+    # Half the catalogue carries no family of its own: those rows are the older single-name
+    # indicators (`percent-b`, `1-2-3-reversal`, `52-week-high-low`…), and LuxAlgo files THEM under a
+    # concept instead — which knows both a family and a finer cluster ("Moving-average lineage",
+    # "Candlestick catalog"). Walking the 853 concepts (nine more pages, once, then disk) is what
+    # turns "Unfiled 414" into real groups: measured 27 Sep, 390 of those 414 have a concept.
+    concepts: dict[str, dict] = {}
+    page = 0
+    while page < CATALOGUE_MAX_PAGES:
+        part = ep_concepts({"page": [str(page)], "page_size": [str(CATALOGUE_PAGE)]})
+        chunk = (part or {}).get("concepts") or []
+        if not chunk:
+            break
+        for concept in chunk:
+            slug = concept.get("slug")
+            if slug:
+                concepts[slug] = concept
+        page += 1
+        if len(chunk) < CATALOGUE_PAGE:
+            break
+    for row in rows:
+        if row.get("family"):
+            continue
+        concept = concepts.get(row.get("slug") or "")
+        if not concept:
+            continue
+        row["family"] = concept.get("family") or ""
+        row["cluster"] = concept.get("cluster") or ""
+        row["concept"] = concept.get("name") or ""
+
+    names = {}
+    try:
+        for fam in (ep_families({}) or {}).get("families") or []:
+            if fam.get("key"):
+                names[fam["key"]] = fam.get("name") or fam["key"]
+    except Exception:  # noqa: BLE001 — the family names are decoration; the keys are the truth
+        pass
+
+    counts: dict[str, int] = {}
+    clusters: dict[str, dict[str, int]] = {}
+    for row in rows:
+        key = row.get("family") or "unfiled"
+        counts[key] = counts.get(key, 0) + 1
+        cluster = (row.get("cluster") or "").strip()
+        if cluster:
+            clusters.setdefault(key, {})[cluster] = clusters.get(key, {}).get(cluster, 0) + 1
+    groups = [{"key": key,
+               "name": names.get(key, key.title() if key != "unfiled" else "Unfiled"),
+               "count": counts[key],
+               # The finer grouping the catalogue already had: a family holds clusters
+               # ("Trend · Moving-average lineage"). Sent with the counts so the page can show them.
+               "clusters": [{"name": name, "count": n}
+                            for name, n in sorted(clusters.get(key, {}).items(), key=lambda kv: (-kv[1], kv[0]))]}
+              for key in sorted(counts, key=lambda k: (k == "unfiled", -counts[k], k))]
+
+    out = {"rows": rows, "total": len(rows), "groups": groups,
+           "pages": page, "fetched_at": time.time(), "cached": False}
+    try:
+        os.makedirs(AGENTS_ROOT, exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(out, fh)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+    return out
+
+
+def _stale(saved: dict, ttl: float) -> bool:
+    try:
+        return (time.time() - float(saved.get("fetched_at") or 0)) > ttl
+    except (TypeError, ValueError):
+        return True
 
 
 def ep_indicator(params: dict) -> dict:
@@ -1123,6 +1240,8 @@ ROUTES = {
     "/api/chart/stream/status": (ep_chart_stream_status, 0.0),
     "/api/search": (ep_search, TTL["search"]),
     "/api/indicators": (ep_indicators, TTL["indicators"]),
+    # The whole catalogue in one answer, grouped by family (walked once, then kept on disk).
+    "/api/catalogue": (ep_catalogue, 60.0),
     "/api/indicator": (ep_indicator, TTL["indicator"]),
     "/api/source": (ep_source, TTL["source"]),
     "/api/concept": (ep_concept, TTL["concept"]),

@@ -56,7 +56,7 @@ change — report that, never "done".
 | split the chart / 2 panes / 4 charts / "multipane" | `chart_set_layout` — no argument **reads** the grid |
 | which indicators can this chart take | `chart_natives` — Vela's built-ins for this market, read from the frame |
 | what is ON the chart right now | `chart_studies` — every reader, labelled; ask this before calling a chart clean |
-| open the Indicators panel / star one / search the catalogue | `chart_indicators` — section `favorites`/`builtins`/`library`, `q`, `star`/`unstar KIND:ID`, `mount` |
+| open the Indicators panel / star one / search the catalogue | `chart_indicators` — section `favorites`/`builtins`/`library`, `q`, `family` (one group of the catalogue; `all` clears), `reading SLUG`, `fold FAMILY[:on]`, `star`/`unstar KIND:ID`, `mount` |
 | add EMA / MACD / supertrend | `chart_add_indicator` |
 | remove indicators / clear studies | `chart_remove_indicator(all=True)` |
 | draw PDH/PDL / lines / boxes | `chart_draw` (overlay). Not `chart_apply_pine` for a plain price level. |
@@ -102,9 +102,35 @@ console's own chip), `cell`, `overlay` (a Library run), `paint`, `native`.
 
 One modal in the chart's top bar (`⌗ Indicators`) holds both halves of "which indicator?":☆
 **Favourites**, **BUILT-INS** (Vela's natives for this market, read live from the frame — 76 on this
-build) and **LIBRARY** (the 806-row LuxAlgo catalogue, searched server-side). `chart_indicators` is
-the door: `section`, `q`, `star`/`unstar "native:supertrend"`/`"library:order-blocks"`, `mount
-"native:ema"`, `show=False` to close. Its answer carries the rows the grid **painted** — quote those.
+build) and **LIBRARY** (the 806-row LuxAlgo catalogue). `chart_indicators` is
+the door: `section`, `q`, `family`, `reading`, `fold`, `star`/`unstar "native:supertrend"`/
+`"library:order-blocks"`, `mount "native:ema"`, `show=False` to close. Its answer carries the rows the
+grid **painted**, the family groups it drew (name + count + folded) and the reading it left open —
+quote those.
+
+### The catalogue is grouped, and every card has a reading (27 Sep)
+
+- `/api/catalogue` walks all nine pages (`sort=family`, **13.5 s cold, 42 ms warm**) plus the 853
+  concepts, keeps the answer in `console/agents/catalogue.json` for 12 h, and hands the page ONE
+  payload. The paged loader is gone: a page of sixty cannot count a family it has not paged to, and
+  it could race a section change. Filtering now happens in memory, so `q` cannot race `section`.
+- **Half the catalogue has no family of its own.** Those rows are the older single-name indicators
+  (`percent-b`, `1-2-3-reversal`); LuxAlgo files them as *concepts*, which carry a **family** AND a
+  **cluster**. Without the concept walk the rail opens with a 414-row "Unfiled"; with it, 390 of those
+  414 land in real groups (Trend 108, Volume & Flow 96, Momentum 89, SMC / ICT 74, …, Unfiled 24).
+  Never present "Unfiled" as the catalogue's own opinion of those rows — it is ours.
+- Picking a family re-groups the grid by that family's **clusters** ("Moving-average lineage",
+  "Candlestick catalog"); a cluster named "Other" is a remainder and is painted last.
+- `reading: "mlma"` unfolds that card's own write-up (`row.description`, 806/806 rows have one) and
+  paints the card even if its group was beyond the slice; `fold: "trend"` folds a group away
+  (`fold: "trend/Other"`, `foldOn: false`), `fold: "trend", foldOn: true` opens it again.
+- `bin/trader-chart indicators --family trend --reading mlma --fold trend:on` is the CLI spelling.
+  An omitted `--family` **clears** the filter (same rule as `--q`) — a filter left over from an earlier
+  call must not silently narrow the next one.
+- A `<button class="btn">` carries an author `display`, which beats the UA sheet's `[hidden]`: the
+  page-wide "Load more" kept painting under a grid with its own per-group doors until the stylesheet
+  got `[hidden] { display: none !important; }`. Hiding a control is not done until it is gone from a
+  screenshot.
 
 - Clicking a built-in mounts it; a **Library row does not mount** — it opens the Details pane, because
   its Pine has to go through PineTS. `mount "library:…"` is refused for that reason; use
@@ -122,7 +148,8 @@ rows, keys with spaces). Fetching them in the browser is why the grid filled in 
 byte per picture, six connections per host, sixty cards. The console fetches each one ONCE, shrinks it
 with `vips` (fallback ImageMagick/`ffmpeg`) into `~/.local/share/traders-agent/thumbs/`, and serves it
 from `/api/library/thumb?slug=&u=&w=` (3.6 ms warm vs ~2 s from S3). `/api/library/thumbs` reports
-what the cache holds; the server warms the catalogue's first three pages at start-up.
+what the cache holds; the server warms **every** page of the catalogue at start-up (`TRADERS_AGENT_THUMB_WARM=0`
+switches it off, `TRADERS_AGENT_THUMB_WARM_PAGES=n` bounds it).
 The modal takes the pane (`width: min(1720px, 100%)`, full height) and cards are 16:10 pictures —
 cards are asked for at 480 px, the Details pane at 960. Warm the width the card paints (`WARM_WIDTH`),
 not a width nobody sees.

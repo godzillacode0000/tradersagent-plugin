@@ -846,6 +846,22 @@
           const section = String(command.section || '').trim().toLowerCase();
           if (section && typeof window.setIndSection === 'function') window.setIndSection(section);
           if (command.q != null && typeof window.setIndSearch === 'function') window.setIndSearch(command.q);
+          /* The family rail: `family: "smc-ict"` narrows the LIBRARY to one family of the catalogue,
+             `family: ""` (or "all") shows every row again. */
+          if (command.family != null && typeof window.setIndFamily === 'function') {
+            window.setIndFamily(command.family);
+          }
+          /* One card's reading, opened from this side: `reading: "mlma"` unfolds that card's write-up
+             so its text is on screen (and in `rows[].reading`) without a click. */
+          let reading = null;
+          if (command.reading != null && typeof window.setIndReading === 'function') {
+            reading = window.setIndReading(command.reading, command.readingOn !== false) || null;
+          }
+          /* Fold one group away, or open it again: `fold: "trend"`, `fold: "trend/Other"`. */
+          let folded = null;
+          if (command.fold != null && typeof window.setIndFold === 'function') {
+            folded = window.setIndFold(command.fold, command.foldOn !== false) || null;
+          }
           /* Star / unstar from this side too: `star: "native:supertrend"` (or "library:slug"). The
              operator's ☆ and this are the same list, so what the agent keeps is what the panel shows. */
           let starred = null;
@@ -881,12 +897,22 @@
             mounted = window.mountNative(id, id);
             out.added = mounted ? id : null;
           }
-          const deadline = Date.now() + 6000;
+          /* The catalogue walk is a real network wait the first time on a machine (nine pages,
+             ~25 s), so the door gives a loading catalogue up to 45 s to answer instead of 6 — the
+             alternative is reporting "0 rows" for a grid that is about to fill. */
+          const firstLook = typeof window.indicatorsSurface === 'function' ? window.indicatorsSurface() : null;
+          const deadline = Date.now() + (firstLook && firstLook.loading ? 45000 : 6000);
           let seen = null;
           for (;;) {
             await pause(150);
             seen = typeof window.indicatorsSurface === 'function' ? window.indicatorsSurface() : null;
             if (!seen) break;
+            /* A reading cannot be reported open on a card that was never painted. On a cold page the
+               catalogue is not in memory yet when `setIndReading` runs, so the read is retried here
+               until the card exists (measured 27 Sep: the first ask answered `onScreen: false`). */
+            if (reading && reading.onScreen === false && !seen.loading) {
+              reading = window.setIndReading(command.reading, command.readingOn !== false) || reading;
+            }
             /* Settled = the right section is showing and nothing is in flight. A search that truly
                matches nothing settles with zero rows — that is an answer, not a reason to spin. */
             if (!seen.loading && seen.section === (section || seen.section)) break;
@@ -897,19 +923,28 @@
           out.indicators = {
             section: seen.section,
             query: seen.query,
+            family: seen.family || '',
+            families: seen.families || 0,
+            groups: (seen.groups || []).slice(0, 24),
             rows: seen.rows.slice(0, 60),
             builtins: seen.builtins,
             catalogueTotal: seen.catalogueTotal,
             favourites: seen.favourites,
             starred: starred,
+            reading: reading,
+            folded: folded,
             stillLoading: Boolean(seen.loading),
           };
           const labels = seen.rows.slice(0, 8).map((r) => r.label).join(' · ');
           out.detail = 'Indicators · ' + seen.section + ' · ' + seen.rows.length + ' row(s)' +
             (seen.query ? ' for "' + seen.query + '"' : '') +
+            (seen.family ? ' · family ' + seen.family : '') +
+            (seen.groups && seen.groups.length ? ' · ' + seen.groups.length + ' family group(s)' : '') +
             ' · built-ins ' + seen.builtins + ' · catalogue ' + seen.catalogueTotal +
             ' · starred ' + seen.favourites +
             (starred ? ' (' + (starred.starred ? 'starred' : 'unstarred') + ')' : '') +
+            (reading ? ' · reading ' + reading.slug + (reading.open ? ' open' : ' closed') +
+              ' (' + reading.chars + ' chars)' : '') +
             (mountSpec ? ' · ' + (mounted ? 'mounted ' + mountSpec : 'mount failed: ' + mountSpec) : '') +
             (labels ? ' ⇒ ' + labels : '');
           break;

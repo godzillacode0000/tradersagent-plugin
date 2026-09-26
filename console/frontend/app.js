@@ -1126,7 +1126,7 @@ function licenseLine(source = '') {
 /** The catalogue's own preview for a slug — the row in hand, the loaded page, or what a star kept. */
 function indicatorShot(slug, row) {
   if (row && row.image_url) return row.image_url;
-  const hit = (indState.library.rows || []).find((r) => r.slug === slug);
+  const hit = (indState.cat.rows || []).find((r) => r.slug === slug);
   return (hit && hit.image_url) || readShots()[favId('library', slug)] || '';
 }
 
@@ -1315,8 +1315,21 @@ const indState = {
   q: '',
   natives: null,        // null = not read yet; [] = this chart truly has none
   nativesError: '',
-  library: { rows: [], page: 0, size: 60, total: 0, query: '', loading: false, queued: null },
+  /* The LIBRARY renders from the WHOLE catalogue (one call, `/api/catalogue`, kept on disk), not from
+     a page of sixty: grouping by family, counting a family, and filtering by text all need every row,
+     and a browser-side filter cannot race a section change the way the old paged fetch could
+     (measured 26 Sep: `0 row(s)` while the API answered ten). */
+  cat: { rows: [], groups: [], state: 'idle', error: '', pages: 0 },
+  family: '',           // '' = every family
+  expanded: {},         // slug → true while its reading is open
+  folded: {},           // family key → true while its group is folded
+  shown: {},            // family key → how many of its cards are on screen ('' = the first slice)
 };
+
+/* A group shows this many cards before it asks — 806 cards with 806 pictures is a page nobody can
+   scroll and a laptop nobody should. Search and the family filter still look at EVERY row; this is
+   only about what is painted at once. */
+const GROUP_SLICE = 24;
 
 /* The catalogue's own preview pictures, remembered next to the stars: a favourite starred from the
    LIBRARY keeps its thumbnail even before the catalogue page that carried it is loaded again. The
@@ -1377,30 +1390,32 @@ async function loadNatives() {
   }
 }
 
-/** The other half: the LuxAlgo Library catalogue, paged and searchable server-side.
+/** The other half: the LuxAlgo Library catalogue — the whole thing, once (see `loadCatalogue`).
 
-    A call already in flight cannot be joined: the door can set the section and the search text in
-    the same breath, and the first load (started by the section change, with the old query) would
-    swallow the second one — measured live on 26 Sep, `--section library --q supertrend` painted
-    `0 row(s)` while the API answered `total 10`. So a request that arrives while one is running is
-    QUEUED and drained after it, exactly as `browse` does. */
-async function loadLibrary(reset = false) {
-  const lib = indState.library;
-  if (lib.loading) { lib.queued = reset ? 'reset' : 'more'; return; }
-  if (reset) { lib.page = 0; lib.rows = []; lib.query = indState.q; }
-  lib.loading = true;
-  try {
-    const data = await api('/api/indicators', { text: indState.q, page: lib.page, page_size: lib.size });
-    lib.rows = lib.page === 0 ? (data.indicators || []) : lib.rows.concat(data.indicators || []);
-    lib.total = data.total || lib.rows.length;
-  } catch (err) {
-    toast('Library: ' + err.message, true);
-  } finally {
-    lib.loading = false;
-    const queued = lib.queued;
-    lib.queued = null;
-    if (queued) loadLibrary(queued === 'reset').then(renderIndicators);
-  }
+    The paged-server version is gone on purpose. It could race (the door sets the section and the
+    search text in the same breath, and the first load, started with the old query, swallowed the
+    second: measured live on 26 Sep, `--section library --q supertrend` painted `0 row(s)` while the
+    API answered `total 10`), it could not count a family it had not paged to, and a card's write-up
+    lives on the row — none of which a page of sixty can answer. Filtering locally cannot race
+    anything. */
+/** The family filter lives in the nav while the LIBRARY is showing: one line per family of the
+    catalogue, with its count, plus "Everything". This is the "respective concept or aspect or group"
+    half of the ask — the headers in the grid say where you are, this says where you can go. */
+function renderFamilies() {
+  const box = document.getElementById('ind-fams');
+  if (!box) return;
+  const groups = indState.cat.groups || [];
+  const onLibrary = indState.section === 'library';
+  box.hidden = !onLibrary || !groups.length;
+  if (box.hidden) { box.innerHTML = ''; return; }
+  const total = indState.cat.rows.length;
+  const item = (key, name, count) => `<button type="button"
+      class="ind-fam${indState.family === key ? ' is-on' : ''}" data-family="${esc(key)}"
+      aria-pressed="${indState.family === key}">
+      <span class="ind-fam__name">${esc(name)}</span><span class="ind-fam__n">${count}</span></button>`;
+  const html = [item('', 'Everything', total)];
+  groups.forEach((g) => html.push(item(g.key, g.name, g.count)));
+  box.innerHTML = html.join('');
 }
 
 function indCard(kind, id, title, meta, opts = {}) {
@@ -1411,6 +1426,11 @@ function indCard(kind, id, title, meta, opts = {}) {
   if (opts.unsupported) sub.push('<span class="ind-card__off">not on this market</span>');
   if (opts.beta) sub.push('<span class="ind-card__beta">beta</span>');
   if (opts.missing) sub.push('<span class="ind-card__off">not in this build</span>');
+  /* The reading: a catalogue row carries its own write-up (`description`), so "what does this
+     actually do?" is one click away without leaving the grid or running anything. Folded by default —
+     806 cards that each shout a paragraph is not a catalogue, it is a wall. */
+  const about = (opts.about || '').trim();
+  const open = Boolean(about && indState.expanded[id]);
   return `<article class="ind-card${opts.present ? ' is-on' : ''}" data-kind="${esc(kind)}" data-id="${esc(id)}"
       data-label="${esc(title)}"${opts.raw ? ` data-shot="${esc(opts.raw)}"` : ''} tabindex="0" role="button"
       aria-label="${esc(title)} — click to mount, star to keep">
@@ -1421,7 +1441,53 @@ function indCard(kind, id, title, meta, opts = {}) {
             aria-label="Favourite ${esc(title)}">${starred ? '★' : '☆'}</button>
     <span class="ind-card__title">${esc(title)}</span>
     ${sub.length ? `<span class="ind-card__meta">${sub.join(' · ')}</span>` : ''}
+    ${about ? `<button type="button" class="ind-card__more" data-about="1" aria-expanded="${open}"
+        title="${open ? 'Hide the reading' : 'Read what this indicator does'}">${open ? '▾' : '▸'} Reading</button>
+      ${open ? `<div class="ind-card__about">${esc(about)}
+        ${opts.url ? `<a class="ind-card__link" href="${esc(opts.url)}" target="_blank" rel="noreferrer">LuxAlgo page ↗</a>` : ''}</div>` : ''}` : ''}
   </article>`;
+}
+
+/** Which group a catalogue row belongs to in the current view: its family, or — when one family is
+    selected — that family's finer cluster. Must match what the grid paints. */
+function indGroupKey(r) {
+  const family = r.family || 'unfiled';
+  return indState.family ? family + '/' + ((r.cluster || '').trim() || 'Other') : family;
+}
+
+/** The whole catalogue, once. `/api/catalogue` walks the nine pages on the server and keeps the
+    answer on disk, so this is one local call after the first time on a machine. */
+async function loadCatalogue() {
+  if (indState.cat.state === 'loading') return;
+  indState.cat.state = 'loading';
+  renderIndicators();
+  try {
+    const data = await api('/api/catalogue');
+    indState.cat.rows = data.rows || [];
+    indState.cat.groups = data.groups || [];
+    indState.cat.pages = data.pages || 0;
+    indState.cat.state = 'ready';
+  } catch (err) {
+    indState.cat.state = 'error';
+    indState.cat.error = err.message || 'the catalogue did not answer';
+    toast('Catalogue: ' + indState.cat.error, true);
+  }
+  renderIndicators();
+}
+
+/** Every row that matches the family filter and the search box, in catalogue order (which is the
+    catalogue's own `sort=family`, so a group's cards arrive together). */
+function catalogueRows() {
+  const q = indState.q.trim().toLowerCase();
+  return (indState.cat.rows || []).filter((r) => {
+    if (indState.family && (r.family || 'unfiled') !== indState.family) return false;
+    if (!q) return true;
+    /* Everything a person might type: the name, the slug the agent uses, the family, the cluster and
+       the reading itself — `orderblock` must find "Order Block" and `order-blocks` alike. */
+    const hay = (r.name || '') + ' ' + (r.slug || '') + ' ' + (r.family || '') + ' '
+      + (r.cluster || '') + ' ' + (r.description || '');
+    return hay.toLowerCase().includes(q);
+  });
 }
 
 function renderIndicators() {
@@ -1430,7 +1496,7 @@ function renderIndicators() {
   const favs = readFavourites();
   const natives = indState.natives || [];
   const byType = new Map(natives.map((n) => [n.type, n]));
-  const libRows = indState.library.rows;
+  const libRows = indState.cat.rows || [];
   const bySlug = new Map(libRows.map((r) => [r.slug, r]));
   const q = indState.q.trim().toLowerCase();
   const html = [];
@@ -1467,36 +1533,86 @@ function renderIndicators() {
         n.present ? 'built-in' : 'built-in', { present: n.present, unsupported: !n.supported, beta: n.beta })));
     }
   } else {
-    if (!libRows.length) {
-      html.push(indState.library.loading
-        ? '<p class="ind-note">Reading the catalogue…</p>'
-        : '<p class="ind-note">No catalogue rows for “' + esc(indState.q) + '”.</p>');
+    /* The LIBRARY: every family in the catalogue, each with its own header, count and cards — the
+       operator's ask of 27 Sep ("categorize each in the library into each own respective concept or
+       aspect or group"). Search and the family filter decide which rows are in play; the rows arrive
+       pre-clustered (`sort=family`), so grouping is a walk, not a sort. */
+    const rows = catalogueRows();
+    if (indState.cat.state === 'idle' || indState.cat.state === 'loading') {
+      html.push('<p class="ind-note">Reading the catalogue — every row, family, count and reading. '
+        + 'The first time on a machine this walks nine pages; after that it is kept on disk.</p>');
+    } else if (indState.cat.state === 'error') {
+      html.push(`<p class="ind-note">The catalogue did not answer: ${esc(indState.cat.error)}</p>`);
+    } else if (!rows.length) {
+      html.push('<p class="ind-note">Nothing in the catalogue matches '
+        + (indState.q ? '“' + esc(indState.q) + '”' : 'this family') + '.</p>');
     }
-    const shown = q && indState.library.query !== indState.q
-      /* These rows are not the server's answer to THIS query (they are a general page), so filter
-         them here. When they ARE the answer, they are painted as they came: the catalogue's own
-         search is not a substring match — `orderblock` answers with two rows whose names say
-         "Order Block" and whose slugs say `order-blocks`, and a local `includes()` re-filter threw
-         both away and reported an empty search against a non-empty answer (measured 26 Sep). */
-      ? libRows.filter((r) => (r.name + ' ' + r.slug + ' ' + (r.family || '')).toLowerCase().includes(q))
-      : libRows;
-    shown.forEach((r) => html.push(indCard('library', r.slug, r.name || r.slug, r.family,
-      { shot: thumbUrl(r.slug, r.image_url, CARD_SHOT_W), raw: r.image_url })));
-    /* Warm the rest of this page in the background — the pictures the operator has not scrolled to
-       yet. Fire-and-forget: the console fetches 16 at a time and keeps them, so the second open (and
-       the first scroll) is served from disk. */
-    const pending = shown.filter((r) => r.slug && r.image_url)
-      .map((r) => r.slug + ':' + r.image_url).join('|');
-    if (pending) api('/api/library/warm', { slugs: pending, w: CARD_SHOT_W }).catch(() => {});
+    const perFamily = new Map();
+    /* One family selected from the rail? Then group by that family's CLUSTERS — the catalogue's own
+       finer reading ("Moving-average lineage", "Candlestick catalog"), which is what turns a
+       sixty-card family into concepts a person can scan. */
+    const byCluster = Boolean(indState.family);
+    rows.forEach((r) => {
+      const key = indGroupKey(r);
+      if (!perFamily.has(key)) perFamily.set(key, []);
+      perFamily.get(key).push(r);
+    });
+    /* Order the groups, not just the rows inside them: biggest first, and "Other" (the rows whose
+       family files them under no cluster) always last — it is a remainder, not a headline. */
+    Array.from(perFamily.entries())
+      .sort((a, b) => {
+        const tail = (k) => (k.split('/').slice(1).join('/') === 'Other' ? 1 : 0);
+        if (tail(a[0]) !== tail(b[0])) return tail(a[0]) - tail(b[0]);
+        return b[1].length - a[1].length || a[0].localeCompare(b[0]);
+      })
+      .forEach(([key, familyRows]) => {
+      const group = (indState.cat.groups || []).find((g) => g.key === key.split('/')[0]);
+      const label = byCluster ? key.split('/').slice(1).join('/')
+        : (group ? group.name : key);
+      const folded = Boolean(indState.folded[key]);
+      const slice = indState.shown[key] || GROUP_SLICE;
+      const painted = folded ? 0 : Math.min(slice, familyRows.length);
+      html.push(`<div class="ind-group" data-family="${esc(key)}">
+          <button type="button" class="ind-group__head" data-fold="1" aria-expanded="${!folded}"
+                  title="${folded ? 'Show' : 'Fold'} ${esc(label)}">
+            <span class="ind-group__caret">${folded ? '▸' : '▾'}</span>
+            <span class="ind-group__name">${esc(label)}</span>
+            <span class="ind-group__n">${familyRows.length}</span>
+          </button>
+        </div>`);
+      if (folded) return;
+      familyRows.slice(0, painted).forEach((r) => html.push(indCard('library', r.slug,
+        String(r.name || r.slug).trim(),
+        byCluster ? (group ? group.name : r.family) : (r.cluster || r.family), 
+        { shot: thumbUrl(r.slug, r.image_url, CARD_SHOT_W), raw: r.image_url,
+          about: r.description, url: r.url })));
+      const rest = familyRows.length - painted;
+      if (rest > 0) {
+        html.push(`<button type="button" class="ind-group__more" data-show-family="${esc(key)}">
+            Show the other ${rest} in ${esc(label)}</button>`);
+      }
+    });
+    /* Warm the pictures this render actually painted. Fire-and-forget: the console fetches sixteen at
+       a time and keeps them, so scrolling into a family later is a disk read. */
+    if (indState.cat.state === 'ready') {
+      const pending = [];
+      perFamily.forEach((familyRows, key) => {
+        if (indState.folded[key]) return;
+        familyRows.slice(0, indState.shown[key] || GROUP_SLICE)
+          .forEach((r) => { if (r.slug && r.image_url) pending.push(r.slug + ':' + r.image_url); });
+      });
+      if (pending.length) api('/api/library/warm', { slugs: pending.join('|'), w: CARD_SHOT_W }).catch(() => {});
+    }
   }
 
   grid.innerHTML = html.join('');
   /* Pictures want room, names do not: the grid sizes itself to what this render put in it. */
   grid.classList.toggle('is-pictures', html.join('').includes('ind-card__shot'));
+  renderFamilies();
   const counts = {
     favorites: favs.length,
     builtins: natives.length,
-    library: indState.library.total,
+    library: (indState.cat.rows || []).length,
   };
   document.querySelectorAll('#ind-nav .ind-tab').forEach((tab) => {
     const on = tab.dataset.section === indState.section;
@@ -1505,17 +1621,25 @@ function renderIndicators() {
     const badge = tab.querySelector('.ind-tab__n');
     if (badge) badge.textContent = counts[tab.dataset.section] ? ' ' + counts[tab.dataset.section] : '';
   });
+  /* The old "Load more" door is gone: each group carries its own ("Show the other N in …"), and the
+     rows behind the door are already in memory — paging was only ever the price of asking the server
+     for a page at a time. */
   const more = document.getElementById('ind-more');
   if (more) {
-    const canPage = indState.section === 'library' && !indState.q
-      && indState.library.rows.length < indState.library.total;
-    more.hidden = !canPage;
+    more.hidden = true;
+    const wrap = more.closest('.ind-more');
+    if (wrap) wrap.hidden = true;
   }
   const count = document.getElementById('ind-count');
   if (count) {
+    const inFamily = indState.family
+      ? (indState.cat.groups || []).find((g) => g.key === indState.family)
+      : null;
     count.textContent = indState.section === 'builtins'
       ? `${natives.length} built-in${natives.length === 1 ? '' : 's'} on this build`
-      : (indState.section === 'library' ? `${indState.library.total} in the catalogue` : '');
+      : (indState.section === 'library'
+          ? (inFamily ? `${inFamily.count} in ${inFamily.name}` : `${counts.library} in the catalogue`)
+          : '');
   }
 }
 
@@ -1540,10 +1664,16 @@ function mountNative(type, title) {
 
 function setIndSection(section) {
   indState.section = section;
-  if (section === 'library' && !indState.library.rows.length) {
-    loadLibrary(true).then(renderIndicators);
-  }
+  if (section === 'library' && indState.cat.state === 'idle') loadCatalogue();
   renderIndicators();
+}
+
+/** Set the family filter. `''` (or 'all') means the whole catalogue. */
+function setIndFamily(key) {
+  const want = String(key == null ? '' : key).trim().toLowerCase();
+  indState.family = (want === 'all' || want === 'everything' || want === 'any') ? '' : want;
+  renderIndicators();
+  return indState.family;
 }
 
 /** The bridge's `indicators` door sets the search box and its state in one move. */
@@ -1552,12 +1682,8 @@ function setIndSearch(q) {
   const text = String(q == null ? '' : q);
   if (box) box.value = text;
   indState.q = text;
-  /* Same rule the typing path uses: a query the catalogue can answer is fetched, and so is clearing
-     it — otherwise the previous search's rows stay on screen under an empty box. */
-  if (indState.section === 'library' && (text.trim().length >= 2 || indState.library.query)) {
-    loadLibrary(true).then(renderIndicators);
-    return;
-  }
+  /* Nothing to fetch any more: the whole catalogue is in memory, so the filter is instantaneous and
+     cannot race a section change (the old paged loader could, and did). */
   renderIndicators();
 }
 
@@ -1567,28 +1693,72 @@ function setIndSearch(q) {
 window.openIndicators = openIndicators;
 window.setIndSection = setIndSection;
 window.setIndSearch = setIndSearch;
+window.setIndFamily = setIndFamily;
+/** Fold or unfold one group from the agent's side: `family` is a key the grid paints ("trend", or
+    "trend/Digital filters & smoothers" when a family is selected), and `on=false` folds it away. */
+window.setIndFold = (family, on = true) => {
+  const key = String(family || '').trim();
+  if (!key) return null;
+  if (on === false) indState.folded[key] = true; else delete indState.folded[key];
+  renderIndicators();
+  return { family: key, folded: Boolean(indState.folded[key]) };
+};
 window.indicatorsSurface = () => {
   const grid = document.getElementById('ind-grid');
   const cards = Array.from(document.querySelectorAll('#ind-grid .ind-card'));
+  const groups = Array.from(document.querySelectorAll('#ind-grid .ind-group'))
+    .map((g) => ({ family: g.dataset.family,
+                   name: (g.querySelector('.ind-group__name') || {}).textContent || '',
+                   count: Number((g.querySelector('.ind-group__n') || {}).textContent || 0),
+                   folded: g.querySelector('.ind-group__head')?.getAttribute('aria-expanded') === 'false' }));
   return {
     section: indState.section,
     query: indState.q,
+    family: indState.family,
+    groups,
     rows: cards.map((c) => ({ kind: c.dataset.kind, id: c.dataset.id, label: c.dataset.label,
                               onChart: c.classList.contains('is-on'),
                               starred: Boolean(c.querySelector('.ind-card__star.is-starred')),
                               /* Read off the rendered card, not the data behind it: this is how the
                                  door proves a preview is actually in the grid (26 Sep). */
-                              shot: Boolean(c.querySelector('img.ind-card__shot')) })),
+                              shot: Boolean(c.querySelector('img.ind-card__shot')),
+                              /* …and whether this card's reading is open right now. */
+                              reading: Boolean(c.querySelector('.ind-card__about')) })),
     builtins: (indState.natives || []).length,
-    catalogueTotal: indState.library.total,
+    catalogueTotal: (indState.cat.rows || []).length,
+    families: (indState.cat.groups || []).length,
     favourites: readFavourites().length,
     gridPresent: Boolean(grid),
-    loading: Boolean(indState.library.loading || indState.library.queued),
+    loading: indState.cat.state === 'loading',
+    error: indState.cat.error || '',
   };
 };
 
 /** Star / unstar without a click — the agent's side of the same ☆ the operator presses. */
 window.mountNative = mountNative;
+/** Unfold (or fold) one card's reading from the agent's side, without a click. Answers with whether
+    the card is on screen and whether its reading is open, so the door can say what it saw. */
+window.setIndReading = (slug, on = true) => {
+  const id = String(slug || '').trim();
+  if (!id) return null;
+  indState.expanded[id] = on !== false;
+  if (indState.section !== 'library') indState.section = 'library';
+  if (indState.cat.state === 'idle') loadCatalogue();
+  /* The card has to exist before its reading can be reported as open: a group paints its first
+     `GROUP_SLICE` cards, so unfolding a reading for row 61 of SMC / ICT would otherwise land on a
+     card that was never painted (and the door would say "open" about nothing). Unfold that card's
+     own group and let its whole tail through. */
+  const row = (indState.cat.rows || []).find((r) => r.slug === id);
+  if (row && on !== false) {
+    const key = indGroupKey(row);
+    delete indState.folded[key];
+    indState.shown[key] = (indState.cat.rows || []).filter((r) => indGroupKey(r) === key).length;
+  }
+  renderIndicators();
+  const card = document.querySelector(`#ind-grid .ind-card[data-id="${CSS.escape(id)}"]`);
+  return { slug: id, name: row ? row.name : '', onScreen: Boolean(card),
+           open: indState.expanded[id] === true, chars: row ? (row.description || '').length : 0 };
+};
 window.setIndFavourite = (kind, id, on) => {
   const key = favId(kind, id);
   const list = readFavourites();
@@ -1608,7 +1778,7 @@ function openIndicators(on) {
   document.body.classList.toggle('has-ind-modal', show);
   if (!show) return true;
   if (indState.natives === null) loadNatives().then(renderIndicators);
-  if (!indState.library.rows.length) loadLibrary(true).then(renderIndicators);
+  if (indState.cat.state === 'idle') loadCatalogue();
   renderIndicators();
   const box = document.getElementById('ind-q');
   if (box) box.focus();
@@ -1632,10 +1802,37 @@ function initIndicators() {
     if (ev.target === modal) { openIndicators(false); return; }
     const tab = ev.target.closest('.ind-tab');
     if (tab) { setIndSection(tab.dataset.section); return; }
+    const fam = ev.target.closest('.ind-fam');
+    if (fam) { setIndFamily(fam.dataset.family); return; }
+    const fold = ev.target.closest('[data-fold]');
+    if (fold) {
+      const key = fold.closest('.ind-group')?.dataset.family || '';
+      indState.folded[key] = !indState.folded[key];
+      renderIndicators();
+      return;
+    }
+    const more = ev.target.closest('[data-show-family]');
+    if (more) {
+      const key = more.dataset.showFamily || '';
+      const rows = catalogueRows().filter((r) => indGroupKey(r) === key);
+      indState.shown[key] = rows.length;      // "the other N" is this group's whole tail
+      renderIndicators();
+      return;
+    }
     const card = ev.target.closest('.ind-card');
     if (!card) return;
     if (ev.target.closest('[data-star]')) {
       toggleFavourite(card.dataset.kind, card.dataset.id, card.dataset.label, card.dataset.shot);
+      return;
+    }
+    /* The reading opens inside the card — the operator asked for a collapsible per card ("shows
+       reading about each indicator"), and it must NOT be a door to somewhere else. */
+    if (ev.target.closest('[data-about]')) {
+      const id = card.dataset.id;
+      indState.expanded[id] = !indState.expanded[id];
+      renderIndicators();
+      const again = document.querySelector(`#ind-grid .ind-card[data-id="${CSS.escape(id)}"] [data-about]`);
+      if (again) again.focus();
       return;
     }
     const kind = card.dataset.kind;
@@ -1644,14 +1841,16 @@ function initIndicators() {
     if (kind === 'native') { mountNative(id, label); return; }
     /* A catalogue row keeps its own home: the Details pane, with the Pine source and the SAME
        Run PineTS / Add to chart buttons every other door uses. */
-    const row = indState.library.rows.find((r) => r.slug === id) || { slug: id, name: label, kind: 'indicator' };
+    const row = (indState.cat.rows || []).find((r) => r.slug === id)
+      || { slug: id, name: label, kind: 'indicator' };
     openIndicators(false);
     openResult({ ...row, kind: 'indicator' }, card);
   });
   modal.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter' || ev.key === ' ') {
       const card = ev.target.closest('.ind-card');
-      if (card && !ev.target.closest('[data-star]')) { ev.preventDefault(); card.click(); }
+      /* Space/Enter on the reading button and the star belong to those buttons, not to the card. */
+      if (card && !ev.target.closest('[data-star], [data-about]')) { ev.preventDefault(); card.click(); }
     }
   });
   let debounce = null;
@@ -1659,17 +1858,9 @@ function initIndicators() {
   box.addEventListener('input', () => {
     indState.q = box.value;
     clearTimeout(debounce);
-    debounce = setTimeout(() => {
-      if (indState.section !== 'library') { renderIndicators(); return; }
-      /* Any query the catalogue can answer is its own answer to fetch — including a short one.
-         Clearing the box has to fetch too, or the previous search's rows would stay on screen. */
-      if (indState.q.trim().length >= 2 || indState.library.query) loadLibrary(true).then(renderIndicators);
-      else renderIndicators();
-    }, 250);
-  });
-  document.getElementById('ind-more').addEventListener('click', () => {
-    indState.library.page += 1;
-    loadLibrary(false).then(renderIndicators);
+    /* Client-side now, so the debounce is only about not repainting a thousand cards on every
+       keystroke — there is nothing to wait for on the wire. */
+    debounce = setTimeout(renderIndicators, 140);
   });
 }
 

@@ -4,6 +4,27 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- **The catalogue is grouped, and every card carries its own reading.** The LIBRARY was one flat
+  806-row list. It now arrives as families — SMC / ICT 60, Trend 55, Volume & Flow 46, Structure 40,
+  … — each with a header that says how many it holds and folds away, and a rail in the nav
+  ("Everything" plus one line per family) to jump between them. Pick a family and the grid groups by
+  that family's *clusters* instead, the catalogue's own finer reading ("Moving-average lineage",
+  "Candlestick catalog", "Market profile / auction theory"). Under every card there is now a
+  **Reading** button: it unfolds in place and shows what the indicator is and how it is read, from the
+  catalogue's own description — 806 of 806 rows have one. `trader-chart indicators --family trend
+  --reading mlma` drives both from the door.
+
+  Two details worth knowing. Half the catalogue carries no family of its own — those are the older
+  single-name indicators (`percent-b`, `1-2-3-reversal`, `52-week-high-low`) and LuxAlgo files them as
+  *concepts* instead, which know a family **and** a cluster; the console walks those 853 concepts too
+  (nine more pages, once) and 390 of the 414 unfiled rows land in a real group, the rest honestly
+  staying "Unfiled". And the paged loader is gone: `/api/catalogue` walks the whole thing in one call
+  (nine pages, `sort=family`, **13.5 s cold, 42 ms warm**, kept on disk for 12 h), so the page filters
+  in memory — which is also why the search can no longer race a section change (26 Sep's `0 row(s)`
+  over a 2-row answer is structurally impossible now, not merely fixed).
+
 ### Changed
 
 - **The Indicators catalogue takes the surface.** It was `min(920px, 72vh)` with 96 px banners — a

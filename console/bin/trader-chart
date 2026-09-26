@@ -410,6 +410,17 @@ def cmd_indicators(args) -> int:
     # Always send the search text: an omitted --q means "no filter", and a stale one must not
     # survive a call that did not ask for it (same lesson as `browse --family`).
     payload["q"] = args.q or ""
+    # Same rule for the family rail: an omitted `--family` means "the whole catalogue", and a filter
+    # left over from an earlier call must not silently narrow this one. (`--family all` clears it.)
+    payload["family"] = args.family or ""
+    if args.reading:
+        payload["reading"] = args.reading
+    if args.fold:
+        # `--fold trend` folds it; `--fold trend:on` opens it again. (The door's own word for
+        # "open" is `foldOn: true`, so a bare FAMILY — the common case, "fold this away" — is false.)
+        key, _, want = args.fold.partition(":")
+        payload["fold"] = key
+        payload["foldOn"] = (want.strip().lower() in ("on", "true", "show", "open", "1"))
     if args.star:
         payload["star"] = args.star
     if args.unstar:
@@ -549,6 +560,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--section", choices=["favorites", "builtins", "library"], default="",
                    help="which list to show")
     s.add_argument("--q", default=None, help="fill the search box with this")
+    s.add_argument("--family", default="",
+                   help="narrow the LIBRARY to one family of the catalogue (trend, smc-ict, …); "
+                        "pass 'all' to clear it")
+    s.add_argument("--reading", default="",
+                   help="unfold this slug's reading in the grid (the card's own write-up)")
+    s.add_argument("--fold", default="",
+                   help="fold a group away: FAMILY[:on|off] — 'trend' folds Trend, 'trend:on' opens it")
     s.add_argument("--star", default="", help="star KIND:ID (native:supertrend, library:order-blocks)")
     s.add_argument("--unstar", default="", help="remove that star")
     s.add_argument("--mount", default="",
