@@ -389,6 +389,28 @@ class ThePineBlockCollapsesWithoutTouchingTheChart(unittest.TestCase):
         self.assertIn("writeText(source)", read(APP))
 
 
+class TheChromeShowsVerbsNotTelemetry(unittest.TestCase):
+    """Spec §5: `MCP: 291 calls ok` is engineer telemetry and leaves the chrome. The header keeps a
+    connection DOT with the numbers in the tooltip; the footer keeps ONE human sentence naming the
+    last thing that touched the chart, with the tool name in its title."""
+
+    def test_the_counter_left_the_chrome(self):
+        app = read(APP)
+        self.assertIn("'● Agent'", app)
+        self.assertIn("'● Agent offline'", app)
+        self.assertNotIn("`MCP: ${label}`", app)          # the old visible shape
+        self.assertIn("'MCP: ' + label", app)             # telemetry kept, as a tooltip
+
+    def test_the_activity_line_is_wired_to_mutations(self):
+        index = read(os.path.join(ROOT, "console", "frontend", "index.html"))
+        self.assertIn('id="last-action"', index)
+        app = read(APP)
+        self.assertIn("function noteActivity(", app)
+        body = app.split("function noteActivity(", 1)[1]
+        self.assertIn("noteActivity(", body)              # used, not merely defined
+        self.assertIn("window.TraderRun.summarize = ", app)   # the bridge's own runs land too
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -1066,3 +1066,12 @@ pre {
 }
 .code__chev { display: inline-block; width: 1ch; transition: transform var(--lx-dur-240) var(--lx-ease); }
 .code:not(.code--collapsed) .code__chev { transform: rotate(90deg); }
+
+/* ── Activity line (26 Sep, spec §5) — audit, not workspace: 32px, one sentence, always on. */
+.last-action {
+  flex: 1 1 auto; min-width: 0;
+  font-size: var(--lx-fs-2xs); color: var(--lx-fg-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.last-action:empty { display: none; }
+.toast:not(:empty) { flex: 0 1 auto; }

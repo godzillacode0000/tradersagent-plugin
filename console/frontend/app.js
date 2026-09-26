@@ -198,6 +198,16 @@ function flashChart() {
 }
 
 /* ------------------------------------------------------------------ helpers */
+
+/* The activity line (26 Sep, spec §5): "Last: drew 12-bar high/low", tool in the title. Only real
+   mutations call this — searches and "loading…" are not "what the agent did to my chart". */
+function noteActivity(text, tool) {
+  const line = document.getElementById('last-action');
+  if (!line) return;
+  line.textContent = text;
+  line.title = tool ? tool + ' · ' + text : text;
+}
+
 function toast(message, bad = false) {
   el.toast.textContent = message;
   el.toast.className = 'toast' + (bad ? ' toast--bad' : '');
@@ -1131,6 +1141,7 @@ async function openResult(row, button) {
         try {
           await queueMount(source, label);
           toast(`“${label}” is running on the chart`);
+          noteActivity(`mounted “${label}”`, 'chart_add_indicator');
         } catch (err) { toast('Not mounted: ' + err.message, true); }
         finally { setActionState(button, 'idle'); }
       });
@@ -1237,14 +1248,17 @@ async function checkHealth() {
       : (data.mcp && data.mcp.calls != null
           ? `${data.mcp.calls} ${data.mcp.calls === 1 ? 'call' : 'calls'} ok`
           : 'ready');
-    el.mcp.textContent = ready ? `MCP: ${label}` : 'MCP: offline';
+    /* Spec §5: the counter is engineer telemetry — the chrome keeps a connection DOT and the
+       numbers move into the tooltip. */
+    el.mcp.textContent = ready ? '● Agent' : '● Agent offline';
     el.mcp.className = 'pill ' + (ready ? 'pill--ok' : 'pill--bad');
-    el.mcp.title = ready
-      ? (data.mcp_url || (data.mcp && data.mcp.url) || 'connected')
-      : ((data.mcp_error || (data.mcp && data.mcp.last_error)) || 'not connected');
+    el.mcp.title = (ready ? 'MCP: ' + label : 'MCP: offline')
+      + ' · ' + (ready
+        ? (data.mcp_url || (data.mcp && data.mcp.url) || 'connected')
+        : ((data.mcp_error || (data.mcp && data.mcp.last_error)) || 'not connected'));
     if (!ready) toast('LuxAlgo MCP is not connected — see backend log', true);
   } catch (err) {
-    el.mcp.textContent = 'MCP: no backend';
+    el.mcp.textContent = '● Agent offline';
     el.mcp.className = 'pill pill--bad';
     el.mcp.title = err.message;
     toast('Backend unreachable — start ./console/start.sh (or luxalgo-web.service) first', true);
@@ -1384,6 +1398,7 @@ async function main() {
            blank. A pulse on the chart closes that loop. */
         const n = Array.isArray(r.series) ? r.series.length : (r.series || 0);
         toast(`“${label}” ran in ${r.ms} ms · ${n} series · the paint is on the chart`);
+        noteActivity(`ran “${label}” · ${n} series · ${r.ms} ms`, 'chart_apply_pine');
         nudgeChart();
         flashChart();
       }
@@ -1418,6 +1433,18 @@ async function main() {
   await checkHealth();
   try { await bootChart(); }
   catch (err) { console.error(err); log('Chart failed to boot: ' + err.message); toast('Chart failed: ' + err.message, true); }
+  /* The bridge's own mutations (`apply`, `draw` from the agent's CLI) never touch a button on this
+     page, so wrap the one function both of them end in: every run that produced a sentence lands on
+     the activity line, whoever started it. */
+  if (window.TraderRun && typeof window.TraderRun.summarize === 'function') {
+    const summarize = window.TraderRun.summarize.bind(window.TraderRun);
+    window.TraderRun.summarize = (r) => {
+      const line = summarize(r);
+      noteActivity(line, 'chart_apply_pine');
+      return line;
+    };
+  }
+
 
   if (new URLSearchParams(location.search).get('q')) {
     el.q.value = new URLSearchParams(location.search).get('q');
