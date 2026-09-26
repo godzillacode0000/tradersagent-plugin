@@ -1,4 +1,4 @@
-# Trader's Agent — MCP tools (36)
+# Trader's Agent — MCP tools (37)
 
 The `traders-chart` MCP server exposes the live LuxAlgo **Vela** chart as native tools.
 Every tool talks to the local console (`http://127.0.0.1:8787`) over its push channel (SSE), so a
@@ -18,6 +18,7 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | `chart_views` | — | Is a chart view attached right now? Every command tool needs one (the chart is not headless). |
 | `chart_caps` | — | What the attached page will actually execute. Read this before drawing: an action this build does not have fails at the page, not here. |
 | `chart_natives` | — | What Vela can put on **this** chart from its own side: the built-ins for the current market (`catalog`, count, which are already on the chart). The console's Indicators panel shows the same list, and `chart_add_indicator` takes these `type` values. |
+| `chart_studies` | — | Everything **on** the chart right now, each row labelled with the reader that saw it: `study` (what the console's own chip counts), `cell` (the workspace cell's on-chart rows), `overlay` (a script run through the console's landasan), `paint` (the PineTS paint layer), `native` (Vela's own names). Ask it before calling a chart clean: `chart_state`'s `natives` list is Vela's names only, and a script mounted from the Library is not one of them. |
 | `chart_state` | — | Symbol, timeframe, last price, bars, indicators on the chart, plus `build`/`viewer` when the page publishes them (stale-frame check). |
 | `chart_shot` | `name: str = ""` | One PNG of the chart. Returned as an image when the client takes images, plus the path on disk. |
 | `chart_palette` | `try_apply: bool = false` | What colours the chart is actually wearing (background, candles, console theme). `try_apply=true` asserts the console's palette and reports what landed 300 ms later. |

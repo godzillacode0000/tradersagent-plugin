@@ -110,6 +110,10 @@ def save_state(root: str | Path, payload: dict) -> dict:
         "last": payload.get("last"),
         "visible": payload.get("visible") or {},
         "natives": payload.get("natives") or [],
+        # What is actually ON the chart, with the reader that saw each row (study/cell/overlay/paint/
+        # native). `natives` is Vela's own names only, and a script mounted from the Library is not
+        # one — the pane counted 1 indicator while the state said `natives: []` (26 Sep).
+        "studies": payload.get("studies") or [],
         "drawings": payload.get("drawings"),
         "series": payload.get("series"),
         "bars": payload.get("bars"),
@@ -204,6 +208,9 @@ def record_result(root: str | Path, payload: dict) -> dict:
         # read as a filled one.
         "catalog": payload.get("catalog"),
         "indicators": payload.get("indicators"),
+        # The pane's own "what is on the chart" list (`studies` door): every reader, labelled.
+        "studies": payload.get("studies"),
+        "doors": payload.get("doors"),
     }
     if payload.get("shot"):
         path = _decode_shot(root, f"shot-{rid}", str(payload["shot"]))

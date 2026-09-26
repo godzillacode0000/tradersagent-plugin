@@ -23,7 +23,34 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   placeholders and says so: `the script drew nothing: every one of its 6 drawing container(s) still
   holds an empty placeholder row — its own conditions never fired on these bars`.
 
+### Fixed
+
+- **"Clear all indicators" told half the truth, and `remove --all` could not reach the other half.**
+  The console's own idea of "what is on the chart" was `presentNativeIndicators()` — Vela's names.
+  A script mounted from the Library (Run PineTS / Add to chart) is not one of those, so while the
+  pane showed CRT range boxes and "Manipulation" labels the state said `natives: []`, and the
+  operator was told the chart was clean while he could see it was not (measured live, 26 Sep). There
+  is now one reader that asks every place a study can be — `inspect().indicators` (what the console's
+  own chip counts), the active cell's `onChartRows()`, `TraderRun.list()` (the overlay runs),
+  `PineTSPaint.added` and `presentNativeIndicators()` — and it reports each row with the reader that
+  saw it (`EMA (study/native/cell)`, one row per name). It rides the heartbeat as `studies`, answers
+  as `chart_studies` / `trader-chart studies`, and both `remove --all` and `clear` report from it.
+  `remove --all` now also clears the overlay/paint layer (a Library run lives there, and the layer is
+  all-or-nothing — `ChartOverlay` has no per-item removal), saying so in its answer: `removed CRT
+  Sweep & Setup Highlighter (overlay) · overlay cleared: 69/123/17 + 1 run(s)`. Asking for one such
+  name no longer reads as a bare "nothing removed": it says the name rides the overlay layer and that
+  `all`/`clear` is the door. Verified end to end on the operator's own case: CRT script + EMA, then
+  one `remove --all` — `chart now carries: nothing`, and the screenshot shows bare candles.
+
 ### Added
+
+- **Every LIBRARY card now shows the catalogue's own chart preview.** The rows always carried
+  `image_url` (a 1600×1000 chart shot on LuxAlgo's S3) and the modal simply was not using it, so
+  "how does this look applied?" needed a run to answer. Cards render it as a banner above the name
+  (lazy, off-thread decode: 60 cards is 60 pictures on an 8 GB box), the Details pane shows it full
+  size next to the Run PineTS / Add to chart buttons, and a ☆ remembers the URL (`indicator-shots`)
+  so a favourite keeps its thumbnail even before its catalogue page is loaded again. The `indicators`
+  door reports `shot` per row, read off the rendered card — 60/60 on the live catalogue.
 
 - **One surface for both halves of "which indicator?" — Favourites, BUILT-INS and the LIBRARY
   catalogue.** Vela's menu lists its natives, the Library panel lists 806 catalogue rows, and

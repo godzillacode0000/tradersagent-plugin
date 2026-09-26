@@ -155,6 +155,12 @@ def cmd_caps(args) -> int:
     return 0
 
 
+def study_label(row: dict) -> str:
+    """`EMA (study/native/cell)` — one study, however many readers can see it."""
+    sources = row.get("sources") or [row.get("source") or "?"]
+    return f"{row.get('name', '')} ({'/'.join(str(s) for s in sources)})"
+
+
 def cmd_state(args) -> int:
     state = require_open(args)
     if args.json:
@@ -165,6 +171,8 @@ def cmd_state(args) -> int:
           f"last {last:,.2f}" if isinstance(last, (int, float)) else
           f"chart: {state.get('symbol')} {state.get('timeframe')} · last unknown")
     print(f"  painted natives: {', '.join(state.get('natives') or []) or 'none'}")
+    studies = [s for s in (state.get("studies") or []) if isinstance(s, dict)]
+    print("  on the chart: " + (", ".join(study_label(s) for s in studies) or "nothing"))
     print(f"  series {state.get('series')} · drawings {state.get('drawings')} · bars {state.get('bars')}")
     print(f"  reported {state.get('age_s')}s ago"
           + (f" · picture on the heartbeat: {state['shot']}"
@@ -426,6 +434,29 @@ def cmd_indicators(args) -> int:
     return 0 if result.get("ok") else 1
 
 
+def cmd_studies(args) -> int:
+    """Everything on the chart, each row labelled with the reader that saw it.
+
+    The five readers are `study` (the console's own chip), `cell` (the workspace cell's on-chart
+    rows), `overlay` (a script run through the console's landasan), `paint` (the PineTS paint layer)
+    and `native` (Vela's own names). One reader is one blind spot: `state`'s `natives` list is
+    Vela's names only, so a script mounted from the Library was invisible to it (26 Sep).
+    """
+    result = send(args, {"action": "studies"})
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+        if args.list:
+            for row in (result.get("studies") or []):
+                print(f"  {row.get('source', '?'):<8} {row.get('name', '')}"
+                      + (f"  [{', '.join(str(s) for s in (row.get('sources') or []))}]"
+                         if len(row.get("sources") or []) > 1 else ""))
+            for door in (result.get("doors") or []):
+                print(f"  door: {door}")
+    return 0 if result.get("ok") else 1
+
+
 def cmd_wait(args) -> int:
     args._payload = {}
     result = wait(args.id, timeout=args.timeout)
@@ -507,6 +538,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="1 | 2h | 2v | 4 | 8, or g<cols>x<rows> (1-4 each). Omit to read it.")
     s.set_defaults(func=cmd_layout)
 
+    s = sub.add_parser("studies", help="everything on the chart, with the reader that saw each row")
+    s.add_argument("--list", action="store_true", help="print the rows and the cell's removal doors")
+    s.set_defaults(func=cmd_studies)
     s = sub.add_parser("natives", help="what this build can put on the chart (Vela's built-ins)")
     s.add_argument("--list", action="store_true", help="print every built-in, not just the count")
     s.set_defaults(func=cmd_natives)

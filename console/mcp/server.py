@@ -320,10 +320,19 @@ def chart_state() -> str:
         return f"✗ {exc}"
     if not state.get("open"):
         return f"✗ no chart open — {state.get('reason') or 'the console page is not mounted'}"
+    # The PANE's truth, not Vela's names alone: a script mounted from the Library is not a native,
+    # and the state used to report `natives: []` while the pane's own chip read "1 indicator" (26 Sep).
+    studies = [s for s in (state.get("studies") or []) if isinstance(s, dict)]
+
+    def _label(s: dict) -> str:
+        srcs = s.get("sources") or [s.get("source")]
+        return f"{s.get('name')} ({'/'.join(str(x) for x in srcs)})"
+
+    on_chart = ", ".join(_label(s) for s in studies) or "nothing"
     lines = [
         f"{state.get('symbol')} · {state.get('timeframe')} · last {state.get('last')}",
         f"bars {state.get('bars')} · series {state.get('series')} · drawings {state.get('drawings')}",
-        f"indicators on the chart: {', '.join(state.get('natives') or []) or 'none'}",
+        f"on the chart: {on_chart}",
         f"heartbeat {state.get('age_s')}s ago" + (f" · picture: {state['shot']}" if state.get("shot") else ""),
     ]
     if state.get("build") or state.get("viewer"):
@@ -462,6 +471,20 @@ def chart_set_layout(layout: str = "") -> str:
     if not want:
         return _command("layout")
     return _command("layout", layout=want)
+
+
+@mcp.tool(annotations=_ann("List what is on the chart right now", read_only=True))
+def chart_studies() -> str:
+    """Everything on the chart, each row labelled with the reader that saw it.
+
+    Five readers, because one is one blind spot: `study` (what the console's own chip counts),
+    `cell` (the workspace cell's on-chart rows), `overlay` (a script run through the console's
+    landasan), `paint` (the PineTS paint layer) and `native` (Vela's own names). Ask this BEFORE
+    saying a chart is clean, and after any `chart_remove_indicator`/`chart_clear`, because
+    `chart_state`'s `natives` list is Vela's names only — a script mounted from the Library is not
+    one of them, and a natives-only report called a chart clean while CRT boxes sat on it (26 Sep).
+    """
+    return _command("studies")
 
 
 @mcp.tool(annotations=_ann("List the chart's built-in indicators", read_only=True))

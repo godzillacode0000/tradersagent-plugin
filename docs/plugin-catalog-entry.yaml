@@ -34,6 +34,7 @@ capabilities:
     - chart_set_market
     - chart_set_layout
     - chart_natives
+    - chart_studies
     - chart_indicators
     - chart_reload
     - chart_palette

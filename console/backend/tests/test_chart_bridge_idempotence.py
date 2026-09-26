@@ -124,8 +124,11 @@ class RemoveWorksWithoutAWorkspace(unittest.TestCase):
         self.assertIn("if (read().length === 0) break;", self.block)
 
     def test_the_report_names_what_came_off(self):
-        self.assertIn("removed.length ? 'removed ' + removed.join(', ')", self.block)
-        self.assertIn("out.ok = after.length < before.length;", self.block)
+        # The list is the pane's truth now (name + the reader that saw it), not the natives diff:
+        # a Library run is not a Vela name, so a natives-only diff said "nothing removed" over a
+        # chart the operator could see was busy (26 Sep).
+        self.assertIn("gone.length ? 'removed ' + gone.map(studyTag).join(', ')", self.block)
+        self.assertIn("out.ok = after.length < beforeAll.length;", self.block)
 
 
 class BothFixesSurviveInTheLiveCopy(unittest.TestCase):

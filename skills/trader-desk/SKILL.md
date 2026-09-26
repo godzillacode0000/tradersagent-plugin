@@ -55,6 +55,7 @@ change — report that, never "done".
 | open / switch SOLUSDT 1h | `chart_set_market` |
 | split the chart / 2 panes / 4 charts / "multipane" | `chart_set_layout` — no argument **reads** the grid |
 | which indicators can this chart take | `chart_natives` — Vela's built-ins for this market, read from the frame |
+| what is ON the chart right now | `chart_studies` — every reader, labelled; ask this before calling a chart clean |
 | open the Indicators panel / star one / search the catalogue | `chart_indicators` — section `favorites`/`builtins`/`library`, `q`, `star`/`unstar KIND:ID`, `mount` |
 | add EMA / MACD / supertrend | `chart_add_indicator` |
 | remove indicators / clear studies | `chart_remove_indicator(all=True)` |
@@ -81,6 +82,21 @@ quote those, not the id asked for.
   one pane, ~167 KB two.
 - The topbar's own **Layout** and **Sync** controls are the same `setLayout` call — never claim the
   agent did something the operator's own picker cannot do.
+
+## What is actually on the chart
+
+`chart_state`'s `natives` list is **Vela's names only** — a script mounted from the Library (Run
+PineTS / Add to chart) is not one of them, and it lives on the console's overlay/paint layer. A
+natives-only report called a chart clean while CRT boxes and "Manipulation" labels sat on it (26 Sep).
+Use `chart_studies`: one row per study, each labelled with the reader that saw it — `study` (the
+console's own chip), `cell`, `overlay` (a Library run), `paint`, `native`.
+
+- `chart_remove_indicator(all=true)` (`trader-chart remove --all`) now reaches all of them: studies
+  through the chart's ledger, then the overlay/paint layer for script runs, and its answer names what
+  came off — `overlay cleared: 69/123/17 + 1 run(s)`. Verify with `chart_studies`, then `chart_shot`.
+- Removing a **script by name** cannot be surgical: `ChartOverlay` is all-or-nothing. The door says so
+  instead of a bare "nothing removed"; the way out is `all` (or `clear`, which also wipes drawings).
+- `chart_clear` removes our overlay + paint layer only, and reports what still remains.
 
 ## The Indicators surface
 

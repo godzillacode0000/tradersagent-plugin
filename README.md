@@ -115,7 +115,7 @@ systemctl --user enable --now traders-agent.service
 | Top bar → `☰ Library` | the Library panel: search 800+ concepts and indicators |
 | Top bar → `▤ Details` | the selected item: write-up, **full Pine source**, licence badge, **Run PineTS** |
 | Chart top bar → **Layout** | Vela's own grid picker — presets and custom `g<cols>x<rows>` grids. The console boots at `2h` (two side by side); the same door is `chart_set_layout` / `trader-chart layout` |
-| Chart top bar → **⌗ Indicators** | One surface for both halves: **Favourites** (your own ☆), **BUILT-INS** (Vela's natives for this market, read live from the frame) and **LIBRARY** (the 806-row LuxAlgo catalogue, searched server-side). Star the ones you reach for; clicking a built-in mounts it, a Library row opens the Details pane with its Run PineTS / Add to chart. The same door is `chart_indicators` / `trader-chart indicators` |
+| Chart top bar → **⌗ Indicators** | One surface for both halves: **Favourites** (your own ☆), **BUILT-INS** (Vela's natives for this market, read live from the frame) and **LIBRARY** (the 806-row LuxAlgo catalogue, searched server-side). Every LIBRARY card carries the catalogue's own **chart preview** above its name — and the Details pane shows it full size — so "how does this look applied?" is answered before running anything. Star the ones you reach for; clicking a built-in mounts it, a Library row opens the Details pane with its Run PineTS / Add to chart. The same door is `chart_indicators` / `trader-chart indicators` |
 | The chart's own bottom bar | Vela's range buttons, timezone clock and settings (not ours) |
 
 ### Chat beside the chart
@@ -152,6 +152,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_views` | is a view attached to push into? (0 = the console is not open) |
 | `chart_caps` | what the attached page will actually execute — read it before drawing |
 | `chart_natives` | what Vela can put on **this** chart from its own side (the built-ins for this market) |
+| `chart_studies` | everything **on** the chart, each row labelled with the reader that saw it — ask this before calling a chart clean |
 | `chart_state` | symbol, timeframe, last price, bars, indicators on the chart |
 | `chart_shot` | one PNG of the chart (returned as an image, plus the path) |
 | `chart_apply_pine` | run Pine over the chart's live bars and paint a matching native |

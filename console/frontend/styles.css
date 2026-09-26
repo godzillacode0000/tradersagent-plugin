@@ -1198,3 +1198,35 @@ pre {
 
 /* The modal owns the screen while it is up: the chart underneath does not need to scroll away. */
 body.has-ind-modal { overflow: hidden; }
+
+/* ── Indicator previews (26 Sep) ─────────────────────────────────────────────
+   The catalogue ships a chart shot per indicator (`image_url`, 1600×1000 on LuxAlgo's S3). The
+   LIBRARY cards show it as a banner — the operator asked for "how does this look on the chart?"
+   before running anything, the way the Library page answers it. Lazy-loaded and decoded off the
+   main thread: 60 cards on a page is 60 pictures, and this box has 8 GB. */
+.ind-card__shot {
+  display: block;
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  object-position: top left;
+  border-radius: var(--lx-radius-2, 6px);
+  border: 1px solid var(--lx-border);
+  background: var(--lx-field-bg);
+}
+
+/* In the Details pane it is the answer to "how does it look applied?", so it gets the room. */
+.detail__shot {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  object-fit: cover;
+  object-position: top left;
+  border-radius: var(--lx-radius-3, 10px);
+  border: 1px solid var(--lx-border);
+  background: var(--lx-field-bg);
+  margin-bottom: 10px;
+}
+
+/* A card with a picture reads as one block: keep the name tight under its shot. */
+.ind-card:has(.ind-card__shot) { gap: 6px; }

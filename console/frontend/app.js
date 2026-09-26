@@ -1123,6 +1123,13 @@ function licenseLine(source = '') {
   return match ? match[0] : null;
 }
 
+/** The catalogue's own preview for a slug — the row in hand, the loaded page, or what a star kept. */
+function indicatorShot(slug, row) {
+  if (row && row.image_url) return row.image_url;
+  const hit = (indState.library.rows || []).find((r) => r.slug === slug);
+  return (hit && hit.image_url) || readShots()[favId('library', slug)] || '';
+}
+
 async function openResult(row, button) {
   document.querySelectorAll('.row--active').forEach((n) => n.classList.remove('row--active'));
   button?.classList.add('row--active');
@@ -1133,8 +1140,15 @@ async function openResult(row, button) {
       const data = await api('/api/source', { slug: row.slug });
       const source = data.source || '';
       const lic = licenseLine(source);
+      /* The catalogue ships a preview picture per indicator (`image_url`, 1600×1000): the same
+         thing the Library page shows, and the answer to "how does this look on a chart?" before
+         running anything. Its own row is the authority; a star remembers it for later. */
+      const shot = indicatorShot(row.slug, row);
+      if (shot) rememberShot(favId('library', row.slug), shot);
       el.detail.innerHTML = `
         <div class="detail__head">
+          ${shot ? `<img class="detail__shot" src="${esc(shot)}" loading="lazy" decoding="async"
+              alt="${esc(data.name || row.slug)} as it looks on a chart">` : ''}
           <h2 class="detail__title">${esc(data.name || row.slug)}</h2>
           <div class="detail__meta">
             <span class="badge badge--ok">source: public</span>
@@ -1286,6 +1300,26 @@ const indState = {
   library: { rows: [], page: 0, size: 60, total: 0, query: '', loading: false, queued: null },
 };
 
+/* The catalogue's own preview pictures, remembered next to the stars: a favourite starred from the
+   LIBRARY keeps its thumbnail even before the catalogue page that carried it is loaded again. The
+   URL comes from the row (`image_url`, LuxAlgo's S3 — 1600×1000 chart shots). */
+const SHOT_KEY = 'luxalgo-web:indicator-shots';
+
+function readShots() {
+  try {
+    const v = JSON.parse(localStorage.getItem(SHOT_KEY));
+    return (v && typeof v === 'object') ? v : {};
+  } catch { return {}; }
+}
+
+function rememberShot(key, url) {
+  if (!key || !url) return;
+  const map = readShots();
+  if (map[key] === url) return;
+  map[key] = url;
+  try { localStorage.setItem(SHOT_KEY, JSON.stringify(map)); } catch { /* private mode */ }
+}
+
 function readFavourites() {
   try {
     const v = JSON.parse(localStorage.getItem(FAV_KEY));
@@ -1295,11 +1329,11 @@ function readFavourites() {
 const favId = (kind, id) => kind + ':' + id;
 const isFavourite = (kind, id) => readFavourites().includes(favId(kind, id));
 
-function toggleFavourite(kind, id, label) {
+function toggleFavourite(kind, id, label, shot) {
   const key = favId(kind, id);
   const list = readFavourites();
   const at = list.indexOf(key);
-  if (at === -1) list.push(key); else list.splice(at, 1);
+  if (at === -1) { list.push(key); rememberShot(key, shot); } else list.splice(at, 1);
   try { localStorage.setItem(FAV_KEY, JSON.stringify(list)); } catch { /* private mode */ }
   toast((at === -1 ? '★ ' : '☆ ') + label + (at === -1 ? ' starred' : ' unstarred'));
   renderIndicators();
@@ -1360,8 +1394,10 @@ function indCard(kind, id, title, meta, opts = {}) {
   if (opts.beta) sub.push('<span class="ind-card__beta">beta</span>');
   if (opts.missing) sub.push('<span class="ind-card__off">not in this build</span>');
   return `<article class="ind-card${opts.present ? ' is-on' : ''}" data-kind="${esc(kind)}" data-id="${esc(id)}"
-      data-label="${esc(title)}" tabindex="0" role="button"
+      data-label="${esc(title)}"${opts.shot ? ` data-shot="${esc(opts.shot)}"` : ''} tabindex="0" role="button"
       aria-label="${esc(title)} — click to mount, star to keep">
+    ${opts.shot ? `<img class="ind-card__shot" src="${esc(opts.shot)}" loading="lazy"
+        decoding="async" alt="${esc(title)} as it looks on a chart">` : ''}
     <button type="button" class="ind-card__star${starred ? ' is-starred' : ''}" data-star="1"
             aria-pressed="${starred}" title="${starred ? 'Remove from favourites' : 'Add to favourites'}"
             aria-label="Favourite ${esc(title)}">${starred ? '★' : '☆'}</button>
@@ -1397,7 +1433,7 @@ function renderIndicators() {
       } else {
         const hit = bySlug.get(id);
         html.push(indCard('library', id, hit ? hit.name : id, hit ? hit.family : 'library',
-          { missing: !hit }));
+          { missing: !hit, shot: (hit && hit.image_url) || readShots()[key] }));
       }
     });
   } else if (indState.section === 'builtins') {
@@ -1425,7 +1461,8 @@ function renderIndicators() {
          both away and reported an empty search against a non-empty answer (measured 26 Sep). */
       ? libRows.filter((r) => (r.name + ' ' + r.slug + ' ' + (r.family || '')).toLowerCase().includes(q))
       : libRows;
-    shown.forEach((r) => html.push(indCard('library', r.slug, r.name || r.slug, r.family)));
+    shown.forEach((r) => html.push(indCard('library', r.slug, r.name || r.slug, r.family,
+      { shot: r.image_url })));
   }
 
   grid.innerHTML = html.join('');
@@ -1511,7 +1548,10 @@ window.indicatorsSurface = () => {
     query: indState.q,
     rows: cards.map((c) => ({ kind: c.dataset.kind, id: c.dataset.id, label: c.dataset.label,
                               onChart: c.classList.contains('is-on'),
-                              starred: Boolean(c.querySelector('.ind-card__star.is-starred')) })),
+                              starred: Boolean(c.querySelector('.ind-card__star.is-starred')),
+                              /* Read off the rendered card, not the data behind it: this is how the
+                                 door proves a preview is actually in the grid (26 Sep). */
+                              shot: Boolean(c.querySelector('img.ind-card__shot')) })),
     builtins: (indState.natives || []).length,
     catalogueTotal: indState.library.total,
     favourites: readFavourites().length,
@@ -1561,7 +1601,7 @@ function initIndicators() {
     const card = ev.target.closest('.ind-card');
     if (!card) return;
     if (ev.target.closest('[data-star]')) {
-      toggleFavourite(card.dataset.kind, card.dataset.id, card.dataset.label);
+      toggleFavourite(card.dataset.kind, card.dataset.id, card.dataset.label, card.dataset.shot);
       return;
     }
     const kind = card.dataset.kind;

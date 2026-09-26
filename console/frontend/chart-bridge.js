@@ -43,6 +43,7 @@
                    'signals',
                    'layout',
                    'natives',
+                   'studies',
                    'indicators',];
 
   const api = async (path, body) => {
@@ -106,6 +107,81 @@
     return null;
   }
 
+  /* The active cell of the workspace — where Vela keeps the real removal doors (`removeFromChart`,
+     `removeNative`, `removeInstance`, `onChartRows`). `ws.active` is the object in this build; the
+     other two names are tried because the bundle grew them at different times. */
+  function activeCell() {
+    try {
+      const ws = (window.__wsApp || {}).ws;
+      if (!ws) return null;
+      for (const name of ['activeCell', 'active', 'cell']) {
+        try {
+          const v = typeof ws[name] === 'function' ? ws[name]() : ws[name];
+          if (v && typeof v === 'object') return v;
+        } catch (err) { /* opaque */ }
+      }
+      const cells = typeof ws.cells === 'function' ? ws.cells() : ws.cells;
+      return (Array.isArray(cells) ? cells[0] : null) || null;
+    } catch (err) { return null; }
+  }
+
+  /* What is actually ON the chart — read from every place it can be, each row labelled with the
+     reader that saw it.
+
+     The bridge's ledger only knows the natives IT added and `presentNativeIndicators()` only knows
+     Vela's own names, so a script mounted from the Library (Run PineTS / Add to chart) sat on screen
+     while `chart_state` said `series 0 · natives none` — and "clear all indicators" reported a clean
+     chart the operator could see was not clean (measured 26 Sep 2026: the pane showed CRT boxes and
+     "Manipulation" labels, the console showed nothing). A single reader is a single blind spot, so
+     the answer names its sources instead of flattening them into one hopeful list. */
+  function paneStudies() {
+    const rows = [];
+    const byName = new Map();
+    const add = (name, source) => {
+      const label = String(name == null ? '' : name).trim();
+      if (!label || /^vol(ume)?$/i.test(label)) return;
+      const key = label.toLowerCase();
+      const seen = byName.get(key);
+      if (seen) {
+        /* One EMA is one indicator, however many readers can see it: the count has to agree with
+           the chip's ("1 indicator"), so the name is the key and the readers are listed under it. */
+        if (!seen.sources.includes(source)) seen.sources.push(source);
+        seen.source = seen.sources[0];
+        return;
+      }
+      const row = { name: label, source, sources: [source] };
+      byName.set(key, row);
+      rows.push(row);
+    };
+    const c = chart();
+    try {
+      const info = (c && typeof c.inspect === 'function') ? (c.inspect() || {}) : {};
+      const list = Array.isArray(info.indicators) ? info.indicators : [];
+      for (const i of list) add(i && (i.title || i.id || i.type || i.name), 'study');
+    } catch (err) { /* opaque */ }
+    try {
+      const cell = activeCell();
+      const onChart = (cell && typeof cell.onChartRows === 'function') ? (cell.onChartRows() || []) : [];
+      for (const r of onChart) add(r && (r.title || r.name || r.id || r.slug || r.type), 'cell');
+    } catch (err) { /* opaque */ }
+    try {
+      for (const n of ((window.TraderRun && window.TraderRun.list) ? window.TraderRun.list() : [])) add(n, 'overlay');
+    } catch (err) { /* opaque */ }
+    try {
+      for (const n of ((window.PineTSPaint && window.PineTSPaint.added) || [])) add(n, 'paint');
+    } catch (err) { /* opaque */ }
+    try {
+      const natives = (c && typeof c.presentNativeIndicators === 'function')
+        ? (c.presentNativeIndicators() || []) : [];
+      for (const n of natives) add(n, 'native');
+    } catch (err) { /* opaque */ }
+    return rows;
+  }
+
+  /* One study, one row: `EMA (study/native/cell)` reads as one indicator seen three ways. */
+  const studyTag = (r) => r.name + ' (' +
+    ((r.sources && r.sources.length ? r.sources : [r.source]).join('/')) + ')';
+
   function inspect() {
     const c = chart();
     if (!c || typeof c.inspect !== 'function') return {};
@@ -137,6 +213,10 @@
         timeframe_reported: market.timeframe,
         last: last,
         natives: c && typeof c.presentNativeIndicators === 'function' ? c.presentNativeIndicators() : [],
+        /* The whole truth about "what is on the chart", not only Vela's names — the pane's own chip
+           counts all three readers, so a heartbeat that reports one of them is how "clear all
+           indicators" came back clean while the operator looked at CRT boxes (26 Sep). */
+        studies: paneStudies(),
         series: inspect().series,
         drawings: inspect().drawings,
         bars: barsList.length || null,
@@ -258,26 +338,37 @@
           /* Same rule as every other mutation: report the state after the call, not the intent. */
           const left = window.ChartOverlay && window.ChartOverlay.state ? window.ChartOverlay.state() : null;
           const stillPainted = (window.PineTSPaint && window.PineTSPaint.added) ? window.PineTSPaint.added : [];
-          const onChart = (c && typeof c.presentNativeIndicators === 'function') ? c.presentNativeIndicators() : null;
-          out.ok = (!left || (left.boxes + left.lines + left.labels) === 0) && stillPainted.length === 0;
-          out.natives = onChart;
+          const onChart = paneStudies();
+          out.ok = onChart.length === 0;
+          out.natives = (c && typeof c.presentNativeIndicators === 'function') ? c.presentNativeIndicators() : null;
+          out.studies = onChart;
           out.detail = 'painted natives removed: ' + removed +
             ' · overlay now: ' + (left ? left.boxes + '/' + left.lines + '/' + left.labels : 'unknown') +
             // `clear` removes the overlay + what OUR paint layer added — an indicator the agent added
             // with `add` (or the operator added by hand) is not ours to remove, and the answer says so.
-            ' · chart still carries: ' + (onChart ? (onChart.join(', ') || 'nothing') : 'unknown');
+            // The list is the PANE's truth, not `presentNativeIndicators()` alone: a script mounted
+            // from the Library is not a Vela name, and reporting natives-only called a chart clean
+            // while CRT boxes were on it (26 Sep).
+            ' · chart still carries: ' + (onChart.length
+              ? onChart.map(studyTag).join(', ')
+              : 'nothing');
           break;
         }
         case 'remove': {
-          /* Remove indicators: `native` names one, `all: true` clears the chart's studies.
+          /* Remove what is on the chart: `native` names one, `all: true` takes everything off.
              `clear` deliberately leaves operator-added studies alone, so this is the door for "take
              them off" — and Vela's own indicators control is the only thing that can. Which removal
              method that control exposes is not documented in this build, so the doors are tried in
-             order and the report names the one that worked, read back from the chart. */
+             order and the report names the one that worked, read back from the chart.
+
+             The bookkeeping here is the PANE's truth (`paneStudies()`), not `presentNativeIndicators()`
+             alone: a script mounted from the Library is not a Vela native name, and a report that
+             only counts natives says "nothing removed" about boxes the operator can see. */
           const c = chart();
           const read = () => (c && typeof c.presentNativeIndicators === 'function')
             ? (c.presentNativeIndicators() || []) : [];
           const before = read();
+          const beforeAll = paneStudies();
           const ctl = c && c.indicators;
           let names = [];
           if (ctl) {
@@ -384,12 +475,54 @@
             out.ok = after.length < before.length;
           }
 
+          /* `all` means ALL. A script mounted from the Library (Run PineTS / Add to chart) is not in
+             the ledger and not a Vela native name — its boxes and labels live on the console's own
+             overlay / paint layer, and the layer is all-or-nothing (`ChartOverlay` exposes
+             apply/clear/state, no per-item removal). So the layer is wiped here, after the studies,
+             and the report says it happened: the operator asked for a clean chart and a wipe he did
+             not hear about is worse than one he did. */
+          let overlayWiped = null;
+          if (command.all) {
+            const layer = (window.ChartOverlay && window.ChartOverlay.state) ? window.ChartOverlay.state() : null;
+            const runs = (window.TraderRun && window.TraderRun.list) ? window.TraderRun.list() : [];
+            const painted = (window.PineTSPaint && window.PineTSPaint.added) || [];
+            if ((layer && (layer.boxes + layer.lines + layer.labels) > 0) || runs.length || painted.length) {
+              try { if (window.ChartOverlay && window.ChartOverlay.clear) window.ChartOverlay.clear(); } catch (err) { tried.push('overlay ✗ ' + (err && err.message)); }
+              try { if (window.TraderRun && window.TraderRun.reset) window.TraderRun.reset(); } catch (err) { tried.push('runs ✗ ' + (err && err.message)); }
+              try { if (window.PineTSPaint && window.PineTSPaint.clear) window.PineTSPaint.clear(); } catch (err) { tried.push('paint ✗ ' + (err && err.message)); }
+              overlayWiped = {
+                boxes: layer ? layer.boxes : 0, lines: layer ? layer.lines : 0, labels: layer ? layer.labels : 0,
+                runs: runs, painted: painted,
+              };
+              await new Promise((r) => setTimeout(r, 400));
+            }
+          }
+          after = paneStudies();
+          const afterNames = after.map((r) => r.name);
+          out.studies = after;
+          out.ok = after.length < beforeAll.length;
+
           /* The answer a person (or the agent) reads first: what actually came off, and what the chart
              carries now. The door-by-door trace is only worth showing when nothing was removed. */
-          const removed = before.filter((n) => !after.includes(n));
-          out.detail = (removed.length ? 'removed ' + removed.join(', ') : 'nothing removed') +
-                       ' · chart now carries: ' + (after.join(', ') || 'nothing') +
+          const gone = beforeAll.filter((r) => !afterNames.includes(r.name));
+          out.detail = (gone.length ? 'removed ' + gone.map(studyTag).join(', ')
+                                    : 'nothing removed') +
+                       (overlayWiped ? ' · overlay cleared: ' + overlayWiped.boxes + '/' + overlayWiped.lines + '/' +
+                         overlayWiped.labels + ' + ' + (overlayWiped.runs.length + overlayWiped.painted.length) +
+                         ' run(s)' : '') +
+                       ' · chart now carries: ' + (afterNames.join(', ') || 'nothing') +
                        (out.ok ? '' : ' · tried: ' + (tried.join(', ') || 'nothing'));
+          /* A name that IS on the chart but is not a native (a Library run, say) must not read as
+             "nothing removed" with no reason: that is the case the operator hit on 26 Sep. */
+          const wanted = String(want || '').toLowerCase();
+          const hint = !out.ok && wanted
+            ? beforeAll.filter((r) => r.name.toLowerCase().includes(wanted) && r.source !== 'native')
+            : [];
+          if (hint.length) {
+            out.detail += ' · "' + hint[0].name + '" rides the ' + hint[0].source +
+              ' layer (a script, not a Vela study): that layer is all-or-nothing — `all: true` or ' +
+              '`clear` takes it off';
+          }
           break;
         }
         /* The bars the chart is showing, for anyone who needs the same series the eye sees —
@@ -644,6 +777,31 @@
             (shown ? ': ' + shown : ' — none built yet');
           break;
         }
+        /* What the pane is carrying right now — every reader, labelled with the one that saw it, plus
+           the removal doors the active cell actually exposes. Read-only, and the door the agent
+           should ask BEFORE saying a chart is clean or after saying it cleared something. */
+        case 'studies': {
+          const rows = paneStudies();
+          const cell = activeCell();
+          const doors = [];
+          for (const name of ['removeFromChart', 'removeNative', 'removeInstance', 'dropInstance',
+                               'onChartRows', 'libraryRows', 'addToChart']) {
+            const has = cell && (typeof cell[name] === 'function');
+            if (has) doors.push(name + '()');
+          }
+          out.ok = true;
+          out.studies = rows;
+          out.count = rows.length;
+          out.doors = doors;
+          const bySource = {};
+          for (const r of rows) bySource[r.source] = (bySource[r.source] || 0) + 1;
+          out.detail = rows.length
+            ? rows.length + ' row(s) on the chart: ' + rows.map(studyTag).join(' · ')
+            : 'nothing on the chart — no study, no overlay run, no painted native';
+          out.detail += doors.length ? ' · cell doors: ' + doors.join(' ') : ' · the cell exposes no removal door';
+          break;
+        }
+
         case 'natives': {
           /* What this build can put on the chart from its own side — Vela's natives for THIS market.
              Read-only, and the copy the console's Indicators panel shows (BUILT-INS) comes from the
