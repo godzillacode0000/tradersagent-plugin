@@ -387,6 +387,29 @@
                        (out.ok ? '' : ' · tried: ' + (tried.join(', ') || 'nothing'));
           break;
         }
+        /* The bars the chart is showing, for anyone who needs the same series the eye sees —
+           the backtest engine above all. This is why there is no fourth klines client: the chart
+           already holds the truth, so the agent asks the chart instead of Binance. */
+        case 'bars': {
+          if (!c || typeof window.chartBars !== 'function') throw new Error('no chart on this page');
+          const all = await window.chartBars();
+          if (!all || !all.length) throw new Error('the chart has no bars yet');
+          const want = Math.max(1, Math.min(5000, Number(command.count) || all.length));
+          const bars = all.slice(-want).map((b) => ({
+            time: b.time != null ? b.time : (b.t != null ? b.t : null),
+            open: b.open, high: b.high, low: b.low, close: b.close,
+            volume: b.volume != null ? b.volume : 0,
+          }));
+          out.ok = true;
+          out.bars = bars;
+          out.count = bars.length;
+          const m = marketFromDom();
+          out.symbol = m.symbol || null;
+          out.timeframe = m.timeframe || null;
+          out.detail = `read ${bars.length} bars off the chart`;
+          break;
+        }
+
         case 'probe': {
           // Diagnostics only: what this page can actually see and what the handles expose.
           const c = chart();

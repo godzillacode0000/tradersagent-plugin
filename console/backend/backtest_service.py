@@ -89,7 +89,18 @@ def _bars_local(name: str) -> "object":
                             f"(expected {name}.csv or {name}.parquet)")
 
 
-def load_bars(source: str, bars: int):
+def load_bars(source: str, bars: int), inline: list | None = None):
+    if inline:
+        import pandas as _pd
+        df = _pd.DataFrame(inline)
+        df["time"] = (_pd.to_datetime(df["time"], unit="ms", utc=True)
+                      if _pd.api.types.is_numeric_dtype(df["time"])
+                      else _pd.to_datetime(df["time"], utc=True))
+        df = df.set_index("time").sort_index()
+        df = df[[c for c in ("open", "high", "low", "close", "volume") if c in df.columns]].astype(float)
+        df = df.dropna(subset=["open", "high", "low", "close"])
+        return df.tail(int(bars)) if bars else df
+
     if source.startswith("binance:"):
         _, symbol, interval = source.split(":", 2)
         return _klines_binance(symbol.upper(), interval, bars)
