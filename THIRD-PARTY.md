@@ -73,3 +73,26 @@ by Vela") and ships no LuxAlgo logo. See LuxAlgo's
 
 The `▲` mark on the chart is Vela's required attribution (see above). The console also shows the
 LuxAlgo Library source link on every item it displays. Keep both.
+
+## vectorbt — the optional backtesting engine
+
+`vectorbt` is **not bundled** with this plugin and is **not required**. If the operator runs
+`./install.sh --with-backtest`, it is downloaded from PyPI into its own virtual environment
+(`~/.local/share/traders-agent/bt/venv`) and stays there — no source is vendored into this
+repository, exactly as with the PineTS runtimes above.
+
+- **Licence:** Apache-2.0 **with Commons Clause**. The Commons Clause removes the right to
+  *"Sell"* the software — defined as providing it to third parties *"for a fee or other
+  consideration"*. This plugin is distributed free of charge, so shipping the installer flag is
+  not a Sale; a paid tier, a donation gate, or a "support fee" that is really a licence fee would
+  change that reading, and the clause would then need a commercial licence from the vectorbt
+  author. Project: <https://github.com/polakowo/vectorbt>
+- **What is installed:** the plain `vectorbt` distribution only.
+  - **`vectorbtpro` is not installed and must not be** — it is a separate commercial product.
+  - **The `[full]` extras are not installed** — they pull TA-Lib and other packages whose own
+    licences are stricter than vectorbt's.
+- **Where it runs:** a separate process (`console/backend/backtest_service.py`) in its own venv.
+  The console itself stays stdlib-only, so the plugin works with or without the engine.
+- **Data:** a backtest can run on the chart's own bars (they never leave the machine) or on public
+  exchange endpoints. Any data the operator supplies for `local:` sources is theirs and is not
+  redistributed with this plugin.

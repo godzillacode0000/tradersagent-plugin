@@ -3,6 +3,8 @@
 #
 #   ./install.sh                    copy plugin/ -> $HERMES_HOME/desktop-plugins/traders-desk/
 #   ./install.sh --doctor           check interpreter, console port, service, plugin folder
+#   ./install.sh --with-backtest    also install the optional vectorbt backtesting engine
+#                                   into ~/.local/share/traders-agent/bt/venv (~840 MB, once)
 #   ./install.sh --vendor           also fetch LuxAlgo's pinned browser builds into
 #                                   console/frontend/vendor/ for offline use (not tracked by git)
 #   HERMES_HOME=/path ./install.sh  install into another Hermes home
@@ -55,6 +57,25 @@ SKILL_DST="$HERMES_HOME/skills/trading/trader-desk"
 mkdir -p "$SKILL_DST"
 cp "$HERE/skills/trader-desk/SKILL.md" "$SKILL_DST/SKILL.md"
 echo "desk skill       -> $SKILL_DST"
+
+if [[ " $* " == *" --with-backtest "* ]]; then
+  # Optional, and never a default: vectorbt pulls pandas + numba (~840 MB) and needs the network
+  # once. It lives in its own venv so the console stays stdlib-only, and it is plain `vectorbt`
+  # — not vectorbtpro (commercial) and not the [full] extras (TA-Lib and friends carry their own,
+  # stricter licences). See THIRD-PARTY.md.
+  BT="$HOME/.local/share/traders-agent/bt"
+  if [[ -x "$BT/venv/bin/python" ]]; then
+    echo "backtest engine already installed at $BT/venv (skipping)"
+  else
+    echo "installing the backtest engine (vectorbt) into $BT/venv — this downloads ~840 MB once"
+    mkdir -p "$BT"
+    python3 -m venv "$BT/venv"
+    "$BT/venv/bin/pip" install --quiet --upgrade pip
+    "$BT/venv/bin/pip" install --quiet vectorbt
+    echo "done. start it with:"
+    echo "  ~/.local/share/traders-agent/bt/venv/bin/python console/backend/backtest_service.py --port 8788"
+  fi
+fi
 
 if [[ "${1:-}" == "--vendor" ]]; then
   V="$HERE/console/frontend/vendor"
