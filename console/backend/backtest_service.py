@@ -219,13 +219,14 @@ def run_signals(spec: dict) -> dict:
     summary cannot carry. Entries and exits are matched onto the chart's own bar timestamps, and
     timestamps that land on no bar are reported rather than silently dropped.
     """
+    import pandas as _pd
     fee = float(spec.get("fee", 0.001))
     df = load_bars(str(spec.get("source", "binance:BTCUSDT:30m")), int(spec.get("bars", 1000)),
                    inline=spec.get("inline") or None)
     trades = spec.get("trades") or []
     idx = df.index
-    entries = pd.Series(False, index=idx)
-    exits = pd.Series(False, index=idx)
+    entries = _pd.Series(False, index=idx)
+    exits = _pd.Series(False, index=idx)
 
     def ts(v):
         if v is None or isinstance(v, bool):
@@ -233,8 +234,8 @@ def run_signals(spec: dict) -> dict:
         try:
             if isinstance(v, (int, float)) or str(v).strip().isdigit():
                 n = float(v)
-                return pd.Timestamp(int(n), unit="ms", tz="UTC") if n > 1e11 else pd.Timestamp(int(n), unit="s", tz="UTC")
-            return pd.Timestamp(v)
+                return _pd.Timestamp(int(n), unit="ms", tz="UTC") if n > 1e11 else _pd.Timestamp(int(n), unit="s", tz="UTC")
+            return _pd.Timestamp(v)
         except Exception:  # noqa: BLE001
             return None
 
