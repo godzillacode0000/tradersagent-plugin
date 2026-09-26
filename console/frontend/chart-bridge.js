@@ -39,7 +39,8 @@
      validates against that instead of trusting a constant. */
   const ACTIONS = ['apply', 'add', 'remove', 'draw', 'clear', 'probe', 'market', 'shot', 'reload',
                    'mode', 'script', 'palette', 'browse', 'open', 'rect',
-    'bars',];
+    'bars',
+                   'signals',];
 
   const api = async (path, body) => {
     const res = await fetch(path, body
@@ -408,6 +409,32 @@
           out.symbol = m.symbol || null;
           out.timeframe = m.timeframe || null;
           out.detail = `read ${bars.length} bars off the chart`;
+          break;
+        }
+
+        /* A Pine script's own events, for the backtest engine. PineTS already computes the
+           strategy's summary; this op hands over the trades behind it so VectorBT can price them
+           properly (fees, sizing, equity) instead of trusting a summary. */
+        case 'signals': {
+          const pine = String(command.pine || '');
+          if (!pine.trim()) throw new Error('no Pine source in the command');
+          if (!c || typeof window.chartBars !== 'function') throw new Error('no chart on this page');
+          const r = await window.TraderRun.run(pine, 'agent');
+          if (!r.ok) {
+            out.detail = r.reason || 'not runnable: unknown';
+            out.error = r.error || null;
+            break;
+          }
+          const st = r.strategy || null;
+          out.ok = true;
+          out.strategy = st;
+          out.trades = (st && st.trades) || [];
+          out.count = out.trades.length;
+          out.bars = r.bars;
+          const m = marketFromDom();
+          out.symbol = m.symbol || null;
+          out.timeframe = m.timeframe || null;
+          out.detail = 'ran ' + r.bars + ' bars · ' + out.trades.length + ' closed trades off the script';
           break;
         }
 

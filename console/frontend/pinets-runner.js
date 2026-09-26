@@ -221,9 +221,24 @@
     const s = out && out.strategy;
     if (!s) return null;
     const closed = Array.isArray(s.closedtrades) ? s.closedtrades : [];
+    /* The trades themselves, not only their count (26 Sep): the backtest engine needs the events,
+       and a summary cannot be replayed. Each row keeps its original fields and gains normalized
+       aliases, because PineTS's own key names are the engine's business to absorb. */
+    const trades = closed.map((t) => {
+      const o = (t && typeof t === 'object') ? t : { value: t };
+      return Object.assign({}, o, {
+        entry_time: o.entry_time ?? o.entryTime ?? o.entryDate ?? o.entry_bar_index ?? null,
+        exit_time: o.exit_time ?? o.exitTime ?? o.exitDate ?? o.exit_bar_index ?? null,
+        entry_price: o.entry_price ?? o.entryPrice ?? null,
+        exit_price: o.exit_price ?? o.exitPrice ?? null,
+        size: o.size ?? o.qty ?? null,
+        profit: o.profit ?? o.netprofit ?? null,
+      });
+    });
     return {
       netprofit: s.netprofit,
       closedtrades: closed.length,
+      trades: trades,
       wintrades: s.wintrades,
       losstrades: s.losstrades,
       max_drawdown: s.max_drawdown,

@@ -212,7 +212,58 @@ def run_ma_cross_sweep(spec: dict) -> dict:
             "ms": round(ms, 1), "top": rows}
 
 
-RUNNERS = {"ma_cross": run_ma_cross, "ma_cross_sweep": run_ma_cross_sweep}
+def run_signals(spec: dict) -> dict:
+    """A Pine script's events, priced by vectorbt.
+
+    The script decides *when*; this decides *what it costs* — fees, sizing, equity, the metrics a
+    summary cannot carry. Entries and exits are matched onto the chart's own bar timestamps, and
+    timestamps that land on no bar are reported rather than silently dropped.
+    """
+    fee = float(spec.get("fee", 0.001))
+    df = load_bars(str(spec.get("source", "binance:BTCUSDT:30m")), int(spec.get("bars", 1000)),
+                   inline=spec.get("inline") or None)
+    trades = spec.get("trades") or []
+    idx = df.index
+    entries = pd.Series(False, index=idx)
+    exits = pd.Series(False, index=idx)
+
+    def ts(v):
+        if v is None or isinstance(v, bool):
+            return None
+        try:
+            if isinstance(v, (int, float)) or str(v).strip().isdigit():
+                n = float(v)
+                return pd.Timestamp(int(n), unit="ms", tz="UTC") if n > 1e11 else pd.Timestamp(int(n), unit="s", tz="UTC")
+            return pd.Timestamp(v)
+        except Exception:  # noqa: BLE001
+            return None
+
+    matched_e = matched_x = 0
+    for t in trades:
+        if not isinstance(t, dict):
+            continue
+        e_ = ts(t.get("entry_time") or t.get("entryTime") or t.get("entryDate"))
+        x_ = ts(t.get("exit_time") or t.get("exitTime") or t.get("exitDate"))
+        if e_ is not None and e_ in idx:
+            entries.loc[e_] = True
+            matched_e += 1
+        if x_ is not None and x_ in idx:
+            exits.loc[x_] = True
+            matched_x += 1
+    if not matched_e:
+        return {"ok": False, "error": "no entry timestamps from the script landed on this data's bars "
+                                      f"({len(trades)} trades offered, {len(idx)} bars)"}
+    pf = vbt.Portfolio.from_signals(df["close"], entries, exits, fees=fee, freq=None)
+    m = _metrics(pf)
+    return {"kind": "signals", "fee": fee, "bars": int(len(df)),
+            "script_entries": matched_e, "script_exits": matched_x,
+            "script_trades_offered": len(trades),
+            "from": str(idx[0]), "to": str(idx[-1]),
+            "metrics": m, "trades": _trades(pf)}
+
+
+RUNNERS = {"ma_cross": run_ma_cross, "ma_cross_sweep": run_ma_cross_sweep,
+           "signals": run_signals}
 
 
 def warm_up() -> None:
