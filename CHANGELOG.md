@@ -6,6 +6,27 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Fixed
 
+- **The catalogue previews load now.** They always worked and were always slow: sixty cards pulled
+  sixty full-size PNGs straight from LuxAlgo's S3 over the internet, ~1–2 s each (measured: 0.8 s just
+  to first byte) across the browser's six-connections-per-host limit, so the Indicators grid filled in
+  while the operator watched. The pictures were never the problem — a 1600×1000 card is only ~29 KB;
+  the LATENCY and the COUNT were. The console now fetches each one once, shrinks it to the 320 px it is
+  actually painted at (`vips`, else ImageMagick, else `ffmpeg` — no new Python dependency), keeps it in
+  `~/.local/share/traders-agent/thumbs/`, and serves it from localhost: **3.6 ms warm against ~2 s from
+  S3**. Sixteen at a time, and the server warms the catalogue's first three pages in the background at
+  start-up (`TRADERS_AGENT_THUMB_WARM=0` switches it off), so the first open is already on disk. The
+  Details pane asks for the same picture at 960 px.
+- **Four catalogue rows had no preview at all.** Their pictures live in a second LuxAlgo bucket whose
+  keys contain spaces (`luxalgo-images-production.s3.us-east-1.amazonaws.com/Screenshot 2026-06-04 at
+  3.13.58 PM.png`). The fetch allow-list now covers it — LuxAlgo buckets only, https only, foreign
+  hosts still refused — and quotes the key instead of dropping it. That is why the grid used to have
+  holes where "Session Sweep & iFVG RR" and the raw-recording rows should have shown a chart.
+- **A new backend module must be named in `tools/sync-live.sh`.** Its copy list is explicit, so
+  `library_thumbs.py` never reached the live tree and the server died on `ModuleNotFoundError` at
+  start-up while systemd restarted it in a loop. The list is updated and
+  `test_preview_cache.py::test_sync_live_names_every_backend_module` now fails if a future module is
+  left out.
+
 - **The chart-bars fallback ran with no market context and the wrong bar keys.** The editor's run
   line ended in `chart-bars retry failed: PineTS error: Cannot read properties of undefined
   (reading 'slice')`, and the fallback could not have worked even without the crash. PineTS's

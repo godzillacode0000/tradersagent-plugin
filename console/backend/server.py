@@ -51,6 +51,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+import library_thumbs
+
 # --------------------------------------------------------------------------
 # Constants
 # --------------------------------------------------------------------------
@@ -1023,6 +1025,65 @@ def ep_build(params: dict) -> dict:
     return {"build": frontend_build(), "server_version": SERVER_VERSION}
 
 
+def _library_pairs(params: dict) -> list[tuple[str, str]]:
+    """`slugs=a:b|c:d` — slug and its catalogue picture, in the order the page laid them out."""
+    raw = (params.get("slugs") or [""])[0]
+    pairs = []
+    for chunk in raw.split("|"):
+        slug, _, url = chunk.partition(":")
+        slug, url = slug.strip(), url.strip()
+        if slug and url:
+            pairs.append((slug, url))
+    return pairs
+
+
+def ep_library_warm(params: dict) -> dict:
+    """Fetch + shrink a page of catalogue pictures in the background, so the next open is instant."""
+    pairs = _library_pairs(params)
+    width = int((params.get("w") or [library_thumbs.DEFAULT_WIDTH])[0] or library_thumbs.DEFAULT_WIDTH)
+    queued = library_thumbs.warm(pairs, width)
+    return {"queued": queued, "asked": len(pairs), "cache": library_thumbs.stats()}
+
+
+def ep_library_thumbs(params: dict) -> dict:
+    """What the preview cache is holding — the answer to "why is it slow?" without guessing."""
+    return library_thumbs.stats()
+
+
+def _thumb_pairs(rows: list[dict]) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for row in rows or []:
+        slug, url = row.get("slug"), row.get("image_url")
+        if slug and url:
+            out.append((str(slug), str(url)))
+    return out
+
+
+def warm_catalogue_thumbs(pages: int = 3) -> None:
+    """Fetch and shrink the catalogue's first pages in the background, once per process.
+
+    The point is the FIRST open: a page of sixty pictures costs about 1–2 s each from S3 (this link
+    runs ~80 KB/s), so without this the grid fills in while the operator watches. With it, the
+    pictures are already on disk by the time anyone opens the modal — and they stay there, so this
+    only ever does work on a cold cache. Pages are walked one at a time with a breath between them,
+    because the operator may be using the same slow link for his chart."""
+    for page in range(max(1, pages)):
+        data = None
+        for _ in range(12):  # MCP may still be connecting at start-up
+            try:
+                data = ep_indicators({"page": str(page), "page_size": "60"})
+                break
+            except Exception:  # noqa: BLE001 — a warmer must never take the server down
+                time.sleep(5)
+        rows = (data or {}).get("indicators") if isinstance(data, dict) else None
+        if not rows:
+            return
+        pairs = _thumb_pairs(rows)
+        if pairs:
+            library_thumbs.warm(pairs, 320)
+        time.sleep(1.5)
+
+
 ROUTES = {
     "/api/health": (ep_health, 0.0),
     "/api/build": (ep_build, 0.0),
@@ -1043,6 +1104,11 @@ ROUTES = {
     "/api/edge/symbols": (ep_edge_symbols, TTL["edge_symbols"]),
     "/api/propfirms": (ep_propfirms, TTL["propfirms"]),
     "/api/offers": (ep_offers, TTL["offers"]),
+    # Preview thumbnails are made and cached locally (backend/library_thumbs.py): the catalogue's own
+    # pictures are small but ~0.8 s away, and sixty of them over six browser connections is what made
+    # the Indicators modal look empty while it waited.
+    "/api/library/warm": (ep_library_warm, 0.0),
+    "/api/library/thumbs": (ep_library_thumbs, 0.0),
 }
 
 API_INDEX = {
@@ -1505,6 +1571,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._chart_stream()
                 return
 
+            if path == "/api/library/thumb":
+                self._library_thumb(params, head_only=head_only)
+                return
+
             route = ROUTES.get(path)
             if route is not None:
                 handler, _ttl = route
@@ -1536,6 +1606,32 @@ class Handler(BaseHTTPRequestHandler):
                 "internal_error",
                 head_only=head_only,
             )
+
+    def _library_thumb(self, params: dict, head_only: bool = False):
+        """One preview picture, from the local cache when it is there.
+
+        Bytes go out with a long, immutable max-age: the picture for a slug never changes, so the
+        browser keeps it and a second open of the modal is a disk read on both sides of the wire.
+        """
+        slug = (params.get("slug") or [""])[0]
+        url = (params.get("u") or [""])[0]
+        try:
+            width = int((params.get("w") or [library_thumbs.DEFAULT_WIDTH])[0]
+                        or library_thumbs.DEFAULT_WIDTH)
+        except ValueError:
+            width = library_thumbs.DEFAULT_WIDTH
+        if not slug:
+            self._fail("thumb needs ?slug=", HTTPStatus.BAD_REQUEST, "bad_request", head_only=head_only)
+            return
+        got = library_thumbs.thumb(slug, url, width)
+        if got is None:
+            # No picture is a fact, not a failure to hide: the card draws without one.
+            self._fail(f"no preview for '{slug}'", HTTPStatus.NOT_FOUND, "no_preview",
+                       head_only=head_only)
+            return
+        body, ctype = got
+        self._send(200, body, ctype,
+                   {"Cache-Control": "public, max-age=31536000, immutable"}, head_only)
 
     def _serve_static(self, url_path: str, head_only: bool):
         static = self.static
@@ -1712,6 +1808,16 @@ def main(argv=None) -> int:
 
     httpd = Server((args.host, args.port), Handler)
     log(f"listening on http://{args.host}:{args.port}  (Ctrl-C to stop)")
+
+    # Preview pictures, fetched once and kept: the operator's first open of the Indicators modal used
+    # to fill in picture by picture (60 × ~1–2 s from S3 on this link). Warming starts here, in the
+    # background, so disk answers before the modal asks. TRADERS_AGENT_THUMB_WARM=0 turns it off.
+    if os.environ.get("TRADERS_AGENT_THUMB_WARM", "1") != "0":
+        threading.Thread(
+            target=warm_catalogue_thumbs,
+            kwargs={"pages": int(os.environ.get("TRADERS_AGENT_THUMB_WARM_PAGES", "3") or 3)},
+            name="thumb-warmer", daemon=True,
+        ).start()
     try:
         httpd.serve_forever(poll_interval=0.2)
     except KeyboardInterrupt:

@@ -115,6 +115,21 @@ the door: `section`, `q`, `star`/`unstar "native:supertrend"`/`"library:order-bl
   `chart_reload`: the result store **whitelists** fields, so a new key arrives empty and reads as "no
   answer". Frontend-only changes are the ones `chart_reload` covers.
 
+## Catalogue previews are cached HERE, not fetched from LuxAlgo
+
+The cards' pictures come from `luxalgo-production.s3.amazonaws.com` (plus a second bucket for older
+rows, keys with spaces). Fetching them in the browser is why the grid filled in slowly: 0.8 s to first
+byte per picture, six connections per host, sixty cards. The console fetches each one ONCE, shrinks it
+with `vips` (fallback ImageMagick/`ffmpeg`) into `~/.local/share/traders-agent/thumbs/`, and serves it
+from `/api/library/thumb?slug=&u=&w=` (3.6 ms warm vs ~2 s from S3). `/api/library/thumbs` reports
+what the cache holds; the server warms the catalogue's first three pages at start-up.
+
+- A **new backend module must be added to `tools/sync-live.sh`**: its copy list is explicit, and a
+  module left out makes the live server die on `ModuleNotFoundError` while systemd restarts it forever
+  (`test_preview_cache.py` now fails if the list drifts).
+- Previews are the catalogue's SAMPLE chart, not the operator's own chart — say so; never present a
+  thumbnail as "your chart with this on it".
+
 ## When a script fails
 
 | code | meaning | what to do |

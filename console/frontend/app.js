@@ -1130,6 +1130,16 @@ function indicatorShot(slug, row) {
   return (hit && hit.image_url) || readShots()[favId('library', slug)] || '';
 }
 
+/** The local preview endpoint. The catalogue's picture is fetched and shrunk ONCE by the console and
+ *  served from here: sixty cards straight from S3 meant sixty ~0.8 s waits over six connections
+ *  (measured 26 Sep), which is why the grid looked empty while it filled. */
+function thumbUrl(slug, rawUrl, width = 320) {
+  if (!slug) return '';
+  const params = new URLSearchParams({ slug: String(slug), w: String(width) });
+  if (rawUrl) params.set('u', String(rawUrl));
+  return '/api/library/thumb?' + params.toString();
+}
+
 async function openResult(row, button) {
   document.querySelectorAll('.row--active').forEach((n) => n.classList.remove('row--active'));
   button?.classList.add('row--active');
@@ -1144,10 +1154,11 @@ async function openResult(row, button) {
          thing the Library page shows, and the answer to "how does this look on a chart?" before
          running anything. Its own row is the authority; a star remembers it for later. */
       const shot = indicatorShot(row.slug, row);
+      const local = thumbUrl(row.slug, shot, 960);
       if (shot) rememberShot(favId('library', row.slug), shot);
       el.detail.innerHTML = `
         <div class="detail__head">
-          ${shot ? `<img class="detail__shot" src="${esc(shot)}" loading="lazy" decoding="async"
+          ${local ? `<img class="detail__shot" src="${esc(local)}" loading="lazy" decoding="async"
               alt="${esc(data.name || row.slug)} as it looks on a chart">` : ''}
           <h2 class="detail__title">${esc(data.name || row.slug)}</h2>
           <div class="detail__meta">
@@ -1394,7 +1405,7 @@ function indCard(kind, id, title, meta, opts = {}) {
   if (opts.beta) sub.push('<span class="ind-card__beta">beta</span>');
   if (opts.missing) sub.push('<span class="ind-card__off">not in this build</span>');
   return `<article class="ind-card${opts.present ? ' is-on' : ''}" data-kind="${esc(kind)}" data-id="${esc(id)}"
-      data-label="${esc(title)}"${opts.shot ? ` data-shot="${esc(opts.shot)}"` : ''} tabindex="0" role="button"
+      data-label="${esc(title)}"${opts.raw ? ` data-shot="${esc(opts.raw)}"` : ''} tabindex="0" role="button"
       aria-label="${esc(title)} — click to mount, star to keep">
     ${opts.shot ? `<img class="ind-card__shot" src="${esc(opts.shot)}" loading="lazy"
         decoding="async" alt="${esc(title)} as it looks on a chart">` : ''}
@@ -1432,8 +1443,9 @@ function renderIndicators() {
           { present: hit && hit.present, missing: !hit }));
       } else {
         const hit = bySlug.get(id);
+        const raw = (hit && hit.image_url) || readShots()[key] || '';
         html.push(indCard('library', id, hit ? hit.name : id, hit ? hit.family : 'library',
-          { missing: !hit, shot: (hit && hit.image_url) || readShots()[key] }));
+          { missing: !hit, shot: raw ? thumbUrl(id, raw, 320) : '', raw: raw }));
       }
     });
   } else if (indState.section === 'builtins') {
@@ -1462,7 +1474,13 @@ function renderIndicators() {
       ? libRows.filter((r) => (r.name + ' ' + r.slug + ' ' + (r.family || '')).toLowerCase().includes(q))
       : libRows;
     shown.forEach((r) => html.push(indCard('library', r.slug, r.name || r.slug, r.family,
-      { shot: r.image_url })));
+      { shot: thumbUrl(r.slug, r.image_url, 320), raw: r.image_url })));
+    /* Warm the rest of this page in the background — the pictures the operator has not scrolled to
+       yet. Fire-and-forget: the console fetches 8 at a time and keeps them, so the second open (and
+       the first scroll) is served from disk. */
+    const pending = shown.filter((r) => r.slug && r.image_url)
+      .map((r) => r.slug + ':' + r.image_url).join('|');
+    if (pending) api('/api/library/warm', { slugs: pending, w: 320 }).catch(() => {});
   }
 
   grid.innerHTML = html.join('');
