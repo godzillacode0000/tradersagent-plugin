@@ -13,9 +13,11 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   the LATENCY and the COUNT were. The console now fetches each one once, shrinks it to the 320 px it is
   actually painted at (`vips`, else ImageMagick, else `ffmpeg` — no new Python dependency), keeps it in
   `~/.local/share/traders-agent/thumbs/`, and serves it from localhost: **3.6 ms warm against ~2 s from
-  S3**. Sixteen at a time, and the server warms the catalogue's first three pages in the background at
-  start-up (`TRADERS_AGENT_THUMB_WARM=0` switches it off), so the first open is already on disk. The
-  Details pane asks for the same picture at 960 px.
+  S3**. Sixteen at a time, and the server warms **the whole catalogue** in the background at start-up —
+  806 rows, ~5 MB, a few minutes once per machine (`TRADERS_AGENT_THUMB_WARM=0` switches it off,
+  `TRADERS_AGENT_THUMB_WARM_PAGES=n` bounds it) — so the first open is already on disk. The Details
+  pane asks for the same picture at 960 px, and the cache key carries a tag of the source URL so
+  replaced artwork is never served stale.
 - **Four catalogue rows had no preview at all.** Their pictures live in a second LuxAlgo bucket whose
   keys contain spaces (`luxalgo-images-production.s3.us-east-1.amazonaws.com/Screenshot 2026-06-04 at
   3.13.58 PM.png`). The fetch allow-list now covers it — LuxAlgo buckets only, https only, foreign

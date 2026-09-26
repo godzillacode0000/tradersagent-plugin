@@ -1612,6 +1612,13 @@ function initIndicators() {
   if (!modal || !open) return;
   open.addEventListener('click', () => openIndicators(modal.classList.contains('view--hidden')));
   document.getElementById('ind-close').addEventListener('click', () => openIndicators(false));
+  /* A card whose picture the catalogue does not actually carry answers 404. Drop the <img> instead of
+     leaving the browser's broken-image glyph in the tile: no picture is a fact, a broken icon looks
+     like a bug (26 Sep). Capture phase, because `error` from an <img> does not bubble. */
+  document.getElementById('ind-grid')?.addEventListener('error', (ev) => {
+    const img = ev.target;
+    if (img && img.tagName === 'IMG') img.remove();
+  }, true);
   modal.addEventListener('click', (ev) => {
     if (ev.target === modal) { openIndicators(false); return; }
     const tab = ev.target.closest('.ind-tab');

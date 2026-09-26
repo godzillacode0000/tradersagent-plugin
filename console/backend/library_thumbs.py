@@ -23,6 +23,7 @@ import re
 import shutil
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -79,8 +80,18 @@ def _allowed(url: str) -> bool:
     return bool(_HOST_RULE.match(url)) and "luxalgo" in url.split("//", 1)[1].split("/", 1)[0]
 
 
-def cache_path(slug: str, width: int) -> Path:
-    return CACHE_DIR / f"{_safe_slug(slug)}-{_clamp(width)}.jpg"
+def _tag(url: str) -> str:
+    """A short tag of WHERE the picture came from.
+
+    Without it a slug's cached file would outlive its artwork: LuxAlgo replaces a card's PNG at the
+    same slug, and an immutable local copy would keep showing the old chart forever. The URL carries
+    the upload's own timestamp, so tagging with it means a new picture is simply a new file — the
+    stale one is never served again."""
+    return hashlib.sha256((url or "").encode("utf-8")).hexdigest()[:8]
+
+
+def cache_path(slug: str, url: str, width: int) -> Path:
+    return CACHE_DIR / f"{_safe_slug(slug)}-{_tag(url)}-{_clamp(width)}.jpg"
 
 
 def _converter() -> tuple[str, list[str]] | None:
@@ -127,7 +138,7 @@ def _shrink(src: Path, dst: Path, width: int) -> bool:
 def thumb(slug: str, url: str, width: int = DEFAULT_WIDTH) -> tuple[bytes, str] | None:
     """The bytes to send for one card. `None` means "no preview, say so" — never a stand-in image."""
     width = _clamp(width)
-    dst = cache_path(slug, width)
+    dst = cache_path(slug, url, width)
     try:
         if dst.exists() and dst.stat().st_size > 0:
             return dst.read_bytes(), "image/jpeg"
@@ -156,8 +167,17 @@ def thumb(slug: str, url: str, width: int = DEFAULT_WIDTH) -> tuple[bytes, str] 
 
 
 def _build(key: str, slug: str, url: str, width: int) -> None:
+    """One job. A transient failure must not leave a permanent hole: retry twice, then let it go.
+
+    Four rows of 806 came back empty from the first cold warm and all four fetched fine a minute
+    later (measured 27 Sep) — S3 under a sixteen-way burst, not a broken URL. Without this the card
+    would simply have no picture until somebody opened it again."""
     try:
-        thumb(slug, url, width)
+        for wait in (0.0, 2.0, 6.0):
+            if wait:
+                time.sleep(wait)
+            if thumb(slug, url, width) is not None:
+                return
     finally:
         with _LOCK:
             _IN_FLIGHT.discard(key)
@@ -170,8 +190,8 @@ def warm(items, width: int = DEFAULT_WIDTH) -> int:
     for slug, url in items:
         if not slug or not _allowed(url or ""):
             continue
-        key = f"{_safe_slug(slug)}-{width}"
-        dst = CACHE_DIR / f"{key}.jpg"
+        key = cache_path(slug, url, width).name[:-4]
+        dst = cache_path(slug, url, width)
         if dst.exists():
             continue
         with _LOCK:

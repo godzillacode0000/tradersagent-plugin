@@ -1037,6 +1037,14 @@ def _library_pairs(params: dict) -> list[tuple[str, str]]:
     return pairs
 
 
+WARM_PAGE_SIZE = 60
+# Guard rail, not a policy: the catalogue is 806 rows on this build, so 40 pages is room to grow.
+MAX_WARM_PAGES = 40
+# What the warmer is doing right now, for /api/library/thumbs. A cold machine warms the whole
+# catalogue once (~5 MB); after that every boot finds the files already there and does nothing.
+_WARM: dict = {"state": "idle", "page": 0, "rows": 0, "done": None}
+
+
 def ep_library_warm(params: dict) -> dict:
     """Fetch + shrink a page of catalogue pictures in the background, so the next open is instant."""
     pairs = _library_pairs(params)
@@ -1047,7 +1055,9 @@ def ep_library_warm(params: dict) -> dict:
 
 def ep_library_thumbs(params: dict) -> dict:
     """What the preview cache is holding — the answer to "why is it slow?" without guessing."""
-    return library_thumbs.stats()
+    out = library_thumbs.stats()
+    out["warmer"] = dict(_WARM)
+    return out
 
 
 def _thumb_pairs(rows: list[dict]) -> list[tuple[str, str]]:
@@ -1059,29 +1069,45 @@ def _thumb_pairs(rows: list[dict]) -> list[tuple[str, str]]:
     return out
 
 
-def warm_catalogue_thumbs(pages: int = 3) -> None:
-    """Fetch and shrink the catalogue's first pages in the background, once per process.
+def warm_catalogue_thumbs(pages: int = 0) -> None:
+    """Fetch and shrink the catalogue's previews in the background, once per process.
 
     The point is the FIRST open: a page of sixty pictures costs about 1–2 s each from S3 (this link
     runs ~80 KB/s), so without this the grid fills in while the operator watches. With it, the
     pictures are already on disk by the time anyone opens the modal — and they stay there, so this
-    only ever does work on a cold cache. Pages are walked one at a time with a breath between them,
-    because the operator may be using the same slow link for his chart."""
-    for page in range(max(1, pages)):
+    only ever does work on a cold cache.
+
+    `pages=0` means every page the catalogue has (the default: 806 rows on this build, ~5 MB, once).
+    Pages are walked one at a time with a breath between them, because the operator may be using the
+    same slow link for his chart."""
+    limit = pages or MAX_WARM_PAGES
+    _WARM.update(state="running", started=time.time(), page=0, rows=0, done=False)
+    page = 0
+    while page < limit:
         data = None
         for _ in range(12):  # MCP may still be connecting at start-up
             try:
-                data = ep_indicators({"page": str(page), "page_size": "60"})
+                data = ep_indicators({"page": str(page), "page_size": str(WARM_PAGE_SIZE)})
                 break
             except Exception:  # noqa: BLE001 — a warmer must never take the server down
                 time.sleep(5)
         rows = (data or {}).get("indicators") if isinstance(data, dict) else None
         if not rows:
-            return
+            break
         pairs = _thumb_pairs(rows)
         if pairs:
             library_thumbs.warm(pairs, 320)
-        time.sleep(1.5)
+        _WARM.update(page=page + 1, rows=_WARM["rows"] + len(pairs))
+        page += 1
+        if len(rows) < WARM_PAGE_SIZE:
+            break
+        time.sleep(1.0)
+    # Stay "running" until the pool is empty, so `/api/library/thumbs` never reports done while a
+    # hundred fetches are still on their way.
+    deadline = time.time() + 1800
+    while time.time() < deadline and library_thumbs.stats().get("queued", 0) != 0:
+        time.sleep(2.0)
+    _WARM.update(state="done", done=True, finished=time.time())
 
 
 ROUTES = {
@@ -1815,7 +1841,8 @@ def main(argv=None) -> int:
     if os.environ.get("TRADERS_AGENT_THUMB_WARM", "1") != "0":
         threading.Thread(
             target=warm_catalogue_thumbs,
-            kwargs={"pages": int(os.environ.get("TRADERS_AGENT_THUMB_WARM_PAGES", "3") or 3)},
+            # 0 = every page of the catalogue (the default). Set a small number on a metered link.
+            kwargs={"pages": int(os.environ.get("TRADERS_AGENT_THUMB_WARM_PAGES", "0") or 0)},
             name="thumb-warmer", daemon=True,
         ).start()
     try:

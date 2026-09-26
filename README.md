@@ -37,6 +37,7 @@ MCP server) in one local web app — your chat session is left exactly where it 
 | **Hermes Desktop** | v0.21.3 or newer (the plugin uses the `sidebar.nav` + `routes` contribution areas) |
 | **Python** | 3.11+ with the `mcp` client: `pip install mcp` (a venv is fine — point `PY=` at it) |
 | **Network** | for LuxAlgo's MCP endpoint and the jsDelivr builds; the chart falls back to synthetic bars when the data provider is unreachable |
+| **Preview resizer** *(optional)* | `libvips` (or ImageMagick, or `ffmpeg`) — see [Catalogue previews](#catalogue-previews-are-kept-on-your-machine). With none of them the console still shows every preview, just at the catalogue's original size |
 | **OS** | Linux — built and verified on Omarchy (Arch + Hyprland). macOS and Windows are out of scope. |
 
 ## Install
@@ -258,7 +259,31 @@ install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/
 | `LUXALGO_AGENTS_DIR` | `console/agents` | runtime state: chart bridge files, study threads, shots |
 | `HERMES_CLI` | `hermes` on `PATH` | CLI the in-app study bridge shells out to |
 | `LUXALGO_CHART_INLINE_WAIT` | `8` | seconds a command holds its request open waiting for the chart's pushed answer |
+| `TRADERS_AGENT_THUMB_WARM` | `1` | `0` turns off warming the catalogue's previews in the background at start-up |
+| `TRADERS_AGENT_THUMB_WARM_PAGES` | `0` (all) | how many catalogue pages to warm; set a small number on a metered link |
+| `TRADERS_AGENT_THUMBS` | `~/.local/share/traders-agent/thumbs` | where the shrunk previews live |
 | `--mcp-url` | `https://mcp.luxalgo.com/mcp` | point at a different (or local) MCP server |
+
+## Catalogue previews are kept on your machine
+
+The Indicators modal shows each card the way LuxAlgo's own library does, with a chart preview. Those
+pictures are 1600×1000 PNGs on LuxAlgo's S3 (~29 KB each) and they are **slow to fetch one by one** —
+about 1–2 s each from a home connection, and a browser only opens six connections per host, so sixty
+cards used to fill in while you watched. The console therefore fetches each picture **once**, shrinks
+it to the width it is actually painted at (320 px for a card, 960 px for the Details pane), and serves
+it from `http://127.0.0.1:8787/api/library/thumb`: **~5 ms warm instead of ~2 s**.
+
+- **Every machine keeps its own copy.** A fresh install warms the whole catalogue (806 rows, roughly
+  5 MB) in the background on first start — a few minutes on a slow link, invisible while it works —
+  and every start after that finds the files already there. Nothing is shared between installs and
+  nothing is downloaded twice.
+- **The resizer is a CLI, not a Python package**: `vips`, else ImageMagick, else `ffmpeg`. If none is
+  installed the console serves the catalogue's original PNG — bigger, exactly as slow as upstream, but
+  never a broken or blank tile.
+- **A replaced picture is never stale**: the cache key carries a tag of the source URL, and the
+  response is `immutable`, so new artwork is a new file.
+- `curl localhost:8787/api/library/thumbs` reports what is cached and what the warmer is doing.
+  `TRADERS_AGENT_THUMB_WARM=0` switches warming off entirely.
 
 ## Limits
 

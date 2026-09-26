@@ -52,7 +52,7 @@ class TheSyncListCoversEveryModule(unittest.TestCase):
     def test_the_thumb_cache_module_is_stdlib_only(self):
         """The console's rule: no third-party imports (the resizer is a CLI, not a Python dep)."""
         src = read(THUMBS)
-        allowed = {"__future__", "hashlib", "os", "re", "shutil", "subprocess", "threading",
+        allowed = {"__future__", "hashlib", "os", "re", "shutil", "subprocess", "threading", "time",
                    "urllib", "concurrent", "pathlib"}
         for line in src.splitlines():
             match = re.match(r"^(?:import|from)\s+([a-zA-Z_][\w.]*)", line)
@@ -108,6 +108,21 @@ class TheEndpointIsLocalAndCheap(unittest.TestCase):
         src = read(THUMBS)
         self.assertIn('urllib.parse.quote(url, safe=":/?&=#%+,;@[]~")', src)
 
+    def test_the_cache_key_carries_the_picture_identity(self):
+        """Artwork gets replaced at the same slug; an immutable local copy must not outlive it."""
+        src = read(THUMBS)
+        self.assertIn("def _tag(url: str) -> str:", src)
+        self.assertIn('f"{_safe_slug(slug)}-{_tag(url)}-{_clamp(width)}.jpg"', src)
+
+    def test_the_warmer_walks_the_whole_catalogue_by_default(self):
+        """The operator's ask: every card cached, not just the first page."""
+        src = read(SERVER)
+        self.assertIn("def warm_catalogue_thumbs(pages: int = 0) -> None:", src)
+        self.assertIn("limit = pages or MAX_WARM_PAGES", src)
+        self.assertIn("MAX_WARM_PAGES = 40", src, "a runaway page walk needs a guard rail")
+        self.assertIn('os.environ.get("TRADERS_AGENT_THUMB_WARM_PAGES", "0")', src)
+        self.assertIn('out["warmer"] = dict(_WARM)', src, "progress must be observable, not guessed")
+
     def test_the_resizer_is_a_cli_with_a_honest_fallback(self):
         src = read(THUMBS)
         for tool in ("vips", "magick", "convert", "ffmpeg"):
@@ -135,6 +150,12 @@ class ThePageUsesIt(unittest.TestCase):
         block = app.split("function renderIndicators()", 1)[1].split("grid.innerHTML", 1)[0]
         self.assertIn("/api/library/warm", block,
                       "the page warms its own results, so the second open is a disk read")
+
+    def test_a_row_without_a_picture_loses_its_img_not_its_tile(self):
+        app = read(APP)
+        self.assertIn("document.getElementById('ind-grid')?.addEventListener('error'", app,
+                      "a 404 preview must not leave the browser's broken-image glyph behind")
+        self.assertIn("if (img && img.tagName === 'IMG') img.remove();", app)
 
 
 if __name__ == "__main__":
