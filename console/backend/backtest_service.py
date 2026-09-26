@@ -219,7 +219,9 @@ def run_signals(spec: dict) -> dict:
     summary cannot carry. Entries and exits are matched onto the chart's own bar timestamps, and
     timestamps that land on no bar are reported rather than silently dropped.
     """
+    import numpy as _np
     import pandas as _pd
+    import vectorbt as _vbt
     fee = float(spec.get("fee", 0.001))
     df = load_bars(str(spec.get("source", "binance:BTCUSDT:30m")), int(spec.get("bars", 1000)),
                    inline=spec.get("inline") or None)
@@ -254,7 +256,7 @@ def run_signals(spec: dict) -> dict:
     if not matched_e:
         return {"ok": False, "error": "no entry timestamps from the script landed on this data's bars "
                                       f"({len(trades)} trades offered, {len(idx)} bars)"}
-    pf = vbt.Portfolio.from_signals(df["close"], entries, exits, fees=fee, freq=None)
+    pf = _vbt.Portfolio.from_signals(df["close"], entries, exits, fees=fee, freq=None)
     m = _metrics(pf)
     return {"kind": "signals", "fee": fee, "bars": int(len(df)),
             "script_entries": matched_e, "script_exits": matched_x,
