@@ -51,6 +51,13 @@
   /* A script's dashboard (Sharpe, profit factor, heatmap) is a Pine `table`, and Pine paints it into a
      corner of the pane. A canvas cannot hold a table, so the dashboard gets its own DOM layer over the
      chart: an HTML <table> positioned where the script asked, cells coloured as the script asked. */
+  /* Where the overlay sits in the stack. The chart's own layers beat 6/7 (measured 27 Sep: a canvas
+     and a table painted at 6/7 were in the DOM, in the pane, opaque — and invisible), and the
+     console's own surfaces must stay above us: `--lx-z-overlay` is 30, Vela's dialog 40, toast 60,
+     modal 70. So the band between the chart and the console's overlay is where this lives. */
+  const CANVAS_Z = 25;
+  const TABLES_Z = 26;
+
   const TABLE_POS = {
     top_left:      { top: 8, left: 8 },
     top_center:    { top: 8, left: '50%', cx: true },
@@ -73,7 +80,7 @@
     tablesHost = document.createElement('div');
     tablesHost.id = 'chart-tables';
     Object.assign(tablesHost.style, { position: 'absolute', left: '0', top: '0', right: '0',
-                                      bottom: '0', zIndex: '7', pointerEvents: 'none' });
+                                      bottom: '0', zIndex: String(TABLES_Z), pointerEvents: 'none' });
     target.appendChild(tablesHost);
     return tablesHost;
   }
@@ -92,8 +99,27 @@
     return { colspan, rowspan };
   }
 
-  function paintTables(tables, rect) {
+  /** Put the host exactly over the price pane, so "top_left" means the pane's top-left corner. */
+  function placeTablesHost() {
     const hostEl = ensureTables();
+    const target = chartEl();
+    const pane = paneCanvas();
+    if (!hostEl || !target || !pane) return hostEl;
+    try {
+      const t = target.getBoundingClientRect();
+      const p = pane.getBoundingClientRect();
+      if (p.width < 2 || p.height < 2) return hostEl;
+      Object.assign(hostEl.style, {
+        left: Math.round(p.x - t.x) + 'px', top: Math.round(p.y - t.y) + 'px',
+        width: Math.round(p.width) + 'px', height: Math.round(p.height) + 'px',
+        right: 'auto', bottom: 'auto'
+      });
+    } catch (err) { /* keep the whole-element box rather than nothing */ }
+    return hostEl;
+  }
+
+  function paintTables(tables, rect) {
+    const hostEl = placeTablesHost();
     if (!hostEl) return 0;
     hostEl.innerHTML = '';
     let painted = 0;
@@ -260,7 +286,7 @@
     canvas.style.left = '0';
     canvas.style.top = '0';
     canvas.style.pointerEvents = 'none';
-    canvas.style.zIndex = '6';
+    canvas.style.zIndex = String(CANVAS_Z);
     if (getComputedStyle(target).position === 'static') target.style.position = 'relative';
     target.appendChild(canvas);
     sizeCanvas();
@@ -395,6 +421,36 @@
    * canvas pixels (we own this 2D canvas, so unlike the chart's WebGL surface it IS readable) —
    * a coarse "is anything painted at all" check that catches a silently cleared or clipped layer.
    */
+
+
+
+
+  /** Where the painted tables actually sit, measured against the pane. */
+  function tablePlacement() {
+    const wrap = tablesHost && tablesHost.firstElementChild;
+    if (!wrap) return { inPane: null, rect: null, cells: 0 };
+    let r;
+    try { r = wrap.getBoundingClientRect(); } catch (err) { return { inPane: null, rect: null, cells: 0 }; }
+    const pane = paneCanvas();
+    let inPane = null;
+    if (pane && r.width > 0 && r.height > 0) {
+      const p = pane.getBoundingClientRect();
+      inPane = r.right > p.left && r.left < p.right && r.bottom > p.top && r.top < p.bottom;
+    }
+    let paneRect = null;
+    if (pane) {
+      try {
+        const p = pane.getBoundingClientRect();
+        paneRect = { x: Math.round(p.x), y: Math.round(p.y), w: Math.round(p.width), h: Math.round(p.height) };
+      } catch (err) { paneRect = null; }
+    }
+    return { inPane,
+             paneRect,
+             rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+             cells: wrap.querySelectorAll('td').length,
+             text: (wrap.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80) };
+  }
+
   function state() {
     const d = (lastSpec && lastSpec.drawn) || { boxes: 0, lines: 0, labels: 0, tables: 0 };
     let ink = -1;
@@ -409,7 +465,15 @@
       ink = -1;                                  // reported as unknown, never as "empty"
     }
     const tables = (tablesHost && tablesHost.childElementCount) || 0;   // read the DOM, not the wish
+    /* "In the DOM" is not "on screen". A wrapper can be painted and still land outside the pane —
+       a workspace container wider than the cell it belongs to, or a scrolled position — and then
+       the count reads 1 while the operator sees nothing. Measured against the same pane rect the
+       mapping uses, so a caller can tell the two apart instead of trusting the count. */
+    const place = tablePlacement();
     return { boxes: d.boxes, lines: d.lines, labels: d.labels, tables, ink,
+             tablesInPane: place.inPane, tablesRect: place.rect, tablesCells: place.cells,
+             tablesText: place.text, paneRect: place.paneRect,
+             viewport: window.innerWidth + 'x' + window.innerHeight,
              has: ink > 0 || tables > 0,
              canvas: canvas ? canvas.width + 'x' + canvas.height : null };
   }

@@ -4,6 +4,25 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Fixed
+
+- **A Library script that mounted and drew nothing.** The operator's recording showed *Wyckoff Wave &
+  Volume Studies* opening an empty pane with `PineTS: Index -2 is out of bounds, array size is 0`.
+  Cause, measured: the Pine engine (`pinets@0.9.33`, pinned in the page's import map) evaluates **both
+  sides of a ternary**, so the guard every LuxAlgo script uses for a rolling array —
+  `size >= 2 ? array.get(a, size - 2) : na` — still runs the read while the array is empty and throws.
+  Proven minimal: `1 == 2 ? array.get(arr, -5) : 7` crashes although the guarded branch cannot be
+  reached. `pinets@0.10.0` honours the guard; the same script then runs (4 series + its dashboard)
+  instead of aborting on its first wave. The pin is a floor now, with a test that stops it sliding
+  back.
+- **Drawings and dashboards were painted, in the pane, opaque — and invisible.** The overlay canvas
+  and the tables layer sat at z-index 6 and 7, beneath the chart's own layers: a loud probe box drew
+  nothing at 6 and appeared at once at 5000. They now live in a named band between the chart and the
+  console's own surfaces (25/26, under `--lx-z-overlay` 30), and the tables layer covers the **price
+  pane** instead of the whole chart element — a `table.new(position.top_left)` dashboard used to land
+  on the toolbar strip. The apply report also says *where* a table landed (`16 cell(s) at 502,85 … in
+  the pane`), because "1 table on screen" read as "you can see it" while it was not.
+
 ### Added
 
 - **Full screen for the chart.** The operator, looking at the pane: *"sy nak ada button capability

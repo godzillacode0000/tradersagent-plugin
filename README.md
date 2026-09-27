@@ -166,6 +166,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_fullscreen` | give the chart the whole pane / the whole screen (`on=False` comes back) — hides the console chrome and asks the browser for fullscreen; the answer says whether the display was taken or only the page |
 | `chart_reload` | remount every attached console (picks up new frontend files) |
 | `chart_palette` | what colours the chart is wearing (`try_apply` asserts the console theme) |
+| `chart_theme` | read or set the console theme — `light` / `dark` (no argument reports what is worn); the console palette, Vela's chrome and the chart's own colours move together, and the choice survives a reload |
 | `chart_browse` | open the Library concept list in the pane (optional `family`) |
 | `chart_draw` | run Pine and paint the boxes/lines/labels it builds on the chart overlay |
 | `chart_clear` | clear the overlay and the indicators our paint layer added (then report what is left) |

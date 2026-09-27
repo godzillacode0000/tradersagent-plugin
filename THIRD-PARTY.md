@@ -22,9 +22,15 @@ stated.
 ## vela-pinets + pinets — the Pine (PineTS) runtimes
 
 - **Licence:** **AGPL-3.0-only** — <https://github.com/LuxAlgo/Vela-pinets> · <https://github.com/LuxAlgo/PineTS>
-- **How it is used:** loaded from jsDelivr at runtime (`@luxalgo/vela-pinets@0.2.12`, `pinets@0.9.33`),
+- **How it is used:** loaded from jsDelivr at runtime (`@luxalgo/vela-pinets@0.2.12`, `pinets@0.10.0`),
   pinned by URL. **They are not redistributed in this repository** — that is deliberate: bundling
   them would put the combined work under the AGPL.
+- **Why the `pinets` pin is a floor, not a preference (27 Sep):** 0.9.33 evaluates *both* sides of a
+  ternary, so the standard guard `size >= 2 ? array.get(a, size - 2) : na` still runs the read and
+  dies with `Index -2 is out of bounds, array size is 0` the moment the array is empty — the script
+  aborts and the pane stays blank. 0.10.0 honours the guard. Verified against the Library's
+  *Wyckoff Wave & Volume Studies* (crashes on 0.9.33, runs and draws four series on 0.10.0); do not
+  pin back down.
 - `./install.sh --vendor` fetches a local copy for offline use straight from the CDN into
   `console/frontend/vendor/` (git-ignored). That copy is for the person who ran it, on their own
   machine, and it keeps the AGPL obligations the licence states.

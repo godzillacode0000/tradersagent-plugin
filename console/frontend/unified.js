@@ -196,6 +196,18 @@ window.TraderRun = (function () {
       if (v) {
         s += ' · verified: ' + v.boxes + ' box / ' + v.lines + ' line / ' +
           v.labels + ' label / ' + (v.tables || 0) + ' table on screen';
+        /* A table can be in the DOM and still off the pane, and a count alone reads as "you can see
+           it" — which was not always true. Report where it sits, and whether it is inside the pane. */
+        if (v.tables > 0 && v.tablesRect) {
+          s += ' (table #1: ' + (v.tablesCells || 0) + ' cell(s) at ' + v.tablesRect.x + ',' +
+            v.tablesRect.y + ' ' + v.tablesRect.w + 'x' + v.tablesRect.h +
+            (v.tablesInPane === false ? ' — OUTSIDE the pane' : v.tablesInPane === true ? ' — in the pane' : '') +
+            (v.tablesText ? ' — "' + v.tablesText.slice(0, 60) + '"' : ' — no text') +
+            (v.paneRect ? '; pane ' + v.paneRect.x + ',' + v.paneRect.y + ' ' + v.paneRect.w + 'x' + v.paneRect.h : '') +
+            (v.viewport ? '; page ' + v.viewport : '') + ')';
+        } else if (v.tables > 0 && v.tablesCells === 0) {
+          s += ' (the table has no cells filled — the script filled it on a bar we do not have)';
+        }
       }
       if (r.drew.reason) s += ' · ' + r.drew.reason;
       if (r.drew.mapping) {

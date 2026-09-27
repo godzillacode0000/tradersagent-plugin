@@ -135,19 +135,29 @@
    * The palette is therefore re-asserted a few bounded times after boot and whenever the page comes
    * back into view. Bounded on purpose: a later, deliberate change made in Vela's own settings is the
    * operator's business and is not fought.
+   *
+   * The re-assertion follows the theme the console is WEARING at the moment it fires, never the one
+   * captured at boot. Measured 27 Sep: a console flipped to light came back dark minutes later
+   * because the 60 s pass re-enforced the boot string — the operator's own change, undone by our
+   * own timer, with the palette probe reading the dark background to prove it.
    */
+  function liveTheme(fallback) {
+    const worn = document.documentElement.dataset.theme;
+    return worn === 'light' || worn === 'dark' ? worn : (fallback === 'light' ? 'light' : 'dark');
+  }
+
   function armAfterBoot(theme, options) {
     const delays = (options && options.delays) || [0, 1500, 6000, 20000, 60000];
-    const timers = delays.map((ms) => setTimeout(() => enforce(theme), ms));
+    const timers = delays.map((ms) => setTimeout(() => enforce(liveTheme(theme)), ms));
     try {
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') enforce(theme);
+        if (document.visibilityState === 'visible') enforce(liveTheme(theme));
       });
     } catch (err) { /* a document without a visibility API */ }
     return timers.length;
   }
 
-  window.ChartPalette = { KEY, PALETTES, KNOWN_UP, parked, isHandMade, parkStored, apply, matches, enforce, armAfterBoot };
+  window.ChartPalette = { KEY, PALETTES, KNOWN_UP, parked, isHandMade, parkStored, apply, matches, enforce, liveTheme, armAfterBoot };
 
   /* Park right here, at script load: Vela rewrites its stored state while its modules are being
    * imported, so this is the last moment the operator's own palette is still readable. A second

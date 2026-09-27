@@ -486,6 +486,24 @@ def cmd_fullscreen(args) -> int:
     return 0 if result.get("ok") else 1
 
 
+def cmd_theme(args) -> int:
+    """Read or set the console's theme — the same switch the ◐ button presses.
+
+    One action moves both systems: our --lx-* palette (the console's own colours), Vela's chrome and
+    the chart's parked colours, because the page runs the same `applyTheme` the operator's toggle
+    runs. The choice is stored, so it survives a reload. No argument reads what is worn now.
+    """
+    payload = {"action": "theme"}
+    if getattr(args, "value", None):
+        payload["theme"] = args.value
+    result = send(args, payload)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
 def cmd_wait(args) -> int:
     args._payload = {}
     result = wait(args.id, timeout=args.timeout)
@@ -596,6 +614,11 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("fullscreen", help="give the chart the whole pane / the whole screen (--off to come back)")
     s.add_argument("--off", action="store_true", help="come back to the pane (chrome, panels, statusbar)")
     s.set_defaults(func=cmd_fullscreen)
+
+    s = sub.add_parser("theme", help="read or set the console theme (light | dark)")
+    s.add_argument("value", nargs="?", choices=["light", "dark"],
+                   help="omit to read what the console is wearing now")
+    s.set_defaults(func=cmd_theme)
     s = sub.add_parser("wait", help="wait for an earlier command's outcome")
     s.add_argument("id", type=int)
     s.add_argument("--timeout", type=float, default=TIMEOUT)

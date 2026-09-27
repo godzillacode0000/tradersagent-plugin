@@ -554,6 +554,20 @@ def chart_fullscreen(on: bool = True) -> str:
     return _command("fullscreen", on=bool(on))
 
 
+@mcp.tool(annotations=_ann("Console theme (light / dark)", read_only=False))
+def chart_theme(theme: str = "") -> str:
+    """Read or set the console's theme: 'light', 'dark', or '' to report what is worn now.
+
+    Runs the same switch the operator's ◐ button runs, so the console palette, Vela's chrome and the
+    chart's own colours all move together — a theme set from here cannot drift from one set by hand.
+    The choice is stored and survives a reload.
+    """
+    fields = {}
+    if str(theme or "").strip():
+        fields["theme"] = str(theme).strip().lower()
+    return _command("theme", **fields)
+
+
 @mcp.tool(annotations=_ann("Reload every chart view", destructive=True))
 def chart_reload() -> str:
     """Reload every attached console page so it picks up current frontend files.

@@ -45,7 +45,8 @@
                    'natives',
                    'studies',
                    'indicators',
-                   'fullscreen',];
+                   'fullscreen',
+                   'theme',];
 
   const api = async (path, body) => {
     const res = await fetch(path, body
@@ -818,6 +819,47 @@
           out.detail = 'Chart ' + (state.fullscreen ? 'full screen' : 'back in the pane')
             + (state.fullscreen ? (state.native ? ' · the console took the display' : ' · page only (the host refused native fullscreen)') : '')
             + ' · ✓ ' + (state.fullscreen ? 'Esc or the ✕ comes back' : 'the console chrome is back');
+          break;
+        }
+
+        case 'theme': {
+          /* The console's ◐ switch, reachable from the agent's side. One call moves both systems —
+             our --lx-* palette, Vela's chrome and the chart's parked colours — because it runs the
+             SAME applyTheme the operator's toggle runs (window.__app.applyTheme), so a theme set here
+             cannot drift from one set by hand. No argument reports what is worn now. */
+          const app = window.__app || {};
+          if (typeof app.applyTheme !== 'function') {
+            out.detail = 'this build has no theme control (older frontend)';
+            break;
+          }
+          const want = String(command.theme || '').trim().toLowerCase();
+          const worn = () => (document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+          if (want && want !== 'light' && want !== 'dark') {
+            out.detail = "theme must be 'light' or 'dark' (got " + JSON.stringify(command.theme) + ')';
+            break;
+          }
+          const was = worn();
+          if (want) {
+            app.applyTheme(want);
+            await new Promise((r) => setTimeout(r, 350));   // let the palette + chrome land
+          }
+          const theme = worn();
+          let stored = 'unset';
+          try { stored = localStorage.getItem('luxalgo-web:theme') || 'unset'; } catch (err) { stored = 'unreadable'; }
+          /* What "light" restores: the operator's own parked palette, if one was found at boot. Worth
+             reporting — "the console is light" and "the chart is light" are two different claims. */
+          let parked = null;
+          try {
+            const p = window.ChartPalette?.parked?.();
+            if (p) parked = { background: p.layout?.background || null, up: p.candles?.upColor || null,
+                              down: p.candles?.downColor || null };
+          } catch (err) { parked = null; }
+          out.ok = true;
+          out.theme = { theme, was, stored, changed: theme !== was, set: !!want, parked };
+          out.detail = (theme === 'light' ? 'Light theme' : 'Dark theme')
+            + (was !== theme ? ' · was ' + was : '')
+            + (want ? ' · stored ' + stored : ' · wearing it now')
+            + (parked ? ' · light restores the parked palette (bg ' + parked.background + ')' : '');
           break;
         }
 
