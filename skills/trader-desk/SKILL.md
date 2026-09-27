@@ -190,10 +190,40 @@ Vela's toolbar row carry. Two halves, and only the first is guaranteed:
 | code | meaning | what to do |
 |---|---|---|
 | `NOT_RUNNABLE[while/for-in/import]` | PineTS cannot execute that construct | Stop. Do not port Library scripts unless asked. For levels, compute from data and `chart_draw`. |
-| `RUNTIME_CRASH[…]` | engine threw mid-run | Report the code + line. |
+| `RUNTIME_CRASH[…]` | engine threw mid-run | Report the code + line. `Index -2 is out of bounds, array size is 0` is the guarded-ternary class below — check the engine pin before blaming the script. |
 | `TOO_FEW_BARS` | not enough history | Widen range, retry once. |
 | `ENGINE_UNAVAILABLE` | PineTS module not fetched | Network; retry when online. |
 | `TIMEOUT` | run exceeded budget | Retry once; then a lighter script. |
+
+## The engine is pinned, and the overlay must out-stack the chart (27 Sep)
+
+- **`pinets` is a floor, not a preference.** 0.9.33 evaluates **both sides of a ternary**, so the guard
+  every LuxAlgo Library script uses for a rolling array — `size >= 2 ? array.get(a, size - 2) : na` —
+  still runs the read on an empty array and throws `Index -2 is out of bounds, array size is 0`; the
+  script aborts on its first wave and the pane stays blank (the operator's recording of *Wyckoff Wave &
+  Volume Studies*, 27 Sep). Proven minimal in Node: `1 == 2 ? array.get(arr, -5) : 7` crashes although
+  the guarded branch cannot be reached. The page's import map pins `pinets@0.10.0`, and
+  `test_pinets_floor.py` fails if anything pins below it. Bumping vela-pinets does NOT fix it (0.2.13
+  still crashes).
+- **To test a Library script without touching the live pane**, fetch it (`/api/source?slug=…`) and run it
+  in Node against two engine builds — `import { PineTS }`, `new PineTS(bars, 'BTCUSDT', '1h', 500)`,
+  `await engine.run(src)` — over 500 synthetic bars. A 15-script battery took seconds and showed exactly
+  which the bump fixes (Wyckoff: crash → 4 series) and which are still engine limits (`Identifier 'fib'
+  has already been declared` = a transpiler bug; a few need a full TradingView context).
+- **A paint can be in the DOM, in the pane, opaque — and invisible.** The overlay canvas and the tables
+  layer sat at z-index 6/7, beneath the chart's own layers. They live in a named band (`CANVAS_Z` 25,
+  `TABLES_Z` 26) between the chart and the console's own surfaces (`--lx-z-overlay` 30, Vela dialog 40,
+  toast 60, modal 70) — two bounds, so both a too-low and a too-high value are bugs. The tables host
+  covers the **price pane**, not the whole chart element: a `table.new(position.top_left)` dashboard used
+  to land on the toolbar strip, and `bottom_right` in the date axis.
+- **Diagnose the live page from the door, not from CDP** (the packaged app exposes no port): make the
+  code report the facts you need in its own answer — rects, `getComputedStyle` values,
+  `childElementCount` — then read them in `trader-chart apply`'s one-line report. `state()` carries
+  `tablesInPane`, `tablesRect`, `tablesCells`, `paneRect` and the page size. A `1 table on screen` that
+  only counted DOM children was read as "you can see it" while it was not.
+- **Never open the console in your own browser while the operator's pane is live**: a second view
+  attaches to the backend and commands can be routed to the tab that has no bars (`the chart did not
+  answer command … within 45s`). Confirm with `trader-chart state` afterwards.
 
 ## Hard stops
 
