@@ -44,7 +44,8 @@
                    'layout',
                    'natives',
                    'studies',
-                   'indicators',];
+                   'indicators',
+                   'fullscreen',];
 
   const api = async (path, body) => {
     const res = await fetch(path, body
@@ -799,6 +800,24 @@
             ? rows.length + ' row(s) on the chart: ' + rows.map(studyTag).join(' · ')
             : 'nothing on the chart — no study, no overlay run, no painted native';
           out.detail += doors.length ? ' · cell doors: ' + doors.join(' ') : ' · the cell exposes no removal door';
+          break;
+        }
+
+        /* Full screen for the chart (27 Sep): press the same button the operator has, from here.
+           `fullscreen: true` gives the chart the page (and the display, where the host allows it);
+           `false` brings the console's chrome back. The answer says which half landed. */
+        case 'fullscreen': {
+          const want = command.on !== false && command.fullscreen !== false;
+          if (typeof window.setChartFullscreen !== 'function') {
+            out.detail = 'this build has no full-screen control (older frontend)';
+            break;
+          }
+          const state = window.setChartFullscreen(want);
+          out.ok = true;
+          out.fullscreen = state;
+          out.detail = 'Chart ' + (state.fullscreen ? 'full screen' : 'back in the pane')
+            + (state.fullscreen ? (state.native ? ' · the console took the display' : ' · page only (the host refused native fullscreen)') : '')
+            + ' · ✓ ' + (state.fullscreen ? 'Esc or the ✕ comes back' : 'the console chrome is back');
           break;
         }
 

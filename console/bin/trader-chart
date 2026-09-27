@@ -468,6 +468,24 @@ def cmd_studies(args) -> int:
     return 0 if result.get("ok") else 1
 
 
+def cmd_fullscreen(args) -> int:
+    """Give the chart the whole pane — and the whole screen, where the host allows it.
+
+    This presses the same button the console's topbar (and Vela's own toolbar row) carries: the
+    console's chrome and panels step aside so the chart owns the page, and the page asks the browser
+    for fullscreen so it can take the display too. The answer reports both halves — `native` is worth
+    quoting, because a host that refuses fullscreen (a pane iframe without `allowfullscreen`, an
+    embedded webview) still gets the chart the page, and that must not read as a failure.
+    """
+    payload = {"action": "fullscreen", "on": not args.off}
+    result = send(args, payload)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return 0 if result.get("ok") else 1
+
+
 def cmd_wait(args) -> int:
     args._payload = {}
     result = wait(args.id, timeout=args.timeout)
@@ -575,6 +593,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--list", action="store_true", help="print the rows it painted")
     s.set_defaults(func=cmd_indicators)
 
+    s = sub.add_parser("fullscreen", help="give the chart the whole pane / the whole screen (--off to come back)")
+    s.add_argument("--off", action="store_true", help="come back to the pane (chrome, panels, statusbar)")
+    s.set_defaults(func=cmd_fullscreen)
     s = sub.add_parser("wait", help="wait for an earlier command's outcome")
     s.add_argument("id", type=int)
     s.add_argument("--timeout", type=float, default=TIMEOUT)

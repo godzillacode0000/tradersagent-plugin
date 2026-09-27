@@ -136,7 +136,7 @@ class TheScriptControlRidesVelaToolbar(unittest.TestCase):
 
     def test_dock_moves_the_live_node_into_velas_right_cluster(self):
         i = APP.index("function dockScriptButton")
-        body = APP[i:i + 900]
+        body = APP[i:i + 1700]
         self.assertIn(".vela-topbar-right", body)        # Vela's own right cluster
         self.assertIn("el.scriptOpen", body)             # the live node — id stays unique
         self.assertNotIn("cloneNode", body)

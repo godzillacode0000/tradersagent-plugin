@@ -330,6 +330,22 @@ input:focus-visible, textarea:focus-visible {
    three tracks must break, because 1240−280−340=620 < 640.            */
 .app { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100dvh; }
 
+/* ── Nothing in this console may scroll the PAGE sideways (27 Sep) ───────────────────────────────
+   The operator read the horizontal scrollbar under his chart as "the chart pane is not adaptive",
+   and he was right about the cause: with a legend chip showing an indicator's name plus the two
+   status pills, the topbar's min-content came to 921px inside an 870px pane and pushed the whole
+   document wider. Everything that scrolls in here is a PANE (the library list, the results, the
+   grid) — never the shell. */
+.app { overflow: hidden; }
+.topbar { flex-wrap: wrap; height: auto; min-height: var(--lx-topbar-h); row-gap: 2px; }
+.topbar__right { flex-wrap: wrap; justify-content: flex-end; }
+.chart-legend { flex: 0 1 auto; min-width: 0; max-width: 34%; }
+/* A control that has lost its label is still a control: below this width the four docked buttons go
+   icon-only rather than pushing the row (and the page) wider than the pane. */
+@media (max-width: 1180px) {
+  .topbar .btn__label { display: none; }
+}
+
 /* Chart-first (operator's call, 16 Sep): one column is the chart. The library and the detail panel
    are opt-in, from the two small toggles in the topbar — no permanent side columns, so Vela gets
    the whole pane until he asks for something else. */
@@ -388,6 +404,40 @@ input:focus-visible, textarea:focus-visible {
   .panel--chart { min-height: 360px; }
   .panel--right { position: static; width: auto; max-height: 40dvh; box-shadow: none; transform: none; }
 }
+
+/* ── Full screen for the chart (27 Sep) ───────────────────────────────────────────────────────────
+   The operator's ask, verbatim: "sy nak ada button capability untuk boleh kasi fullscreen ni chart".
+   One press does two things, because they answer two different questions:
+
+     · the console's own chrome goes (topbar, statusbar, both panels) so the CHART owns this page —
+       this always works, in any host, even where fullscreen is refused;
+     · the page asks for real fullscreen as well, so the console takes the whole DISPLAY. That one
+       needs the plugin pane's iframe to carry `allowfullscreen` (plugin/plugin.js does).
+
+   Esc, the button again, or the floating ✕ comes back. `fullscreenchange` re-syncs the class: an
+   Esc in native fullscreen exits it without ever reaching our keydown, and a focused button that
+   stays "on" after the screen came back is worse than no button at all. */
+body.chart-focus .topbar,
+body.chart-focus .statusbar,
+body.chart-focus .panel--left,
+body.chart-focus .panel--right { display: none !important; }
+body.chart-focus .app { grid-template-rows: minmax(0, 1fr); }
+body.chart-focus .main { grid-template-columns: minmax(0, 1fr) !important; }
+body.chart-focus .panel--chart { border: 0; }
+/* Vela's own toolbar row stays: that is the CHART's chrome (symbol, timeframe, our docked buttons),
+   not ours — taking it away would cost the operator the controls he asked for in the first place. */
+
+.chart-focus-exit {
+  position: fixed; top: 10px; right: 12px; z-index: var(--lx-z-overlay);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 999px;
+  border: 1px solid var(--lx-border-strong); background: var(--lx-surface-2);
+  color: var(--lx-fg); font: inherit; font-size: var(--lx-fs-xs); cursor: pointer;
+  box-shadow: var(--lx-shadow-4);
+  opacity: 0.45; transition: opacity var(--lx-dur-160) var(--lx-ease);
+}
+.chart-focus-exit:hover,
+.chart-focus-exit:focus-visible { opacity: 1; }
 
 /* ── Layer 5b — topbar / statusbar ───────────────────────────────────────── */
 .topbar {

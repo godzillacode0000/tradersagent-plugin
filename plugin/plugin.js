@@ -181,6 +181,11 @@ function ConsoleFrame({ title }) {
         src: APP_URL,
         title: title || "Trader's Agent chart console",
         style: S.frame,
+        /* Full screen (27 Sep): the operator asked for a button that gives the chart the whole
+           screen, and the console implements it with `requestFullscreen()`. Without this attribute
+           the frame is not allowed to, and the request is refused silently — the console's own
+           control would then only ever take the page, never the display. */
+        allowFullScreen: true,
         onLoad: () => setLoaded(true)
       }),
       loaded

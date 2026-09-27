@@ -117,6 +117,7 @@ systemctl --user enable --now traders-agent.service
 | Top bar → `▤ Details` | the selected item: write-up, **full Pine source**, licence badge, **Run PineTS** |
 | Chart top bar → **Layout** | Vela's own grid picker — presets and custom `g<cols>x<rows>` grids. The console boots at `2h` (two side by side); the same door is `chart_set_layout` / `trader-chart layout` |
 | Chart top bar → **⌗ Indicators** | One surface for both halves: **Favourites** (your own ☆), **BUILT-INS** (Vela's natives for this market, read live from the frame) and **LIBRARY** (the 806-row LuxAlgo catalogue). Every LIBRARY card carries the catalogue's own **chart preview** above its name — and the Details pane shows it full size — so "how does this look applied?" is answered before running anything. The LIBRARY arrives **grouped into families** (SMC / ICT 74, Trend 108, Volume & Flow 96, …) with a rail down the left to jump between them, and each family opens into its own **clusters** ("Moving-average lineage", "Candlestick catalog"); every card has a **Reading** button that unfolds what the indicator is and how it is read, in place. Star the ones you reach for; clicking a built-in mounts it, a Library row opens the Details pane with its Run PineTS / Add to chart. The same door is `chart_indicators` / `trader-chart indicators` (`--family trend --reading mlma --fold trend:on`) |
+| Chart top bar → **⛶ Full screen** | Gives the chart the whole pane — and the whole display: the console's chrome, panels and statusbar step aside and the page asks the browser for fullscreen. `Esc` (or the floating `✕`, or the same button) comes back. Docked on Vela's own toolbar row beside `<> Script` and `☰ catalogue`; the door is `chart_fullscreen` / `trader-chart fullscreen [--off]` |
 | The chart's own bottom bar | Vela's range buttons, timezone clock and settings (not ours) |
 
 ### Chat beside the chart
@@ -162,6 +163,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_set_market` | switch symbol / timeframe |
 | `chart_set_layout` | read or set the workspace **grid** — `1`, `2h`, `2v`, `4`, `8`, or `g<cols>x<rows>` (no argument reads it) |
 | `chart_indicators` | the **Indicators** surface — sections `favorites`/`builtins`/`library`, `q` for the search box, `family` to open one group of the catalogue, `reading SLUG` to unfold a card's write-up, `fold FAMILY[:on]` to fold a group, `star`/`unstar KIND:ID`, `mount` a built-in; answers with the rows it painted, the groups it drew and the reading it left open |
+| `chart_fullscreen` | give the chart the whole pane / the whole screen (`on=False` comes back) — hides the console chrome and asks the browser for fullscreen; the answer says whether the display was taken or only the page |
 | `chart_reload` | remount every attached console (picks up new frontend files) |
 | `chart_palette` | what colours the chart is wearing (`try_apply` asserts the console theme) |
 | `chart_browse` | open the Library concept list in the pane (optional `family`) |

@@ -499,22 +499,35 @@ def chart_natives() -> str:
 
 
 @mcp.tool(annotations=_ann("Open the Indicators surface", read_only=False))
-def chart_indicators(section: str = "", q: str = "", star: str = "", unstar: str = "",
+def chart_indicators(section: str = "", q: str = "", family: str = "", reading: str = "",
+                     fold: str = "", fold_on: bool = True, star: str = "", unstar: str = "",
                      mount: str = "", show: bool = True) -> str:
     """The console's Indicators surface: BUILT-INS + LIBRARY + favourites behind one search.
 
-    `section` is 'favorites', 'builtins' or 'library'; `q` fills the search box; `star`/`unstar`
-    take 'KIND:ID' ('native:supertrend', 'library:order-blocks') and use the same favourites the
-    operator's ☆ writes; `mount` mounts a built-in through the surface itself ('supertrend' or
-    'native:supertrend') — library rows keep the Details pane, since they carry Pine. `show=False`
-    closes it. The answer carries the rows the grid painted, so a panel that opened empty cannot
-    read as a filled one.
+    `section` is 'favorites', 'builtins' or 'library'; `q` fills the search box; `family` narrows the
+    LIBRARY to one group of the catalogue ('trend', 'smc-ict', 'wyckoff'… — 'all' clears it), and
+    once a family is picked the grid groups by that family's own clusters; `reading` unfolds one
+    card's write-up in place ('mlma') and paints the card even when its group was beyond the slice;
+    `fold` folds a group away ('trend', or 'trend/Other' with a family selected) and `fold_on=False`
+    folds that group, `True` opens it; `star`/`unstar` take 'KIND:ID' ('native:supertrend',
+    'library:order-blocks') and use the same favourites the operator's ☆ writes; `mount` mounts a
+    built-in through the surface itself ('supertrend' or 'native:supertrend') — library rows keep the
+    Details pane, since they carry Pine. `show=False` closes it. The answer carries the rows the grid
+    painted, the family groups it drew (name, count, folded) and the reading it left open, so a panel
+    that opened empty cannot read as a filled one.
     """
     fields = {}
     if section.strip():
         fields["section"] = section.strip().lower()
     if q:
         fields["q"] = q
+    if family.strip():
+        fields["family"] = family.strip().lower()
+    if reading.strip():
+        fields["reading"] = reading.strip()
+    if fold.strip():
+        fields["fold"] = fold.strip()
+        fields["foldOn"] = bool(fold_on)
     if star.strip():
         fields["star"] = star.strip()
     if unstar.strip():
@@ -524,6 +537,21 @@ def chart_indicators(section: str = "", q: str = "", star: str = "", unstar: str
     if not show:
         fields["show"] = False
     return _command("indicators", **fields)
+
+
+@mcp.tool(annotations=_ann("Full screen for the chart", read_only=False))
+def chart_fullscreen(on: bool = True) -> str:
+    """Give the chart the whole pane — and the whole screen, where the host allows it.
+
+    Presses the same button the console's topbar and Vela's own toolbar row carry: the console's
+    chrome, panels and statusbar step aside so the chart owns the page, and the page asks the browser
+    for fullscreen so the console can take the display as well. `on=False` brings everything back
+    (Esc does the same, as does the floating ✕). The answer reports both halves — `native` tells you
+    whether the display was taken or only the page, and a host that refuses fullscreen (a pane iframe
+    without `allowfullscreen`) still gets the chart the whole page. Worth using before `chart_shot`
+    when the operator wants a big, uncluttered capture.
+    """
+    return _command("fullscreen", on=bool(on))
 
 
 @mcp.tool(annotations=_ann("Reload every chart view", destructive=True))

@@ -6,6 +6,33 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Full screen for the chart.** The operator, looking at the pane: *"sy nak ada button capability
+  untuk boleh kasi fullscreen ni chart,,, sekarang mcm takde"*. There is one now — `⛶ Full screen`,
+  in the console's topbar and docked onto Vela's own toolbar row beside `<> Script` and
+  `☰ catalogue`. It does two things, because they answer two questions: the console's chrome, panels
+  and statusbar step aside so the **chart owns the page** (pure CSS — nothing can refuse it), and the
+  page asks the browser for fullscreen so the console takes the **whole display** (that half needs
+  the plugin pane's iframe to carry `allowfullscreen`; it does). `Esc`, the same button, or a floating
+  `✕` comes back. Measured live: press → the app window goes fullscreen and the chart fills the
+  display; `Esc` → back in the pane, chrome restored. The door is `chart_fullscreen` /
+  `trader-chart fullscreen [--off]`, and its answer says which half landed (`native` = the display).
+
+### Fixed
+
+- **The chart pane could push the page sideways — that was the "tak adaptive".** With a legend chip
+  carrying an indicator's name ("Directional Matrix · overview") plus the two status pills, the
+  topbar's min-content measured **921 px inside an 870 px pane** and made the whole document wider, so
+  a horizontal scrollbar appeared under the chart. Reproduced in a headless browser before touching
+  anything, re-measured after: the shell is `overflow: hidden`, the topbar may wrap, legend chips
+  shrink (`flex: 0 1 auto; max-width: 34%`), and below 1180 px the docked buttons go icon-only
+  (`.btn__label` hidden). Everything that scrolls in this console is a pane, never the page.
+- **Esc inside native fullscreen left the console full-bleed with no way back.** The
+  `fullscreenchange` listener asked `isChartFullscreen()`, which reads the `chart-focus` class itself,
+  so it could never decide to take the class off; the browser's own state is tracked separately now
+  (`nativeFullscreenWasOn`), and Esc in either mode brings both halves back.
+
+### Added
+
 - **The catalogue is grouped, and every card carries its own reading.** The LIBRARY was one flat
   806-row list. It now arrives as families — SMC / ICT 60, Trend 55, Volume & Flow 46, Structure 40,
   … — each with a header that says how many it holds and folds away, and a rail in the nav

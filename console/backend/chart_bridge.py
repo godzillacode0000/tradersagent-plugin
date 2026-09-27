@@ -211,6 +211,9 @@ def record_result(root: str | Path, payload: dict) -> dict:
         # page adds inside it — `family`, `families`, `groups`, `reading` (27 Sep) — travels with it;
         # that is why only the key is named here.
         "indicators": payload.get("indicators"),
+        # Full screen for the chart (27 Sep): {fullscreen, native, page} — `native` says whether the
+        # console also took the display, or only the page.
+        "fullscreen": payload.get("fullscreen"),
         # The pane's own "what is on the chart" list (`studies` door): every reader, labelled.
         "studies": payload.get("studies"),
         "doors": payload.get("doors"),

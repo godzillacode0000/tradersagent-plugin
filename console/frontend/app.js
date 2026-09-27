@@ -26,6 +26,7 @@ const el = {
   browseConceptsMore: $('#browse-concepts-more'),
   browseConceptsClose: $('#browse-concepts-close'),
   scriptOpen: $('#script-open'),
+  fullOpen: $('#full-open'), focusExit: $('#chart-focus-exit'),
   statusbar: $('.statusbar'),
 };
 
@@ -149,10 +150,14 @@ function dockScriptButton() {
       if (home) (mcp ? home.insertBefore(btn, mcp) : home.appendChild(btn));
       btn.style.removeProperty('--vela-tool-color');
     }
-    // The catalogue button travels with it: both live on Vela's row when there is one.
+    // The catalogue button travels with it: both live on Vela's row when there is one. So does
+    // full screen (27 Sep) — it is a control ON the chart, so it belongs beside the chart's own.
     const lib = el.libOpen, libHome = document.querySelector('.topbar__right');
     if (lib && !lib.isConnected && libHome) libHome.insertBefore(lib, btn.nextSibling);
     if (lib) lib.style.removeProperty('--vela-tool-color');
+    const full = el.fullOpen;
+    if (full && !full.isConnected && libHome) libHome.insertBefore(full, lib && lib.nextSibling ? lib.nextSibling : btn.nextSibling);
+    if (full) full.style.removeProperty('--vela-tool-color');
     return false;
   }
   if (btn.parentElement !== slot) {
@@ -164,15 +169,81 @@ function dockScriptButton() {
   if (lib && lib.parentElement !== slot) {
     slot.insertBefore(lib, btn.nextSibling);
   }
+  const full = el.fullOpen;
+  if (full && full.parentElement !== slot) {
+    slot.insertBefore(full, lib && lib.nextSibling ? lib.nextSibling : btn.nextSibling);
+  }
   const sib = slot.querySelector('.vela-widget-tool');
   if (sib) {
     const colour = getComputedStyle(sib).color;
     btn.style.setProperty('--vela-tool-color', colour);
     if (lib) lib.style.setProperty('--vela-tool-color', colour);
+    if (full) full.style.setProperty('--vela-tool-color', colour);
   }
   return true;
 }
 setInterval(dockScriptButton, 4000);
+
+
+/* ── Full screen for the chart (27 Sep) ───────────────────────────────────────────────────────────
+ * The operator's ask: "sy nak ada button capability untuk boleh kasi fullscreen ni chart". Two halves,
+ * because they answer two different questions — and only the first one can be guaranteed:
+ *
+ *   · `body.chart-focus` hides the console's own chrome (topbar, statusbar, both panels) so the CHART
+ *     owns this page. Pure CSS, works in every host, nothing to refuse.
+ *   · native fullscreen is asked for on top of that, so the console takes the whole display. It needs
+ *     the plugin pane's iframe to carry `allowfullscreen` (plugin/plugin.js) and a host that allows
+ *     it; if it is refused the page half still lands, and `native` in the answer says which happened.
+ *
+ * Esc, the button again, or the floating ✕ comes back. The `fullscreenchange` listener in the boot
+ * section re-syncs the class, because an Esc inside native fullscreen never reaches a keydown handler.
+ */
+function isChartFullscreen() {
+  return Boolean(document.fullscreenElement) || document.body.classList.contains('chart-focus');
+}
+
+/** Vela measures its host with a ResizeObserver, but this costs nothing and covers a host that only
+    listens for window resizes: full screen changes the chart's box without a window resize. */
+function syncChartBox() {
+  try { window.dispatchEvent(new Event('resize')); } catch { /* nothing to do */ }
+}
+
+/** Paint the page half from the state we hold — class, floating ✕, the button's own pressed look. */
+function paintChartFocus(on) {
+  document.body.classList.toggle('chart-focus', on);
+  if (el.focusExit) el.focusExit.hidden = !on;
+  if (el.fullOpen) {
+    el.fullOpen.setAttribute('aria-pressed', String(on));
+    el.fullOpen.classList.toggle('is-on', on);
+  }
+  syncChartBox();
+}
+
+/* Whether the BROWSER was in fullscreen, kept apart from what was asked for. `isChartFullscreen()`
+   reads the class too, so it can never be the thing that decides to turn the class off — measured
+   27 Sep: Esc inside native fullscreen left the class on, and the console stayed full-bleed with no
+   visible way back. */
+let nativeFullscreenWasOn = false;
+
+function setChartFullscreen(on = true) {
+  const want = on !== false;
+  paintChartFocus(want);
+  let native = Boolean(document.fullscreenElement);
+  try {
+    if (want && !native && document.documentElement.requestFullscreen) {
+      const asked = document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+      if (asked && asked.catch) asked.catch(() => { /* the page half is already on */ });
+    } else if (!want && native && document.exitFullscreen) {
+      const left = document.exitFullscreen();
+      if (left && left.catch) left.catch(() => { /* it is leaving anyway */ });
+    }
+  } catch { /* no fullscreen API here — the chart still takes the page */ }
+  native = Boolean(document.fullscreenElement);
+  nativeFullscreenWasOn = native;
+  return { fullscreen: want, native, page: document.body.classList.contains('chart-focus') };
+}
+window.setChartFullscreen = setChartFullscreen;
+window.isChartFullscreen = isChartFullscreen;
 
 
 /* F5 (25 Sep): the right column must never sit on top of the chart's own toolbar row — that is
@@ -2074,6 +2145,33 @@ async function main() {
     applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
   });
   document.documentElement.dataset.theme = currentTheme();
+
+  /* Full screen (27 Sep). See the CSS header: our chrome goes so the chart owns this page, and the
+     page asks for real fullscreen so it can take the whole display. Both are idempotent — the door
+     may call this as often as it likes. */
+  if (el.fullOpen) {
+    el.fullOpen.addEventListener('click', () => setChartFullscreen(!isChartFullscreen()));
+  }
+  if (el.focusExit) {
+    el.focusExit.addEventListener('click', () => setChartFullscreen(false));
+  }
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && isChartFullscreen()) setChartFullscreen(false);
+  });
+  /* Esc in NATIVE fullscreen exits it without reaching the keydown above. The browser's own event is
+     then the only thing that knows, and the operator's Esc means "out of full screen" — so the page
+     half goes down with it. (Guarded by `nativeFullscreenWasOn`: a refused `requestFullscreen()`
+     never fires this, and the page-only mode must survive that.) */
+  document.addEventListener('fullscreenchange', () => {
+    const native = Boolean(document.fullscreenElement);
+    if (nativeFullscreenWasOn && !native && document.body.classList.contains('chart-focus')) {
+      nativeFullscreenWasOn = native;
+      setChartFullscreen(false);
+      return;
+    }
+    nativeFullscreenWasOn = native;
+    paintChartFocus(isChartFullscreen());
+  });
 
   initIndicators();
   await checkHealth();

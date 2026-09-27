@@ -61,6 +61,7 @@ change — report that, never "done".
 | remove indicators / clear studies | `chart_remove_indicator(all=True)` |
 | draw PDH/PDL / lines / boxes | `chart_draw` (overlay). Not `chart_apply_pine` for a plain price level. |
 | screenshot | `chart_shot` |
+| give the chart the whole screen / come back | `chart_fullscreen` (`on=False` to return) — the console's chrome steps aside and the page asks the browser for fullscreen |
 | chart looks stale / old JS | `chart_reload` |
 | chart is light/dark | `chart_palette` |
 
@@ -163,6 +164,26 @@ not a width nobody sees.
   URL, so replaced artwork is never served stale from disk.
 - Previews are the catalogue's SAMPLE chart, not the operator's own chart — say so; never present a
   thumbnail as "your chart with this on it".
+
+## Full screen, and a pane that cannot push the page sideways
+
+`chart_fullscreen` / `trader-chart fullscreen [--off]` presses the `⛶` the console's topbar and
+Vela's toolbar row carry. Two halves, and only the first is guaranteed:
+
+- **the page half** — `body.chart-focus` hides our chrome (topbar, statusbar, both panels) so the
+  chart owns the page. Pure CSS, works everywhere.
+- **the display half** — `requestFullscreen()` on the page root. It needs (a) the plugin pane's
+  iframe to carry `allowfullscreen` (plugin/plugin.js does) and (b) **a real user gesture**: a click
+  on the button is granted, the door/agent is not (Chromium refuses a script-initiated request), so a
+  door call honestly answers `native: false, page: true`. Never report that as a failure — quote it.
+- `Esc` in native fullscreen is consumed by the browser and never reaches the page's keydown; the
+  `fullscreenchange` listener takes both halves down instead. Keep the browser's state in its own
+  variable (`nativeFullscreenWasOn`) — asking `isChartFullscreen()`, which reads the class, meant the
+  listener could never turn the class off and the console stayed full-bleed (measured live 27 Sep).
+- **"The chart pane is not adaptive"** meant a horizontal scrollbar: the topbar's min-content was
+  921 px inside an 870 px pane once a legend chip showed an indicator's name. Reproduce it in a
+  headless browser at the pane's width (Emulation.setDeviceMetricsOverride + legend chips visible),
+  then measure `documentElement.scrollWidth` before and after the fix.
 
 ## When a script fails
 

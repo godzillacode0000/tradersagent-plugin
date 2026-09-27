@@ -59,6 +59,7 @@ capabilities:
     - chart_undo
     - chart_watch
     - chart_alert
+  - chart_fullscreen
   provides_hooks: []
   provides_middleware: []
   requires_env: []
