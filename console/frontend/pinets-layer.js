@@ -56,6 +56,46 @@
     [/\bta\.crossover|\bta\.crossunder/, 'ema', 'Exponential Moving Average']  // cross systems draw on MAs
   ];
 
+  /* The script's OWN name, per native — the signal that does not lie. `ta.atr(` appears in scripts
+     that merely *use* ATR (a reversal threshold, a stop distance), and matching the source alone put
+     an Average True Range pane on a Wyckoff dashboard (27 Sep: five stacked ATR panes on one chart).
+     A script called "…ATR…" is an ATR; a script called "Wyckoff Wave & Volume Studies" is not. */
+  const NAMES = {
+    supertrend: /supertrend/i,
+    'bollinger-bands': /bollinger/i,
+    'keltner-channels': /keltner/i,
+    'donchian-channels': /donchian/i,
+    'linear-regression': /linear\s*regression/i,
+    ema: /\bema\b|exponential\s+moving\s+average/i,
+    sma: /\bsma\b|simple\s+moving\s+average/i,
+    rma: /\brma\b|smoothed\s+moving\s+average/i,
+    zlema: /\bzlema\b|zero[-\s]?lag/i,
+    rsi: /\brsi\b|relative\s+strength/i,
+    stochastic: /stochastic|\bstoch\b/i,
+    macd: /\bmacd\b/i,
+    'average-true-range': /\batr\b|average\s+true\s+range/i,
+    'average-directional-index': /\badx\b|\bdmi\b|directional\s+(?:movement|index)/i,
+    'standard-deviation': /\bstdev\b|standard\s+deviation/i,
+    'williams-percent-r': /williams\s*%?\s*r/i,
+    'commodity-channel-index': /\bcci\b|commodity\s+channel/i,
+    vwap: /\bvwap\b/i,
+    'parabolic-sar': /parabolic\s*sar/i,
+    'pivot-points': /pivot\s*points?/i,
+    'money-flow-index': /\bmfi\b|money\s+flow/i,
+    'on-balance-volume': /\bobv\b|on[-\s]?balance/i,
+    'chande-momentum-oscillator': /\bcmo\b|chande/i,
+    trix: /\btrix\b/i,
+    'awesome-oscillator': /\bao\b|awesome\s+oscillator/i
+  };
+
+  /** What the script calls itself: `indicator("…", shorttitle="…")` → "title · shorttitle". */
+  function scriptTitle(source) {
+    const text = String(source || '');
+    const title = text.match(/indicator\s*\(\s*(?:title\s*=\s*)?["']([^"']+)["']/i);
+    const short = text.match(/shorttitle\s*=\s*["']([^"']+)["']/i);
+    return [title && title[1], short && short[1]].filter(Boolean).join(' · ');
+  }
+
   let catalogPromise = null;
 
   function chartHandle() { return window.__consoleChart || null; }
@@ -80,15 +120,31 @@
   }
 
   /** Which Vela native (if any) expresses what this script computes. */
-  async function nativeFor(source) {
+  async function nativeFor(source, opts) {
     if (!source) return null;
+    const O = opts || {};
     const types = await catalog();
     const known = new Set(types.map((t) => t.type));
+    const labelOf = (type) => (types.find((t) => t.type === type) || {}).title || type;
+    /* 1. The script's own name. It beats a source scan, and it is the only signal that survives a
+          script which merely USES one of these — an ATR-based threshold, an EMA-smoothed signal. */
+    const name = scriptTitle(source);
+    if (name) {
+      for (const [type, re] of Object.entries(NAMES)) {
+        if (!known.has(type) || !re.test(name)) continue;
+        return { type, title: labelOf(type), length: lengthFor(source, type),
+                 why: 'the script names it: "' + name + '"' };
+      }
+    }
+    /* 2. A dashboard is not a native. A script that builds tables/boxes/lines, or plots a family of
+          its own series, is not expressed by one Vela indicator — say so instead of picking one. */
+    if (O.containers) return null;
+    if (typeof O.series === 'number' && O.series > 2) return null;
     for (const [re, type, label] of MAP) {
       if (!re.test(source)) continue;
       if (!known.has(type)) continue;
-      const title = (types.find((t) => t.type === type) || {}).title || label;
-      return { type, title, length: lengthFor(source, type) };
+      return { type, title: labelOf(type) || label, length: lengthFor(source, type),
+               why: 'the script computes it (source scan)' };
     }
     return null;
   }
@@ -107,17 +163,26 @@
    * Paint the native equivalent of `source` on the chart.
    * Returns a result that is safe to show verbatim in the UI.
    */
-  async function paintNative(source) {
+  async function paintNative(source, opts) {
     const c = chartHandle();
     if (!c || typeof c.addNativeIndicator !== 'function') {
       return { added: null, reason: 'this chart exposes no addNativeIndicator' };
     }
-    const match = await nativeFor(source);
+    const match = await nativeFor(source, opts);
     if (!match) {
-      return {
-        added: null,
-        reason: 'no Vela native in this build expresses what this script computes — PineTS still ran it and reported the values'
-      };
+      const why = (opts && opts.containers)
+        ? 'this script paints its own dashboard (tables / boxes / lines) — one Vela native would '
+          + 'misrepresent it, so nothing was added; PineTS still ran it and reported the values'
+        : 'no Vela native in this build expresses what this script computes — PineTS still ran it and reported the values';
+      return { added: null, reason: why };
+    }
+    /* One pane per indicator. A native of this type already on the chart is left alone: re-running a
+       script — or running it again after a reload, when the old handle is gone — used to stack a
+       second pane (five Average True Range panes ended up on one chart, 27 Sep). */
+    const already = (() => { try { return c.presentNativeIndicators(); } catch { return null; } })();
+    if (Array.isArray(already) && already.includes(match.type)) {
+      return { added: null, present: already,
+               reason: 'this chart already carries ' + match.title + ' (' + match.type + ') — not stacking a second pane' };
     }
     try {
       clear();
@@ -128,6 +193,7 @@
       try { totals = c.inspect().totals; } catch { /* snapshot is a nicety */ }
       return {
         added: { id: handle.id, title: handle.title, type: match.type, length: match.length },
+        why: match.why,
         present: (() => { try { return c.presentNativeIndicators(); } catch { return null; } })(),
         series: totals ? totals.series : null
       };

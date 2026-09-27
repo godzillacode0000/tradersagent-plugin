@@ -221,6 +221,15 @@ Vela's toolbar row carry. Two halves, and only the first is guaranteed:
   `childElementCount` — then read them in `trader-chart apply`'s one-line report. `state()` carries
   `tablesInPane`, `tablesRect`, `tablesCells`, `paneRect` and the page size. A `1 table on screen` that
   only counted DOM children was read as "you can see it" while it was not.
+- **A script's name decides which Vela native it becomes — and a dashboard becomes none.** The old
+  rule scanned the source for `ta.atr(` and friends, so the Wyckoff dashboard (which *uses* ATR as its
+  reversal threshold) was painted as stacked Average True Range panes. The title (`indicator("…")`,
+  `shorttitle=`) is consulted first (`NAMES` in `pinets-layer.js`); a script that builds tables/boxes/
+  lines, or plots more than two series, is refused a native *with a reason* instead. A native of that
+  type already on the chart is never re-added — re-running a script, or running it after a reload when
+  the old handle is gone, used to stack another pane (five `ATR 2.17` panes, 27 Sep). The report says
+  which rule fired (`drawn with … "the script names it"` / `not drawn: this script paints its own
+  dashboard …`).
 - **Never open the console in your own browser while the operator's pane is live**: a second view
   attaches to the backend and commands can be routed to the tab that has no bars (`the chart did not
   answer command … within 45s`). Confirm with `trader-chart state` afterwards.

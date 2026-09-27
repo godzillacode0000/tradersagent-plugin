@@ -152,7 +152,9 @@ window.TraderRun = (function () {
        contains ta.atr(, matched the heuristic, and re-added the indicator just removed. ── */
     let paint = null;
     if (res.series && res.series.length > 0 && window.PineTSPaint) {
-      paint = await window.PineTSPaint.paintNative(String(pine));
+      /* `containers` and the series count go with the source: a script that draws its own dashboard,
+         or plots a family of series, is not expressed by one Vela native (see pinets-layer.js). */
+      paint = await window.PineTSPaint.paintNative(String(pine), { containers, series: res.series.length });
     }
 
     return {
