@@ -2085,7 +2085,9 @@ async function main() {
     logsBtn.addEventListener('click', () => {
       const on = logsBtn.getAttribute('aria-pressed') === 'true';
       logsBtn.setAttribute('aria-pressed', String(!on));
-      outBox.classList.toggle('is-folded', on);
+      // Fold when the click turned Logs ON. Toggling with the PREVIOUS state was inverted: the first
+      // click reported pressed and left the output open (caught by the live console check, 27 Sep).
+      outBox.classList.toggle('is-folded', !on);
     });
   }
 
