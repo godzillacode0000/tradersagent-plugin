@@ -230,6 +230,14 @@ Vela's toolbar row carry. Two halves, and only the first is guaranteed:
   the old handle is gone, used to stack another pane (five `ATR 2.17` panes, 27 Sep). The report says
   which rule fired (`drawn with … "the script names it"` / `not drawn: this script paints its own
   dashboard …`).
+- **A drawing's x may be a TIMESTAMP, not a bar index.** `xloc = xloc.bar_time` rows — the LuxAlgo SMC
+  order blocks are built exactly this way (`box.new(na,na,na,na, xloc = xloc.bar_time, extend =
+  extend.right)` then `box.set_lefttop`/`set_rightbottom`) — carry ms, and the overlay paints in
+  bar-index space. The old `flatten()` dropped them outright, so *Smart Money Concepts* drew 35 lines
+  and 35 labels and **0 boxes** while the original shows shaded zones; the tell in the report is
+  `engine stored N raw row(s) but none survived the filters`. Translate with the bars' own time
+  (`barAt`/`toBarIndex` in `unified.js`) for box `left`/`right`, line `x1`/`x2`, label `x`, and drop
+  only what cannot be placed. Trust what the overlay *drew*, never what the engine stored.
 - **Never open the console in your own browser while the operator's pane is live**: a second view
   attaches to the backend and commands can be routed to the tab that has no bars (`the chart did not
   answer command … within 45s`). Confirm with `trader-chart state` afterwards.
