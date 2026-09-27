@@ -20,7 +20,50 @@ window.TraderRun = (function () {
   /* Names whose overlay output landed this session — feeds the badge and the chart legend. */
   const applied = [];
 
-  function flatten(raw) {
+  /* A drawing declared with `xloc = xloc.bar_time` carries ms timestamps, not bar indices — the
+     overlay paints in bar-index space, so those rows were dropped outright and a whole indicator's
+     zones went missing (27 Sep: Smart Money Concepts' internal order blocks and FVGs, which the
+     LuxAlgo original shows as shaded boxes). Translate the times to the nearest bar at or before
+     them; drop only what still cannot be placed. */
+  function timeOf(v) {
+    if (v && typeof v === 'object') {
+      if (typeof v.time === 'number') return v.time;
+      if (typeof v.value === 'number') return v.value;
+      return null;
+    }
+    return typeof v === 'number' ? v : null;
+  }
+
+  function barAt(bars, t) {
+    const list = Array.isArray(bars) ? bars : [];
+    if (!list.length || typeof t !== 'number' || !isFinite(t)) return null;
+    const at = (b) => (b && typeof b.time === 'number' ? b.time : (b && b.openTime) || 0);
+    const last = list.length - 1;
+    if (t <= at(list[0])) return 0;
+    if (t >= at(list[last])) return last;
+    let lo = 0;
+    let hi = last;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (at(list[mid]) <= t) lo = mid; else hi = mid - 1;
+    }
+    return lo;
+  }
+
+  /** Bar-time row -> bar-index row (bar-index rows pass through untouched). */
+  function toBarIndex(row, bars, xs) {
+    if (!row || row.xloc !== 'bt') return row;
+    const out = Object.assign({}, row);
+    for (const k of xs) {
+      const i = barAt(bars, timeOf(row[k]));
+      if (i == null) return null;
+      out[k] = i;
+    }
+    out.xloc = 'bi';
+    return out;
+  }
+
+  function flatten(raw, bars) {
     const plots = (raw && raw.plots) || {};
     const rawRows = {};   // rows the ENGINE stored, before any filter — the honest denominator
     const rowsOf = (key) => {
@@ -36,9 +79,9 @@ window.TraderRun = (function () {
       return vals.filter((x) => x && typeof x === 'object' && !x._deleted);
     };
     return {
-      boxes: rowsOf('__boxes__').filter((b) => b.xloc !== 'bt'),
-      lines: rowsOf('__lines__'),
-      labels: rowsOf('__labels__'),
+      boxes: rowsOf('__boxes__').map((b) => toBarIndex(b, bars, ['left', 'right'])).filter(Boolean),
+      lines: rowsOf('__lines__').map((l) => toBarIndex(l, bars, ['x1', 'x2'])).filter(Boolean),
+      labels: rowsOf('__labels__').map((t) => toBarIndex(t, bars, ['x'])).filter(Boolean),
       tables: rowsOf('__tables__'),
       rawRows,
     };
@@ -121,7 +164,7 @@ window.TraderRun = (function () {
       : (declared ? declared[1] : name);
 
     /* ── surface 1: geometry -> our overlay, read back after drawing ── */
-    const geo = flatten(res.raw);
+    const geo = flatten(res.raw, bars);
     const stored = engineRows(res.raw);
     const engineN = stored.n;
     const containers = counts(geo) > 0;
