@@ -381,6 +381,23 @@ input:focus-visible, textarea:focus-visible {
    buttons stay reachable while the pane is open. The fallback keeps the old topbar offset. */
 .panel--right { inset-block-start: var(--lx-pane-top, calc(var(--lx-topbar-h) + 44px)); }
 
+/* ── #4 — the Run split (27 Sep, from LuxAlgo Quant's stills) ──────────────────────────────────
+   Quant shows the editor and the chart at the same time, so a Run's paint is visible the moment it
+   lands. An overlay can do that too, but it covers the right of the canvas, and the paint that
+   lands under it is invisible. When the console is wide enough for both, the pane becomes a real
+   column beside the chart instead: chart on the left, editor on the right, nothing hidden.
+   The chart keeps a 320px floor, so it can never be squeezed to nothing, and app.js's nudgeChart()
+   repaints Vela after the flip (the documented cure for a blank canvas after a column change).
+   Below that width there is not enough room for either, so the overlay stays — unchanged. */
+.main[data-dock="on"][data-detail="on"] { grid-template-columns: minmax(320px, 1fr) 380px; }
+.main[data-dock="on"][data-library="on"][data-detail="on"] {
+  grid-template-columns: 300px minmax(320px, 1fr) 380px;
+}
+.main[data-dock="on"][data-detail="on"] .panel--right {
+  position: static; width: auto; transform: none; box-shadow: none;
+  border-left: 1px solid var(--lx-border);
+}
+
 @media (max-width: 1439px) {
   .main[data-library="on"] { grid-template-columns: 280px minmax(0, 1fr); }
   .main[data-library="on"] { grid-template-columns: 280px minmax(0, 1fr); }
@@ -1025,6 +1042,51 @@ pre {
   border-bottom: 1px solid var(--lx-border);
 }
 .script__name { flex: 1; min-width: 0; }
+/* Two groups: name left, actions right. Run is the loudest control in the pane. */
+.script__acts { display: flex; align-items: center; gap: var(--lx-space-2); }
+.btn--run {
+  background: #ffffff; color: #111111; border-color: #ffffff; font-weight: 600;
+  padding-inline: 14px;
+}
+.btn--run:hover { background: #f0f0f0; border-color: #f0f0f0; }
+.btn--run:disabled { opacity: .6; }
+/* Light theme keeps the same white-on-dark idea, inverted for legibility. */
+:root[data-theme="light"] .btn--run { background: #111111; color: #ffffff; border-color: #111111; }
+:root[data-theme="light"] .btn--run:hover { background: #2a2a2a; border-color: #2a2a2a; }
+
+/* The status strip under the editor: Logs toggle, the Pine badge, and the last run's numbers. */
+.script__status {
+  display: flex; align-items: center; gap: var(--lx-space-2);
+  padding: 3px var(--lx-space-3);
+  border-top: 1px solid var(--lx-border);
+  font-size: 11px;
+}
+.script__logs {
+  background: none; border: 1px solid var(--lx-border); color: var(--lx-fg-muted);
+  border-radius: 4px; padding: 1px 8px; cursor: pointer; font: inherit;
+}
+.script__logs:hover { color: var(--lx-fg); border-color: var(--lx-border-strong, var(--lx-border)); }
+.script__logs[aria-pressed="true"] { color: var(--lx-accent-ink); border-color: currentColor; }
+.script__pill {
+  padding: 1px 7px; border-radius: 999px;
+  border: 1px solid var(--lx-border); color: var(--lx-fg-muted);
+}
+.script__stat { color: var(--lx-fg-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Logs closed = the output folds away; the numbers stay on the strip. */
+.script__out.is-folded { display: none; }
+/* The editor is a flex row: a numbers column and the textarea sharing one scroll line. A textarea
+   cannot grow its own gutter, so the sibling is painted from the same value (see app.js). */
+.script__edit { display: flex; flex: 1; min-height: 120px; overflow: hidden; }
+.script__gutter {
+  flex: 0 0 auto; overflow: hidden; user-select: none;
+  padding: var(--lx-space-2) 6px var(--lx-space-2) var(--lx-space-2);
+  text-align: right; color: var(--lx-fg-faint);
+  font-family: ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace;
+  font-size: 12.5px; line-height: 1.55;
+  border-right: 1px solid var(--lx-border);
+  scrollbar-width: none;
+}
+.script__gutter span { display: block; }
 .script__src {
   flex: 1; min-height: 120px; width: 100%; box-sizing: border-box;
   padding: var(--lx-space-2) var(--lx-space-3);

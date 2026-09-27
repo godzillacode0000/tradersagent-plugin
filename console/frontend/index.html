@@ -176,17 +176,33 @@
     <section class="panel panel--right">
       <!-- VIEW: the script editor (restored 23 Sep) — Run goes through window.TraderRun. -->
       <div class="view script view--hidden" id="view-script">
+        <!-- Two groups, LuxAlgo Quant's shape (27 Sep): the name on the left, the actions on the
+             right, Run the loudest thing in the row. Mixed into one run of three, the eye has to
+             read every control; split, it only has to read one. -->
         <div class="script__bar">
           <input id="script-name" class="script__name" type="text" value="Untitled script"
                  aria-label="Script name" spellcheck="false" />
-          <button type="button" class="btn btn--primary" id="script-run"
-                  title="Run this script on the chart">▶ Run</button>
-          <button type="button" class="btn btn--ghost" id="script-close"
-                  title="Close the script pane" aria-label="Close the script pane">✕</button>
+          <div class="script__acts">
+            <button type="button" class="btn btn--run" id="script-run"
+                    title="Run this script on the chart">▶ Run</button>
+            <button type="button" class="btn btn--ghost" id="script-close"
+                    title="Close the script pane" aria-label="Close the script pane">✕</button>
+          </div>
         </div>
-        <textarea id="script-src" class="script__src" spellcheck="false" autocapitalize="off"
-                  placeholder="// Paste LuxAlgo Pine here. Run paints whatever it builds:&#10;// boxes, lines and labels on the overlay; plot series as a native."></textarea>
+        <div class="script__edit">
+          <div class="script__gutter" id="script-gutter" aria-hidden="true"></div>
+          <textarea id="script-src" class="script__src" spellcheck="false" autocapitalize="off"
+                    placeholder="// Paste LuxAlgo Pine here. Run paints whatever it builds:&#10;// boxes, lines and labels on the overlay; plot series as a native."></textarea>
+        </div>
         <pre class="script__out" id="script-out" aria-live="polite">Ready — paste Pine and press Run.</pre>
+        <!-- The status strip: Quant answers "which Pine, did it run, how long" under the editor, so a
+             reader never has to guess whether a Run landed. Counts, not prose. -->
+        <div class="script__status">
+          <button type="button" class="script__logs" id="script-logs" aria-pressed="false"
+                  title="Show or hide the run output">Logs</button>
+          <span class="script__pill" id="script-pine">Pine v6</span>
+          <span class="script__stat" id="script-stat"></span>
+        </div>
         <p class="script__hint" id="script-hint">Run paints onto the chart <em>beside</em> this panel:
         plots become Vela natives, boxes / lines / labels go on the overlay. Press
         <kbd>&lt;&gt;</kbd> (or ✕) to close this pane and see the chart full width.</p>

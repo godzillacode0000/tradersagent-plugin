@@ -294,14 +294,37 @@ class TheOverlayPanelKeepsTheTopbarReachable(unittest.TestCase):
     def test_the_right_column_never_takes_grid_space(self):
         # F1 (operator's recording, 25 Sep): when the column took a grid column the chart shrank and
         # Vela's canvas came back blank — the run's paint landed on a white area nobody could see.
-        # It must be an overlay at every width, so no grid rule may name the panel column.
+        # F7 (operator's ask, 27 Sep, from LuxAlgo Quant): he wants Run beside the chart, the way
+        # Quant shows it, so the paint is visible the moment it lands. The rule is therefore narrowed
+        # rather than dropped: the pane takes a grid column ONLY in the docked state, ONLY paired with
+        # a chart floor, and the overlay stays the default at every other width.
         css = read(CSS)
-        for rule in css.split(".main[")[1:]:
-            head = rule.split("}", 1)[0]
-            if "grid-template-columns" in head:
-                self.assertNotIn("380px", head, "the right column must not take grid space")
-                self.assertNotIn("340px", head, "the right column must not take grid space")
+        docked = 0
+        # Walk real rules: split on "}" so each part ends with one rule's declarations, then take the
+        # selector from just before the rule's own "{". Only rules that hand the pane a fixed track
+        # (340px/380px) are policed.
+        for part in css.split("}"):
+            sel, brace, body = part.rpartition("{")
+            if not brace or "grid-template-columns" not in body:
+                continue
+            if not ("380px" in body or "340px" in body):
+                continue
+            last = sel.strip().splitlines()[-1] if sel.strip() else ""
+            # Scope: the console's main layout grid only. Card grids elsewhere in the sheet use fixed
+            # tracks of their own and have nothing to do with the pane's column.
+            if ".main[" not in last:
+                continue
+            self.assertIn('data-dock="on"', last,
+                          "only the docked state may give the pane grid space")
+            self.assertIn("minmax(320px", body, "the chart needs a width floor when docked")
+            docked += 1
+        self.assertGreater(docked, 0, "the docked split must exist")
+        # And the base rule is still an overlay, unchanged for the narrow case.
+        self.assertIn("position: fixed", css.split(".panel--right {", 1)[1].split("}", 1)[0])
         self.assertIn(".main[data-detail=\"on\"] .panel--right { transform: none; }", css)
+        # Below the floor the pane overlays: the dock is opt-in by width, never a default.
+        self.assertIn('const DOCK_MIN = 760', read(APP))
+        self.assertIn("window.innerWidth >= DOCK_MIN", read(APP))
 
     def test_the_topbar_toggle_still_exists(self):
         self.assertIn('id="detail-open"', read(HTML))

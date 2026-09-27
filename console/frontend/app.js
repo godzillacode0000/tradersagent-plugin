@@ -91,10 +91,24 @@ function nudgeChart() {
   requestAnimationFrame(() => { kick(); setTimeout(kick, 90); setTimeout(kick, 320); setTimeout(kick, 700); });
 }
 
+/* #4 — dock or overlay? A docked column needs room for a legible chart (320px) AND a legible pane
+   (380px); 760px is the floor, with a little air. Below it the pane overlays, which is what the
+   console has always done. Re-evaluated on resize, so a Hermes pane that widens starts docking. */
+const DOCK_MIN = 760;
+function syncDock() {
+  const dock = window.innerWidth >= DOCK_MIN ? 'on' : 'off';
+  if (el.main.dataset.dock !== dock) {
+    el.main.dataset.dock = dock;
+    nudgeChart();
+  }
+}
+syncDock();
+window.addEventListener('resize', syncDock);
+
 function setPanel(name, on) {
   if (name === 'detail' || name === 'script') {
     on = Boolean(on);
-    if (on) showRightView(name);
+    if (on) { syncDock(); showRightView(name); }
     el.main.dataset.detail = on ? 'on' : 'off';
     if (on) setPaneTop();
     syncRightButtons();
@@ -2063,6 +2077,38 @@ async function main() {
 
   // Script pane (restored 23 Sep) — Run goes through the one landasan; the draft survives reloads.
   const srcBox = $('#script-src'), outBox = $('#script-out'), nameBox = $('#script-name'), runBtn = $('#script-run');
+  const logsBtn = $('#script-logs'), statBox = $('#script-stat'), gutter = $('#script-gutter');
+
+  /* #3 — the status strip: Logs folds the output away, and the numbers stay visible either way, so
+     "did it run and how long" is answerable without reading the prose block. */
+  if (logsBtn) {
+    logsBtn.addEventListener('click', () => {
+      const on = logsBtn.getAttribute('aria-pressed') === 'true';
+      logsBtn.setAttribute('aria-pressed', String(!on));
+      outBox.classList.toggle('is-folded', on);
+    });
+  }
+
+  /* #2 — line numbers. A textarea has no gutter of its own, so a sibling mirrors the count. Kept in
+     step on input, and on scroll so the numbers do not drift away from their lines. */
+  const paintGutter = () => {
+    if (!gutter) return;
+    const n = Math.max(1, srcBox.value.split('\n').length);
+    if (gutter.childElementCount !== n) {
+      gutter.textContent = '';
+      for (let i = 1; i <= n; i++) {
+        const s = document.createElement('span');
+        s.textContent = String(i);
+        gutter.appendChild(s);
+      }
+    }
+    gutter.scrollTop = srcBox.scrollTop;
+  };
+  if (gutter) {
+    paintGutter();
+    srcBox.addEventListener('input', paintGutter);
+    srcBox.addEventListener('scroll', () => { gutter.scrollTop = srcBox.scrollTop; });
+  }
   try {
     const draft = JSON.parse(localStorage.getItem('luxalgo-web:script') || 'null');
     if (draft && typeof draft === 'object') {
@@ -2104,6 +2150,7 @@ async function main() {
       const r = await window.TraderRun.run(source, label);
       if (!r.ok) {
         outBox.textContent = '✗ ' + r.reason;
+        if (statBox) statBox.textContent = 'failed · ' + String(r.reason).slice(0, 60);
         toast('Pine: ' + r.reason, true);
       } else {
         outBox.textContent = window.TraderRun.summarize(r);
@@ -2115,11 +2162,16 @@ async function main() {
         const n = Array.isArray(r.series) ? r.series.length : (r.series || 0);
         toast(`“${label}” ran in ${r.ms} ms · ${n} series · the paint is on the chart`);
         noteActivity(`ran “${label}” · ${n} series · ${r.ms} ms`, 'chart_apply_pine');
+        if (statBox) {
+          const drew = r.drew ? ` · ${r.drew.boxes || 0}b/${r.drew.lines || 0}l/${r.drew.labels || 0}lb` : '';
+          statBox.textContent = `${n} series · ${r.ms} ms · ${r.bars} bars${drew}`;
+        }
         nudgeChart();
         flashChart();
       }
     } catch (err) {
       outBox.textContent = '✗ ' + err.message;
+      if (statBox) statBox.textContent = 'failed';
       toast('Run failed: ' + err.message, true);
     } finally { runBtn.disabled = false; }
   });
