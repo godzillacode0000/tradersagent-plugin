@@ -68,7 +68,10 @@ window.TraderRun = (function () {
     const rawRows = {};   // rows the ENGINE stored, before any filter — the honest denominator
     const rowsOf = (key) => {
       const node = plots[key];
-      const rows = node && Array.isArray(node.data) ? node.data : [];
+      /* Two shapes reach here: the live engine's context keeps rows under `.data`, while the worker's
+       * projection sends the row list as a plain array. Reading only `.data` made every worker run
+       * report "the engine stored NO rows" and left the overlay empty. Accept both. */
+      const rows = Array.isArray(node) ? node : (node && Array.isArray(node.data) ? node.data : []);
       rawRows[key.replace(/__/g, '')] = rows.length;
       const vals = [];
       for (const row of rows) {
@@ -104,7 +107,11 @@ window.TraderRun = (function () {
     let empty = 0;
     for (const k of Object.keys(plots)) {
       if (!k.startsWith('__')) continue;
-      const rows = plots[k] && Array.isArray(plots[k].data) ? plots[k].data : [];
+      /* Same two-shapes tolerance as `flatten`: the worker sends the row list as an array, the live
+       * context keeps it under `.data`. Reading only `.data` reported 0 stored rows for every worker
+       * run and produced the misleading "the data never reached the constructors" line. */
+      const node = plots[k];
+      const rows = Array.isArray(node) ? node : (node && Array.isArray(node.data) ? node.data : []);
       for (const row of rows) {
         n++;
         const v = row && row.value;

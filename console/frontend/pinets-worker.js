@@ -68,13 +68,38 @@ function projectPlots(plots) {
     out[key] = arr.map((p) => {
       if (typeof p === 'number') return isFinite(p) ? p : null;
       if (!p || typeof p !== 'object') return null;
+      const time = p.time != null ? p.time : (p.openTime != null ? p.openTime : null);
+      /* Drawing containers (__boxes__, __lines__, __labels__, …) put the geometry in `value` as an
+       * ARRAY of objects — box coords, colours, text. The old projection kept only numbers, so every
+       * drawing row became `value: null` and the overlay had nothing to paint: the script ran, the
+       * panel said "the engine stored NO rows", and the chart stayed empty. Carry the payload. */
+      if (Array.isArray(p.value)) {
+        return { value: p.value.map(jsonSafe), options: { style: (p.options && p.options.style) || null }, time: time };
+      }
       const v = typeof p.value === 'number' && isFinite(p.value) ? p.value : null;
       const color = (p.options && p.options.color) || null;
-      const time = p.time != null ? p.time : (p.openTime != null ? p.openTime : null);
       return { value: v, options: { color: color }, time: time };
     });
   }
   return out;
+}
+
+/** Structured clone accepts plain data; drop functions/cycles and bound the depth. */
+function jsonSafe(value, depth) {
+  const d = depth || 0;
+  if (d > 6 || value == null) return value == null ? null : null;
+  if (typeof value === 'number') return isFinite(value) ? value : null;
+  if (typeof value === 'string' || typeof value === 'boolean') return value;
+  if (Array.isArray(value)) return value.slice(0, 4096).map((v) => jsonSafe(v, d + 1));
+  if (typeof value === 'object') {
+    const o = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (typeof v === 'function') continue;
+      o[k] = jsonSafe(v, d + 1);
+    }
+    return o;
+  }
+  return null;
 }
 
 function projectStrategy(s) {
