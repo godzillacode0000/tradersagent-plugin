@@ -172,9 +172,153 @@
       }
     }
     return {
-      engine: new mod.PineTS(normalizeBars(bars), ctx.symbol, ctx.timeframe, Math.max(30, bars.length)),
+      engine: new mod.PineTS(withSymbolInfo(bars, ctx), ctx.symbol, ctx.timeframe, Math.max(30, bars.length)),
       ctor: 'custom-bars', context: ctx.symbol + '@' + ctx.timeframe,
     };
+  }
+
+  /**
+   * Fix #3 (28 Sep): a bars-only engine has NO syminfo.
+   *
+   * Measured over every indicator the LuxAlgo MCP serves (797 sources run through this engine):
+   * 203 crash, and 146 of those (71%) die reading `syminfo` — tickerid 77, mintick 52, ticker 11,
+   * timezone 3, basecurrency 3. The console feeds the chart's own bars, so no market-data provider
+   * is involved, and PineTS fills `_syminfo` ONLY when the source it was handed exposes
+   * `getSymbolInfo` (PineTS.class.ts: `if (source && source.getSymbolInfo)`). An array carrying that
+   * method takes the same path — `Array.isArray` stays true, so `loadMarketData` still returns our
+   * bars — which is why this hangs the info off the array instead of inventing a provider.
+   *
+   * mintick is derived from the bars themselves (the most decimal places any price carries), not
+   * assumed: a wrong tick size silently changes rounding in scripts that use it.
+   */
+  function withSymbolInfo(bars, ctx) {
+    const arr = normalizeBars(bars);
+    const symbol = String(ctx.symbol || 'BTCUSDT').toUpperCase();
+    const m = /^(.*?)(USDT|USDC|BUSD|FDUSD|TUSD|USD|BTC|ETH|BNB)$/.exec(symbol);
+    const base = (m && m[1]) || symbol;
+    const quote = (m && m[2]) || 'USDT';
+    const mintick = inferMintick(arr);
+    const info = {
+      ticker: symbol,
+      tickerid: 'BINANCE:' + symbol,
+      prefix: 'BINANCE',
+      root: base,
+      description: base + ' / ' + quote,
+      type: 'crypto',
+      main_tickerid: 'BINANCE:' + symbol,
+      current_contract: '',
+      isin: '',
+      basecurrency: base,
+      currency: quote,
+      timezone: 'UTC',
+      country: '',
+      mintick: mintick,
+      pricescale: Math.round(1 / mintick),
+      minmove: 1,
+      pointvalue: 1,
+      mincontract: 0,
+      session: '24x7',
+      volumetype: 'base',
+      expiration_date: 0,
+      employees: 0,
+      industry: '',
+      sector: '',
+      shareholders: 0,
+      shares_outstanding: 0,
+      source: 'chart-bars',
+    };
+    try {
+      arr.getSymbolInfo = () => Promise.resolve(info);
+    } catch (err) {
+      /* a frozen array would throw; the caller still gets usable bars */
+    }
+    return arr;
+  }
+
+  /** The bars' own precision, so a tick size is derived rather than assumed. */
+  function inferMintick(arr) {
+    let decimals = 0;
+    for (let i = Math.max(0, arr.length - 60); i < arr.length; i += 1) {
+      const c = String(arr[i] && arr[i].close);
+      const dot = c.indexOf('.');
+      if (dot > 0) decimals = Math.max(decimals, Math.min(8, c.length - dot - 1));
+    }
+    return decimals > 0 ? Math.pow(10, -decimals) : 1e-8;
+  }
+
+  /**
+   * Fix #2 (28 Sep, measured): run the engine in a Worker, because a slow script freezes the console.
+   *
+   * A 20-second run ticked a 250 ms interval ZERO times, so no timer fires while the engine works:
+   * `withTimeout` cannot rescue a blocking run, and every queued bridge command waits behind it. The
+   * catalogue's slowest script measured 301 s. `worker.terminate()` is the only way to interrupt one.
+   *
+   * The worker imports PineTS by URL resolved from the page's import map — import maps do not reach
+   * workers, and the page's own entry is a bare specifier (`pinets`).
+   */
+  function engineUrl() {
+    try {
+      const el = document.querySelector('script[type="importmap"]');
+      const map = JSON.parse((el && el.textContent) || '{}');
+      const url = map && map.imports && map.imports[PINETS_SPECIFIER];
+      if (url) return url;
+    } catch (err) {
+      /* fall through to the specifier itself */
+    }
+    return /^https?:/.test(PINETS_SPECIFIER) ? PINETS_SPECIFIER : null;
+  }
+
+  function workerRun(source, bars, ctx, timeoutMs, label) {
+    return new Promise((resolve) => {
+      const url = engineUrl();
+      if (typeof Worker === 'undefined' || !url) {
+        resolve({ unavailable: true });
+        return;
+      }
+      let worker;
+      try {
+        worker = new Worker('pinets-worker.js', { type: 'module' });
+      } catch (err) {
+        resolve({ unavailable: true });
+        return;
+      }
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(deadline);
+        try { worker.terminate(); } catch (err) { /* already gone */ }
+        resolve(value);
+      };
+      const deadline = setTimeout(() => finish({
+        ok: false,
+        reason: `${label} did not finish within ${timeoutMs / 1000}s — cancelled (a running script cannot `
+          + 'be interrupted, so its worker was terminated and the pane kept working)',
+        error: classify('did not finish within'),
+      }), timeoutMs);
+      worker.onmessage = (ev) => {
+        const d = (ev && ev.data) || {};
+        if (!d.ok) {
+          finish({ ok: false, reason: 'PineTS error: ' + d.reason, error: classify(d.reason) });
+          return;
+        }
+        finish({ ok: true, ms: d.ms, plots: d.plots || {}, strategy: d.strategy || null,
+                 drawings: d.drawings || [] });
+      };
+      worker.onerror = (ev) => {
+        const why = (ev && ev.message) || 'worker failed to start';
+        finish({ ok: false, workerFailed: true, reason: 'worker failed: ' + why });
+      };
+      const list = Array.isArray(bars) ? bars : [];
+      worker.postMessage({
+        engineUrl: url,
+        source: source,
+        bars: normalizeBars(list),
+        symbol: ctx.symbol,
+        timeframe: ctx.timeframe,
+        mintick: inferMintick(list),
+      });
+    });
   }
 
   function withTimeout(promise, ms, label) {
@@ -338,6 +482,29 @@
       return { ok: false, reason: 'not runnable: ' + why, error: classify(why, 'TOO_FEW_BARS') };
     }
 
+    const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
+    const t0 = performance.now();
+    const label = 'PineTS' + (opts.name ? ` (${opts.name})` : '');
+    const ctx = marketContext(bars);
+
+    /* Worker first (fix #2). A run that overruns is terminated, not waited on — the pane stays usable,
+       which is the whole point: the bridge's earlier "page is dead" reports were runs, not crashes. */
+    const viaWorker = await workerRun(source, bars, ctx, timeoutMs, label);
+    if (!viaWorker.unavailable) {
+      const ms = Math.round(performance.now() - t0);
+      const context = ctx.symbol + '@' + ctx.timeframe;
+      if (!viaWorker.ok && !viaWorker.workerFailed) {
+        return { ok: false, reason: viaWorker.reason, error: viaWorker.error,
+                 ctor: 'worker', context: context };
+      }
+      if (viaWorker.ok) {
+        return { ok: true, ms: ms, series: toSeries({ plots: viaWorker.plots }),
+                 strategy: toStrategy({ strategy: viaWorker.strategy }),
+                 drawings: viaWorker.drawings, ctor: 'worker', context: context };
+      }
+      /* a worker that could not start falls through to the old main-thread path */
+    }
+
     let mod;
     try {
       mod = await loadPineTS();
@@ -346,9 +513,6 @@
       return { ok: false, reason: why, error: classify(why, 'ENGINE_UNAVAILABLE') };
     }
 
-    const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
-    const t0 = performance.now();
-    const label = 'PineTS' + (opts.name ? ` (${opts.name})` : '');
     let built = newEngine(mod, bars, opts.forceBars);
     try {
       let out;

@@ -194,9 +194,35 @@ class TheChartBarsFallbackIsNotSilentlyBroken(unittest.TestCase):
 
     def test_fallback_engine_gets_symbol_and_timeframe_not_bars_alone(self):
         self.assertIn("function normalizeBars", RUNNER)
-        self.assertIn("new mod.PineTS(normalizeBars(bars), ctx.symbol, ctx.timeframe", RUNNER)
+        self.assertIn("new mod.PineTS(withSymbolInfo(bars, ctx), ctx.symbol, ctx.timeframe", RUNNER)
         self.assertNotIn("new mod.PineTS(bars)", RUNNER)
         self.assertNotIn("context: null", RUNNER)
+
+    def test_the_bars_carry_symbol_info_so_syminfo_resolves(self):
+        """Fix #3 (28 Sep): a bars-only engine has NO syminfo, and 146 of 203 catalogued crashes were
+        scripts reading it (tickerid 77, mintick 52, ticker 11, timezone 3, basecurrency 3). PineTS
+        fills `_syminfo` only for a source exposing `getSymbolInfo`, so the array carries the method.
+        The mechanism was proven, not assumed: `probe-syminfo.mjs` PASSES with the method attached and
+        the same script FAILS without it. mintick must be derived from the bars — a wrong tick size
+        silently changes rounding."""
+        self.assertIn("function withSymbolInfo", RUNNER)
+        self.assertIn("arr.getSymbolInfo = () => Promise.resolve(info)", RUNNER)
+        self.assertIn("inferMintick", RUNNER)
+        for field in ("tickerid", "mintick", "timezone", "basecurrency", "currency"):
+            self.assertIn(field, RUNNER.split("function withSymbolInfo", 1)[1].split("function ", 1)[0])
+
+    def test_a_slow_run_cannot_freeze_the_pane(self):
+        """Fix #2 (28 Sep, measured): a 20-second run ticked a 250 ms interval ZERO times, so a run
+        holds the page's only thread and `withTimeout` cannot fire — no queued bridge command is
+        answered while it works, and the catalogue's slowest script measured 301 s. The run therefore
+        goes to a worker with a deadline, and the deadline TERMINATES it."""
+        self.assertIn("new Worker('pinets-worker.js', { type: 'module' })", RUNNER)
+        self.assertIn("worker.terminate()", RUNNER)
+        self.assertIn("did not finish within", RUNNER)
+        worker = read("console/frontend/pinets-worker.js")
+        self.assertIn("self.onmessage", worker)
+        self.assertIn("attachSymbolInfo", worker)          # the worker needs fix #3 too
+        self.assertIn("self.postMessage(payload)", worker)
 
     def test_bars_are_keyed_openTime_and_closeTime(self):
         self.assertIn("openTime", RUNNER)
