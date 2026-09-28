@@ -9,8 +9,8 @@ engine ran both, which hid 450 indicators behind a guard that had stopped being 
 ## Totals
 
 - **797 indicators measured**
-- **runs: 721 (90%)** — was 594 (74%) before the syminfo fix
-- **crashes: 76 (9%)**
+- **runs: 731 (91%)** — was 594 (74%) before the syminfo fix
+- **crashes: 66 (8%)**
 - of the ones that run: **530 plot at least one series**, 191 run and paint
   nothing (an engine ANSWER — conditions never fired, or the script draws only geometry — not a
   failure)
