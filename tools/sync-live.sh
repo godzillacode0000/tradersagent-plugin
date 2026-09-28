@@ -21,6 +21,11 @@ fi
 
 cp "$HERE"/console/frontend/*.js "$HERE"/console/frontend/*.css "$HERE"/console/frontend/index.html \
   "$LIVE/frontend/"
+# The vendored pinets engine travels with the repo (see THIRD-PARTY.md / vendor/pinets/PROVENANCE.md):
+# the import map serves it from ./vendor/pinets/, so a sync that skips it 404s the engine and every
+# script on the chart stops evaluating. The *.js glob above does not descend, hence this line.
+mkdir -p "$LIVE/frontend/vendor/pinets"
+cp "$HERE"/console/frontend/vendor/pinets/* "$LIVE/frontend/vendor/pinets/"
 cp "$HERE"/console/backend/{server.py,chart_bridge.py,chart_stream.py,agents_store.py,chat.py,backtest_service.py,library_thumbs.py} \
   "$LIVE/backend/"
 cp "$HERE"/console/bin/trader-chart "$LIVE/bin/trader-chart"

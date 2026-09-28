@@ -1,7 +1,10 @@
 # runtime state — chart bridge files, study threads, screenshots
 console/agents/
-# offline copy fetched by ./install.sh --vendor (LuxAlgo's builds, not redistributed here)
-console/frontend/vendor/
+# LuxAlgo's builds fetched by ./install.sh --vendor (not redistributed here)
+console/frontend/vendor/*.js
+console/frontend/vendor/*.css
+# …but the pinets engine IS redistributed: pinned, unmodified, built from the fork below.
+!console/frontend/vendor/pinets/
 
 # python
 __pycache__/

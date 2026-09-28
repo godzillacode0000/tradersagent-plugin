@@ -22,18 +22,25 @@ stated.
 ## vela-pinets + pinets — the Pine (PineTS) runtimes
 
 - **Licence:** **AGPL-3.0-only** — <https://github.com/LuxAlgo/Vela-pinets> · <https://github.com/LuxAlgo/PineTS>
-- **How it is used:** loaded from jsDelivr at runtime (`@luxalgo/vela-pinets@0.2.12`, `pinets@0.10.0`),
-  pinned by URL. **They are not redistributed in this repository** — that is deliberate: bundling
-  them would put the combined work under the AGPL.
-- **Why the `pinets` pin is a floor, not a preference (27 Sep):** 0.9.33 evaluates *both* sides of a
+- **How it is used:** `@luxalgo/vela-pinets@0.2.12` is loaded from jsDelivr at runtime, pinned by URL.
+  The **`pinets` engine is redistributed in this repository** at
+  `console/frontend/vendor/pinets/pinets.min.browser.es.js` (653 KB, browser-ES build) and is what the
+  import map serves; the AGPL text travels with it as `vendor/pinets/LICENSE`.
+  - Built **unmodified** from the fork **<https://github.com/godzillacode0000/PineTS>** at commit
+    `1f65fa2` (= upstream `0.10.0`, the same version the CDN pin used to serve).
+  - Because this repository now redistributes AGPL code, the combined distribution is under the AGPL:
+    anyone who receives it can ask for the complete corresponding source, and the fork above is that
+    source for the engine. Bundling was a deliberate decision (free distribution, no monetisation) —
+    the earlier policy was CDN-only, precisely to keep the combined work out of the AGPL.
+  - If the engine is ever patched here, the patch must be published in the fork and noted in this file.
+- **Why the `pinets` pin is a floor, not a preference (27 Sep):** `pinets@0.10.0` is the floor: 0.9.33 evaluates *both* sides of a
   ternary, so the standard guard `size >= 2 ? array.get(a, size - 2) : na` still runs the read and
   dies with `Index -2 is out of bounds, array size is 0` the moment the array is empty — the script
   aborts and the pane stays blank. 0.10.0 honours the guard. Verified against the Library's
   *Wyckoff Wave & Volume Studies* (crashes on 0.9.33, runs and draws four series on 0.10.0); do not
   pin back down.
-- `./install.sh --vendor` fetches a local copy for offline use straight from the CDN into
-  `console/frontend/vendor/` (git-ignored). That copy is for the person who ran it, on their own
-  machine, and it keeps the AGPL obligations the licence states.
+- `./install.sh --vendor` still fetches Vela's pinned browser builds into `console/frontend/vendor/`
+  for offline use (git-ignored). The pinets engine no longer needs fetching — it ships with the repo.
 - LuxAlgo's own note: vela-pinets is *"licensed separately from Vela's Apache-2.0 and this server's
   MIT. Vela itself ships no engine and carries no Pine code."*
 

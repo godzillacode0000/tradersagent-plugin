@@ -54,16 +54,46 @@ def import_map(html: str) -> dict:
 
 class ThePineEnginePin(unittest.TestCase):
     def test_the_import_map_asks_for_the_fixed_engine(self):
+        """The engine is either a CDN URL (>= floor) or the vendored file (with its provenance).
+
+        It moved from `pinets@0.10.0` on jsDelivr to `./vendor/pinets/` when the engine was bundled:
+        the version is then recorded in PROVENANCE.md next to the file, because a minified bundle
+        carries no readable version marker.
+        """
         url = import_map(read(HTML)).get("pinets")
         self.assertIsNotNone(url, "the import map no longer maps 'pinets'")
+
         match = re.search(r"pinets@(\d+\.\d+\.\d+)", url)
-        self.assertIsNotNone(match, f"no version in the pinets URL: {url}")
-        found = version_tuple(match.group(1))
+        if match:
+            self.assertGreaterEqual(
+                version_tuple(match.group(1)),
+                FLOOR,
+                "pinets is pinned below 0.10.0 — that engine runs both sides of a ternary and "
+                "kills every guarded array read in the Library (Index -2 is out of bounds)",
+            )
+            return
+
+        # A local path: the file must be there, and its provenance must name the version.
+        path = os.path.normpath(os.path.join(FRONTEND, url))
+        self.assertTrue(os.path.isfile(path), f"the import map points at a missing file: {url}")
+        self.assertGreater(
+            os.path.getsize(path),
+            100_000,
+            f"{url} is too small to be the engine bundle",
+        )
+        provenance = read(os.path.join(os.path.dirname(path), "PROVENANCE.md"))
+        found = re.search(r"Version\s*\|\s*\*\*(\d+\.\d+\.\d+)\*\*", provenance)
+        self.assertIsNotNone(found, f"PROVENANCE.md next to {url} names no version")
         self.assertGreaterEqual(
-            found,
+            version_tuple(found.group(1)),
             FLOOR,
-            "pinets is pinned below 0.10.0 — that engine runs both sides of a ternary and "
-            "kills every guarded array read in the Library (Index -2 is out of bounds)",
+            "the vendored engine is below 0.10.0 — see the ternary note in THIRD-PARTY.md",
+        )
+        self.assertIn("AGPL-3.0-only", provenance, "PROVENANCE.md must state the licence")
+        self.assertIn("github.com/godzillacode0000/PineTS", provenance, "name the fork")
+        self.assertTrue(
+            os.path.isfile(os.path.join(os.path.dirname(path), "LICENSE")),
+            "the AGPL text must travel with the redistributed engine",
         )
 
     def test_nothing_else_pins_the_engine_below_the_floor(self):
