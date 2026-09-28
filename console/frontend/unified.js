@@ -95,16 +95,20 @@ window.TraderRun = (function () {
         for (const row of arr) {
           const here = idx;
           idx += 1;
-          if (!row || typeof row !== 'object') continue;
-          if (!color && row.options && row.options.color) color = row.options.color;
-          if (typeof row.value !== 'number' || !isFinite(row.value)) continue;
+          /* The worker's projection sends a bare NUMBER for a simple plot and an object for a styled
+           * one, so read both — the same tolerance `pointValue` gives the series list. Requiring an
+           * object here is why every series-only indicator painted nothing. */
+          if (row && typeof row === 'object' && !color && row.options && row.options.color) color = row.options.color;
+          const val = (typeof row === 'number') ? row
+            : (row && typeof row === 'object' && typeof row.value === 'number' ? row.value : null);
+          if (val == null || !isFinite(val)) continue;
           /* Plot rows are one per bar in run order, but they do not always carry a timestamp. Map by
            * time when there is one, else fall back to the row's own index — the engine ran over the
            * same bars the chart is showing, so the index is the bar index. */
-          const byTime = barAt(bars, timeOf(row));
+          const byTime = row && typeof row === 'object' ? barAt(bars, timeOf(row)) : null;
           const i = byTime != null ? byTime : here;
           if (i == null || i < 0) continue;
-          pts.push({ x: i, y: row.value });
+          pts.push({ x: i, y: val });
         }
         if (pts.length >= 2) out.push({ points: pts, color: color || null });
       }
@@ -283,7 +287,8 @@ window.TraderRun = (function () {
 
     if (r.drew) {
       s += ' · overlay drew ' + r.drew.boxes + ' box(es), ' + r.drew.lines + ' line(s), ' +
-        r.drew.labels + ' label(s), ' + (r.drew.tables || 0) + ' table(s)';
+        r.drew.labels + ' label(s), ' + (r.drew.tables || 0) + ' table(s)' +
+        (r.drew.polylines ? ', ' + r.drew.polylines + ' series path(s)' : '');
       const v = r.verified;
       if (v) {
         s += ' · verified: ' + v.boxes + ' box / ' + v.lines + ' line / ' +
