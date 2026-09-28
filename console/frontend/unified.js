@@ -81,10 +81,41 @@ window.TraderRun = (function () {
       }
       return vals.filter((x) => x && typeof x === 'object' && !x._deleted);
     };
+    /* The engine's own series — every plot that is not a drawing container. Painting these as paths is
+     * what makes a script with more than two plots actually appear: the "Vela native" mapper can only
+     * express simple scripts, so a four-series indicator used to compute fine and paint nothing. */
+    const seriesPaths = () => {
+      const out = [];
+      for (const [key, node] of Object.entries(plots)) {
+        if (key.startsWith('__')) continue;
+        const arr = Array.isArray(node) ? node : (node && Array.isArray(node.data) ? node.data : []);
+        const pts = [];
+        let color = null;
+        let idx = 0;
+        for (const row of arr) {
+          const here = idx;
+          idx += 1;
+          if (!row || typeof row !== 'object') continue;
+          if (!color && row.options && row.options.color) color = row.options.color;
+          if (typeof row.value !== 'number' || !isFinite(row.value)) continue;
+          /* Plot rows are one per bar in run order, but they do not always carry a timestamp. Map by
+           * time when there is one, else fall back to the row's own index — the engine ran over the
+           * same bars the chart is showing, so the index is the bar index. */
+          const byTime = barAt(bars, timeOf(row));
+          const i = byTime != null ? byTime : here;
+          if (i == null || i < 0) continue;
+          pts.push({ x: i, y: row.value });
+        }
+        if (pts.length >= 2) out.push({ points: pts, color: color || null });
+      }
+      return out;
+    };
+
     return {
       boxes: rowsOf('__boxes__').map((b) => toBarIndex(b, bars, ['left', 'right'])).filter(Boolean),
       lines: rowsOf('__lines__').map((l) => toBarIndex(l, bars, ['x1', 'x2'])).filter(Boolean),
       labels: rowsOf('__labels__').map((t) => toBarIndex(t, bars, ['x'])).filter(Boolean),
+      polylines: seriesPaths(),
       tables: rowsOf('__tables__'),
       rawRows,
     };
@@ -94,7 +125,10 @@ window.TraderRun = (function () {
      objects themselves). Adding arrays with `+` stringifies them — that made `=== 0` permanently
      false and hid the provider guard for a whole afternoon (measured 23 Sep). Count by length. */
   const fieldN = (v) => (Array.isArray(v) ? v.length : (typeof v === 'number' ? v : (v ? 1 : 0)));
-  const counts = (o) => (o ? fieldN(o.boxes) + fieldN(o.lines) + fieldN(o.labels) + fieldN(o.tables) : 0);
+  const counts = (o) => (o ? fieldN(o.boxes) + fieldN(o.lines) + fieldN(o.labels) + fieldN(o.polylines) + fieldN(o.tables) : 0);
+  /* Geometry only: `containers` still means "the script declares its own drawings", which is what tells
+     the Vela-native mapper to stand aside. Series paths are ours to paint, not a reason to skip it. */
+  const geometryOnly = (o) => (o ? fieldN(o.boxes) + fieldN(o.lines) + fieldN(o.labels) + fieldN(o.tables) : 0);
 
   /* Rows the engine actually stored across every drawing container — before filters, before
      shape — and how many of them came back EMPTY. A container that was constructed but never
@@ -174,19 +208,25 @@ window.TraderRun = (function () {
     const geo = flatten(res.raw, bars);
     const stored = engineRows(res.raw);
     const engineN = stored.n;
-    const containers = counts(geo) > 0;
+    const containers = geometryOnly(geo) > 0;
     let drew = null;
     let verified = null;
     let drawFail = null;
-    if (containers) {
+    /* A script can have something to paint without declaring a single drawing container: its own plot
+     * series. Those are paths now, so gate on both — gating on `containers` alone meant every
+     * series-only indicator computed correctly and painted nothing. */
+    const hasPaths = !!(geo.polylines && geo.polylines.length);
+    if (containers || hasPaths) {
       if (!window.ChartOverlay) {
         drawFail = 'no overlay on this page — reload the console';
       } else {
         const spec = await window.ChartOverlay.apply(
-          { boxes: geo.boxes, lines: geo.lines, labels: geo.labels, tables: geo.tables }, opts || {});
+          { boxes: geo.boxes, lines: geo.lines, labels: geo.labels, polylines: geo.polylines,
+            tables: geo.tables }, opts || {});
         if (spec && spec.ok) {
           drew = {
             boxes: spec.boxes || 0, lines: spec.lines || 0, labels: spec.labels || 0,
+            polylines: spec.polylines || 0,
             tables: spec.tables || 0, reason: spec.reason || null, mapping: spec.mapping || null,
           };
           verified = window.ChartOverlay.state ? window.ChartOverlay.state() : null;

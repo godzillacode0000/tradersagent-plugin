@@ -498,7 +498,11 @@
                  ctor: 'worker', context: context };
       }
       if (viaWorker.ok) {
+        /* `raw` must carry the same shape the main-thread path returns, because flatten() and
+         * engineRows() read `raw.plots`. Without it every worker run painted nothing at all — the
+         * drawings and the script's own series were computed and then dropped on the floor. */
         return { ok: true, ms: ms, series: toSeries({ plots: viaWorker.plots }),
+                 raw: { plots: viaWorker.plots, strategy: viaWorker.strategy },
                  strategy: toStrategy({ strategy: viaWorker.strategy }),
                  drawings: viaWorker.drawings, ctor: 'worker', context: context };
       }

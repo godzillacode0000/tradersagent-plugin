@@ -363,7 +363,7 @@
     if (!m) return { ok: false, reason: 'no visible window / bars to map against' };
     const ctx = cv.getContext('2d');
     ctx.clearRect(0, 0, cv.width, cv.height);
-    let boxes = 0, lines = 0, labels = 0;
+    let boxes = 0, lines = 0, labels = 0, polylines = 0;
 
     for (const b of (spec.boxes || [])) {
       const x1 = m.x(+b.left), x2 = m.x(+b.right);
@@ -400,6 +400,23 @@
     }
     ctx.setLineDash([]);
 
+    for (const pl of (spec.polylines || [])) {
+      const pts = (pl.points || []).filter((p) => p && isFinite(p.x) && isFinite(p.y));
+      if (pts.length < 2) continue;
+      ctx.strokeStyle = pl.color || '#2157f3';
+      ctx.lineWidth = Math.max(pl.width || 1, O2.emphasise !== false ? 1.6 : 1);
+      ctx.setLineDash(pl.style && /dash/i.test(pl.style) ? [5, 4] : []);
+      ctx.beginPath();
+      let started = false;
+      for (const p of pts) {
+        const X = m.x(+p.x), Y = m.y(+p.y);
+        if (!started) { ctx.moveTo(X, Y); started = true; } else { ctx.lineTo(X, Y); }
+      }
+      ctx.stroke();
+      polylines += 1;
+    }
+    ctx.setLineDash([]);
+
     for (const t of (spec.labels || [])) {
       ctx.fillStyle = t.color || '#e6edf3';
       ctx.font = t.font || DEFAULTS.font;
@@ -410,8 +427,8 @@
     const tables = paintTables(spec.tables, m.rect);
 
     lastSpec = { spec, opts, map: { i0: m.i0, n: m.n, lo: m.lo, hi: m.hi, bars: m.bars },
-                 drawn: { boxes, lines, labels, tables } };
-    return { ok: true, boxes, lines, labels, tables, mapping: lastSpec.map, pad: m.pad };
+                 drawn: { boxes, lines, labels, polylines, tables } };
+    return { ok: true, boxes, lines, labels, polylines, tables, mapping: lastSpec.map, pad: m.pad };
   }
 
   /**
