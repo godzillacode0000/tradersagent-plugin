@@ -24,11 +24,21 @@
   let ctorPromise = null;
 
   /* What PineTS genuinely cannot run today, each with the exact reason the UI shows.
-     Keep this list honest: a wrong "runnable" here is reported to the user as success. */
+     Keep this list honest in BOTH directions: a wrong "runnable" here is reported to the user as
+     success, and a wrong refusal hides a script that would have worked.
+
+     `while` and `for … in` were refused here for months and they both RUN. Measured 28 Sep 2026 with
+     the offline battery (`scripts/pinets-engine-battery.mjs`), on pinets 0.10.0 AND 0.9.33 (our
+     floor): a `while` probe and a `for … in` probe each return OK, and a real Library script that
+     carries a `while` (eqh-eql-fvg-breakouts, 17,917 characters) runs and returns 2 series. The
+     engine's own source has `WhileStatement` in the parser and the codegen, and its AGENTS.md
+     documents `whl<n>_` while-loop scopes. The refusal was ours, and it sat in front of roughly half
+     the catalogue — 450 of 806 indicators were refused by this regex, not by the engine.
+
+     Before adding an entry here, PROVE the refusal with a run: put the construct in a tiny script and
+     run it through the battery. A guard is a claim about the engine and it decays. */
   const GAPS = [
-    [/^\s*import\s/m, '`import` (LuxAlgo libraries) is unimplemented in PineTS'],
-    [/\bwhile\b/, '`while` loops are unimplemented in PineTS'],
-    [/\bfor\s+\w+\s+in\b/, '`for \u2026 in` is unimplemented in PineTS']
+    [/^\s*import\s/m, '`import` (LuxAlgo libraries) is unimplemented in PineTS']
   ];
 
   /** Strip comments so a construct NAMED in prose never blocks a file that does not use it. */

@@ -386,6 +386,32 @@ class ContrastClearsAA(unittest.TestCase):
             self.assertGreaterEqual(r, 4.5, "--lx-%s is %.2f:1 on paper" % (name, r))
 
 
+class TheRefusalListMatchesTheEngine(unittest.TestCase):
+    """The pre-flight in pinets-runner.js refuses a script before it runs, so a wrong entry hides a
+    script that works — and it did: `while` and `for … in` were refused for months while the engine
+    ran both (measured 28 Sep 2026, offline battery, pinets 0.10.0 and 0.9.33, plus a real Library
+    script carrying a `while` returning 2 series). A refusal is a claim about the engine, so it is
+    pinned here as a contract: only `import` may be refused, and any addition needs a run behind it.
+    """
+
+    def test_while_and_for_in_are_not_refused(self):
+        src = read(APP_DIR + "/pinets-runner.js") if "APP_DIR" in globals() else read(
+            os.path.join(ROOT, "console", "frontend", "pinets-runner.js"))
+        gaps = src.split("const GAPS = [", 1)[1].split("];", 1)[0]
+        self.assertNotIn("while", gaps,
+                         "PineTS runs while loops — prove a refusal with the battery before adding it")
+        self.assertNotIn("in\\b", gaps.replace("in\b", "in\\b"),
+                         "PineTS runs for … in — prove a refusal with the battery before adding it")
+        self.assertIn("import", gaps, "import is the real one and must stay refused")
+
+    def test_the_refusal_list_carries_its_evidence(self):
+        src = read(os.path.join(ROOT, "console", "frontend", "pinets-runner.js"))
+        block = src.split("const GAPS = [", 1)[0]
+        self.assertIn("battery", block,
+                      "the list must say how a refusal is proven, or the next agent adds one blind")
+        self.assertIn("28 Sep 2026", block, "the measurement date belongs with the claim")
+
+
 class ThePineBlockCollapsesWithoutTouchingTheChart(unittest.TestCase):
     """A 22,729-char script used to push the whole Details pane down. Long sources now arrive
     collapsed and open on click. Two things this must never become: a JS height measurement, or an
