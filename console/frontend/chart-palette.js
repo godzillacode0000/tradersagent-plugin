@@ -90,7 +90,14 @@
     config.layout.textColor = p.text;
     if (config.grid?.vertLines) config.grid.vertLines.color = p.grid;
     if (config.grid?.horzLines) config.grid.horzLines.color = p.grid;
-    if (config.priceScale) config.priceScale.borderColor = p.border;
+    if (config.priceScale) {
+      config.priceScale.borderColor = p.border;
+      // The pane had been running with its right-hand axis collapsed: the chart showed candles with
+      // a bare gutter where the numbers belong, and every render reads as "broken" next to the
+      // vendor's own screenshots. The labels are part of the palette pass now — the same pass that
+      // owns the background and the candles — so a collapsed axis can never survive a theme change.
+      config.priceScale.labelsVisible = true;
+    }
     if (config.panes) config.panes.separatorColor = p.border;
     if (config.crosshair) config.crosshair.color = p.crosshair;
     for (const key of ['candles', 'bars']) {
