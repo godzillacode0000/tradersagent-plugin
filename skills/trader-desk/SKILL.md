@@ -228,8 +228,12 @@ Vela's toolbar row carry. Two halves, and only the first is guaranteed:
   lines, or plots more than two series, is refused a native *with a reason* instead. A native of that
   type already on the chart is never re-added — re-running a script, or running it after a reload when
   the old handle is gone, used to stack another pane (five `ATR 2.17` panes, 27 Sep). The report says
-  which rule fired (`drawn with … "the script names it"` / `not drawn: this script paints its own
-  dashboard …`).
+  which rule fired (`drawn with … "the script names it"` / `not drawn as a Vela native: this script
+  paints its own dashboard …`).
+- **"Not drawn as a Vela native" is not "not drawn".** Every plot series is stroked as a path on our
+  overlay (`seriesPaths()` in `unified.js` → `ChartOverlay`), so a script that wins no native still
+  paints; only one series at most ever becomes a native. Never relay the clause to the operator as
+  data missing — quote the `N series path(s)` count beside it.
 - **A drawing's x may be a TIMESTAMP, not a bar index.** `xloc = xloc.bar_time` rows — the LuxAlgo SMC
   order blocks are built exactly this way (`box.new(na,na,na,na, xloc = xloc.bar_time, extend =
   extend.right)` then `box.set_lefttop`/`set_rightbottom`) — carry ms, and the overlay paints in
@@ -243,6 +247,16 @@ Vela's toolbar row carry. Two halves, and only the first is guaranteed:
   answer command … within 45s`). Confirm with `trader-chart state` afterwards.
 
 ## Hard stops
+
+- **`chart_shot` cannot see our overlay.** The page captures with Vela's own `screenshot()`
+  (`workspace.screenshot()` → `chart.screenshot()`), which renders the chart's canvas only. A Library
+  run's boxes/lines/labels/series paths live on OUR canvas and are absent from the PNG. So a shot
+  proves natives and price, never geometry: to show overlay output, take a desktop capture (`grim`)
+  with the pane on screen. `overlay.state()` samples its own canvas alpha, which is why the run report
+  can honestly say a label is on screen while `chart_shot` shows nothing.
+- **Our overlay draws labels as plain text at (x, y).** `overlay.js` ignores Pine's label `style` and
+  anchor and calls `ctx.fillText` — so a label placed at the last bar runs off the right edge and is
+  invisible. For a diagnostic label, anchor it mid-pane (`bar_index - 150`), never at `bar_index`.
 
 - One indicator per chart. Replace, never stack.
 - No claim without a screenshot.
