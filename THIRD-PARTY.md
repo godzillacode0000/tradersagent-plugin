@@ -34,10 +34,10 @@ stated.
     anyone who receives it can ask for the complete corresponding source, and the fork above is that
     source for the engine. Bundling was a deliberate decision (free distribution, no monetisation) —
     the earlier policy was CDN-only, precisely to keep the combined work out of the AGPL.
-  - The engine now CARRIES three patches (29 Sep), all PUBLISHED on the fork's branch
+  - The engine now CARRIES four patches (29 Sep), all PUBLISHED on the fork's branch
     `fix/scope-collision` (<https://github.com/godzillacode0000/PineTS/tree/fix/scope-collision>):
-    UDT field history reads (`30a75fd`), `<drawing>.all` as a Pine array (`493a8ea`) and a scoped
-    comparison operand chain (`94d13ec`). The AGPL's
+    UDT field history reads (`30a75fd`), `<drawing>.all` as a Pine array (`493a8ea`), a scoped
+    comparison operand chain (`94d13ec`) and a UDT whose name a variable shares (`3c35b0f`). The AGPL's
     "make the changes visible" condition is met by that public branch — push any future patch BEFORE
     shipping a bundle that carries it.
 - **Why the `pinets` pin is a floor, not a preference (27 Sep):** `pinets@0.10.0` is the floor: 0.9.33 evaluates *both* sides of a
