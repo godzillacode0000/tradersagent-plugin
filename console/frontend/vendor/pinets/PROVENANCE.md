@@ -25,5 +25,8 @@ cd PineTS && npm ci && npm run build:prod:browser-es
 cp dist/pinets.min.browser.es.js <this directory>/
 ```
 
-If a patch is ever carried here, publish it in the fork and note it in `THIRD-PARTY.md` — the AGPL
-requires the changes to be visible to whoever receives this distribution.
+The patches this file carries are PUBLISHED: both commits live on the fork's branch
+`fix/scope-collision` (<https://github.com/godzillacode0000/PineTS/tree/fix/scope-collision>) —
+`30a75fd` (UDT field history) and `493a8ea` (`<drawing>.all`) — which is what the AGPL asks for
+(the changes visible to whoever receives this distribution). A future patch must be pushed BEFORE a
+bundle carrying it ships, and noted in `THIRD-PARTY.md`.

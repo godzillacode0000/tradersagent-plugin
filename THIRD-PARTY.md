@@ -34,10 +34,11 @@ stated.
     anyone who receives it can ask for the complete corresponding source, and the fork above is that
     source for the engine. Bundling was a deliberate decision (free distribution, no monetisation) —
     the earlier policy was CDN-only, precisely to keep the combined work out of the AGPL.
-  - The engine now CARRIES a patch (29 Sep). It is committed in the fork clone on branch
-    `fix/scope-collision` and still has to be PUSHED to the public fork before this bundle is handed
-    to anyone — until it is, someone receiving the bundle cannot see the modification, which is
-    exactly what the AGPL asks for. Pushing is a public action: ask the operator first.
+  - The engine now CARRIES two patches (29 Sep), both PUBLISHED on the fork's branch
+    `fix/scope-collision` (<https://github.com/godzillacode0000/PineTS/tree/fix/scope-collision>):
+    UDT field history reads (`30a75fd`) and `<drawing>.all` as a Pine array (`493a8ea`). The AGPL's
+    "make the changes visible" condition is met by that public branch — push any future patch BEFORE
+    shipping a bundle that carries it.
 - **Why the `pinets` pin is a floor, not a preference (27 Sep):** `pinets@0.10.0` is the floor: 0.9.33 evaluates *both* sides of a
   ternary, so the standard guard `size >= 2 ? array.get(a, size - 2) : na` still runs the read and
   dies with `Index -2 is out of bounds, array size is 0` the moment the array is empty — the script
