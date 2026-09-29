@@ -26,10 +26,10 @@ stated.
   The **`pinets` engine is redistributed in this repository** at
   `console/frontend/vendor/pinets/pinets.min.browser.es.js` (653 KB, browser-ES build) and is what the
   import map serves; the AGPL text travels with it as `vendor/pinets/LICENSE`.
-  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `30a75fd`
-    (= upstream `0.10.0` plus ONE transpiler patch — a UDT field history read; the details, the test
-    file and the sha256 are in `console/frontend/vendor/pinets/PROVENANCE.md`). Everything before that
-    commit was upstream as-is.
+  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `493a8ea`
+    (= upstream `0.10.0` plus TWO patches — UDT field history reads, and `<drawing>.all` as a Pine
+    array; the details, the test files and the sha256 are in
+    `console/frontend/vendor/pinets/PROVENANCE.md`). Everything before those commits was upstream as-is.
   - Because this repository now redistributes AGPL code, the combined distribution is under the AGPL:
     anyone who receives it can ask for the complete corresponding source, and the fork above is that
     source for the engine. Bundling was a deliberate decision (free distribution, no monetisation) —

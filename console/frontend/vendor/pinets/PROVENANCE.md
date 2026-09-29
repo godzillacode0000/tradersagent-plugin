@@ -8,9 +8,9 @@ Where this file came from, so the AGPL obligations are answerable without guessw
 | Version | **0.10.0** — the same version the import map used to serve from jsDelivr (`pinets@0.10.0`) |
 | Licence | **AGPL-3.0-only** — full text in `LICENSE` beside this file |
 | Source | <https://github.com/godzillacode0000/PineTS> — fork of <https://github.com/LuxAlgo/PineTS> |
-| Built from | commit `30a75fd` (branch `fix/scope-collision`), 2026-09-29 |
-| Modifications | **one transpiler patch**, on top of upstream 0.10.0: a UDT field history read (`b.c[N]`) — the lookback index is scoped like any other index (it used to be emitted bare and died with `ReferenceError: name is not defined`), and a `var` instance reads the FIELD's history (the object is created once, so `$.get(b, N).field` returned today's value — silently wrong). Tests: `tests/transpiler/udt-field-history.test.ts`, 4 cases, 3 fail without the patch. |
-| File | `pinets.min.browser.es.js`, 653,891 bytes, sha256 `215bc9e561b787856939fc48b765edab49005b5a6f70e6f5dabcb497e6b372e1…` |
+| Built from | commit `493a8ea` (branch `fix/scope-collision`), 2026-09-29 |
+| Modifications | **two patches**, on top of upstream 0.10.0. (1) UDT field history reads (`b.c[N]`): the lookback index is scoped like any other index (it was emitted bare and died with `ReferenceError: name is not defined`), and a `var` instance reads the FIELD's history (the object is created once, so `$.get(b, N).field` returned today's value — silently wrong); tests `tests/transpiler/udt-field-history.test.ts`, 3 of 4 fail without it. (2) `<drawing>.all` is a Pine array again: a new `DrawingArray` (an Array subclass that also carries the Pine array surface and `array` = itself) plus `Series.from`/`Context.init` keeping the array whole instead of storing its last element; tests `tests/namespaces/drawing-array.test.ts`. |
+| File | `pinets.min.browser.es.js`, 654,805 bytes, sha256 `42db98456aea506e484b2d4eb89065f9abd2e48f3ac26f40a9b7fb859028eeab…` |
 | Built with | `npm ci && npm run build:prod:browser-es` (rollup browser-ES bundle) |
 
 Why it is here: the console's import map (`console/frontend/index.html`) serves `pinets` from this file
