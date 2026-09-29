@@ -81,6 +81,34 @@ window.TraderRun = (function () {
       }
       return vals.filter((x) => x && typeof x === 'object' && !x._deleted);
     };
+    /* polyline.new() stores points as {index, price} (or {time, price} when xloc is bar_time).
+       The overlay paints {x, y} in bar-index space. Until this mapping existed, __polylines__
+       was never read — series paths reused the name — so every volume-profile script computed
+       a polyline and the chart showed none of it. */
+    const pointXY = (p, xloc) => {
+      if (!p || typeof p !== 'object') return null;
+      const y = typeof p.price === 'number' ? p.price : (typeof p.y === 'number' ? p.y : null);
+      if (y == null || !isFinite(y)) return null;
+      let x = null;
+      if ((xloc === 'bt' || xloc === 'bar_time') && typeof p.time === 'number') x = barAt(bars, p.time);
+      else if (typeof p.index === 'number') x = p.index;
+      else if (typeof p.x === 'number') x = p.x;
+      else if (typeof p.time === 'number') x = barAt(bars, p.time);
+      if (x == null || !isFinite(x)) return null;
+      return { x: x, y: y };
+    };
+    const drawingPolylines = () => rowsOf('__polylines__').map((pl) => {
+      const pts = (pl.points || []).map((p) => pointXY(p, pl.xloc)).filter(Boolean);
+      if (pts.length < 2) return null;
+      return {
+        points: pts,
+        color: pl.line_color || null,
+        fill: pl.fill_color || null,
+        width: pl.line_width || 1,
+        style: pl.line_style || null,
+        closed: !!pl.closed,
+      };
+    }).filter(Boolean);
     /* The engine's own series — every plot that is not a drawing container. Painting these as paths is
      * what makes a script with more than two plots actually appear: the "Vela native" mapper can only
      * express simple scripts, so a four-series indicator used to compute fine and paint nothing. */
@@ -119,7 +147,7 @@ window.TraderRun = (function () {
       boxes: rowsOf('__boxes__').map((b) => toBarIndex(b, bars, ['left', 'right'])).filter(Boolean),
       lines: rowsOf('__lines__').map((l) => toBarIndex(l, bars, ['x1', 'x2'])).filter(Boolean),
       labels: rowsOf('__labels__').map((t) => toBarIndex(t, bars, ['x'])).filter(Boolean),
-      polylines: seriesPaths(),
+      polylines: drawingPolylines().concat(seriesPaths()),
       tables: rowsOf('__tables__'),
       rawRows,
     };
@@ -271,10 +299,10 @@ window.TraderRun = (function () {
       if (r.paint && r.paint.added) {
         s += ' · drawn with Vela native "' + r.paint.added.title + '"';
         if (r.series.length > 1) {
-          s += ' · ' + (r.series.length - 1) + ' other plot(s) not drawn (no exact Vela native)';
+          s += ' · ' + (r.series.length - 1) + ' other plot(s) not drawn as a Vela native';
         }
       } else {
-        s += ' · not drawn: ' + ((r.paint && r.paint.reason) || 'paint layer missing');
+        s += ' · not drawn as a Vela native: ' + ((r.paint && r.paint.reason) || 'paint layer missing');
       }
     }
 

@@ -671,11 +671,19 @@ async function chartBars() {
     const symbol = m && m.symbol;
     const interval = (m && m.interval) || '1h';
     if (!symbol) return [];
-    const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=500`);
-    const rows = await res.json();
-    if (Array.isArray(rows) && rows.length) {
-      return rows.map(([t, o, h, l, cl, v]) => ({
-        time: t, open: +o, high: +h, low: +l, close: +cl, volume: +v
+    // Through the console, not straight to the venue: api.binance.com sends no
+    // Access-Control-Allow-Origin for http://127.0.0.1:8787, so the browser blocked this fetch and
+    // every run reported "0 bars available". Same origin, and the console normalises the chart's
+    // display timeframe ("30M") to the lowercase interval the venue accepts.
+    const res = await fetch(`/api/bars?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=500`);
+    const payload = await res.json();
+    // The console wraps every endpoint the same way: { ok, data: { bars, count, ... } }.
+    const rows = payload && payload.ok && payload.data && Array.isArray(payload.data.bars)
+      ? payload.data.bars
+      : null;
+    if (rows && rows.length) {
+      return rows.map((r) => ({
+        time: r.time, open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume
       }));
     }
   } catch {}

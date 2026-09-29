@@ -41,9 +41,18 @@ a cycle:
 * `apply <file.pine>` runs Pine and paints what it makes: geometry (boxes/lines/labels/tables) on our
   overlay, plot series as a **Vela native** matching the script. When a plain price level has **no**
   matching native, the answer still says so:
-  *"2 series · not drawn: no Vela native in this build expresses what this script computes"*.
+  *"2 series · not drawn as a Vela native: no Vela native in this build expresses what this script
+  computes"* — both series are still stroked as series paths on the overlay; the clause says only that
+  no native of theirs was added.
 * `draw <file.pine>` runs Pine and paints the **geometry the script builds** (lines/labels/boxes/tables)
   on our overlay layer. This is the one that shows a level.
+
+**Bars come through the console** — `chartBars()` asks `/api/bars?symbol=…&interval=…&limit=500` on the
+page's own origin. The page used to fetch `api.binance.com` directly and the venue sends no
+`Access-Control-Allow-Origin` for `http://127.0.0.1:8787`, so the browser blocked the response and every
+run reported *"only 0 bars available (need at least 30)"*. The endpoint also normalises the chart's
+display timeframe (`30M`, `4H`) to the lowercase interval the venue accepts, and coerces Binance's
+string numbers with `float()`.
 
 Measured example, `SOLUSDT 1h`, previous UTC day 2026-09-19 (Binance daily klines):
 

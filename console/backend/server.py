@@ -1092,6 +1092,53 @@ def ep_chart_state(params: dict) -> dict:
     return load_chart_state(AGENTS_ROOT)
 
 
+# Binance only accepts lowercase intervals. The chart reports its own timeframe in display form
+# ("30M", "4H", "1D"), so normalise before the request instead of trusting the caller.
+_BINANCE_TF = {
+    "1M": "1m", "3M": "3m", "5M": "5m", "15M": "15m", "30M": "30m", "45M": "45m",
+    "1H": "1h", "2H": "2h", "3H": "3h", "4H": "4h", "6H": "6h", "8H": "8h", "12H": "12h",
+    "1D": "1d", "3D": "3d", "1W": "1w",
+}
+
+
+def ep_bars(params: dict) -> dict:
+    """Public OHLCV for one symbol/timeframe, fetched server-side.
+
+    The page cannot do this itself: api.binance.com sends no Access-Control-Allow-Origin for
+    http://127.0.0.1:8787, so the browser blocked every direct klines request and chartBars()
+    returned an empty array. That surfaced as "only 0 bars available (need at least 30)".
+    Serving bars from the origin the page was served from makes the request same-origin.
+    """
+    symbol = str((params.get("symbol") or [""])[0] or "").strip().upper()
+    interval = str((params.get("interval") or [""])[0] or "1h").strip()
+    try:
+        limit = max(1, min(1000, int((params.get("limit") or ["500"])[0] or 500)))
+    except (TypeError, ValueError):
+        limit = 500
+    if not symbol:
+        return {"bars": [], "symbol": symbol, "interval": interval, "error": "symbol_required"}
+
+    interval = _BINANCE_TF.get(interval, interval) or "1h"
+    from urllib.parse import quote as _quote
+    url = ("https://api.binance.com/api/v3/klines"
+           f"?symbol={_quote(symbol)}&interval={_quote(interval)}&limit={limit}")
+    try:
+        import urllib.request as _u
+        req = _u.Request(url, headers={"User-Agent": "traders-agent-console/1.0"})
+        with _u.urlopen(req, timeout=15) as res:
+            rows = json.load(res)
+    except Exception as exc:  # noqa: BLE001 - an upstream failure is an answer, not a crash
+        return {"bars": [], "symbol": symbol, "interval": interval,
+                "error": f"{type(exc).__name__}: {exc}"}
+    if not isinstance(rows, list):
+        return {"bars": [], "symbol": symbol, "interval": interval, "error": "unexpected_payload"}
+    # Binance returns every numeric field as a JSON *string*; float() is what coerces it.
+    bars = [{"time": int(r[0]), "open": float(r[1]), "high": float(r[2]), "low": float(r[3]),
+             "close": float(r[4]), "volume": float(r[5])}
+            for r in rows if isinstance(r, list) and len(r) >= 6]
+    return {"bars": bars, "symbol": symbol, "interval": interval, "count": len(bars)}
+
+
 def ep_chart_commands(params: dict) -> dict:
     """Commands the chart page has not executed yet (it passes the last id it handled)."""
     since = int((params.get("since") or ["0"])[0] or 0)
@@ -1238,6 +1285,11 @@ ROUTES = {
     "/api/chart/commands": (ep_chart_commands, 0.0),
     "/api/chart/result": (ep_chart_result, 0.0),
     "/api/chart/stream/status": (ep_chart_stream_status, 0.0),
+    # Bars come through the console, same-origin. The page fetching api.binance.com directly is
+    # what made every run report "0 bars available": Binance sends no Access-Control-Allow-Origin
+    # for http://127.0.0.1:8787, so the browser blocked the response and chartBars() returned [].
+    # One proxy, the CORS table gains no entry, and the page asks the origin it was served from.
+    "/api/bars": (ep_bars, 0.0),
     "/api/search": (ep_search, TTL["search"]),
     "/api/indicators": (ep_indicators, TTL["indicators"]),
     # The whole catalogue in one answer, grouped by family (walked once, then kept on disk).

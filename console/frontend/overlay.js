@@ -192,8 +192,16 @@
     return best;
   }
 
+  /* The overlay must be the last child of the SAME parent as the candle canvas. Appending it to
+     #chart at z-index 25 still lost: Vela's plot lives in its own stacking context and painted
+     over us. state() then counted pixels on a canvas the operator could not see. */
+  function overlayHost() {
+    const plot = paneCanvas();
+    return (plot && plot.parentElement) || chartEl();
+  }
+
   function plotRect() {
-    const hs = chartEl();
+    const hs = overlayHost();
     const c = paneCanvas();
     if (!c) return null;
     const r = c.getBoundingClientRect();
@@ -273,10 +281,11 @@
   }
 
   function ensureCanvas() {
-    const target = chartEl();
+    const target = overlayHost();
     if (!target) return null;
     if (canvas && host === target && canvas.isConnected) {
       sizeCanvas();
+      target.appendChild(canvas);
       return canvas;
     }
     host = target;
@@ -403,7 +412,6 @@
     for (const pl of (spec.polylines || [])) {
       const pts = (pl.points || []).filter((p) => p && isFinite(p.x) && isFinite(p.y));
       if (pts.length < 2) continue;
-      ctx.strokeStyle = pl.color || '#2157f3';
       ctx.lineWidth = Math.max(pl.width || 1, O2.emphasise !== false ? 1.6 : 1);
       ctx.setLineDash(pl.style && /dash/i.test(pl.style) ? [5, 4] : []);
       ctx.beginPath();
@@ -412,7 +420,18 @@
         const X = m.x(+p.x), Y = m.y(+p.y);
         if (!started) { ctx.moveTo(X, Y); started = true; } else { ctx.lineTo(X, Y); }
       }
-      ctx.stroke();
+      if (pl.closed) ctx.closePath();
+      if (pl.fill) {
+        ctx.fillStyle = emphasiseColour(pl.fill, O2.emphasise !== false, 0.28);
+        ctx.fill();
+      }
+      if (pl.color) {
+        ctx.strokeStyle = pl.color;
+        ctx.stroke();
+      } else if (!pl.fill) {
+        ctx.strokeStyle = '#2157f3';
+        ctx.stroke();
+      }
       polylines += 1;
     }
     ctx.setLineDash([]);
