@@ -464,7 +464,10 @@ function applyTheme(next) {
 /* ------------------------------------------------------------------- chart */
 function newChart(host, options) {
   const Ctor = window.Vela?.Vela ?? window.Vela;
-  const Pine = window.VelaPinets?.PineEngine;
+  // Their port ships two engines and the docs' own line — "Off the main thread" — makes the worker the
+  // one to reach for first. The bare-chart path takes PineWorkerEngine and only falls back to the
+  // main-thread engine on a build that does not carry it (docs: PineEngine "simplest setup").
+  const Pine = window.VelaPinets?.PineWorkerEngine ?? window.VelaPinets?.PineEngine;
   if (typeof Ctor !== 'function') throw new Error('Vela browser build did not load');
   host.innerHTML = '';
   const instance = new Ctor(host, {
@@ -478,6 +481,8 @@ function newChart(host, options) {
   if (typeof Pine === 'function') {
     instance.registerEngine('pine', new Pine());
     pineReady = true;
+    log('Pine engine on this chart: ' +
+        (Pine === window.VelaPinets?.PineWorkerEngine ? 'PineWorkerEngine (Web Worker)' : 'PineEngine (main thread)'));
   } else {
     pineReady = false;
     toast('Pine engine missing — indicators cannot be mounted', true);

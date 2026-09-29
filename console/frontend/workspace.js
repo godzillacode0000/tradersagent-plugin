@@ -74,6 +74,19 @@ state.ready = (async () => {
   const Engine = pinets.PineWorkerEngine || pinets.PineEngine;
   window.__wsApp.pineRegistered = typeof Engine === 'function';
 
+  // The docs' other wiring — `registerDefaultEngine('pine', () => new PineWorkerEngine())`, "register
+  // once, app-wide" — so any chart this app builds later (even one that skips the factory above) can
+  // run Pine. Separate import and try/catch: a plugin subpath that fails must not cost us the shell.
+  try {
+    const { registerDefaultEngine } = await import('@luxalgo/vela/plugin');
+    if (typeof registerDefaultEngine === 'function' && typeof pinets.PineWorkerEngine === 'function') {
+      registerDefaultEngine('pine', () => new pinets.PineWorkerEngine());
+      console.info('[workspace] default Pine engine registered app-wide (PineWorkerEngine)');
+    }
+  } catch (err) {
+    console.warn('[workspace] registerDefaultEngine unavailable — per-cell engines still wired:', err);
+  }
+
   // Park the palette the workspace is about to load, before Vela can replace it: this is the only
   // moment the operator's own colours are still readable (see chart-palette.js).
   if (window.ChartPalette?.parkStored?.()) {
