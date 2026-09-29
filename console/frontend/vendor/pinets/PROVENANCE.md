@@ -8,9 +8,9 @@ Where this file came from, so the AGPL obligations are answerable without guessw
 | Version | **0.10.0** — the same version the import map used to serve from jsDelivr (`pinets@0.10.0`) |
 | Licence | **AGPL-3.0-only** — full text in `LICENSE` beside this file |
 | Source | <https://github.com/godzillacode0000/PineTS> — fork of <https://github.com/LuxAlgo/PineTS> |
-| Built from | commit `1f65fa2dc1d46a9b254163599030f4bc27580922` (`1f65fa2`), 2026-09-25 |
-| Modifications | **none** — the fork is upstream 0.10.0 as-is at that commit |
-| File | `pinets.min.browser.es.js`, 653,095 bytes, sha256 `80f3a8d80d413a966b492b067ef39bb6…` |
+| Built from | commit `30a75fd` (branch `fix/scope-collision`), 2026-09-29 |
+| Modifications | **one transpiler patch**, on top of upstream 0.10.0: a UDT field history read (`b.c[N]`) — the lookback index is scoped like any other index (it used to be emitted bare and died with `ReferenceError: name is not defined`), and a `var` instance reads the FIELD's history (the object is created once, so `$.get(b, N).field` returned today's value — silently wrong). Tests: `tests/transpiler/udt-field-history.test.ts`, 4 cases, 3 fail without the patch. |
+| File | `pinets.min.browser.es.js`, 653,891 bytes, sha256 `215bc9e561b787856939fc48b765edab49005b5a6f70e6f5dabcb497e6b372e1…` |
 | Built with | `npm ci && npm run build:prod:browser-es` (rollup browser-ES bundle) |
 
 Why it is here: the console's import map (`console/frontend/index.html`) serves `pinets` from this file

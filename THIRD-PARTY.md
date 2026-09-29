@@ -26,13 +26,18 @@ stated.
   The **`pinets` engine is redistributed in this repository** at
   `console/frontend/vendor/pinets/pinets.min.browser.es.js` (653 KB, browser-ES build) and is what the
   import map serves; the AGPL text travels with it as `vendor/pinets/LICENSE`.
-  - Built **unmodified** from the fork **<https://github.com/godzillacode0000/PineTS>** at commit
-    `1f65fa2` (= upstream `0.10.0`, the same version the CDN pin used to serve).
+  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `30a75fd`
+    (= upstream `0.10.0` plus ONE transpiler patch — a UDT field history read; the details, the test
+    file and the sha256 are in `console/frontend/vendor/pinets/PROVENANCE.md`). Everything before that
+    commit was upstream as-is.
   - Because this repository now redistributes AGPL code, the combined distribution is under the AGPL:
     anyone who receives it can ask for the complete corresponding source, and the fork above is that
     source for the engine. Bundling was a deliberate decision (free distribution, no monetisation) —
     the earlier policy was CDN-only, precisely to keep the combined work out of the AGPL.
-  - If the engine is ever patched here, the patch must be published in the fork and noted in this file.
+  - The engine now CARRIES a patch (29 Sep). It is committed in the fork clone on branch
+    `fix/scope-collision` and still has to be PUSHED to the public fork before this bundle is handed
+    to anyone — until it is, someone receiving the bundle cannot see the modification, which is
+    exactly what the AGPL asks for. Pushing is a public action: ask the operator first.
 - **Why the `pinets` pin is a floor, not a preference (27 Sep):** `pinets@0.10.0` is the floor: 0.9.33 evaluates *both* sides of a
   ternary, so the standard guard `size >= 2 ? array.get(a, size - 2) : na` still runs the read and
   dies with `Index -2 is out of bounds, array size is 0` the moment the array is empty — the script
