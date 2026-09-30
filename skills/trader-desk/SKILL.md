@@ -12,6 +12,29 @@ There is no headless mode. Drive it with the **`traders-chart` MCP tools** (pref
 Do **not** port or run LuxAlgo Library Pine unless the operator names a script. Prompt-to-chart is
 natives + overlay drawings + market/state/shot.
 
+## MCP stack — auto-use (the operator never names a tool)
+
+On this desk use **`traders-chart` + `luxalgo`**; **never `tradingview-mcp`** (nor the disabled
+hosted `tradingview` entry) — ruled out by the operator (30 Sep).
+
+- **`traders-chart`** — first reach for anything on or about the chart: `chart_*` (incl. `chart_batch`,
+  `chart_watch`, `chart_alert`), the Library proxy (`library_*`), edge/prop-firm reads, and the
+  backtest tier (`bt_*`). Step 0 stays `chart_views`.
+- **Backtest tier** — engine is the user service `traders-agent-bt.service` (venv
+  `~/.local/share/traders-agent/bt/venv`, port 8788, results under `~/Projects/luxalgo-web/_chart/backtest/`).
+  `bt_run` = MA-cross only; `bt_optimize` = full pair sweep; `bt_status` reads back a run. If a bt tool
+  answers `backtest_down`, check `systemctl --user status traders-agent-bt` — never hand-start the engine.
+  Custom vectorbt experiments: `~/.local/share/traders-agent/bt/smc_sweep_bos.py` (liquidity-sweep + BOS demo).
+- **`luxalgo`** (hosted, keyless) — catalogue truth + wider datasets: `library_search`,
+  `library_get_source_code`, `library_list_*`, `library_taxonomy`, `propfirms_*`, `edge_*`, `trackers_*`.
+  Every call needs its 15–25-word third-person `context`. Edge Stats covers BTCUSDT + ETHUSDT only.
+  There are **no SMC/ICT strategies** in the Library (60 smc-ict *indicators*; the whole catalogue has
+  one `strategy()` script — moon-phases).
+- **OAuth-gated**: `luxalgo_account`, `journal_*` error until `hermes mcp login luxalgo` runs in a
+  browser — never promise account/journal features.
+- Session truth: `curl -s http://127.0.0.1:8787/api/health` → `mcp.connected`; `chart_views` for a live
+  pane. New MCP tools arrive only with a new session or `/reload-mcp`.
+
 ## Step 0 — is anything listening?
 
 - `chart_views` first. 0 views → tell the operator to open the Trader's Agent row. Do not queue work
