@@ -9,8 +9,8 @@ engine ran both, which hid 450 indicators behind a guard that had stopped being 
 ## Totals
 
 - **797 indicators measured**
-- **runs: 731 (91%)** — was 594 (74%) before the syminfo fix
-- **crashes: 66 (8%)**
+- **runs: 721 (90%)** — was 594 (74%) before the syminfo fix
+- **crashes: 76 (10%)**
 - of the ones that run: **530 plot at least one series**, 191 run and paint
   nothing (an engine ANSWER — conditions never fired, or the script draws only geometry — not a
   failure)
@@ -72,4 +72,6 @@ to a worker whose deadline TERMINATES them, so the pane answers while a script i
 - `runs` means the engine returned plots; it does not mean the numbers match TradingView.
 - Scripts were classified at 500 bars. Some need more history before their conditions fire.
 
-Regenerate with the sweep in `traders-agent-apply-indicator` (`battery-many.mjs`).
+Regenerate with the sweep in the fork — `godzillacode0000/PineTS`, branch `fix/scope-collision`,
+`tools/repro/` — or run one script headlessly with the Hermes skill `pinets-offline-run`
+(`scripts/run-pine.mjs`). The battery script is not in this repo.

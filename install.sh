@@ -78,13 +78,16 @@ if [[ " $* " == *" --with-backtest "* ]]; then
 fi
 
 if [[ "${1:-}" == "--vendor" ]]; then
+  # The browser builds are COMMITTED under console/frontend/vendor/{vela,vela-pinets}/dist and that is
+  # what index.html loads — this flag refreshes those exact files from the pinned CDN versions, so it
+  # can no longer leave a copy that nothing reads.
   V="$HERE/console/frontend/vendor"
-  mkdir -p "$V"
-  curl -fsSL -o "$V/vela.global.min.js" \
+  mkdir -p "$V/vela/dist" "$V/vela-pinets/dist"
+  curl -fsSL -o "$V/vela/dist/vela.global.min.js" \
     https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.7.3/dist/vela.global.min.js
-  curl -fsSL -o "$V/vela-pinets.global.min.js" \
+  curl -fsSL -o "$V/vela-pinets/dist/vela-pinets.global.min.js" \
     https://cdn.jsdelivr.net/npm/@luxalgo/vela-pinets@0.2.12/dist/vela-pinets.global.min.js
-  echo "fetched LuxAlgo's pinned builds into console/frontend/vendor/ (local offline copy, git-ignored)"
+  echo "refreshed the committed vendored builds (console/frontend/vendor/{vela,vela-pinets}/dist/)"
 fi
 
 # Restart the console if a user unit is running it.

@@ -20,8 +20,11 @@ MCP server) in one local web app — your chat session is left exactly where it 
 - **Chart-first by design.** Vela gets the whole pane. The Library and the item detail panel are two
   small toggles in the top bar, never permanent columns.
 - **Everything local.** One Python process on `127.0.0.1:8787` proxies LuxAlgo's MCP server and
-  serves the frontend. No account, no key, no telemetry. Nothing from LuxAlgo is copied into this
-  repo — the chart engine and the Pine runtime load from their published jsDelivr builds.
+  serves the frontend. No account, no key, no telemetry. The chart engine (**Vela**, Apache-2.0) and
+  the Pine runtime (**pinets**, AGPL-3.0 — a patched build) are vendored under
+  `console/frontend/vendor/` and served from this machine; nothing is fetched at run time. The patches
+  and their published chain: [`THIRD-PARTY.md`](THIRD-PARTY.md) and
+  [`console/frontend/vendor/pinets/PROVENANCE.md`](console/frontend/vendor/pinets/PROVENANCE.md).
 - **The agent can drive the chart.** `console/bin/trader-chart` reads what the chart is showing and
   puts indicator scripts on it through a small file bridge, so you prompt your agent instead of
   clicking around. `console/bin/library-indicator` pulls an indicator's Pine source by name.
@@ -36,7 +39,7 @@ MCP server) in one local web app — your chat session is left exactly where it 
 |---|---|
 | **Hermes Desktop** | v0.21.3 or newer (the plugin uses the `sidebar.nav` + `routes` contribution areas) |
 | **Python** | 3.11+ with the `mcp` client: `pip install mcp` (a venv is fine — point `PY=` at it) |
-| **Network** | for LuxAlgo's MCP endpoint and the jsDelivr builds; the chart falls back to synthetic bars when the data provider is unreachable |
+| **Network** | for LuxAlgo's MCP endpoint and the Binance data feed; the chart falls back to synthetic bars when the provider is unreachable. The chart engine and Pine runtime are served locally |
 | **Preview resizer** *(optional)* | `libvips` (or ImageMagick, or `ffmpeg`) — see [Catalogue previews](#catalogue-previews-are-kept-on-your-machine). With none of them the console still shows every preview, just at the catalogue's original size |
 | **OS** | Linux — built and verified on Omarchy (Arch + Hyprland). macOS and Windows are out of scope. |
 
@@ -69,14 +72,15 @@ itself, so `install.sh --doctor` cannot see it. To ask directly:
 If the pane is enabled but still does not dock, that is a different, app-side interaction —
 see [`docs/INSTALL-ENABLE.md`](docs/INSTALL-ENABLE.md) for both failure modes side by side.
 
-`./install.sh --vendor` additionally fetches LuxAlgo's pinned browser builds into
-`console/frontend/vendor/` for offline use (see the licence note in `THIRD-PARTY.md`).
+The browser builds are committed under `console/frontend/vendor/` — the console loads them from there.
+`./install.sh --vendor` refreshes those exact files from the pinned CDN versions (see the licence note
+in `THIRD-PARTY.md`).
 
 ### Verify it worked
 
 ```bash
 curl -s localhost:8787/api/health                    # {"ok": true, "data": {"status": "ok", ...}}
-node tools/verify-plugin.mjs plugin/plugin.js        # OK — 8 contributions
+node tools/verify-plugin.mjs plugin/plugin.js        # OK — 7 contributions
 console/bin/trader-chart state                       # symbol, timeframe, price, bars, indicators on
 ```
 
@@ -133,10 +137,11 @@ chart through the tools — the pane is chart, not conversation.
 That chat is the "connected, sees, understands" part, and it needs no bespoke composer: the tools
 below answer over the console's push channel, so the round trip is local.
 
-**Run PineTS** executes the script over the chart's live bars with LuxAlgo's PineTS runtime and paints
-it as a native series; it says plainly when a script uses something PineTS has not implemented
-(`import`, `while`, `for…in`). **Add to chart** hands the script to Vela's own Pine engine, which is
-experimental — the app reports what actually happened rather than pretending.
+**Run PineTS** executes the script over the chart's live bars with the vendored, patched Pine runtime
+and paints it as a native series; it says plainly when a script uses something the runtime refuses
+(`import` is the one). **Add to chart** hands the script to the Pine engine that ships inside
+`vela-pinets` — a separate, unpatched build — so some Library scripts that *Run PineTS* handles will
+paint nothing there; the app reports what actually happened rather than pretending.
 
 ### Letting your agent drive the chart
 
@@ -290,8 +295,8 @@ it from `http://127.0.0.1:8787/api/library/thumb`: **~5 ms warm instead of ~2 s*
 
 ## Limits
 
-- **PineTS is a subset of Pine.** `import`, `while` and `for…in` are not implemented; the detail panel
-  says so instead of pretending. Anything heavier only runs in TradingView's own Pine engine.
+- **The Pine runtime is a subset of Pine.** `import` is refused outright; `while` and `for…in` run.
+  Anything heavier only runs in TradingView's own Pine engine.
 - **"Add to chart" is experimental.** It hands the script to Vela's Pine engine; some scripts paint
   nothing. **Run PineTS** is the reliable path.
 - **The bridge is not a headless renderer.** `trader-chart` and the MCP tools only take effect while
@@ -318,7 +323,7 @@ python3 -m compileall console/backend                                           
 
 The suite is stdlib-only on purpose — the study store, the chat bridge, the chart bridge and the push
 channel are covered without a browser, a network, or the app — and the MCP tool layer runs against a
-stub console. 63 tests; the 15 MCP ones skip themselves when `fastmcp` is absent (CI sets
+stub console. ≈350 tests; the MCP ones skip themselves when `fastmcp` is absent (CI sets
 `TRADER_CHART_REQUIRE_MCP=1` so they cannot silently skip there).
 
 CI (`.github/workflows/ci.yml`) has three jobs: the plugin harness (Node 20), the backend (compile,
@@ -343,7 +348,8 @@ frame remounted (switch session and back).
 
 This project's code is **MIT** — see [`LICENSE`](LICENSE). It builds on LuxAlgo's work: **Vela**
 (Apache-2.0, with its own attribution requirement — the `▲` mark on the chart stays), **vela-pinets**
-and **pinets** (AGPL-3.0, loaded from the CDN, not redistributed), the **LuxAlgo MCP server** (MIT,
+and **pinets** (AGPL-3.0; pinets is vendored here as a patched build whose patches are published on
+the fork, and `vela-pinets` is vendored unmodified), the **LuxAlgo MCP server** (MIT,
 `@luxalgo/mcp`) and the **LuxAlgo Library** (free with attribution — `Source: LuxAlgo Library —
 luxalgo.com/library/…`). Full details, quotes and links: [`THIRD-PARTY.md`](THIRD-PARTY.md).
 

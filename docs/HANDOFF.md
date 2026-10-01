@@ -14,9 +14,10 @@ the agent (and the user) read and drive that chart with low latency. It is delib
 
 - **local-only** — a small Python stdlib server on `127.0.0.1:8787` serves the chart page; nothing is
   hosted, no accounts, no telemetry.
-- **not affiliated with LuxAlgo** — never use their logo or wordmark; Vela and PineTS load from CDN, never
-  vendored; Library Pine source is CC BY-NC-SA 4.0 and must **never** be committed (it may be fetched at
-  runtime and drawn, with attribution).
+- **not affiliated with LuxAlgo** — never use their logo or wordmark; Vela and the Pine runtime are
+  vendored under `console/frontend/vendor/` (Vela unmodified, pinets patched — see
+  `console/frontend/vendor/pinets/PROVENANCE.md`); Library Pine source is CC BY-NC-SA 4.0 and must
+  **never** be committed (it may be fetched at runtime and drawn, with attribution).
 - **MIT** for this plugin's own code.
 - **private repo**, personal use. Grok cannot clone it; the operator will paste this file (and file
   contents) instead.
@@ -189,7 +190,7 @@ short note with the way out instead of failing silently.
 | File | Role |
 | --- | --- |
 | `index.html` | page skeleton; loads CDN shims, `chart-palette.js`, then `workspace.js` (ESM) and `app.js` |
-| `workspace.js` | builds the Vela workspace from CDN (`@luxalgo/vela/workspace` + Binance provider + `vela-pinets`), parks the palette before construction |
+| `workspace.js` | builds the Vela workspace from the vendored builds (`./vendor/vela/dist/workspace.js` + Binance provider + `vela-pinets`), parks the palette before construction |
 | `app.js` | boot (workspace or bare chart), theme, panels/Library/Details UI, log |
 | `chart-bridge.js` | the agent-facing page: heartbeat, command execution, claim, SSE + poll, `shot`, `palette`, `remove`, `probe` |
 | `chart-palette.js` | the palette park/apply/enforce rules described above |
@@ -197,13 +198,13 @@ short note with the way out instead of failing silently.
 | `pinets-runner.js`, `pinets-layer.js` | PineTS execution + the native paint layer |
 | `styles.css` | console chrome, responsive top row (clip-proof from ~500 px to 1280 px pane width) |
 
-**MCP server (`console/mcp/server.py`)** — 14 tools (`chart_views`, `chart_caps`, `chart_state`,
+**MCP server (`console/mcp/server.py`)** — 39 tools (`chart_views`, `chart_caps`, `chart_state`,
 `chart_shot`, `chart_apply_pine`, `chart_draw`, `chart_clear`, `chart_add_indicator`,
 `chart_remove_indicator`, `chart_set_market`, `chart_reload`, `chart_palette`, `library_search`,
-`library_indicator`). Thin wrapper over the HTTP API. **Tools load at session start: after adding a
+`library_indicator` among them). Thin wrapper over the HTTP API. **Tools load at session start: after adding a
 tool, the running session will not see it — start a new session or `/reload-mcp`.**
 
-**CLI (`console/bin/trader-chart`)** — 14 subcommands; also `console/bin/library-indicator` (fetch one
+**CLI (`console/bin/trader-chart`)** — 21 subcommands; also `console/bin/library-indicator` (fetch one
 Library indicator) and `console/bin/all-library-context-dependency.py` (Library analysis helper).
 
 ---
@@ -226,9 +227,11 @@ Full version: `docs/vela-chart-api-notes.md`. The essentials:
   only when the script really plots. `draw` stays the explicit geometry door for levels like PDH/PDL;
   `apply`, the script pane and the Library all share the same run, so no door can claim it lacks a
   surface while drawing nothing.
-- **PineTS is a subset:** no `import`, no `while`, no `for … in`. The Library's *Previous Highs & Lows*
-  (the PDH/PDL indicator) **cannot run** for exactly this reason. Vela's own Pine engine is a paid feature
-  and is not used. When a Library script hits the wall, compute the value from data and draw it.
+- **The Pine runtime is a subset:** `import` is refused; `while` and `for … in` run. The Library's
+  *Previous Highs & Lows* (the PDH/PDL indicator) hits that wall. Vela's own paid Pine engine is not
+  used; the engine that ships INSIDE `vela-pinets` is a separate, unpatched pinets build — that is the
+  "Add to chart" path, while the Library/agent path uses the patched `vendor/pinets`. When a Library
+  script hits the wall, compute the value from data and draw it.
 - **Library source is licence-bound:** fetch at runtime (`/api/source?slug=…`), never commit it.
 - **Stale frames:** compare the heartbeat's `build` with `/api/build`. A frozen/occluded frame executes
   nothing at all — no reload, no command — which is why the pane remounts on reveal.
@@ -340,8 +343,9 @@ page's action list in the backend; assume a clean API return means the chart cha
 
 ## 9. Glossary
 
-- **Vela** — LuxAlgo's charting library (loaded from CDN). **PineTS** — the open Pine-subset engine used
-  here; **the full TradingView/Vela Pine engine is paid and unused.**
+- **Vela** — LuxAlgo's charting library (vendored under `console/frontend/vendor/vela/`). **pinets** —
+  the open Pine-subset engine used here, vendored as a PATCHED build; **the full TradingView/Vela Pine
+  engine is paid and unused**, and the copy inside `vela-pinets` (the "Add to chart" path) is unpatched.
 - **Console** — the local page + server at `127.0.0.1:8787` that hosts the chart.
 - **Pane** — the app's dockable surface; the chart lives in `traders-desk:chart`.
 - **Bridge action** — one command the console page knows how to execute (`add`, `remove`, `apply`, `draw`,

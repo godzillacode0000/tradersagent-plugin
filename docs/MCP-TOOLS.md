@@ -22,7 +22,7 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | `chart_state` | — | Symbol, timeframe, last price, bars, indicators on the chart, plus `build`/`viewer` when the page publishes them (stale-frame check). |
 | `chart_shot` | `name: str = ""` | One PNG of the chart. Returned as an image when the client takes images, plus the path on disk. |
 | `chart_palette` | `try_apply: bool = false` | What colours the chart is actually wearing (background, candles, console theme). `try_apply=true` asserts the console's palette and reports what landed 300 ms later. |
-| `chart_browse` | `family: str = ""`, `show: bool = true` | Open the Library's concept-family list in the pane, optionally narrowed to one family slug. Family bubbles expose Library **concepts** (not indicator scripts); the empty family opens all concepts. Answers with the rows actually painted. The catalogue itself is `chart_library_list`; this one is the *surface*. |
+| `chart_browse` | `family: str = ""`, `show: bool = true` | Open the Library's concept-family list in the pane, optionally narrowed to one family slug. Family bubbles expose Library **concepts** (not indicator scripts); the empty family opens all concepts. Answers with the rows actually painted. The catalogue itself is `library_list`; this one is the *surface*. |
 | `library_search` | `query: str`, `kind: str = ""` (`concept`/`indicator`), `limit: int = 8` | Search the LuxAlgo Library (concepts + indicators). See the Library section below for the other nine. |
 | `library_indicator` | `query: str` | One indicator by name or slug: summary, licence, and its full Pine source. |
 
@@ -41,10 +41,10 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | `chart_draw` | `pine: str` | Run Pine and paint the geometry it **builds** (boxes/lines/labels/tables) on the console's overlay; any plot series lands as a native — one landasan with `chart_apply_pine`. The explicit route for level-type scripts (SMC/liquidity models, PDH/PDL). |
 | `chart_clear` | — | Clear our overlay drawings and the natives our paint layer added, then report what is left. **Does not remove studies added with `chart_add_indicator`** — use `chart_remove_indicator`. |
 | `chart_reload` | — | Reload every attached console page (picks up new frontend files). Once-per-view. |
-| `chart_batch` | `steps: str` (JSON array) | Several actions in one call, in order. Each step is `{"action": "...", ...fields}`; stops at the first failure unless `stop_on_error=false`. One round trip instead of five. |
+| `chart_batch` | `commands: str` (JSON array) | Several actions in one call, in order. Each step is `{"action": "...", ...fields}`; stops at the first failure unless `stop_on_error=false`. One round trip instead of five. |
 | `chart_snapshot` | — | Remember the market + indicator set as a restore point for `chart_undo`. |
 | `chart_undo` | — | Put the chart back to the last snapshot: market first, then the indicator set, reporting the chart's own before → after lists. **Drawings are not restored** — `chart_clear`, then re-draw. |
-| `chart_watch` | `seconds: int = 10` | Watch for a spell and answer with a **diff** (what changed) rather than a second snapshot. |
+| `chart_watch` | `seconds: int = 15`, `timeout_s` | Watch for a spell and answer with a **diff** (what changed) rather than a second snapshot. |
 | `chart_alert` | `seconds: int = 30, move_pct: float = 0.0` | Wait for the **market** to move. Reuses the heartbeat's own `last`, reports the move (from → to, percent and absolute) as soon as price travels `move_pct` percent from the first reading — `0` means any change. Where `chart_watch` answers "did the chart change", this answers "did price do something", and reports the largest excursion it saw when the threshold is never met. |
 
 ## Library / research tools
@@ -59,11 +59,11 @@ Read-only, and every one leaves this machine (they reach LuxAlgo's hosted MCP).
 | `library_taxonomy` | `what: str = "families"` | The Library's own families (17 measured) or its concept graph — so a filter value is the Library's, not a guess. |
 | `library_concept` | `slug: str` | One concept by slug, with the indicators that implement it. |
 | `library_source` | `slug: str` | Pine source by **exact** slug — no name resolution to get wrong. |
-| `edge_presets` | — | LuxAlgo's measured edge presets (42 measured). |
+| `edge_presets` | `category: str = ""` | LuxAlgo's measured edge presets (42 measured). |
 | `edge_report` | `preset: str`, `symbol: str` | One preset's measured performance on one symbol. |
 | `edge_symbols` | — | The symbols the edge dataset covers. |
-| `propfirms` | — | Prop-firm challenges (25 measured). |
-| `propfirm_offers` | — | Offers for those challenges. |
+| `propfirms` | `query: str` | Prop-firm challenges (25 measured). |
+| `propfirm_offers` | `query: str` | Offers for those challenges. |
 
 ---
 

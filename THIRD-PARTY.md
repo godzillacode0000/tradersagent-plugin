@@ -52,8 +52,9 @@ stated.
   aborts and the pane stays blank. 0.10.0 honours the guard. Verified against the Library's
   *Wyckoff Wave & Volume Studies* (crashes on 0.9.33, runs and draws four series on 0.10.0); do not
   pin back down.
-- `./install.sh --vendor` still fetches Vela's pinned browser builds into `console/frontend/vendor/`
-  for offline use (git-ignored). The pinets engine no longer needs fetching — it ships with the repo.
+- `./install.sh --vendor` refreshes Vela's pinned browser builds **in place** — they are committed under
+  `console/frontend/vendor/{vela,vela-pinets}/dist/` and that is what `index.html` loads. The pinets
+  engine ships with the repo and is not fetched.
 - LuxAlgo's own note: vela-pinets is *"licensed separately from Vela's Apache-2.0 and this server's
   MIT. Vela itself ships no engine and carries no Pine code."*
 

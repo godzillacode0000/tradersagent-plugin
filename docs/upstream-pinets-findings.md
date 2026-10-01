@@ -88,6 +88,6 @@ If a documented time budget exists for indicator scripts, saying so would help c
 Environment: `pinets@0.10.0` (also spot-checked `0.9.33`), Node on Linux, bars handed in as an array
 with `getSymbolInfo` attached, 500 bars of synthetic OHLCV, `symbol=BTCUSDT`, `timeframe=30`.
 
-Reproduction for anything here: the sweep script and the probes live in
-`traders-agent-apply-indicator` (a skill in this repo's plugin), and the raw per-indicator verdicts are
-in `docs/PINETS-COVERAGE.md`.
+Reproduction for anything here: the sweep script and the probes live in the fork
+(`godzillacode0000/PineTS`, branch `fix/scope-collision`, `tools/repro/`) and in the Hermes skill
+`pinets-offline-run`; the raw per-indicator verdicts are in `docs/PINETS-COVERAGE.md`.

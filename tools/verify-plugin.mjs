@@ -37,8 +37,15 @@ const source = fs.readFileSync(pluginPath, 'utf8')
 const failures = []
 
 // ── only the three allowed specifiers resolve ────────────────────────────────
+// Comments are stripped first: English prose is not an import. A comment reading
+// `… can tell "the chart is quiet" from "the frame is dead" …` matched the specifier regex
+// across its line break and failed the harness for a plugin that had done nothing wrong.
+// Import specifiers are code, so they survive the strip.
+const code = source
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
 const ALLOWED = ['@hermes/plugin-sdk', 'react', 'react/jsx-runtime']
-const found = [...source.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
+const found = [...code.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
 const foreign = found.filter((s) => !ALLOWED.includes(s))
 if (foreign.length) failures.push(`imports outside the allowed three: ${[...new Set(foreign)].join(', ')}`)
 
