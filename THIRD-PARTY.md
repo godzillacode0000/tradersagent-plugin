@@ -26,7 +26,7 @@ stated.
   The **`pinets` engine is redistributed in this repository** at
   `console/frontend/vendor/pinets/pinets.min.browser.es.js` (657 KB, browser-ES build) and is what the
   import map serves; the AGPL text travels with it as `vendor/pinets/LICENSE`.
-  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `073fbaa`
+  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `b001bed`
     (= upstream `0.10.0` plus SEVEN patches — UDT field history reads, `<drawing>.all` as a Pine array,
     a scoped comparison operand chain, a UDT whose name a variable shares, a member chain's base
     inside implicit returns, the two operand classes (an index that is a read, a call's arguments in a
@@ -43,7 +43,7 @@ stated.
     comparison operand chain (`94d13ec`), a UDT whose name a variable shares (`3c35b0f`), a member
     chain's base inside implicit returns (`222c278`) with its regression guard (`922eb5b`), the two
     operand classes (`e9671d0`) and a declaration reached by a walker (`eb5162e`) with its regression
-    guard (`073fbaa`). The
+    guards (`073fbaa`, `b001bed`). The
     AGPL's "make the changes visible" condition is met by that public branch — push any future patch
     BEFORE shipping a bundle that carries it.
 - **Why the `pinets` pin is a floor, not a preference (27 Sep):** `pinets@0.10.0` is the floor: 0.9.33 evaluates *both* sides of a
