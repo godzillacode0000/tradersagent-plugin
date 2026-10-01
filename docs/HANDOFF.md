@@ -35,7 +35,7 @@ native tools.
 | Plugin repo (source of truth) | `~/Projects/tradersagent-plugin` → `git@github.com:godzillacode0000/tradersagent-plugin.git` (private) |
 | Deployed plugin | `~/.hermes/desktop-plugins/traders-desk/plugin.js` (byte-identical to repo, via `./install.sh`) |
 | Live console app | `~/Projects/luxalgo-web` (served at `http://127.0.0.1:8787/`) |
-| Service | user unit `luxalgo-web.service` → `ExecStart=~/Projects/luxalgo-web/start.sh --host 127.0.0.1` (loopback only since 1 Oct — the pane embeds the server on the same machine and the console has no auth; add `--host 0.0.0.0` back only to reach it from another device on purpose) |
+| Service | user unit `luxalgo-web.service` → `ExecStart=~/Projects/luxalgo-web/start.sh --host 127.0.0.1` (loopback only since 1 Oct). POSTs carry a token the server mints at `~/.local/state/traders-agent/console.token` (mode 0600): the page bootstraps it over `GET /api/session`, the CLI and MCP read the file. A non-local `Host` or a non-local `Origin` is refused — so `--host 0.0.0.0` is a deliberate, still-authenticated exposure, not an open door |
 | File bridge (durable queue) | `~/Projects/luxalgo-web/agents/_chart/{commands,results,state}.json` |
 | MCP server | repo `console/mcp/server.py`, registered in Hermes as `traders-chart` (uvx + fastmcp) |
 | CLI | `~/Projects/luxalgo-web/bin/trader-chart` (mirrored to repo `console/bin/trader-chart`) |

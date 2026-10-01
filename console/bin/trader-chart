@@ -34,12 +34,29 @@ INLINE_WAIT = float(os.environ.get("LUXALGO_CHART_INLINE_WAIT", "8"))
 POLL = 1.0
 
 
+def _console_token() -> str:
+    """The console mints a token beside its runtime state and requires it on POSTs. Read it here so
+    the CLI keeps working; an absent file means the console has never started on this machine."""
+    path = os.environ.get("TRADER_CONSOLE_TOKEN_FILE") or os.path.join(
+        os.path.expanduser("~"), ".local", "state", "traders-agent", "console.token"
+    )
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
+
+
 def _request(path: str, payload: dict | None = None) -> dict:
     url = BASE + path
     data = json.dumps(payload).encode() if payload is not None else None
+    headers = {"content-type": "application/json"} if data else {}
+    token = _console_token()
+    if token:
+        headers["X-Trader-Token"] = token
     req = urllib.request.Request(
         url, data=data,
-        headers={"content-type": "application/json"} if data else {},
+        headers=headers,
         method="POST" if data else "GET")
     try:
         with urllib.request.urlopen(req, timeout=30) as res:

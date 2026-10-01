@@ -100,13 +100,30 @@ def _ann(title: str, read_only: bool = False, destructive: bool | None = None,
 
 
 # ── plumbing ────────────────────────────────────────────────────────────────────────────────────
+def _console_token() -> str:
+    """The token the console requires on POSTs (minted beside its runtime state, mode 0600). Empty
+    when the file is absent — the console's own 401 sentence is then the tool's answer."""
+    path = os.environ.get("TRADER_CONSOLE_TOKEN_FILE") or os.path.join(
+        os.path.expanduser("~"), ".local", "state", "traders-agent", "console.token"
+    )
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
+
+
 def _call(path: str, payload: dict | None = None, timeout: float = 20.0) -> dict:
     """One console request. Returns the unwrapped `data`, or raises RuntimeError with the console's
     own message — the tools below turn that into a sentence rather than a traceback."""
+    headers = {"content-type": "application/json"} if payload is not None else {}
+    token = _console_token()
+    if token:
+        headers["X-Trader-Token"] = token
     req = urllib.request.Request(
         BASE + path,
         data=json.dumps(payload).encode() if payload is not None else None,
-        headers={"content-type": "application/json"} if payload is not None else {},
+        headers=headers,
         method="POST" if payload is not None else "GET",
     )
     try:

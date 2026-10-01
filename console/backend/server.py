@@ -38,6 +38,7 @@ import argparse
 import asyncio
 import concurrent.futures
 import json
+import secrets
 import os
 import re
 import socketserver
@@ -1439,6 +1440,42 @@ def cors_origin(origin: str | None, host: str | None) -> str | None:
     return None
 
 
+# ── the POST door ───────────────────────────────────────────────────────────────────────────────
+# A cross-site page can POST `text/plain` to 127.0.0.1 without a preflight (CORS never runs), and
+# this handler parses any body as JSON — so without a check, any page you visit can drive /api/chat
+# (which runs the Hermes CLI), forge the chart state and resolve waiting commands. Every POST now
+# needs:
+#   * an Origin that is absent (CLI, MCP, curl) or local, and
+#   * the console token — by `X-Trader-Token`, or by the SameSite=Strict cookie this server sets
+#     when it serves the page (a cross-site request carries neither).
+# The token lives beside the runtime state at mode 0600; delete the file to mint a new one.
+TOKEN_PATH = Path(os.environ.get(
+    "TRADER_CONSOLE_TOKEN_FILE",
+    str(Path(os.path.expanduser("~")) / ".local/state/traders-agent/console.token"),
+))
+
+
+def console_token() -> str:
+    try:
+        existing = TOKEN_PATH.read_text(encoding="utf-8").strip()
+        if existing:
+            return existing
+    except OSError:
+        pass
+    fresh = secrets.token_urlsafe(32)
+    try:
+        TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+        TOKEN_PATH.write_text(fresh + "\n", encoding="utf-8")
+        os.chmod(TOKEN_PATH, 0o600)
+        log(f"console token minted at {TOKEN_PATH} — POSTs need it (the page receives it as a cookie)")
+    except OSError as exc:
+        log(f"could not write the console token ({exc}) — set TRADER_CONSOLE_TOKEN_FILE to a writable path")
+    return fresh
+
+
+CONSOLE_TOKEN = console_token()
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = f"luxalgo-web/{SERVER_VERSION}"
     protocol_version = "HTTP/1.1"
@@ -1453,13 +1490,39 @@ class Handler(BaseHTTPRequestHandler):
         origin = cors_origin(self.headers.get("Origin"), self.headers.get("Host"))
         headers = {
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Accept",
+            "Access-Control-Allow-Headers": "Content-Type, Accept, X-Trader-Token",
             "Access-Control-Max-Age": "600",
         }
         if origin:
             headers["Access-Control-Allow-Origin"] = origin
             headers["Vary"] = "Origin"
         return headers
+
+    def _host_ok(self) -> bool:
+        """Refuse a Host that is not this machine's — a DNS-rebinding page reaches 127.0.0.1 with
+        its own Host header, and that is the one case where the browser treats it as same-origin."""
+        host = (self.headers.get("Host") or "").split(":")[0]
+        return host in LOCAL_HOSTS
+
+    def _origin_ok(self) -> bool:
+        """A POST may carry no Origin (CLI, MCP, curl) or a local one — never a page from elsewhere."""
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        try:
+            return (urlparse(origin).hostname or "") in LOCAL_HOSTS
+        except ValueError:
+            return False
+
+    def _token_ok(self) -> bool:
+        header = (self.headers.get("X-Trader-Token") or "").strip()
+        if header and secrets.compare_digest(header, CONSOLE_TOKEN):
+            return True
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            name, _, value = part.strip().partition("=")
+            if name == "trader_token" and value and secrets.compare_digest(value.strip(), CONSOLE_TOKEN):
+                return True
+        return False
 
     def _send(self, status: int, body: bytes, content_type: str, extra: dict | None = None,
               head_only: bool = False):
@@ -1579,6 +1642,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._fail("body must be a JSON object", HTTPStatus.BAD_REQUEST, "bad_body")
                 return
             path = urlparse(self.path).path.rstrip("/") or "/"
+            if not self._host_ok():
+                self._fail("refused: non-local Host", HTTPStatus.FORBIDDEN, "non_local_host")
+                return
+            if not self._origin_ok():
+                self._fail("cross-origin POST refused", HTTPStatus.FORBIDDEN, "cross_origin")
+                return
+            if not self._token_ok():
+                self._fail(
+                    "missing console token — send X-Trader-Token (see ~/.local/state/traders-agent/console.token) "
+                    "or open the console page once so the browser receives its cookie",
+                    HTTPStatus.UNAUTHORIZED,
+                    "no_token",
+                )
+                return
             if path == "/api/agents":
                 self._ok({"agent": upsert_study(AGENTS_ROOT, payload)})
                 return
@@ -1775,6 +1852,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._library_thumb(params, head_only=head_only)
                 return
 
+            if path == "/api/session":
+                # The pane bootstraps its POST token here. A cross-site page can send this GET but
+                # cannot read the answer (no CORS for its origin), and a rebinding page fails the Host
+                # check — so the token stays on this machine.
+                if not self._host_ok():
+                    self._fail("refused: non-local Host", HTTPStatus.FORBIDDEN, "non_local_host", head_only=head_only)
+                    return
+                self._ok({"token": CONSOLE_TOKEN}, head_only=head_only)
+                return
+
             route = ROUTES.get(path)
             if route is not None:
                 handler, _ttl = route
@@ -1867,7 +1954,11 @@ class Handler(BaseHTTPRequestHandler):
         except OSError as exc:
             self._fail(f"Could not read {target}: {exc}", 500, "io_error", head_only=head_only)
             return
-        self._send(200, body, ctype, {"Cache-Control": "no-store"}, head_only)
+        extra = {"Cache-Control": "no-store"}
+        if os.path.basename(target) == "index.html":
+            # The page's own POSTs carry this cookie; a cross-site request never does (SameSite=Strict).
+            extra["Set-Cookie"] = f"trader_token={CONSOLE_TOKEN}; Path=/; SameSite=Strict; HttpOnly"
+        self._send(200, body, ctype, extra, head_only)
 
 
 class Server(ThreadingHTTPServer):

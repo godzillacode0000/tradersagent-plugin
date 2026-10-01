@@ -48,10 +48,32 @@
                    'fullscreen',
                    'theme',];
 
+  /* The console mints a token and requires it on POSTs. This page usually lives in an IFRAME on
+     another origin, where the SameSite cookie the server also sets is dropped by third-party-cookie
+     blocking — so bootstrap the token over a same-origin GET (a cross-site page can send that
+     request but cannot READ the answer: no CORS for its origin) and send it as a header. */
+  let TOKEN = null;
+  const token = async () => {
+    if (TOKEN !== null) return TOKEN;
+    try {
+      const res = await fetch('/api/session', { cache: 'no-store' });
+      const payload = await res.json();
+      TOKEN = (payload && payload.data && payload.data.token) || '';
+    } catch (err) {
+      TOKEN = '';
+    }
+    return TOKEN;
+  };
+
   const api = async (path, body) => {
+    const headers = body ? { 'content-type': 'application/json' } : {};
+    if (body) {
+      const t = await token();
+      if (t) headers['X-Trader-Token'] = t;
+    }
     const res = await fetch(path, body
-      ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
-      : { method: 'GET' });
+      ? { method: 'POST', headers, body: JSON.stringify(body) }
+      : { method: 'GET', headers });
     if (!res.ok) throw new Error(path + ' → HTTP ' + res.status);
     const payload = await res.json();
     if (payload && payload.ok === false) throw new Error(path + ' → ' + (payload.error || 'error'));
