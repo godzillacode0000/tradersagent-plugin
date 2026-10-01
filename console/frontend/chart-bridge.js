@@ -226,6 +226,23 @@
         layout: 'workspace',
         build: BUILD,              // the frontend files this frame loaded (see /api/build)
         viewer: VIEWER,            // which console instance this is — a stale frame says so
+        /* Why the heartbeat reads what it reads: after the workspace swap a page can fall back to the
+           bare chart and still look healthy (the pane paints, the bridge says "—"), so the reason is
+           part of the state instead of a guess. */
+        diag: (() => {
+          try {
+            const app = window.__wsApp || {};
+            const ws = app.ws || null;
+            const cells = ws && typeof ws.cells === 'function' ? ws.cells() : null;
+            return {
+              wsReady: !!ws,
+              wsError: app.error ? String((app.error && app.error.message) || app.error).slice(0, 160) : null,
+              cells: cells ? cells.length : null,
+              activeChart: !!(app.activeChart && app.activeChart()),
+              consoleChart: !!window.__consoleChart,
+            };
+          } catch (err) { return { diagErr: String(err && err.message || err).slice(0, 120) }; }
+        })(),
       });
     } catch (err) {
       /* a failed heartbeat means "no chart open" on the agent's side, which is the truth */

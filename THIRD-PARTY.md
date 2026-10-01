@@ -116,3 +116,25 @@ repository, exactly as with the PineTS runtimes above.
 - **Data:** a backtest can run on the chart's own bars (they never leave the machine) or on public
   exchange endpoints. Any data the operator supplies for `local:` sources is theirs and is not
   redistributed with this plugin.
+
+## Vendored in the browser bundle (`console/frontend/vendor/`)
+
+The pane's chart surface is not fetched from a CDN — the page has to boot identically offline, and a
+CDN failure used to look exactly like a broken chart. The vendor directory therefore carries the
+third-party browser builds, each beside its licence:
+
+- **`vela/` — `@luxalgo/vela` 0.7.3** (chart, workspace, plugin SDK, Binance provider).
+  **Licence: Apache-2.0** — free forever, commercial use included, attribution kept
+  (`vela/LICENSE`, `vela/NOTICE`). LuxAlgo's own page invites this: *"Fork it, vendor it, ship it.
+  Contains no Pine code, so its license stays clean."*
+- **`vela-pinets/` — `@luxalgo/vela-pinets` 0.2.12** (the chart's own Pine engine: `PineEngine` /
+  `PineWorkerEngine`). **Licence: AGPL-3.0-only**, stock build — obligations met the same way as for
+  `pinets` above (public fork for anything we change and ship).
+- **`zag/`** — the module closure Vela's ES modules import by name: `@zag-js/*` 1.44.0,
+  `@floating-ui/{core,dom}` 1.8.0, `@floating-ui/utils` 0.2.12, `proxy-compare` 3.0.1.
+  **Licence: all MIT.** Not a free choice: a browser cannot resolve a bare specifier, so every
+  specifier those modules use has an import-map entry pointing here.
+- **`pinets/`** — our patch of LuxAlgo's PineTS; see `pinets/PROVENANCE.md`.
+
+`console/frontend/vendor/VENDORING.md` records versions, the exact commands that produced the copies,
+the two gotchas (`process.env.NODE_ENV`, `.mjs` MIME) and how to update them.

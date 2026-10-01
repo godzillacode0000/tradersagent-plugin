@@ -267,9 +267,16 @@
   </footer>
 </div>
 
-<!-- LuxAlgo's own browser builds, straight from their published packages -->
-<script src="https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.7.3/dist/vela.global.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@luxalgo/vela-pinets@0.2.12/dist/vela-pinets.global.min.js"></script>
+<!-- The vendored builds were published for bundlers, and bundlers define `process.env.NODE_ENV` for
+     them (jsDelivr's +esm bundles do it implicitly; this is the same shim, visible). Without it the
+     workspace module dies with "process is not defined" and the page falls back to the bare chart. -->
+<script>window.process = window.process || { env: { NODE_ENV: 'production' } };</script>
+
+<!-- LuxAlgo's own browser builds — vendored from their published packages (vela 0.7.3, vela-pinets
+     0.2.12) instead of fetched from jsDelivr: the chart surface the agent drives no longer depends on a
+     CDN being reachable, and the bytes on disk are the bytes that were verified. Licences beside them. -->
+<script src="./vendor/vela/dist/vela.global.min.js"></script>
+<script src="./vendor/vela-pinets/dist/vela-pinets.global.min.js"></script>
 
 <!-- PineTS execution + its paint layer. Classic scripts, loaded BEFORE the workspace
      module builds a chart, because Vela reads its renderer-layer registry at
@@ -292,11 +299,34 @@
 <script type="importmap">
 {
   "imports": {
-    "@luxalgo/vela": "https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.7.3/+esm",
-    "@luxalgo/vela/plugin": "https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.7.3/plugin/+esm",
-    "@luxalgo/vela/workspace": "https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.7.3/workspace/+esm",
-    "@luxalgo/vela/providers/binance": "https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.7.3/providers/binance/+esm",
-    "@luxalgo/vela-pinets": "https://cdn.jsdelivr.net/npm/@luxalgo/vela-pinets@0.2.12/+esm",
+    "@luxalgo/vela": "./vendor/vela/dist/index.js",
+    "@luxalgo/vela/plugin": "./vendor/vela/dist/plugin.js",
+    "@luxalgo/vela/workspace": "./vendor/vela/dist/workspace.js",
+    "@luxalgo/vela/providers/binance": "./vendor/vela/dist/providers/binance.js",
+    "@luxalgo/vela-pinets": "./vendor/vela-pinets/dist/index.js",
+    "@zag-js/anatomy": "./vendor/zag/zag-js-anatomy/index.mjs",
+    "@zag-js/aria-hidden": "./vendor/zag/zag-js-aria-hidden/index.mjs",
+    "@zag-js/core": "./vendor/zag/zag-js-core/index.mjs",
+    "@zag-js/dialog": "./vendor/zag/zag-js-dialog/index.mjs",
+    "@zag-js/dismissable": "./vendor/zag/zag-js-dismissable/index.mjs",
+    "@zag-js/dom-query": "./vendor/zag/zag-js-dom-query/index.mjs",
+    "@zag-js/focus-trap": "./vendor/zag/zag-js-focus-trap/index.mjs",
+    "@zag-js/focus-visible": "./vendor/zag/zag-js-focus-visible/index.mjs",
+    "@zag-js/interact-outside": "./vendor/zag/zag-js-interact-outside/index.mjs",
+    "@zag-js/menu": "./vendor/zag/zag-js-menu/index.mjs",
+    "@zag-js/popper": "./vendor/zag/zag-js-popper/index.mjs",
+    "@zag-js/rect-utils": "./vendor/zag/zag-js-rect-utils/index.mjs",
+    "@zag-js/remove-scroll": "./vendor/zag/zag-js-remove-scroll/index.mjs",
+    "@zag-js/store": "./vendor/zag/zag-js-store/index.mjs",
+    "@zag-js/tooltip": "./vendor/zag/zag-js-tooltip/index.mjs",
+    "@zag-js/types": "./vendor/zag/zag-js-types/index.mjs",
+    "@zag-js/utils": "./vendor/zag/zag-js-utils/index.mjs",
+    "@zag-js/vanilla": "./vendor/zag/zag-js-vanilla/index.mjs",
+    "@floating-ui/core": "./vendor/zag/floating-ui-core/floating-ui.core.mjs",
+    "@floating-ui/dom": "./vendor/zag/floating-ui-dom/floating-ui.dom.mjs",
+    "@floating-ui/utils": "./vendor/zag/floating-ui-utils/floating-ui.utils.mjs",
+    "@floating-ui/utils/dom": "./vendor/zag/floating-ui-utils/floating-ui.utils.dom.mjs",
+    "proxy-compare": "./vendor/zag/proxy-compare/index.js",
     "pinets": "./vendor/pinets/pinets.min.browser.es.js"
   }
 }
