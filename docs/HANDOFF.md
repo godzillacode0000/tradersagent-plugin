@@ -228,10 +228,11 @@ Full version: `docs/vela-chart-api-notes.md`. The essentials:
   `apply`, the script pane and the Library all share the same run, so no door can claim it lacks a
   surface while drawing nothing.
 - **The Pine runtime is a subset:** `import` is refused; `while` and `for … in` run. The Library's
-  *Previous Highs & Lows* (the PDH/PDL indicator) hits that wall. Vela's own paid Pine engine is not
-  used; the engine that ships INSIDE `vela-pinets` is a separate, unpatched pinets build — that is the
-  "Add to chart" path, while the Library/agent path uses the patched `vendor/pinets`. When a Library
-  script hits the wall, compute the value from data and draw it.
+  *Previous Highs & Lows* (the PDH/PDL indicator) hits that wall. Vela's paid Pine engine is not used;
+  the console runs Vela's own engine classes from `vela-pinets`, where `PineEngine` (main thread)
+  builds on the patched `vendor/pinets` — what "Add to chart" uses — while `PineWorkerEngine`'s worker
+  carries an engine copy inlined in vela-pinets (unpatched), so it is not wired. When a Library script
+  hits the wall, compute the value from data and draw it.
 - **Library source is licence-bound:** fetch at runtime (`/api/source?slug=…`), never commit it.
 - **Stale frames:** compare the heartbeat's `build` with `/api/build`. A frozen/occluded frame executes
   nothing at all — no reload, no command — which is why the pane remounts on reveal.
@@ -345,7 +346,9 @@ page's action list in the backend; assume a clean API return means the chart cha
 
 - **Vela** — LuxAlgo's charting library (vendored under `console/frontend/vendor/vela/`). **pinets** —
   the open Pine-subset engine used here, vendored as a PATCHED build; **the full TradingView/Vela Pine
-  engine is paid and unused**, and the copy inside `vela-pinets` (the "Add to chart" path) is unpatched.
+  engine is paid and unused**. The console runs vela-pinets' `PineEngine`, which imports `pinets`
+  through the page's import map — i.e. the patched build. vela-pinets' `PineWorkerEngine` is the one
+  class that would NOT be patched (its worker inlines its own engine copy), so nothing registers it.
 - **Console** — the local page + server at `127.0.0.1:8787` that hosts the chart.
 - **Pane** — the app's dockable surface; the chart lives in `traders-desk:chart`.
 - **Bridge action** — one command the console page knows how to execute (`add`, `remove`, `apply`, `draw`,

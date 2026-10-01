@@ -23,8 +23,12 @@ stated.
 
 - **Licence:** **AGPL-3.0-only** — <https://github.com/LuxAlgo/Vela-pinets> · <https://github.com/LuxAlgo/PineTS>
 - **How it is used:** `@luxalgo/vela-pinets@0.2.12` is **vendored unmodified** at
-  `console/frontend/vendor/vela-pinets/dist/` and served from there (it carries its OWN, unpatched
-  copy of the pinets engine — the "Add to chart" path).
+  `console/frontend/vendor/vela-pinets/dist/` and served from there. Its `PineEngine` imports `pinets`
+  as an external module, which the page's import map resolves to the patched build below — so
+  "Add to chart" runs the fork's engine. Its `PineWorkerEngine` is the exception: that class's worker
+  is an engine copy **inlined into vela-pinets' dist** (unpatched), so the console does not register
+  it; `workerUrl`/`createWorker` exist but the worker also carries the model builder, which is not
+  exported for reuse.
   The **`pinets` engine is redistributed in this repository** at
   `console/frontend/vendor/pinets/pinets.min.browser.es.js` (659 KB, browser-ES build) and is what the
   import map serves; the AGPL text travels with it as `vendor/pinets/LICENSE`.

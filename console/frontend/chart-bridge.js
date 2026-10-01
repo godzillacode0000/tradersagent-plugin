@@ -262,6 +262,10 @@
               cells: cells ? cells.length : null,
               activeChart: !!(app.activeChart && app.activeChart()),
               consoleChart: !!window.__consoleChart,
+              /* WHICH Pine engine this page runs. vela-pinets bundles its own unpatched copy of the
+                 fork's engine, so "the patches are in the bundle" is not the same claim as "the chart
+                 runs them" (the audit's #17). Reported, not asserted. */
+              engine: app.engineSource || null,
             };
           } catch (err) { return { diagErr: String(err && err.message || err).slice(0, 120) }; }
         })(),

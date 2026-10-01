@@ -100,22 +100,38 @@ function readTheme() {
 state.ready = (async () => {
   const host = document.getElementById('chart');
   if (!host) throw new Error('#chart host missing');
-  const [{ VelaWorkspace }, { BinanceProvider }, pinets] = await Promise.all([
+  const [{ VelaWorkspace }, { BinanceProvider }, velaPinets] = await Promise.all([
     import('@luxalgo/vela/workspace'),
     import('@luxalgo/vela/providers/binance'),
     import('@luxalgo/vela-pinets'),
   ]);
-  const Engine = pinets.PineWorkerEngine || pinets.PineEngine;
+  /* TWO engines are on offer here and they differ in a way that matters:
+       - PineEngine runs on THIS thread and is built on vela-pinets' own `import { PineTS } from
+         'pinets'`, which the page's import map resolves to ./vendor/pinets — our PATCHED fork.
+       - PineWorkerEngine runs off-thread, but its worker is an engine copy INLINED into
+         vela-pinets' dist (unpatched): a script our patches fixed fails on that path — the audit's
+         #17. `opts.createWorker`/`opts.workerUrl` do exist, but the worker also carries the model
+         builder, so a replacement would mean rebuilding vela-pinets rather than pointing it here.
+     The Library's "Add to chart" runs through this engine, so the patched one wins. Both declare
+     the same capabilities (streaming/visibleRange/inputs/props). */
+  const Engine = velaPinets.PineEngine || velaPinets.PineWorkerEngine;
   window.__wsApp.pineRegistered = typeof Engine === 'function';
+  window.__wsApp.engineSource = typeof Engine !== 'function' ? null
+    : (Engine === velaPinets.PineEngine
+      ? 'PineEngine (main thread) → pinets from vendor/pinets (patched fork)'
+      : 'PineWorkerEngine (worker carries its own unpatched engine copy)');
+  if (Engine === velaPinets.PineWorkerEngine) {
+    console.warn('[workspace] running on vela-pinets\' bundled engine — the fork\'s patches are not in effect here');
+  }
 
   // The docs' other wiring — `registerDefaultEngine('pine', () => new PineWorkerEngine())`, "register
   // once, app-wide" — so any chart this app builds later (even one that skips the factory above) can
   // run Pine. Separate import and try/catch: a plugin subpath that fails must not cost us the shell.
   try {
     const { registerDefaultEngine } = await import('@luxalgo/vela/plugin');
-    if (typeof registerDefaultEngine === 'function' && typeof pinets.PineWorkerEngine === 'function') {
-      registerDefaultEngine('pine', () => new pinets.PineWorkerEngine());
-      console.info('[workspace] default Pine engine registered app-wide (PineWorkerEngine)');
+    if (typeof registerDefaultEngine === 'function' && typeof Engine === 'function') {
+      registerDefaultEngine('pine', () => new Engine());
+      console.info('[workspace] default Pine engine registered app-wide — ' + window.__wsApp.engineSource);
     }
   } catch (err) {
     console.warn('[workspace] registerDefaultEngine unavailable — per-cell engines still wired:', err);

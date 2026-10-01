@@ -64,6 +64,10 @@
           if (typeof Ctor !== 'function') {
             throw new Error('the pinets build exposes no PineTS export — check the CDN entry');
           }
+          /* Expose the PATCHED namespace globally: app.js's bare-chart fallback and anything else on
+             the page that reaches for an engine should be able to find the fork's build (the audit's
+             #17: only this path used it, while Vela's own workspace ran vela-pinets' bundled copy). */
+          window.PineTS = mod;
           return Object.assign({}, mod, { PineTS: Ctor });      // keep Provider too
         })
         .catch((err) => { ctorPromise = null; throw err; });   // allow a retry

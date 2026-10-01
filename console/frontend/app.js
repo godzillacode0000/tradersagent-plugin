@@ -465,9 +465,11 @@ function applyTheme(next) {
 function newChart(host, options) {
   const Ctor = window.Vela?.Vela ?? window.Vela;
   // Their port ships two engines and the docs' own line — "Off the main thread" — makes the worker the
-  // one to reach for first. The bare-chart path takes PineWorkerEngine and only falls back to the
-  // main-thread engine on a build that does not carry it (docs: PineEngine "simplest setup").
-  const Pine = window.VelaPinets?.PineWorkerEngine ?? window.VelaPinets?.PineEngine;
+  // one to reach for first. Here the OTHER axis wins: the module's PineEngine runs on the patched
+  // `pinets` (import map → vendor/pinets), while both worker classes run an engine copy inlined in
+  // vela-pinets' dist (the audit's #17). See bootChart() for the module pre-load.
+  const Pine = window.__velaPinetsModule?.PineEngine
+    ?? window.VelaPinets?.PineWorkerEngine ?? window.VelaPinets?.PineEngine;
   if (typeof Ctor !== 'function') throw new Error('Vela browser build did not load');
   host.innerHTML = '';
   const instance = new Ctor(host, {
@@ -482,7 +484,10 @@ function newChart(host, options) {
     instance.registerEngine('pine', new Pine());
     pineReady = true;
     log('Pine engine on this chart: ' +
-        (Pine === window.VelaPinets?.PineWorkerEngine ? 'PineWorkerEngine (Web Worker)' : 'PineEngine (main thread)'));
+        (Pine === window.__velaPinetsModule?.PineEngine ? 'PineEngine (main thread, patched fork)'
+          : Pine === window.VelaPinets?.PineWorkerEngine ? 'PineWorkerEngine (Web Worker, vela-pinets copy)'
+            : Pine === window.VelaPinets?.PineEngine ? 'PineEngine (main thread, vela-pinets copy)'
+              : 'unknown engine class'));
   } else {
     pineReady = false;
     toast('Pine engine missing — indicators cannot be mounted', true);
@@ -561,6 +566,19 @@ async function bootChart() {
     } else {
       log('Workspace unavailable (' + (window.__wsApp.error?.message || 'failed') + ') — bare chart path.');
     }
+  }
+
+  /* The bare-chart fallback below registers an engine SYNCHRONOUSLY, and the global build
+     (`window.VelaPinets`) carries vela-pinets' own, unpatched engine. Fetch the module's classes
+     first — that module runs on the `pinets` the import map serves, i.e. the patched fork — and
+     fall back to the global if it cannot load. The workspace path (the live one) does this already. */
+  try {
+    const mod = await import('@luxalgo/vela-pinets');
+    if (typeof mod.PineEngine === 'function') {
+      window.__velaPinetsModule = { PineEngine: mod.PineEngine, PineWorkerEngine: mod.PineWorkerEngine };
+    }
+  } catch (err) {
+    log('vela-pinets module unavailable — the bare chart will use the global build\'s engine.');
   }
 
   const Binance = window.Vela?.BinanceProvider;

@@ -139,9 +139,10 @@ below answer over the console's push channel, so the round trip is local.
 
 **Run PineTS** executes the script over the chart's live bars with the vendored, patched Pine runtime
 and paints it as a native series; it says plainly when a script uses something the runtime refuses
-(`import` is the one). **Add to chart** hands the script to the Pine engine that ships inside
-`vela-pinets` — a separate, unpatched build — so some Library scripts that *Run PineTS* handles will
-paint nothing there; the app reports what actually happened rather than pretending.
+(`import` is the one). **Add to chart** asks Vela's own Pine engine, which here is the workspace's
+`PineEngine` — built on that same patched runtime. (vela-pinets' `PineWorkerEngine` would run its
+copy *inlined* in vela-pinets, without the patches; the console therefore does not use it.) The app
+reports what actually happened rather than pretending.
 
 ### Letting your agent drive the chart
 
