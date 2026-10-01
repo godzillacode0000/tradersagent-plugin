@@ -49,8 +49,42 @@ window.__wsApp = {
   setTheme(t) {
     try { state.ws && state.ws.setTheme && state.ws.setTheme(t); return true; } catch (err) { console.warn('[ws] setTheme failed:', err); return false; }
   },
-  screenshot() {
-    try { return state.ws && state.ws.screenshot ? state.ws.screenshot() : null; } catch (err) { console.warn('[ws] screenshot failed:', err); return null; }
+  /* Vela's own shot covers ITS canvases only: the overlay draws on a canvas of its own
+     (`#chart-overlay`, sitting above the chart), so every picture the agent took of a Library script
+     read as empty even while the boxes were on screen (measured 29 Sep: the bridge reported
+     "5 box(es) verified on screen" and the same run's PNG showed nothing). Composite instead — the
+     chart's PNG as the base, then the overlay canvas at its own measured offset and scale. The
+     tables host is a DOM element, not a canvas, so dashboard tables still do not appear in a
+     picture; the bridge's own state carries their counts instead. */
+  async screenshot() {
+    let base = null;
+    try { base = state.ws && state.ws.screenshot ? await state.ws.screenshot() : null; } catch (err) {
+      console.warn('[ws] screenshot failed:', err); return null;
+    }
+    const overlay = document.querySelector('#chart-overlay');
+    if (!base || !overlay) return base;
+    try {
+      const img = new Image();
+      img.src = String(base);
+      await img.decode();
+      const host = document.getElementById('chart');
+      const hostRect = host ? host.getBoundingClientRect() : { left: 0, top: 0, width: img.naturalWidth };
+      const s = hostRect.width ? img.naturalWidth / hostRect.width : (window.devicePixelRatio || 1);
+      const cv = document.createElement('canvas');
+      cv.width = img.naturalWidth; cv.height = img.naturalHeight;
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const r = overlay.getBoundingClientRect();
+      if (r.width && r.height) {
+        ctx.drawImage(overlay, (r.left - hostRect.left) * s, (r.top - hostRect.top) * s, r.width * s, r.height * s);
+      }
+      const out = cv.toDataURL('image/png');
+      return out || base;
+    } catch (err) {
+      // A composite that fails must not cost the picture the operator already had.
+      console.warn('[ws] overlay composite failed, returning the bare chart shot:', err);
+      return base;
+    }
   },
   download(getName) {
     try { state.ws && state.ws.downloadScreenshot && state.ws.downloadScreenshot(getName); return true; } catch (err) { return false; }
