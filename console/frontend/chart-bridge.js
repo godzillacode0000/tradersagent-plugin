@@ -304,14 +304,25 @@
             out.error = r.error || null;             // stable code + hint, not just prose
             break;
           }
-          out.ok = true;
+          /* `ok` means the chart now shows something — the same read-back rule as `draw` and `add`.
+             The run can succeed and still paint nothing (its conditions never fired, or the overlay
+             refused), and an agent that read ok:true went looking for a picture that was not there
+             (the audit's #55). The run's own outcome is `ran`, and the detail line reports both. */
+          const v = r.verified;
+          const paintedOverlay = !!(v && (v.boxes + v.lines + v.labels + (v.tables || 0)) > 0);
+          const paintedNative = !!(r.paint && r.paint.added);
+          out.ok = paintedOverlay || paintedNative;
+          out.ran = true;
+          out.painted = { overlay: paintedOverlay, native: paintedNative, series: r.series.length };
           out.series = r.series.length;
-          out.added = r.paint && r.paint.added ? r.paint.added.title : null;
+          out.added = paintedNative ? r.paint.added.title : null;
           out.ms = r.ms;
           out.strategy = r.strategy || null;          // a strategy() script's own metrics
           out.ctor = r.ctor || null;                  // which PineTS constructor ran (context matters)
-          out.onCanvas = r.verified || null;
-          out.detail = window.TraderRun.summarize(r);
+          out.onCanvas = v || null;
+          out.detail = out.ok
+            ? window.TraderRun.summarize(r)
+            : 'ran, but nothing landed on the chart · ' + window.TraderRun.summarize(r);
           break;
         }
         case 'add': {
