@@ -22,28 +22,32 @@ stated.
 ## vela-pinets + pinets — the Pine (PineTS) runtimes
 
 - **Licence:** **AGPL-3.0-only** — <https://github.com/LuxAlgo/Vela-pinets> · <https://github.com/LuxAlgo/PineTS>
-- **How it is used:** `@luxalgo/vela-pinets@0.2.12` is loaded from jsDelivr at runtime, pinned by URL.
+- **How it is used:** `@luxalgo/vela-pinets@0.2.12` is **vendored unmodified** at
+  `console/frontend/vendor/vela-pinets/dist/` and served from there (it carries its OWN, unpatched
+  copy of the pinets engine — the "Add to chart" path).
   The **`pinets` engine is redistributed in this repository** at
-  `console/frontend/vendor/pinets/pinets.min.browser.es.js` (657 KB, browser-ES build) and is what the
+  `console/frontend/vendor/pinets/pinets.min.browser.es.js` (659 KB, browser-ES build) and is what the
   import map serves; the AGPL text travels with it as `vendor/pinets/LICENSE`.
-  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `b001bed`
-    (= upstream `0.10.0` plus SEVEN patches — UDT field history reads, `<drawing>.all` as a Pine array,
+  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `ba5aa4c`
+    (= upstream `0.10.0` plus EIGHT patches — UDT field history reads, `<drawing>.all` as a Pine array,
     a scoped comparison operand chain, a UDT whose name a variable shares, a member chain's base
     inside implicit returns, the two operand classes (an index that is a read, a call's arguments in a
-    member chain), and a declaration reached by a walker keeping its scope and store; the details, the
+    member chain), a declaration reached by a walker keeping its scope and store, and a split element
+    identified by the node the split built rather than by its name; the details, the
     test files and the sha256 are in `console/frontend/vendor/pinets/PROVENANCE.md`). Everything before
     those commits was upstream as-is.
   - Because this repository now redistributes AGPL code, the combined distribution is under the AGPL:
     anyone who receives it can ask for the complete corresponding source, and the fork above is that
     source for the engine. Bundling was a deliberate decision (free distribution, no monetisation) —
     the earlier policy was CDN-only, precisely to keep the combined work out of the AGPL.
-  - The engine now CARRIES seven patches (1 Oct), all PUBLISHED on the fork's branch
+  - The engine now CARRIES eight patches (1 Oct), all PUBLISHED on the fork's branch
     `fix/scope-collision` (<https://github.com/godzillacode0000/PineTS/tree/fix/scope-collision>):
     UDT field history reads (`30a75fd`), `<drawing>.all` as a Pine array (`493a8ea`), a scoped
     comparison operand chain (`94d13ec`), a UDT whose name a variable shares (`3c35b0f`), a member
     chain's base inside implicit returns (`222c278`) with its regression guard (`922eb5b`), the two
-    operand classes (`e9671d0`) and a declaration reached by a walker (`eb5162e`) with its regression
-    guards (`073fbaa`, `b001bed`). The
+    operand classes (`e9671d0`), a declaration reached by a walker (`eb5162e`) with its regression
+    guards (`073fbaa`, `b001bed`), and a split element identified by node rather than name (`ba5aa4c`,
+    the same name-collision class the audit flagged as its #26). The
     AGPL's "make the changes visible" condition is met by that public branch — push any future patch
     BEFORE shipping a bundle that carries it.
 - **Why the `pinets` pin is a floor, not a preference (27 Sep):** `pinets@0.10.0` is the floor: 0.9.33 evaluates *both* sides of a
