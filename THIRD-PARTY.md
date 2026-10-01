@@ -24,22 +24,24 @@ stated.
 - **Licence:** **AGPL-3.0-only** — <https://github.com/LuxAlgo/Vela-pinets> · <https://github.com/LuxAlgo/PineTS>
 - **How it is used:** `@luxalgo/vela-pinets@0.2.12` is loaded from jsDelivr at runtime, pinned by URL.
   The **`pinets` engine is redistributed in this repository** at
-  `console/frontend/vendor/pinets/pinets.min.browser.es.js` (653 KB, browser-ES build) and is what the
+  `console/frontend/vendor/pinets/pinets.min.browser.es.js` (657 KB, browser-ES build) and is what the
   import map serves; the AGPL text travels with it as `vendor/pinets/LICENSE`.
-  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `493a8ea`
-    (= upstream `0.10.0` plus TWO patches — UDT field history reads, and `<drawing>.all` as a Pine
-    array; the details, the test files and the sha256 are in
+  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `922eb5b`
+    (= upstream `0.10.0` plus FIVE patches — UDT field history reads, `<drawing>.all` as a Pine array,
+    a scoped comparison operand chain, a UDT whose name a variable shares, and a member chain's base
+    inside implicit returns; the details, the test files and the sha256 are in
     `console/frontend/vendor/pinets/PROVENANCE.md`). Everything before those commits was upstream as-is.
   - Because this repository now redistributes AGPL code, the combined distribution is under the AGPL:
     anyone who receives it can ask for the complete corresponding source, and the fork above is that
     source for the engine. Bundling was a deliberate decision (free distribution, no monetisation) —
     the earlier policy was CDN-only, precisely to keep the combined work out of the AGPL.
-  - The engine now CARRIES four patches (29 Sep), all PUBLISHED on the fork's branch
+  - The engine now CARRIES five patches (1 Oct), all PUBLISHED on the fork's branch
     `fix/scope-collision` (<https://github.com/godzillacode0000/PineTS/tree/fix/scope-collision>):
     UDT field history reads (`30a75fd`), `<drawing>.all` as a Pine array (`493a8ea`), a scoped
-    comparison operand chain (`94d13ec`) and a UDT whose name a variable shares (`3c35b0f`). The AGPL's
-    "make the changes visible" condition is met by that public branch — push any future patch BEFORE
-    shipping a bundle that carries it.
+    comparison operand chain (`94d13ec`), a UDT whose name a variable shares (`3c35b0f`), a member
+    chain's base inside implicit returns (`222c278`) and that patch's regression guard (`922eb5b`). The
+    AGPL's "make the changes visible" condition is met by that public branch — push any future patch
+    BEFORE shipping a bundle that carries it.
 - **Why the `pinets` pin is a floor, not a preference (27 Sep):** `pinets@0.10.0` is the floor: 0.9.33 evaluates *both* sides of a
   ternary, so the standard guard `size >= 2 ? array.get(a, size - 2) : na` still runs the read and
   dies with `Index -2 is out of bounds, array size is 0` the moment the array is empty — the script
