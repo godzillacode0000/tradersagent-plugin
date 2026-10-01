@@ -271,12 +271,13 @@ Vela's toolbar row carry. Two halves, and only the first is guaranteed:
 
 ## Hard stops
 
-- **`chart_shot` cannot see our overlay.** The page captures with Vela's own `screenshot()`
-  (`workspace.screenshot()` → `chart.screenshot()`), which renders the chart's canvas only. A Library
-  run's boxes/lines/labels/series paths live on OUR canvas and are absent from the PNG. So a shot
-  proves natives and price, never geometry: to show overlay output, take a desktop capture (`grim`)
-  with the pane on screen. `overlay.state()` samples its own canvas alpha, which is why the run report
-  can honestly say a label is on screen while `chart_shot` shows nothing.
+- **`chart_shot` includes our overlay now (fixed 1 Oct).** The page's `screenshot()` in `workspace.js`
+  composites Vela's own chart PNG with `#chart-overlay` at its measured offset and scale, so a Library
+  run's boxes/lines DO appear in the picture — verified on the live pane (4 boxes + 4 lines drawn, and
+  the same run's PNG showed them). What still does not appear: **dashboard tables** (`#chart-tables` is
+  a DOM host, not a canvas) and anything drawn outside the visible window. So: a shot is now evidence
+  for geometry, but read the counts from the run report for tables, and keep taking a `grim` desktop
+  capture when the question is "what does the pane look like to the operator" (the shot has no chrome).
 - **Our overlay draws labels as plain text at (x, y).** `overlay.js` ignores Pine's label `style` and
   anchor and calls `ctx.fillText` — so a label placed at the last bar runs off the right edge and is
   invisible. For a diagnostic label, anchor it mid-pane (`bar_index - 150`), never at `bar_index`.
