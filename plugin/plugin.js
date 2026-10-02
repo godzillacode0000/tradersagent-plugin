@@ -129,6 +129,29 @@ const S = {
    setting without threading the context through props. (No ctx.os shim: the operator's rule is
    that this plugin never opens an external browser — 24 Sep.) */
 let ctx_storage = null
+/* The row is a switch (2 Oct). The SDK can reveal a pane but has no close door, so the plugin owns
+   the pane's REGISTRATION: unregistered, the pane leaves the grid and the chat takes the space;
+   registered again, it returns where the layout tree remembers it. */
+let paneDispose = null
+let registerPaneFn = null
+let paneIntent = null          /* 'open' from the palette/chip; the row leaves it null = toggle */
+
+function persistOpen(open) {
+  if (ctx_storage) Promise.resolve(ctx_storage.set('paneOpen', open)).catch(() => {})
+}
+
+function mountPane() {
+  if (paneDispose || !registerPaneFn) return
+  paneDispose = registerPaneFn()
+  persistOpen(true)
+}
+
+function unmountPane() {
+  if (!paneDispose) return
+  try { paneDispose() } catch (err) { /* already gone with a plugin reload */ }
+  paneDispose = null
+  persistOpen(false)
+}
 let autoRevealOn = false      /* off by default: the pane opens on a click, not at boot */
 let reveal_attempted = false
 
@@ -141,6 +164,7 @@ let reveal_attempted = false
 
 /** Put the console in front: the app's own navigation, so the page mounts and is shown. */
 function openConsole() {
+  paneIntent = 'open'
   try {
     host.navigate(ROUTE)
     return true
@@ -310,6 +334,7 @@ function ConsolePane() {
 
 /** Is the chart pane on screen right now? Guarded — an older build may not have the pane door. */
 function paneVisible() {
+  if (!paneDispose) return false
   try {
     const atom = host.paneVisibility ? host.paneVisibility(PANE_ID) : null
     return Boolean(atom && typeof atom.get === 'function' && atom.get())
@@ -382,11 +407,31 @@ function revealChart() {
  * If the pane cannot be shown, the page renders the console itself — so a click never lands on an
  * empty page (which is exactly how the 17 Sep version failed).
  */
+/* Leave the row's route after every click — to the focused chat, or a fresh one when there is none.
+   Staying on /traders-agent meant the next click hit the SAME path, the page did not remount, and the
+   row could not act as a switch (measured 3 Oct: second click did nothing). */
+function backToChat(sid) {
+  if (typeof host.navigate !== 'function') return
+  host.navigate(sid ? '/' + encodeURIComponent(sid) : '/')
+}
+
 function TradersDeskPage() {
+  const [closed, setClosed] = useState(false)
   const [paneUp, setPaneUp] = useState(paneVisible)
 
   useEffect(() => {
     let live = true
+    const intent = paneIntent || 'toggle'
+    paneIntent = null
+    console.error('[traders-desk] row: intent=' + intent + ' registered=' + Boolean(paneDispose) +
+      ' visible=' + paneVisible())
+    if (intent === 'toggle' && paneVisible()) {
+      unmountPane()
+      setClosed(true)
+      return () => { live = false }
+    }
+    mountPane()
+    setPaneUp(paneVisible())
     const stop = watchPane(setPaneUp)
     revealChart()
     return () => {
@@ -419,9 +464,25 @@ function TradersDeskPage() {
   const sid = useValue(host.state && host.state.focusedStoredSessionId)
   useEffect(() => {
     if (!paneUp) return
-    if (!sid || typeof host.navigate !== 'function') return
-    host.navigate('/' + encodeURIComponent(sid))
+    backToChat(sid)
   }, [paneUp, sid])
+
+  /* Closed by this click: hand the workspace back to the chat, same bounce as the open path. */
+  useEffect(() => {
+    if (!closed) return
+    backToChat(sid)
+  }, [closed, sid])
+
+  if (closed) {
+    return jsxs('div', {
+      style: S.card,
+      children: [
+        jsx('div', { style: S.cardTitle, children: "Trader's Agent closed" }),
+        jsx('div', { style: S.cardText, children: 'Click the Trader’s Agent row again to bring the chart back — ' +
+          'it reopens with what was on it.' })
+      ]
+    })
+  }
 
   if (!paneUp) {
     return jsxs('div', {
@@ -559,6 +620,20 @@ export default {
         .catch(() => {})
     }
 
+    const PANE_CONTRIB = {
+      /* The chart beside the conversation: the app's chat keeps the left, the chart reads on the
+         right. Closed until the operator asks for it (his call, 19 Sep): the pane used to open with
+         the app, and "only show when I click Trader's Agent" is the behaviour he wants. The row's
+         landing (`revealPane` below) is the way in, and the app remembers the state after that. */
+      id: 'chart',
+      area: PANES_AREA,
+      title: "Trader's Agent",
+      data: { placement: 'right', dock: { pane: 'workspace', pos: 'right' },
+              width: '620px', defaultCollapsed: true },
+      render: () => jsx(ConsolePane, {})
+    }
+    registerPaneFn = () => ctx.register(PANE_CONTRIB)
+
     const CONTRIBUTIONS = [
       {
         /* The row's route, and the console itself: landing here IS seeing the chart. */
@@ -566,18 +641,6 @@ export default {
         area: ROUTES_AREA,
         data: { path: ROUTE },
         render: () => jsx(TradersDeskPage, {})
-      },
-      {
-        /* The chart beside the conversation: the app's chat keeps the left, the chart reads on the
-           right. Closed until the operator asks for it (his call, 19 Sep): the pane used to open with
-           the app, and "only show when I click Trader's Agent" is the behaviour he wants. The row's
-           landing (`revealPane` below) is the way in, and the app remembers the state after that. */
-        id: 'chart',
-        area: PANES_AREA,
-        title: "Trader's Agent",
-        data: { placement: 'right', dock: { pane: 'workspace', pos: 'right' },
-                width: '620px', defaultCollapsed: true },
-        render: () => jsx(ConsolePane, {})
       },
       {
         id: 'nav',
@@ -600,6 +663,16 @@ export default {
           label: "Trading: open Trader's Agent",
           keywords: ['trading', 'trader', 'vela', 'chart', 'luxalgo', 'desk'],
           run: () => openConsole()
+        }
+      },
+      {
+        id: 'close',
+        area: PALETTE_AREA,
+        data: {
+          id: 'tradingDesk.close',
+          label: "Trading: close Trader's Agent",
+          keywords: ['trading', 'trader', 'chart', 'close', 'hide', 'desk'],
+          run: () => unmountPane()
         }
       },
       {
@@ -645,11 +718,19 @@ export default {
       }
     ]
     ctx.registerMany(CONTRIBUTIONS)
+    ctx.onDispose(() => { paneDispose = null })
+    if (ctx.storage) {
+      Promise.resolve(ctx.storage.get('paneOpen'))
+        .then((value) => { if (value !== false) mountPane() })
+        .catch(() => mountPane())
+    } else {
+      mountPane()
+    }
 
     /* A load beacon (proves a save reaches the running app): console.error reaches ~/.hermes/logs/desktop.log (console.log does not), so a
        plugin the app silently skipped is distinguishable from one that actually loaded. The count is
        derived from the list itself — hand-typed counts drifted (a stale "6" outlived the pane's
        removal), and a beacon that lies is worse than no beacon. */
-    console.error(`[traders-desk] loaded — ${CONTRIBUTIONS.length} contributions registered`)
+    console.error(`[traders-desk] loaded — ${CONTRIBUTIONS.length + 1} contributions registered`)
   }
 }
