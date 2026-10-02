@@ -295,12 +295,14 @@
     const drew = r.drew || null;
     detail.overlay = !!(
       (v && (v.has === true || (typeof v.ink === 'number' && v.ink > 0) ||
-        (v.boxes + v.lines + v.labels + (v.tables || 0)) > 0)) ||
-      (drew && (drew.boxes + drew.lines + drew.labels + (drew.polylines || 0) + (drew.tables || 0)) > 0));
+        (v.boxes + v.lines + v.labels + (v.tablesVisible === true ? (v.tables || 0) : 0)) > 0)) ||
+      // `drew` is the run's own count, before anything is on screen — keep only the shapes the
+      // overlay canvas paints (a count of tables here was the second false-success path: round 6).
+      (drew && (drew.boxes + drew.lines + drew.labels + (drew.polylines || 0)) > 0));
     detail.ok = detail.overlay || detail.native;
     return detail;
   }
-  const paintedAnything = (r) => paintedDetail(r).ok
+  const paintedAnything = (r) => paintedDetail(r).ok;
   /* A strategy() script with nothing to draw is a different kind of success (metrics ran). One rule,
      shared by apply, draw and script, so the same script reads the same through every door. */
   const metricsOnly = (r) => !paintedDetail(r).ok && !!r.strategy;

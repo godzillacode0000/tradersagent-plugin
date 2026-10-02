@@ -327,6 +327,11 @@ window.TraderRun = (function () {
           s += ' (table #1: ' + (v.tablesCells || 0) + ' cell(s) at ' + v.tablesRect.x + ',' +
             v.tablesRect.y + ' ' + v.tablesRect.w + 'x' + v.tablesRect.h +
             (v.tablesInPane === false ? ' — OUTSIDE the pane' : v.tablesInPane === true ? ' — in the pane' : '') +
+            /* In the pane is not on screen: the pane can be wider than what is shown (the docked
+               desk is 332px wide with a 1067px chart inside it), and a layer can sit on top. The
+               page's own probe answers it — say the answer, in both directions (round 6). */
+            (v.tablesVisible === true ? ' — the browser shows it'
+              : v.tablesVisible === false ? ' — NOT visible where it sits (covered, or off the shown area)' : '') +
             (v.tablesText ? ' — "' + v.tablesText.slice(0, 60) + '"' : ' — no text') +
             (v.paneRect ? '; pane ' + v.paneRect.x + ',' + v.paneRect.y + ' ' + v.paneRect.w + 'x' + v.paneRect.h : '') +
             (v.viewport ? '; page ' + v.viewport : '') + ')';

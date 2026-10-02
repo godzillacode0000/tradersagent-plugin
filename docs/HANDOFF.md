@@ -44,7 +44,9 @@ native tools.
 | Plugin id / pane id | `traders-desk` / `traders-desk:chart` |
 | Credentials (LuxAlgo MCP URL + tokens, GitHub) | `~/.hermes/config.yaml` — **never** commit, never print |
 
-Versions at handoff: Hermes Desktop 0.21.3, console `SERVER_VERSION = 1.0.0`, CI green, ~350 backend tests,
+Versions at handoff: Hermes Desktop 0.21.3, console `SERVER_VERSION = 1.0.0`. CI was red from
+28 Sep (`1f9d340`) to 2 Oct (`8df6e2e` — a stale MCP test only CI could see); green again from `ab3708b`.
+~350 backend tests,
 7 plugin contributions across 5 areas.
 
 ---
@@ -255,7 +257,8 @@ Working, with evidence:
 - Latency: symbol switch **686–698 ms** end to end, screenshot **35 ms**, `clear` **7 ms**, SSE push
   single-digit ms (transport is not the bottleneck; the chart engine fetch+render is).
 - Console health: `/api/health` ok, LuxAlgo MCP connected, 19 endpoints.
-- ~350 backend tests, plugin harness OK (7 contributions / 5 areas), CI green.
+- ~350 backend tests, plugin harness OK (7 contributions / 5 areas), CI green since `ab3708b`
+  (see the correction above — earlier runs were red for a week and nobody looked).
 
 Current live state (transient): chart on **SOLUSDT**, console theme **light** (so the chart matches it),
 a hand-made palette parked; the docked pane may be hidden — check the heartbeat, not the screen.

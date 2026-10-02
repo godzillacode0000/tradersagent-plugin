@@ -107,3 +107,19 @@ class TheReportDoesNotReadAsMissingData(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TheTableCountIsNotAWish(unittest.TestCase):
+    """A table the browser cannot show must not read as painted (round 6 — found from the outside:
+    `apply` reported "1 table(s)" while neither the shot nor a desktop capture showed it)."""
+
+    def test_the_table_host_lives_with_the_overlay_host(self):
+        # The canvas moved into the candle canvas's parent on 29 Sep for exactly this reason; the
+        # table host kept living one level up until 2 Oct.
+        self.assertIn("const target = overlayHost() || chartEl();", OVERLAY)
+
+    def test_state_probes_the_top_layer_at_the_tables_centre(self):
+        self.assertIn("document.elementFromPoint(tr.x + tr.w / 2, tr.y + tr.h / 2)", OVERLAY)
+        self.assertIn("tablesVisible = !!(el && tablesHost.contains(el));", OVERLAY)
+
+    def test_has_counts_a_table_only_when_the_probe_says_visible(self):
+        self.assertIn("has: ink > 0 || (tables > 0 && tablesVisible === true),", OVERLAY)

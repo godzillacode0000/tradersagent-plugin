@@ -333,7 +333,8 @@ channel are covered without a browser, a network, or the app — and the MCP too
 stub console. ≈350 tests; the MCP ones skip themselves when `fastmcp` is absent (CI sets
 `TRADER_CHART_REQUIRE_MCP=1` so they cannot silently skip there).
 
-CI (`.github/workflows/ci.yml`) has three jobs: the plugin harness (Node 20), the backend (compile,
+CI (`.github/workflows/ci.yml`) has three jobs: the plugin harness (Node 20 — the real plugin first,
+	then the crafted-copy battery `verify-plugin-selftest.mjs`), the backend (compile,
 boot and a `/api/health` smoke test on Python 3.11), and the unit suite (the MCP step installs
 `fastmcp`). Workflow when editing: change the repo, run `./install.sh` to deploy; the app
 re-registers the plugin about 3 seconds after `plugin.js` changes. Console-only changes need the

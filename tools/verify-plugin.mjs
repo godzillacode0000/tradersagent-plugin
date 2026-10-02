@@ -39,95 +39,42 @@ const failures = []
 
 const ALLOWED = ['@hermes/plugin-sdk', 'react', 'react/jsx-runtime']
 
-// ── only the three allowed specifiers resolve ────────────────────────────────
-// Node's OWN ESM loader decides this now (module.register, below, just before the plugin loads) —
-// no regex can see every spacing/quoting/line-wrap a JS import can take, and four crafted copies
-// proved it in round 4 of an external audit (a multi-line import, one missing a space after
-// `import`, a template-quoted dynamic import, and a dynamic import split across lines all evaded the
-// previous regex; a fifth crafted copy — a comment mentioning two file paths — was a FALSE positive).
-// The loader hook sees exactly what Node resolves. What it cannot see: a dynamic `import(expr)` whose
-// argument is not a string literal, and any import on a code path the render never executes — this
-// supplementary scan catches the first of those two blind spots.
-// Strip comments for the scan below — round 5, issues 1 and 3. A small state machine, not a regex:
-// it blanks `//…` and `/*…*/` (a comment saying "see import(docs)" is prose, not an import — the old
-// regex read it as one) and marks which positions sit inside '…', "…" or `…" so the scan can skip
-// prose that happens to look like a call. String literals are also an import() argument, so their
-// CONTENTS stay readable — only the positions are masked.
-// Is the `/` at `i` a regex literal or a division? The standard heuristic: after an operator,
-// opener, comma, colon, semicolon or a value-taking keyword a `/` must start a regex; after an
-// identifier, literal, `)` or `]` it divides. Deliberately conservative (arithmetic operators are
-// left OUT): a wrong "division" costs one missed scan, a wrong "regex" would swallow live code.
-function regexAllowedAt(src, i) {
-  let j = i - 1
-  while (j >= 0 && /\s/.test(src[j])) j -= 1
-  if (j < 0) return true
-  const c = src[j]
-  if ('([{,;:=!&|?~<>'.includes(c)) return true
-  if (/[A-Za-z_$]/.test(c)) {
-    let k = j
-    while (k >= 0 && /[A-Za-z0-9_$]/.test(src[k])) k -= 1
-    return ['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'do', 'else',
-            'yield', 'await', 'case', 'throw'].includes(src.slice(k + 1, j + 1))
+// ── the call scan: fail-closed, over the RAW source ─────────────────────────
+// This is a LINT, not a sandbox. `eval("import('node:child_process')")` passes it, and always will —
+// a static scan cannot see constructed code. What the lint guarantees is narrow and testable: the
+// plugin's source contains NO `import(`, `require(`, `eval(` or `Function(` call except
+// `import('<one of the three>')` written literally with a plain quote. It does not guess lexical
+// state — rounds 4-6 of the external audit defeated every guess (spacing variants, a regex literal
+// at several positions, a template interpolation): a guess that flips turns prose into code or code
+// into prose, and one misread regex inverts the scan for the rest of the file. So this reads the raw
+// bytes and fails on the TOKEN, anywhere — code, comment, string. Yes, that fails honest prose; the
+// plugin contains none of these tokens outside its static imports, and keeping it that way is the
+// five-word fix. A false pass is a hole; a false failure is a sentence to delete.
+//
+// Node's own loader is the second, exact net: module.register + verify-plugin-hook.mjs resolve the
+// plugin's imports for real, so the three allowed specifiers are enforced on everything that
+// actually executes. The scan covers what the hook cannot see: calls on paths the render never runs.
+for (const m of source.matchAll(/(^|[^.\w$])import\s*\(/g)) {
+  const rest = source.slice(m.index + m[0].length, m.index + m[0].length + 160)
+  const lit = rest.match(/^\s*(['"])([^'"`\s]+)\1\s*\)/)
+  if (!lit) {
+    failures.push(`import( that is not a literal dynamic import — only import('<one of the three>') `
+      + `written literally is accepted, anywhere in the source (prose included): `
+      + rest.slice(0, 60).replace(/\n/g, ' / '))
+  } else if (!ALLOWED.includes(lit[2])) {
+    failures.push(`dynamic import() of '${lit[2]}' — outside the allowed three (${ALLOWED.join(', ')})`)
   }
-  return false
 }
-
-function blankComments(src) {
-  const code = new Array(src.length)
-  const inString = new Array(src.length).fill(false)
-  let i = 0, q = null
-  while (i < src.length) {
-    const c = src[i], n = src[i + 1]
-    if (q) {
-      code[i] = c
-      if (c === '\\') { code[i + 1] = n ?? ''; i += 2; continue }
-      if (c === q) { q = null; i += 1; continue }
-      inString[i] = true
-      i += 1; continue
-    }
-    if (c === '/' && n === '/') { let j = i; while (j < src.length && src[j] !== '\n') { code[j] = ' '; j += 1 } i = j; continue }
-    if (c === '/' && regexAllowedAt(src, i)) {
-      // A regex literal is not a string: quotes inside it (`/[\'"]/`) were how a crafted evasion's
-      // dynamic import went unscanned (found 2 Oct, fixed with this branch). The literal is consumed
-      // whole and its interior marked like a string, so pattern text (`/import\('x'\)/`) never reads
-      // as a call. If no closing `/` comes before the newline, it was a division after all — fall on.
-      let j = i + 1, cls = false, closed = false
-      while (j < src.length && src[j] !== '\n') {
-        const d = src[j]
-        if (d === '\\') { j += 2; continue }
-        if (d === '[') cls = true
-        else if (d === ']') cls = false
-        else if (d === '/' && !cls) { closed = true; break }
-        j += 1
-      }
-      if (closed) {
-        for (let k = i; k <= j; k += 1) { code[k] = src[k]; if (k > i && k < j) inString[k] = true }
-        i = j + 1; continue
-      }
-    }
-    if (c === '/' && n === '*') {
-      let j = i
-      while (j < src.length && !(src[j] === '*' && src[j + 1] === '/')) { code[j] = src[j] === '\n' ? '\n' : ' '; j += 1 }
-      code[j] = ' '; code[j + 1] = ' '; i = j + 2; continue
-    }
-    if (c === '"' || c === "'" || c === '`') { q = c; code[i] = c; i += 1; continue }
-    code[i] = c; i += 1
+for (const rule of [
+  { label: 'require(', re: /(^|[^.\w$])require\s*\(/g },
+  { label: 'eval(', re: /(^|[^.\w$])eval\s*\(/g },
+  { label: 'Function(', re: /(^|[^.\w$])(?:new\s+)?Function\s*\(/g },
+]) {
+  const m = rule.re.exec(source)
+  if (m) {
+    failures.push(`${rule.label} — the plugin may not build or require code; the token fails the `
+      + `gate anywhere in the source (byte ${m.index})`)
   }
-  return { code: code.join(''), inString }
-}
-
-// Dynamic import() on a path the render never runs (a handler, an effect, a callback) is invisible to
-// the resolve hook, so scan the blanked source: a literal target must be on the allowlist, a
-// non-literal one cannot be verified and fails too. Skipped: prose inside strings, and `obj.import(`
-// which is a method call, not a dynamic import.
-const { code, inString } = blankComments(source)
-for (const m of code.matchAll(/\bimport\s*\(\s*([\s\S]*?)\s*\)/g)) {
-  if (inString[m.index]) continue
-  if (m.index > 0 && code[m.index - 1] === '.') continue
-  const arg = m[1].trim()
-  const lit = arg.match(/^(['"`])([^'"`$\\]*)\1$/)
-  if (!lit) failures.push(`dynamic import() with a non-literal argument — cannot verify its target: ${arg.slice(0, 60)}`)
-  else if (!ALLOWED.includes(lit[2])) failures.push(`dynamic import() of '${lit[2]}' — outside the allowed three`)
 }
 
 const colour = source.match(/#[0-9a-fA-F]{3,8}\b/)

@@ -155,6 +155,14 @@ def error_line(result: dict) -> str:
     return f"  {head}{line}: {err.get('message')}{tail}"
 
 
+def ok_code(result: dict) -> int:
+    """Exit code for one command: 0 when something landed on the chart — or when a strategy() run
+    produced only metrics (`result: 'metrics'`, the same different-kind-of-success the MCP layer
+    prints ◆ for) — else 1. Round 6: the CLI disagreed with the MCP about this case (exit 1 for a
+    run the MCP calls success), so a shell checking codes saw a failure the tools did not."""
+    return 0 if (result.get("ok") or result.get("result") == "metrics") else 1
+
+
 def cmd_caps(args) -> int:
     """What the attached page can actually execute, as published in its own heartbeat."""
     state = require_open(args)
@@ -224,7 +232,7 @@ def cmd_draw(args) -> int:
         extra = error_line(result)
         if extra:
             print(extra)
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_clear(args) -> int:
@@ -233,7 +241,7 @@ def cmd_clear(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_remove(args) -> int:
@@ -255,7 +263,7 @@ def cmd_remove(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_script(args) -> int:
@@ -269,7 +277,7 @@ def cmd_script(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_mode(args) -> int:
@@ -279,7 +287,7 @@ def cmd_mode(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_browse(args) -> int:
@@ -299,7 +307,7 @@ def cmd_browse(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_open(args) -> int:
@@ -316,7 +324,7 @@ def cmd_open(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_reload(args) -> int:
@@ -330,7 +338,7 @@ def cmd_reload(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_apply(args) -> int:
@@ -349,7 +357,7 @@ def cmd_apply(args) -> int:
         extra = error_line(result)
         if extra:
             print(extra)
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_add(args) -> int:
@@ -358,7 +366,7 @@ def cmd_add(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_market(args) -> int:
@@ -367,7 +375,7 @@ def cmd_market(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_layout(args) -> int:
@@ -385,7 +393,7 @@ def cmd_layout(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_natives(args) -> int:
@@ -410,7 +418,7 @@ def cmd_natives(args) -> int:
                     marks.append("beta")
                 print(f"  {row.get('type', '?'):<24} {row.get('title', ''):<28}"
                       f"{' · '.join(marks)}")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_indicators(args) -> int:
@@ -459,7 +467,7 @@ def cmd_indicators(args) -> int:
                     marks.append("★")
                 print(f"  {row.get('kind', '?'):<8} {row.get('id', ''):<34}"
                       f"{row.get('label', ''):<30}{' · '.join(marks)}")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_studies(args) -> int:
@@ -482,7 +490,7 @@ def cmd_studies(args) -> int:
                          if len(row.get("sources") or []) > 1 else ""))
             for door in (result.get("doors") or []):
                 print(f"  door: {door}")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_fullscreen(args) -> int:
@@ -500,7 +508,7 @@ def cmd_fullscreen(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_theme(args) -> int:
@@ -518,7 +526,7 @@ def cmd_theme(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def cmd_wait(args) -> int:
@@ -529,7 +537,7 @@ def cmd_wait(args) -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         print(result.get("detail") or "no detail")
-    return 0 if result.get("ok") else 1
+    return ok_code(result)
 
 
 def build_parser() -> argparse.ArgumentParser:

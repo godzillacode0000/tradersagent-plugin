@@ -73,7 +73,11 @@
   const TABLE_ALIGN = { left: 'left', center: 'center', right: 'right' };
 
   function ensureTables() {
-    const target = chartEl();
+    /* Same lesson as the overlay canvas (see `ensureCanvas`): the table host must live in the CANDLE
+       canvas's parent. It sat one level up, in `#chart`, at z 26 — and a stacking context at the
+       plot level that beat the canvas at z 25 (measured 29 Sep) hides a div at z 26 the same way:
+       the table was in the DOM, opaque, and invisible (found again 2 Oct, from the outside). */
+    const target = overlayHost() || chartEl();
     if (!target) return null;
     if (tablesHost && tablesHost.isConnected && tablesHost.parentElement === target) return tablesHost;
     if (getComputedStyle(target).position === 'static') target.style.position = 'relative';
@@ -506,11 +510,27 @@
        the count reads 1 while the operator sees nothing. Measured against the same pane rect the
        mapping uses, so a caller can tell the two apart instead of trusting the count. */
     const place = tablePlacement();
+    /* "In the DOM" is not "visible": a layer above ours can hide a placed table (round 6, found from
+       the outside — the count said 1, the pane showed nothing). Probe the TOP layer at the table's
+       centre: the host is pointer-events:none, so flip it hit-testable for the call, ask the browser,
+       restore. `has` counts a table only when the browser says it is actually on top — the #55 rule,
+       applied to a widget that can be hidden instead of painted over. */
+    let tablesVisible = null;
+    const tr = place.rect;
+    if (tables > 0 && tablesHost && tr && tr.w > 1 && tr.h > 1) {
+      const prev = tablesHost.style.pointerEvents;
+      tablesHost.style.pointerEvents = 'auto';
+      try {
+        const el = document.elementFromPoint(tr.x + tr.w / 2, tr.y + tr.h / 2);
+        tablesVisible = !!(el && tablesHost.contains(el));
+      } catch (err) { tablesVisible = null; }
+      tablesHost.style.pointerEvents = prev;
+    }
     return { boxes: d.boxes, lines: d.lines, labels: d.labels, tables, ink,
              tablesInPane: place.inPane, tablesRect: place.rect, tablesCells: place.cells,
-             tablesText: place.text, paneRect: place.paneRect,
+             tablesText: place.text, paneRect: place.paneRect, tablesVisible,
              viewport: window.innerWidth + 'x' + window.innerHeight,
-             has: ink > 0 || tables > 0,
+             has: ink > 0 || (tables > 0 && tablesVisible === true),
              canvas: canvas ? canvas.width + 'x' + canvas.height : null };
   }
 

@@ -186,6 +186,15 @@ class TestTheFrontendReportsWhatLanded(unittest.TestCase):
         self.assertNotIn("out.ok = paintedOverlay || paintedNative", self.src)  # the old duplicate
         self.assertNotIn("out.ok = Boolean(r.ok)", self.src)                   # the old "it ran" rule
 
+    def test_a_hidden_table_does_not_read_as_painted(self):
+        # Round 6: a script's table was counted (`1 table(s)`) while no capture or pane showed it —
+        # the old `tables > 0` read a wish. The page now probes the top layer (overlay.js
+        # `tablesVisible`) and this read-back only counts tables the browser says it shows.
+        self.assertIn("v.tablesVisible === true ? (v.tables || 0) : 0", self.src)
+        # The SECOND false-success path, found while live-verifying the first: the run's own `drew`
+        # count still included tables (a count, not a sighting). The canvas shapes stay; tables don't.
+        self.assertNotIn("(drew.tables || 0)", self.src)
+
     def test_metrics_only_is_the_same_rule_on_all_three_doors(self):
         # Round 5, issue 5: `result: 'metrics'` existed only on `apply`, so a strategy()-only script
         # sent through `draw` or `script` still read as "ran, but nothing landed". One helper, called
@@ -193,6 +202,20 @@ class TestTheFrontendReportsWhatLanded(unittest.TestCase):
         self.assertIn("const metricsOnly = (r) => !paintedDetail(r).ok && !!r.strategy", self.src)
         self.assertEqual(3, self.src.count("out.result = 'metrics'"))   # apply, draw, script
         self.assertNotIn("if (!pd.ok && r.strategy)", self.src)         # the apply-only form is gone
+
+
+class TestTheCliAgreesAboutMetrics(unittest.TestCase):
+    """The CLI's exit code must agree with the MCP's ◆ (round 6): `result: 'metrics'` is a success."""
+
+    def setUp(self):
+        self.src = (Path(__file__).resolve().parents[3] / "console" / "bin" / "trader-chart").read_text(encoding="utf-8")
+
+    def test_a_metrics_run_is_exit_zero(self):
+        self.assertIn("def ok_code(result: dict) -> int:", self.src)
+        self.assertIn('result.get("result") == "metrics"', self.src)
+
+    def test_no_bare_ok_check_survives(self):
+        self.assertNotIn('return 0 if result.get("ok") else 1', self.src)
 
 
 class TestOverARealSocket(unittest.TestCase):

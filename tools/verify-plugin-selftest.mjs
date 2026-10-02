@@ -40,20 +40,32 @@ const CASES = [
   // ── evasions: each MUST fail, with the reason the harness intends ──
   { name: 'dynamic import on a never-run path', prepend: "const later = () => import('node:child_process')", fail: 'outside the allowed three' },
   { name: 'same, behind a quote-carrying regex literal', prepend: "const re = /['\"]/; const later = () => import('node:child_process')", fail: 'outside the allowed three' },
+  { name: 'same, behind a regex after a block (round 6)', prepend: "{} /'/.test('x'); const f = () => import('node:child_process')", fail: 'outside the allowed three' },
+  { name: 'same, Claude round-6 probe verbatim (two lines)', prepend: "{}\n/'/.test('x'); const f = () => import('node:child_process'); const q = 'z'", fail: 'outside the allowed three' },
+  { name: 'same, behind a regex after a paren (round 6)', prepend: "if (1) /'/.test('x'); const f = () => import('node:child_process')", fail: 'outside the allowed three' },
   { name: 'same, behind a `return /…/` regex', prepend: "function g() { return /['\"{}]/ } const f = () => import('node:child_process')", fail: 'outside the allowed three' },
-  { name: 'same, after a division (regex must NOT be assumed)', prepend: "function d(a, b) { return a / b } const f = () => import('node:child_process')", fail: 'outside the allowed three' },
-  { name: 'non-literal dynamic import', prepend: "const f = () => import('node:' + 'child_process')", fail: 'non-literal' },
+  { name: 'same, after a division', prepend: "function d(a, b) { return a / b } const f = () => import('node:child_process')", fail: 'outside the allowed three' },
+  { name: 'same, inside a template interpolation (round 6)', prepend: "const a = () => `${import('node:child_process')}`", fail: 'outside the allowed three' },
+  { name: 'non-literal dynamic import', prepend: "const f = () => import('node:' + 'child_process')", fail: 'not a literal dynamic import' },
+  { name: 'require() on a never-run path (round 6)', prepend: "const f = () => require('node:fs')", fail: 'require(' },
+  { name: 'eval() (round 6)', prepend: "const f = () => eval('1')", fail: 'eval(' },
+  { name: 'Function() constructor (round 6)', prepend: "const f = () => Function('return 1')", fail: 'Function(' },
   { name: 'absolute path import', prepend: "import ev from '/tmp/local-evil.mjs'", fail: 'outside the allowed three' },
   { name: 'file: URL import', prepend: "import ev from 'file:///tmp/local-evil.mjs'", fail: 'outside the allowed three' },
   { name: 'no-space import syntax', prepend: "import{readFileSync}from'node:fs'", fail: 'outside the allowed three' },
   { name: 'template-quoted dynamic import (executes)', prepend: 'const m = await import(`node:fs`)', fail: 'outside the allowed three' },
 
-  // ── lookalikes: each MUST pass, or the check punishes honest code ──
-  { name: 'comment prose mentioning import(docs)', prepend: '// see import(docs) for details' },
-  { name: 'string prose mentioning an import call', prepend: 'const s = "call import(\'node:fs\') in docs"' },
-  { name: 'a regex pattern that spells an import', prepend: "const re2 = /import\\('node:fs'\\)/" },
+  // ── lookalikes that now MUST FAIL: the gate fails closed on the token anywhere (round 6's
+  //    advice — a check that guesses lexical state can always be walked around; this one cannot,
+  //    and the fix for a hit is deleting a sentence, not fixing a hole) ──
+  { name: 'comment prose mentioning import(docs) fails closed', prepend: '// see import(docs) for details', fail: 'not a literal dynamic import' },
+  { name: 'string prose mentioning an import call fails closed', prepend: 'const s = "call import(\'node:fs\') in docs"', fail: 'outside the allowed three' },
+  { name: 'a regex pattern that spells an import fails closed', prepend: "const re2 = /import('node:fs')/", fail: 'outside the allowed three' },
+
+  // ── the lookalikes that must still PASS (token scans cannot see them: not calls) ──
   { name: '.import( method call on an object', prepend: "const o = { import: (x) => x }; const z = o.import('node:fs')" },
   { name: 'allowed literal on a never-run path', prepend: "const f = () => import('react')" },
+  { name: 'allowed literal, double-quoted', prepend: 'const f = () => import("react")' },
 ]
 
 let failed = 0
