@@ -1,6 +1,8 @@
 # runtime state — chart bridge files, study threads, screenshots
 console/agents/
-# LuxAlgo's builds fetched by ./install.sh --vendor (not redistributed here)
+# LuxAlgo's builds live under vendor/{vela,vela-pinets}/ and ARE redistributed here (see
+# THIRD-PARTY.md — Vela Apache-2.0, vela-pinets AGPL-3.0). These two patterns only catch stray files
+# dropped directly into vendor/, not those directories.
 console/frontend/vendor/*.js
 console/frontend/vendor/*.css
 # …but the pinets engine IS redistributed: a PATCHED build from the fork below (see vendor/pinets/PROVENANCE.md).
