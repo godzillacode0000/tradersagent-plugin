@@ -318,8 +318,66 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
+  /* Vela's own coordinate system (3 Oct). The screenshot fit below GUESSED the price scale and the
+     drawing was painted once, so it drifted off the candles the moment the chart scrolled, autoscaled
+     or printed a bar (the operator's Order Block Detector: zigzag apex 400 USD above the high, OB
+     levels floating over empty space). The renderer exposes the truth: coords.timeToX(time) and
+     coords.priceToY(price, pane.scale, pane.bounds) — the very calls Vela paints its own candles with. */
+  function velaRenderer() {
+    const c = window.__consoleChart;
+    const r = c && (c.rendererControl || c.renderer);
+    const inner = r && (r.renderer || r);
+    return (inner && inner.coords && inner.scene) ? inner : null;
+  }
+
+  function pricePane(rd) {
+    try {
+      const panes = rd.scene.orderedPanes ? rd.scene.orderedPanes() : Array.from(rd.scene.panes.values());
+      return panes.find((p) => p.kind === 'price') || panes[0] || null;
+    } catch (err) { return null; }
+  }
+
+  async function nativeMapping() {
+    const rd = velaRenderer();
+    if (!rd) return null;
+    const pane = pricePane(rd);
+    const rect = plotRect();
+    const bars = (typeof window.chartBars === 'function') ? await window.chartBars() : [];
+    if (!pane || !pane.scale || !pane.bounds || !rect || !bars.length) return null;
+    const co = rd.coords;
+    if (typeof co.timeToX !== 'function' || typeof co.priceToY !== 'function' || !co.width) return null;
+    /* The coords are in the plot's CSS pixels with the origin at the canvas's left edge. The canvas
+       is WIDER than the plot — it also holds the price-axis column on the right — so `co.width` is
+       the plot and `rect.w` is plot + axis. Never scale one by the other: a rect.w/co.width ratio
+       stretched x by ~8% and pushed every right edge over the axis labels (3 Oct, measured). */
+    const timeOf = (index) => {
+      const i = Math.round(+index);
+      if (i >= 0 && i < bars.length) return bars[i].openTime || bars[i].time;
+      const last = bars[bars.length - 1], prev = bars[bars.length - 2] || last;
+      const step = (last.openTime || last.time) - (prev.openTime || prev.time) || 60000;
+      return (last.openTime || last.time) + (i - (bars.length - 1)) * step;
+    };
+    const b = pane.bounds;
+    const sig = [co.width, co.rightEdgeLogical, co.pxPerBar ? co.pxPerBar() : 0, pane.scale.min, pane.scale.max,
+                 b.top, b.height, bars.length, rect.x, rect.y, rect.w].join('|');
+    return {
+      native: true, sig, rect, bars: bars.length,
+      i0: 0, n: bars.length, lo: pane.scale.min, hi: pane.scale.max, pad: 0,
+      clip: { x: rect.x, y: rect.y + b.top, w: co.width, h: b.height },
+      x: (index) => rect.x + co.timeToX(timeOf(index)),
+      y: (price) => rect.y + co.priceToY(+price, pane.scale, b),
+      right: rect.x + co.width,
+    };
+  }
+
   /** bar index + price -> pixel, using the chart's own visible window and its bars. */
   async function mapping(opts) {
+    const nat = await nativeMapping();
+    if (nat) return nat;
+    return guessedMapping(opts);
+  }
+
+  async function guessedMapping(opts) {
     const O = Object.assign({}, DEFAULTS, opts || {});
     const bars = (typeof window.chartBars === 'function') ? await window.chartBars() : [];
     const range = (window.__consoleChart && window.__consoleChart.getVisibleRange)
@@ -358,6 +416,28 @@
     };
   }
 
+  /* Follow the chart. Each frame reads a handful of numbers (viewport, scale, bar count); only a
+     changed signature repaints, so an idle chart costs nothing and a pan/zoom/new bar repaints in
+     the same frame the candles move. rAF stops by itself when the pane is hidden. */
+  let following = false;
+  let repainting = false;
+  function follow() {
+    if (following) return;
+    following = true;
+    const tick = async () => {
+      if (!lastSpec) { following = false; return; }
+      if (!repainting) {
+        const m = await nativeMapping();
+        if (m && lastSpec && m.sig !== lastSpec.sig) {
+          repainting = true;
+          try { await apply(lastSpec.spec, lastSpec.opts); } finally { repainting = false; }
+        }
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
   function clear() {
     lastSpec = null;                               // state() reads this back as "nothing painted"
     if (tablesHost) tablesHost.innerHTML = '';
@@ -376,10 +456,18 @@
     if (!m) return { ok: false, reason: 'no visible window / bars to map against' };
     const ctx = cv.getContext('2d');
     ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.save();
+    if (m.clip) {                       /* never paint over the price axis or the volume pane */
+      ctx.beginPath();
+      ctx.rect(m.clip.x, m.clip.y, m.clip.w, m.clip.h);
+      ctx.clip();
+    }
+    const rightEdge = m.right || (m.rect.x + m.rect.w);
     let boxes = 0, lines = 0, labels = 0, polylines = 0;
 
     for (const b of (spec.boxes || [])) {
-      const x1 = m.x(+b.left), x2 = m.x(+b.right);
+      const x1 = m.x(+b.left);
+      const x2 = (b.extend === 'r' || b.extend === 'both' || !isFinite(+b.right)) ? rightEdge : m.x(+b.right);
       const y1 = m.y(+b.top), y2 = m.y(+b.bottom);
       const x = Math.min(x1, x2), w = Math.max(2, Math.abs(x2 - x1));
       const yy = Math.min(y1, y2), h = Math.max(2, Math.abs(y2 - y1));
@@ -404,7 +492,7 @@
       const y1 = m.y(+l.y1), y2 = m.y(+l.y2);
       // `extend: "l"` / `"r"` / `"both"` — Pine's way of saying "run off the edge".
       if (l.extend === 'l' || l.extend === 'both') x1 = 0;
-      if (l.extend === 'r' || l.extend === 'both') x2 = m.rect.x + m.rect.w;
+      if (l.extend === 'r' || l.extend === 'both') x2 = rightEdge;
       ctx.beginPath();
       ctx.moveTo(Math.min(x1, x2), y1);
       ctx.lineTo(Math.max(x1, x2), y2);
@@ -447,10 +535,13 @@
       labels += 1;
     }
 
+    ctx.restore();
     const tables = paintTables(spec.tables, m.rect);
 
-    lastSpec = { spec, opts, map: { i0: m.i0, n: m.n, lo: m.lo, hi: m.hi, bars: m.bars },
+    lastSpec = { spec, opts, sig: m.sig || null,
+                 map: { i0: m.i0, n: m.n, lo: m.lo, hi: m.hi, bars: m.bars, native: !!m.native },
                  drawn: { boxes, lines, labels, polylines, tables } };
+    if (m.native) follow();
     return { ok: true, boxes, lines, labels, polylines, tables, mapping: lastSpec.map, pad: m.pad };
   }
 

@@ -286,11 +286,13 @@ function flashChart() {
 
 /* The activity line (26 Sep, spec §5): "Last: drew 12-bar high/low", tool in the title. Only real
    mutations call this — searches and "loading…" are not "what the agent did to my chart". */
+const ACTIVITY_MAX = 140;   // one sentence the eye can take in; the whole thing stays in the tooltip
 function noteActivity(text, tool) {
   const line = document.getElementById('last-action');
   if (!line) return;
-  line.textContent = text;
-  line.title = tool ? tool + ' · ' + text : text;
+  const full = String(text == null ? '' : text);
+  line.textContent = full.length > ACTIVITY_MAX ? full.slice(0, ACTIVITY_MAX - 1).trimEnd() + '…' : full;
+  line.title = tool ? tool + ' · ' + full : full;
   const bar = line.closest('.statusbar');
   if (bar) bar.classList.add('has-activity');
 }

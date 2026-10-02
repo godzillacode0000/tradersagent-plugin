@@ -328,7 +328,16 @@ input:focus-visible, textarea:focus-visible {
    ≥ 640px: 1440−300−380=760 · 1280−280−340=660 · 1100−260=840 (detail
    overlays, so it costs the chart nothing). 1240px — not 1100 — is where
    three tracks must break, because 1240−280−340=620 < 640.            */
-.app { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100dvh; }
+.app { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; height: 100dvh; }
+
+/* ── The shell's ONE column may not grow (3 Oct) ─────────────────────────────────────────────────
+   Measured live: body 868px, but .topbar / .main / #chart / .statusbar all 2286px. `.app` declared
+   rows and no column, so its implicit `auto` column took the widest child's min-content — the status
+   bar's nowrap activity sentence ("ran in 143 ms over 500 bars · … · engine context: worker …").
+   Vela then laid the chart out at 2286px inside an 868px pane: price axis and last candles off
+   screen, every overlay positioned on a chart nobody could see. `minmax(0, 1fr)` is the cure, and
+   the status bar needs `min-width: 0` so its sentence ellipsizes instead of stretching the grid. */
+.statusbar { min-width: 0; }
 
 /* ── Nothing in this console may scroll the PAGE sideways (27 Sep) ───────────────────────────────
    The operator read the horizontal scrollbar under his chart as "the chart pane is not adaptive",
