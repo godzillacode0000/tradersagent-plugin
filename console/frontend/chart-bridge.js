@@ -280,16 +280,27 @@
    *  paths the overlay painted was reported as "nothing landed", because the test summed the
    *  container counts and state() has no polyline count. The honest read-back is the overlay's own
    *  `has`/`ink` — pixels actually painted, which counts paths and polylines — with the container
-   *  counts (and the draw pass's own tally) as fallbacks for an older build or an unreadable canvas. */
-  function paintedAnything(r) {
-    if (!r || !r.ok) return false;
-    if (r.paint && r.paint.added) return true;
+   *  counts (and the draw pass's own tally) as fallbacks for an older build or an unreadable canvas.
+   *
+   *  `paintedDetail` is the ONE implementation; every door that runs a script asks it. Round 3's
+   *  check found `apply` carrying its own copy without the draw-pass fallback — a real oversight,
+   *  not a deliberate split — so the same script could answer differently depending on which door
+   *  ran it. There is exactly one rule now. */
+  function paintedDetail(r) {
+    const detail = { ok: false, overlay: false, native: false, series: 0 };
+    if (!r || !r.ok) return detail;
+    detail.series = (r.series || []).length;
+    detail.native = !!(r.paint && r.paint.added);
     const v = r.verified || null;
-    if (v && (v.has === true || (typeof v.ink === 'number' && v.ink > 0))) return true;
-    if (v && (v.boxes + v.lines + v.labels + (v.tables || 0)) > 0) return true;
     const drew = r.drew || null;
-    return !!(drew && (drew.boxes + drew.lines + drew.labels + (drew.polylines || 0) + (drew.tables || 0)) > 0);
+    detail.overlay = !!(
+      (v && (v.has === true || (typeof v.ink === 'number' && v.ink > 0) ||
+        (v.boxes + v.lines + v.labels + (v.tables || 0)) > 0)) ||
+      (drew && (drew.boxes + drew.lines + drew.labels + (drew.polylines || 0) + (drew.tables || 0)) > 0));
+    detail.ok = detail.overlay || detail.native;
+    return detail;
   }
+  const paintedAnything = (r) => paintedDetail(r).ok;
 
   /** One command from the agent. Every outcome is reported, including "I did not do that". */
   async function run(command) {
@@ -324,26 +335,31 @@
             out.error = r.error || null;             // stable code + hint, not just prose
             break;
           }
-          /* `ok` means the chart now shows something — the same read-back rule as `draw` and `add`.
-             The run can succeed and still paint nothing (its conditions never fired, or the overlay
-             refused), and an agent that read ok:true went looking for a picture that was not there
-             (the audit's #55). `v.has` reads painted pixels, so a series path counts too. */
-          const v = r.verified;
-          const paintedOverlay = !!(v && (v.has === true || (typeof v.ink === 'number' && v.ink > 0) ||
-            (v.boxes + v.lines + v.labels + (v.tables || 0)) > 0));
-          const paintedNative = !!(r.paint && r.paint.added);
-          out.ok = paintedOverlay || paintedNative;
+          /* `ok` means the chart now shows something — the same read-back rule as `draw` and `add`,
+             through the one shared implementation (`paintedDetail`). The run can succeed and still
+             paint nothing (its conditions never fired, or the overlay refused), and an agent that
+             read ok:true went looking for a picture that was not there (the audit's #55).
+             A strategy() script with no plot is a different kind of success — its metrics ran, there
+             is just nothing to draw — so `result: 'metrics'` marks that instead of reading as a
+             failure (round 3's question #1; answered in round 4). */
+          const pd = paintedDetail(r);
+          out.ok = pd.ok;
           out.ran = true;
-          out.painted = { overlay: paintedOverlay, native: paintedNative, series: r.series.length };
-          out.series = r.series.length;
-          out.added = paintedNative ? r.paint.added.title : null;
+          out.painted = pd;
+          out.series = pd.series;
+          out.added = pd.native ? r.paint.added.title : null;
           out.ms = r.ms;
           out.strategy = r.strategy || null;          // a strategy() script's own metrics
           out.ctor = r.ctor || null;                  // which PineTS constructor ran (context matters)
-          out.onCanvas = v || null;
-          out.detail = out.ok
-            ? window.TraderRun.summarize(r)
-            : 'ran, but nothing landed on the chart · ' + window.TraderRun.summarize(r);
+          out.onCanvas = r.verified || null;
+          if (!pd.ok && r.strategy) {
+            out.result = 'metrics';
+            out.detail = '◆ ran, metrics only (no plot/overlay) · ' + window.TraderRun.summarize(r);
+          } else {
+            out.detail = out.ok
+              ? window.TraderRun.summarize(r)
+              : 'ran, but nothing landed on the chart · ' + window.TraderRun.summarize(r);
+          }
           break;
         }
         case 'add': {

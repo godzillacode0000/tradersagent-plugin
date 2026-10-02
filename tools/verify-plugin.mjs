@@ -26,6 +26,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { register } from 'node:module'
 import { pathToFileURL } from 'node:url'
 
 const pluginPath = process.argv[2]
@@ -36,22 +37,25 @@ if (!pluginPath) {
 const source = fs.readFileSync(pluginPath, 'utf8')
 const failures = []
 
-// ── only the three allowed specifiers resolve ────────────────────────────────
-// Specifiers come from import STATEMENTS, anchored at a line start and allowed to span lines (a
-// multi-line import is the normal style here — the round-3 check showed a one-line-only pattern
-// silently missed this plugin's own multi-line SDK import). Prose cannot match: a statement must
-// begin with import/export at the start of a line. Dynamic `import()` and `require()` are read too —
-// `await import('node:fs')` reaches the same module and the allowlist used to never see it.
+// Register the resolve-hook loader BEFORE anything imports the plugin, so it intercepts every
+// static and dynamic import the plugin module graph makes — see verify-plugin-hook.mjs.
 const ALLOWED = ['@hermes/plugin-sdk', 'react', 'react/jsx-runtime']
-const code = source
-const found = [
-  ...[...code.matchAll(/^[ \t]*(?:import|export)[ \t][\s\S]{0,600}?from[ \t]+['"]([^'"\n]+)['"]/gm)].map((m) => m[1]),
-  ...[...code.matchAll(/^[ \t]*import[ \t]+['"]([^'"\n]+)['"][ \t]*;?[ \t]*$/gm)].map((m) => m[1]),
-  ...[...code.matchAll(/\bimport[ \t]*\([ \t]*['"]([^'"\n]+)['"]/g)].map((m) => m[1]),
-  ...[...code.matchAll(/\brequire[ \t]*\([ \t]*['"]([^'"\n]+)['"]/g)].map((m) => m[1]),
-]
-const foreign = found.filter((s) => !ALLOWED.includes(s))
-if (foreign.length) failures.push(`imports outside the allowed three: ${[...new Set(foreign)].join(', ')}`)
+register(pathToFileURL(path.join(path.dirname(new URL(import.meta.url).pathname), 'verify-plugin-hook.mjs')).href,
+  { parentURL: import.meta.url, data: { allowed: ALLOWED } })
+
+// ── only the three allowed specifiers resolve ────────────────────────────────
+// Node's OWN ESM loader decides this now (module.register, below, just before the plugin loads) —
+// no regex can see every spacing/quoting/line-wrap a JS import can take, and four crafted copies
+// proved it in round 4 of an external audit (a multi-line import, one missing a space after
+// `import`, a template-quoted dynamic import, and a dynamic import split across lines all evaded the
+// previous regex; a fifth crafted copy — a comment mentioning two file paths — was a FALSE positive).
+// The loader hook sees exactly what Node resolves. What it cannot see: a dynamic `import(expr)` whose
+// argument is not a string literal, and any import on a code path the render never executes — this
+// supplementary scan catches the first of those two blind spots.
+const dynamicNonLiteral = [...source.matchAll(/\bimport\s*\(\s*([^'")\s][^)]*)\)/g)]
+if (dynamicNonLiteral.length) {
+  failures.push(`dynamic import() with a non-literal argument — cannot verify its target: ${dynamicNonLiteral[0][1].slice(0, 60)}`)
+}
 
 const colour = source.match(/#[0-9a-fA-F]{3,8}\b/)
 if (colour) failures.push(`hardcoded colour ${colour[0]} — use var(--ui-*) theme tokens`)

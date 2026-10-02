@@ -1427,7 +1427,7 @@ def _machine_addresses() -> set:
     its Host. Includes the LAN address a peer would dial when the operator runs `--host 0.0.0.0`
     on purpose (see HANDOFF): the Host check must not break that option, and it must still refuse a
     name that is not this machine's (a DNS-rebinding page sends its own)."""
-    names = {"localhost", "127.0.0.1", "::1", "0.0.0.0", ""}
+    names = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
     try:
         import socket as _socket
         names.add(_socket.gethostname())
@@ -1454,6 +1454,16 @@ LOCAL_HOSTS = _machine_addresses()
 MAX_BODY_BYTES = 8 * 1024 * 1024
 
 
+def _parse_host(host: str) -> str:
+    """The bare hostname from a `Host` header, IPv6-bracket-aware — shared by `_host_ok` and
+    `cors_origin` so the two cannot disagree about what a Host means (round 4's issue 4: the old
+    `cors_origin` used a plain `split(":")[0].strip("[]")`, which turns `[::1]:8787` into `""`, and
+    only happened to work because `""` was also sitting in `LOCAL_HOSTS`)."""
+    if host.startswith("["):
+        return host[1:host.find("]")] if "]" in host else host[1:]
+    return host.split(":")[0]
+
+
 def cors_origin(origin: str | None, host: str | None) -> str | None:
     """Reflect loopback/self origins; the API is meant for local use only."""
     if not origin:
@@ -1466,8 +1476,7 @@ def cors_origin(origin: str | None, host: str | None) -> str | None:
     # reflect every local hostname on any port (the token leaked to any local page), then every
     # same-netloc origin — which a DNS-rebinding page satisfies, since it sends its own name as both
     # Host and Origin. Both gates now: same origin AND a Host that is actually this machine's.
-    if (host and parsed.netloc == host
-            and (host.split(":")[0].strip("[]") in LOCAL_HOSTS or host.split(":")[0] in LOCAL_HOSTS)):
+    if host and parsed.netloc == host and _parse_host(host) in LOCAL_HOSTS:
         return origin
     return None
 
@@ -1540,7 +1549,7 @@ class Handler(BaseHTTPRequestHandler):
             host = host[1:host.find("]")] if "]" in host else host[1:]
         else:
             host = host.split(":")[0]
-        return host in LOCAL_HOSTS
+        return bool(host) and host in LOCAL_HOSTS
 
     def _origin_ok(self) -> bool:
         """A POST may carry no Origin (CLI, MCP, curl) or a local one — never a page from elsewhere.
@@ -1695,9 +1704,9 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 return
             length = int(self.headers.get("Content-Length") or 0)
-            if length > MAX_BODY_BYTES:
+            if length < 0 or length > MAX_BODY_BYTES:
                 self.close_connection = True
-                self._fail(f"body too large ({length} bytes; the cap is {MAX_BODY_BYTES})",
+                self._fail(f"bad body size ({length} bytes; the cap is {MAX_BODY_BYTES})",
                            HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "body_too_large")
                 return
             raw = self.rfile.read(length) if length else b"{}"

@@ -156,15 +156,22 @@ class TestTheFrontendReportsWhatLanded(unittest.TestCase):
         self.src = (FRONTEND / "chart-bridge.js").read_text(encoding="utf-8")
 
     def test_one_shared_rule(self):
-        self.assertIn("function paintedAnything(r)", self.src)
+        self.assertIn("function paintedDetail(r)", self.src)
         # The ink/has read-back is what makes a series-only script count (its paths are pixels).
         self.assertIn("v.has === true", self.src)
         self.assertIn("v.ink > 0", self.src)
 
     def test_every_door_uses_it(self):
-        self.assertIn("out.ok = paintedAnything(r)", self.src)              # draw + script
-        self.assertIn("out.ok = paintedOverlay || paintedNative", self.src)  # apply (with its fields)
-        self.assertNotIn("out.ok = Boolean(r.ok)", self.src)                 # the old "it ran" rule
+        # One function, one rule — apply/draw/script all read it off `paintedDetail`. Round 4 of an
+        # external audit found this test still pinned the OLD duplicate (`paintedOverlay ||
+        # paintedNative` inside `apply`) after the fix had only reached a different, unpublished tree:
+        # the fix and its test must land in the same commit, which is what this pins now.
+        self.assertIn("const paintedAnything = (r) => paintedDetail(r).ok", self.src)
+        self.assertIn("const pd = paintedDetail(r);", self.src)
+        self.assertIn("out.ok = pd.ok;", self.src)                            # apply
+        self.assertIn("out.ok = paintedAnything(r)", self.src)                # draw + script
+        self.assertNotIn("out.ok = paintedOverlay || paintedNative", self.src)  # the old duplicate
+        self.assertNotIn("out.ok = Boolean(r.ok)", self.src)                   # the old "it ran" rule
 
 
 class TestOverARealSocket(unittest.TestCase):
@@ -181,7 +188,9 @@ class TestOverARealSocket(unittest.TestCase):
         frontend = Path(cls.tmp.name) / "frontend"
         frontend.mkdir()
         (frontend / "index.html").write_text("<!doctype html><title>console</title>", encoding="utf-8")
-        srv.Handler.static = srv.StaticFiles(str(frontend))
+        cls._orig_static = srv.Handler.static              # restored in tearDownClass (round 4, issue 6):
+        srv.Handler.static = srv.StaticFiles(str(frontend)) # a later test in the same process must not
+                                                             # inherit a deleted temp directory
         cls.token = "test-token-0123456789"
         cls.patches = [
             mock.patch.object(srv, "CONSOLE_TOKEN", cls.token),
@@ -199,6 +208,7 @@ class TestOverARealSocket(unittest.TestCase):
     def tearDownClass(cls):
         cls.httpd.shutdown()
         cls.httpd.server_close()
+        srv.Handler.static = cls._orig_static
         for p in cls.patches:
             p.stop()
         cls.tmp.cleanup()
@@ -228,9 +238,23 @@ class TestOverARealSocket(unittest.TestCase):
         self.assertIn(b"no_token", body)
 
     def test_foreign_host_is_403_even_on_a_get(self):
-        code, body = self.raw("GET /api/session HTTP/1.1", {"Host": f"evil.example:{self.port}"})
+        # /api/session already had its own Host check before round 3 — hitting it would still pass
+        # with the round-3 `_handle` gate deleted (round 4's issue 3: the test's name promised more
+        # than it measured). `/api/chart/state` has no route-specific Host check of its own, so this
+        # is the new, general gate in `_handle` and nothing else.
+        code, body = self.raw("GET /api/chart/state HTTP/1.1", {"Host": f"evil.example:{self.port}"})
         self.assertEqual(code, 403)
         self.assertIn(b"non_local_host", body)
+
+    def test_a_negative_content_length_is_refused_without_reading(self):
+        # `int(Content-Length)` accepted -1, the `length > MAX_BODY_BYTES` check let it through, and
+        # `rfile.read(-1)` reads to EOF with no cap (round 4's issue 5) — reachable only past the
+        # token check, so this is authenticated.
+        code, body = self.raw("POST /api/chart/state HTTP/1.1",
+                              {"Host": f"127.0.0.1:{self.port}", "content-type": "application/json",
+                               "X-Trader-Token": self.token, "Content-Length": "-1"})
+        self.assertEqual(code, 413)
+        self.assertIn(b"body_too_large", body)
 
     def test_null_origin_is_403(self):
         code, body = self.request("/api/chart/state", "POST",

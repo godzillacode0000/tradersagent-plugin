@@ -467,9 +467,19 @@ function newChart(host, options) {
   // Their port ships two engines and the docs' own line — "Off the main thread" — makes the worker the
   // one to reach for first. Here the OTHER axis wins: the module's PineEngine runs on the patched
   // `pinets` (import map → vendor/pinets), while both worker classes run an engine copy inlined in
-  // vela-pinets' dist (the audit's #17). See bootChart() for the module pre-load.
-  const Pine = window.__velaPinetsModule?.PineEngine
-    ?? window.VelaPinets?.PineWorkerEngine ?? window.VelaPinets?.PineEngine;
+  // vela-pinets' dist (the audit's #17). The workspace offers the same switch — `?engine=worker` or
+  // localStorage `luxalgo-web:pine-engine` — and this path honours it too (round 3 said it did not,
+  // so the switch silently applied to the workspace only; round 4 found it was never shipped here).
+  const wantWorker = (() => {
+    try {
+      if (new URLSearchParams(location.search).get('engine') === 'worker') return true;
+      return localStorage.getItem('luxalgo-web:pine-engine') === 'worker';
+    } catch (err) { return false; }
+  })();
+  const Pine = wantWorker
+    ? (window.VelaPinets?.PineWorkerEngine ?? window.__velaPinetsModule?.PineEngine)
+    : (window.__velaPinetsModule?.PineEngine
+      ?? window.VelaPinets?.PineWorkerEngine ?? window.VelaPinets?.PineEngine);
   if (typeof Ctor !== 'function') throw new Error('Vela browser build did not load');
   host.innerHTML = '';
   const instance = new Ctor(host, {
