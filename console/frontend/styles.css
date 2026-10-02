@@ -1486,18 +1486,10 @@ body.has-ind-modal { overflow: hidden; }
 }
 .drawer__x:hover { background: var(--lx-surface-3); color: var(--lx-fg); }
 
-.drawer__search {
-  display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px;
-  border: 1px solid var(--lx-border); border-radius: var(--lx-radius-lg);
-  background: var(--lx-field-bg); color: var(--lx-fg-muted);
-  transition: border-color var(--lx-dur-150) var(--lx-ease), box-shadow var(--lx-dur-150) var(--lx-ease);
-}
-.drawer__search:focus-within { border-color: var(--lx-accent); box-shadow: 0 0 0 3px var(--lx-accent-soft); }
-.drawer__search input {
-  flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; box-shadow: none; padding: 0;
-  -webkit-appearance: none; appearance: none; background: transparent;
-  color: var(--lx-fg); font: inherit; font-size: 13px;
-}
+/* The global search-input rule already draws the field (border, magnifier, focus ring) — the wrapper
+   only sizes it, or the drawer paints a second border inside the first. */
+.drawer__search { display: block; }
+.drawer__search input[type="search"] { height: 34px; border-radius: var(--lx-radius-lg); font-size: 13px; }
 
 .drawer__fams { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
 .drawer__fams::-webkit-scrollbar { display: none; }
