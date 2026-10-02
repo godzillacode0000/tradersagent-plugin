@@ -53,6 +53,25 @@ const ALLOWED = ['@hermes/plugin-sdk', 'react', 'react/jsx-runtime']
 // regex read it as one) and marks which positions sit inside '…', "…" or `…" so the scan can skip
 // prose that happens to look like a call. String literals are also an import() argument, so their
 // CONTENTS stay readable — only the positions are masked.
+// Is the `/` at `i` a regex literal or a division? The standard heuristic: after an operator,
+// opener, comma, colon, semicolon or a value-taking keyword a `/` must start a regex; after an
+// identifier, literal, `)` or `]` it divides. Deliberately conservative (arithmetic operators are
+// left OUT): a wrong "division" costs one missed scan, a wrong "regex" would swallow live code.
+function regexAllowedAt(src, i) {
+  let j = i - 1
+  while (j >= 0 && /\s/.test(src[j])) j -= 1
+  if (j < 0) return true
+  const c = src[j]
+  if ('([{,;:=!&|?~<>'.includes(c)) return true
+  if (/[A-Za-z_$]/.test(c)) {
+    let k = j
+    while (k >= 0 && /[A-Za-z0-9_$]/.test(src[k])) k -= 1
+    return ['return', 'typeof', 'instanceof', 'in', 'of', 'new', 'delete', 'void', 'do', 'else',
+            'yield', 'await', 'case', 'throw'].includes(src.slice(k + 1, j + 1))
+  }
+  return false
+}
+
 function blankComments(src) {
   const code = new Array(src.length)
   const inString = new Array(src.length).fill(false)
@@ -67,6 +86,25 @@ function blankComments(src) {
       i += 1; continue
     }
     if (c === '/' && n === '/') { let j = i; while (j < src.length && src[j] !== '\n') { code[j] = ' '; j += 1 } i = j; continue }
+    if (c === '/' && regexAllowedAt(src, i)) {
+      // A regex literal is not a string: quotes inside it (`/[\'"]/`) were how a crafted evasion's
+      // dynamic import went unscanned (found 2 Oct, fixed with this branch). The literal is consumed
+      // whole and its interior marked like a string, so pattern text (`/import\('x'\)/`) never reads
+      // as a call. If no closing `/` comes before the newline, it was a division after all — fall on.
+      let j = i + 1, cls = false, closed = false
+      while (j < src.length && src[j] !== '\n') {
+        const d = src[j]
+        if (d === '\\') { j += 2; continue }
+        if (d === '[') cls = true
+        else if (d === ']') cls = false
+        else if (d === '/' && !cls) { closed = true; break }
+        j += 1
+      }
+      if (closed) {
+        for (let k = i; k <= j; k += 1) { code[k] = src[k]; if (k > i && k < j) inString[k] = true }
+        i = j + 1; continue
+      }
+    }
     if (c === '/' && n === '*') {
       let j = i
       while (j < src.length && !(src[j] === '*' && src[j + 1] === '/')) { code[j] = src[j] === '\n' ? '\n' : ' '; j += 1 }

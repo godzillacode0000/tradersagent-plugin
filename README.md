@@ -260,6 +260,8 @@ console/backend/   one stdlib HTTP server proxying LuxAlgo's MCP + the chart bri
 console/mcp/       trader-chart-mcp — the chart as MCP tools (stdio, FastMCP)
 console/bin/       agent-side CLIs (trader-chart, library-indicator)
 tools/             verify-plugin.mjs — runs a plugin in Node against SDK stubs (used by CI)
+tools/             verify-plugin-hook.mjs — the resolve hook it registers; only the three allowed specifiers resolve
+tools/             verify-plugin-selftest.mjs — crafted-copy battery for the import gate (evasions fail, lookalikes pass)
 install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/
 ```
 
