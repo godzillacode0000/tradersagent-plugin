@@ -124,13 +124,22 @@ class MCPToolsTest(unittest.TestCase):
 
     # ── state ───────────────────────────────────────────────────────────────
     def test_chart_state_reports_what_is_on_the_chart(self):
+        # The shape is the PANE's `studies` rows — {name, source, sources[]}, built by chart-bridge's
+        # paneStudies() — not the flat `natives` list this test used to stub: a Library script is not
+        # a native, and one native with two readers is one indicator (27 Sep). The test kept the old
+        # shape and only runs where fastmcp is installed (CI installs it; a bare checkout skips it),
+        # so it sat red in CI from the day the tool changed (2 Oct sweep). Both shapes of source are
+        # pinned here: a full `sources` list joins with '/', a bare `source` still labels.
         _Stub.routes = {"/api/chart/state": {"ok": True, "data": {
             "open": True, "symbol": "BTCUSDT", "timeframe": "1h", "last": 76500.5, "bars": 500,
-            "series": 5, "drawings": 0, "natives": ["volume", "ema", "donchian-channels"],
+            "series": 5, "drawings": 0,
+            "studies": [{"name": "volume", "source": "native", "sources": ["native"]},
+                        {"name": "ema", "source": "native", "sources": ["native", "cell"]},
+                        {"name": "donchian-channels", "source": "native"}],
             "age_s": 1.2, "shot": "/tmp/chart.png"}}}
         out = self.mcp.chart_state()
         self.assertIn("BTCUSDT · 1h · last 76500.5", out)
-        self.assertIn("volume, ema, donchian-channels", out)
+        self.assertIn("volume (native), ema (native/cell), donchian-channels (native)", out)
         self.assertIn("/tmp/chart.png", out)
 
     def test_chart_state_reports_a_stale_frame_when_the_build_is_present(self):
