@@ -1494,7 +1494,8 @@ body.has-ind-modal { overflow: hidden; }
 }
 .drawer__search:focus-within { border-color: var(--lx-accent); box-shadow: 0 0 0 3px var(--lx-accent-soft); }
 .drawer__search input {
-  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent;
+  flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; box-shadow: none; padding: 0;
+  -webkit-appearance: none; appearance: none; background: transparent;
   color: var(--lx-fg); font: inherit; font-size: 13px;
 }
 

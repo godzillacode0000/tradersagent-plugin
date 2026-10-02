@@ -31,16 +31,31 @@
   const count = $id('drawer-count');
   if (!drawer || !door) return;
 
+  /* Name hits first: "order block" must lead with the scripts CALLED that, not the ones whose
+     write-up merely mentions it. */
+  function score(r, q) {
+    const name = (r.name || '').toLowerCase();
+    if (name.includes(q)) return name.startsWith(q) ? 0 : 1;
+    if (r.slug.includes(q.replace(/\s+/g, '-'))) return 2;
+    if (((r.family || '') + ' ' + (r.cluster || '')).toLowerCase().includes(q)) return 3;
+    return 4;
+  }
+
+  function matches(r, q) {
+    if (!q) return true;
+    return ((r.name || '') + ' ' + r.slug + ' ' + (r.family || '') + ' ' + (r.cluster || '') + ' '
+      + (r.description || '')).toLowerCase().includes(q);
+  }
+
   function rows() {
     const all = (indState.cat.rows || []);
     const q = st.q.trim().toLowerCase();
     return all.filter((r) => {
       if (st.family === '__fav') { if (!isFavourite('library', r.slug)) return false; }
       else if (st.family && (r.family || 'unfiled') !== st.family) return false;
-      if (!q) return true;
-      return ((r.name || '') + ' ' + r.slug + ' ' + (r.family || '') + ' ' + (r.cluster || '') + ' '
-        + (r.description || '')).toLowerCase().includes(q);
-    });
+      return matches(r, q);
+    }).map((r, i) => ({ r, i, s: q ? score(r, q) : 0 }))
+      .sort((a, b) => a.s - b.s || a.i - b.i).map((x) => x.r);
   }
 
   function famLabel(key) {
@@ -50,12 +65,17 @@
 
   function paintFamilies() {
     const groups = indState.cat.groups || [];
-    const favN = (indState.cat.rows || []).filter((r) => isFavourite('library', r.slug)).length;
+    const q = st.q.trim().toLowerCase();
+    const hits = (indState.cat.rows || []).filter((r) => matches(r, q));
+    const n = (key) => hits.filter((r) => (r.family || 'unfiled') === key).length;
+    const favN = hits.filter((r) => isFavourite('library', r.slug)).length;
     const chip = (key, label, n) => `<button type="button" class="dchip${st.family === key ? ' is-on' : ''}"
         data-fam="${esc(key)}" aria-pressed="${st.family === key}">${esc(label)}<span>${n}</span></button>`;
-    fams.innerHTML = chip('', 'All', (indState.cat.rows || []).length)
+    /* Counts follow the search; a family with no hit steps aside unless it is the one picked. */
+    fams.innerHTML = chip('', 'All', hits.length)
       + chip('__fav', '★ Favourites', favN)
-      + groups.map((g) => chip(g.key, g.name, g.count)).join('');
+      + groups.filter((g) => !q || n(g.key) > 0 || st.family === g.key)
+        .map((g) => chip(g.key, g.name, q ? n(g.key) : g.count)).join('');
   }
 
   function paintNow() {
