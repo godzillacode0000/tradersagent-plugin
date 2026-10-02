@@ -17,6 +17,12 @@ Why it is here: the console's import map (`console/frontend/index.html`) serves 
 instead of a CDN URL, so the engine is pinned in the repository, works offline, and can carry fixes.
 See `THIRD-PARTY.md` for what redistributing it means for the combined work.
 
+Which class runs these patches: **`PineEngine`** (main thread) — the workspace registers it for the
+cell, and its module does `import { PineTS } from 'pinets'`, which the page's import map resolves to
+this file. vela-pinets' `PineWorkerEngine` is NOT covered: that class's worker carries an engine copy
+inlined into vela-pinets' dist, which is why the console does not register it (the audit's #17). The
+console reports the class it actually registered — the heartbeat's `diag.engine`.
+
 To rebuild after changing the fork:
 
 ```bash

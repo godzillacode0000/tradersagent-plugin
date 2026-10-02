@@ -37,15 +37,17 @@ const source = fs.readFileSync(pluginPath, 'utf8')
 const failures = []
 
 // ── only the three allowed specifiers resolve ────────────────────────────────
-// Comments are stripped first: English prose is not an import. A comment reading
-// `… can tell "the chart is quiet" from "the frame is dead" …` matched the specifier regex
-// across its line break and failed the harness for a plugin that had done nothing wrong.
-// Import specifiers are code, so they survive the strip.
-const code = source
-  .replace(/\/\*[\s\S]*?\*\//g, '')
-  .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+// Specifiers are read from IMPORT STATEMENTS, anchored at the start of a line. That is how a plugin
+// declares them, and English prose in a comment (`… can tell "the chart is quiet" from "the frame is
+// dead" …`) cannot match it — the earlier fix stripped comments first, which also stripped inside
+// string literals, so a crafted pair of `"/*"` … `"*/"` strings could hide a real import from the
+// scan (the audit's follow-up). Reading statements needs no strip and has no such hole.
 const ALLOWED = ['@hermes/plugin-sdk', 'react', 'react/jsx-runtime']
-const found = [...code.matchAll(/from\s+['"]([^'"]+)['"]/g)].map((m) => m[1])
+const code = source
+const found = [
+  ...[...code.matchAll(/^[ \t]*(?:import|export)[^'"\n]*?from[ \t]+['"]([^'"\n]+)['"]/gm)].map((m) => m[1]),
+  ...[...code.matchAll(/^[ \t]*import[ \t]+['"]([^'"\n]+)['"][ \t]*;?[ \t]*$/gm)].map((m) => m[1]),
+]
 const foreign = found.filter((s) => !ALLOWED.includes(s))
 if (foreign.length) failures.push(`imports outside the allowed three: ${[...new Set(foreign)].join(', ')}`)
 

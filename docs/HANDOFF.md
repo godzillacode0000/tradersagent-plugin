@@ -44,8 +44,8 @@ native tools.
 | Plugin id / pane id | `traders-desk` / `traders-desk:chart` |
 | Credentials (LuxAlgo MCP URL + tokens, GitHub) | `~/.hermes/config.yaml` — **never** commit, never print |
 
-Versions at handoff: Hermes Desktop 0.21.3, console `SERVER_VERSION = 1.0.0`, CI green, 68 backend tests,
-8 plugin contributions across 5 areas.
+Versions at handoff: Hermes Desktop 0.21.3, console `SERVER_VERSION = 1.0.0`, CI green, ~350 backend tests,
+8 plugin contributions across 5 areas. The plugin harness prints 7 contributions (the eighth line is prose, not a contribution — the harness counts what the plugin declares).
 
 ---
 
@@ -75,7 +75,7 @@ flowchart TB
   subgraph AGENTS["Agent side"]
     ME["Hermes agent"]
     CLI["CLI · bin/trader-chart<br/>state · shot · apply · add · remove<br/>market · draw · reload · caps"]
-    MCP["MCP · traders-chart<br/>14 native chart tools"]
+    MCP["MCP · traders-chart<br/>39 chart tools"]
     LUX["LuxAlgo MCP<br/>library · edge · prop-firm"]
   end
 
@@ -108,7 +108,7 @@ flowchart TB
   REPO -.->|"deploy"| SURFACE
 ```
 
-Rendered versions live in the repo: `docs/architecture.html` (dark themed page) and `docs/architecture.mmd`
+Rendered version lives in the repo: `docs/architecture.html` (dark themed page)
 (source, paste-ready). A second diagram, `docs/pine-flow.*`, covers the Pine path.
 
 ### 3.1 The command path (the part that matters)
@@ -254,7 +254,7 @@ Working, with evidence:
 - Latency: symbol switch **686–698 ms** end to end, screenshot **35 ms**, `clear` **7 ms**, SSE push
   single-digit ms (transport is not the bottleneck; the chart engine fetch+render is).
 - Console health: `/api/health` ok, LuxAlgo MCP connected, 19 endpoints.
-- 68 backend tests, plugin harness OK (8 contributions / 5 areas), CI green on `5b11678`.
+- ~350 backend tests, plugin harness OK (7 contributions / 5 areas), CI green on `5b11678`.
 
 Current live state (transient): chart on **SOLUSDT**, console theme **light** (so the chart matches it),
 a hand-made palette parked; the docked pane may be hidden — check the heartbeat, not the screen.

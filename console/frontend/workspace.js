@@ -112,9 +112,22 @@ state.ready = (async () => {
          vela-pinets' dist (unpatched): a script our patches fixed fails on that path — the audit's
          #17. `opts.createWorker`/`opts.workerUrl` do exist, but the worker also carries the model
          builder, so a replacement would mean rebuilding vela-pinets rather than pointing it here.
-     The Library's "Add to chart" runs through this engine, so the patched one wins. Both declare
-     the same capabilities (streaming/visibleRange/inputs/props). */
-  const Engine = velaPinets.PineEngine || velaPinets.PineWorkerEngine;
+
+     The patched one is the default, and that has a cost the audit's follow-up named: a Pine run on
+     the main thread blocks the page (heartbeat, commands, painting) for its whole duration, and
+     nothing can interrupt it — the coverage doc measured a 20 s run that ticked a 250 ms timer zero
+     times, and a 301 s worst case. So the engine is a choice the operator can flip per browser:
+     `?engine=worker` on the console URL, or localStorage `luxalgo-web:pine-engine` = "worker" |
+     "main". Default: the patched main-thread engine, because a script that runs is the point. */
+  const wantWorker = (() => {
+    try {
+      if (new URLSearchParams(location.search).get('engine') === 'worker') return true;
+      return localStorage.getItem('luxalgo-web:pine-engine') === 'worker';
+    } catch (err) { return false; }
+  })();
+  const Engine = wantWorker
+    ? (velaPinets.PineWorkerEngine || velaPinets.PineEngine)
+    : (velaPinets.PineEngine || velaPinets.PineWorkerEngine);
   window.__wsApp.pineRegistered = typeof Engine === 'function';
   window.__wsApp.engineSource = typeof Engine !== 'function' ? null
     : (Engine === velaPinets.PineEngine

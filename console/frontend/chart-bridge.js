@@ -275,6 +275,22 @@
     }
   }
 
+  /** Did anything actually LAND on the canvas? "The engine ran" is a different question, and the
+   *  two were conflated until the audit's follow-up (#55 and its review): a series-only script whose
+   *  paths the overlay painted was reported as "nothing landed", because the test summed the
+   *  container counts and state() has no polyline count. The honest read-back is the overlay's own
+   *  `has`/`ink` — pixels actually painted, which counts paths and polylines — with the container
+   *  counts (and the draw pass's own tally) as fallbacks for an older build or an unreadable canvas. */
+  function paintedAnything(r) {
+    if (!r || !r.ok) return false;
+    if (r.paint && r.paint.added) return true;
+    const v = r.verified || null;
+    if (v && (v.has === true || (typeof v.ink === 'number' && v.ink > 0))) return true;
+    if (v && (v.boxes + v.lines + v.labels + (v.tables || 0)) > 0) return true;
+    const drew = r.drew || null;
+    return !!(drew && (drew.boxes + drew.lines + drew.labels + (drew.polylines || 0) + (drew.tables || 0)) > 0);
+  }
+
   /** One command from the agent. Every outcome is reported, including "I did not do that". */
   async function run(command) {
     const c = chart();
@@ -311,9 +327,10 @@
           /* `ok` means the chart now shows something — the same read-back rule as `draw` and `add`.
              The run can succeed and still paint nothing (its conditions never fired, or the overlay
              refused), and an agent that read ok:true went looking for a picture that was not there
-             (the audit's #55). The run's own outcome is `ran`, and the detail line reports both. */
+             (the audit's #55). `v.has` reads painted pixels, so a series path counts too. */
           const v = r.verified;
-          const paintedOverlay = !!(v && (v.boxes + v.lines + v.labels + (v.tables || 0)) > 0);
+          const paintedOverlay = !!(v && (v.has === true || (typeof v.ink === 'number' && v.ink > 0) ||
+            (v.boxes + v.lines + v.labels + (v.tables || 0)) > 0));
           const paintedNative = !!(r.paint && r.paint.added);
           out.ok = paintedOverlay || paintedNative;
           out.ran = true;
@@ -377,9 +394,7 @@
             break;
           }
           const v = r.verified;
-          out.ok = r.containers
-            ? !!v && (v.boxes + v.lines + v.labels + (v.tables || 0)) > 0
-            : Boolean(r.paint && r.paint.added);
+          out.ok = paintedAnything(r);
           out.ms = r.ms;
           out.series = r.series.length;
           out.added = r.paint && r.paint.added ? r.paint.added.title : null;
@@ -1205,11 +1220,13 @@
             break;
           }
           const r = await window.TraderRun.run(pine, String(command.name || 'agent-script'));
-          out.ok = Boolean(r.ok);
+          out.ok = paintedAnything(r);         // the same read-back rule as `apply` and `draw`
           out.ms = r.ms || null;
           out.series = r.ok ? r.series.length : 0;
           out.onCanvas = r.ok ? (r.verified || null) : null;
-          out.detail = r.ok ? window.TraderRun.summarize(r) : r.reason;
+          out.detail = r.ok
+            ? (out.ok ? window.TraderRun.summarize(r) : 'ran, but nothing landed on the chart · ' + window.TraderRun.summarize(r))
+            : r.reason;
           if (!r.ok) out.error = r.error || null;
           break;
         }

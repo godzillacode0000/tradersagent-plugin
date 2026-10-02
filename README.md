@@ -22,7 +22,9 @@ MCP server) in one local web app — your chat session is left exactly where it 
 - **Everything local.** One Python process on `127.0.0.1:8787` proxies LuxAlgo's MCP server and
   serves the frontend. No account, no key, no telemetry. The chart engine (**Vela**, Apache-2.0) and
   the Pine runtime (**pinets**, AGPL-3.0 — a patched build) are vendored under
-  `console/frontend/vendor/` and served from this machine; nothing is fetched at run time. The patches
+  `console/frontend/vendor/` and served from this machine; no engine code is fetched at run time
+  (market bars come from Binance and Library scripts from LuxAlgo's MCP — both over the network by
+  design, and the console says which provider answered). The patches
   and their published chain: [`THIRD-PARTY.md`](THIRD-PARTY.md) and
   [`console/frontend/vendor/pinets/PROVENANCE.md`](console/frontend/vendor/pinets/PROVENANCE.md).
 - **The agent can drive the chart.** `console/bin/trader-chart` reads what the chart is showing and

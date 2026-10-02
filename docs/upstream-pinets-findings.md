@@ -2,7 +2,7 @@
 
 Draft for upstream. Everything here was measured by executing the indicator sources the LuxAlgo MCP
 serves, on this chart's engine (`pinets@0.10.0`, 500 synthetic bars, 15–20 s per script):
-**731/797 run (91%), 66 crash** (9%).
+**721/797 run (90%), 76 crash** (10%).
 
 Two of my own hypotheses failed their tests and are recorded as NOT bugs, so this does not waste
 your time: `array.get` throwing on an out-of-range index matches TradingView, and a user variable

@@ -132,6 +132,10 @@ def save_state(root: str | Path, payload: dict) -> dict:
                      if isinstance(a, (str, bytes)) and str(a).strip()]
                     if isinstance(payload.get("actions"), (list, tuple)) else []),
         "timeframe_reported": payload.get("timeframe_reported"),
+        # The page's own explanation of why it reads what it reads (workspace ready? cells? the error
+        # that dropped it to the bare chart?). Passthrough, never interpreted here — a heartbeat that
+        # says "—" with a healthy pane is exactly the case this exists to end.
+        "diag": payload.get("diag"),
     }
     if payload.get("shot"):
         path = _decode_shot(root, f"hb-{int(state['at'])}", str(payload["shot"]))

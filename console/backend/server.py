@@ -1433,8 +1433,10 @@ def cors_origin(origin: str | None, host: str | None) -> str | None:
         parsed = urlparse(origin)
     except Exception:
         return None
-    if parsed.hostname in ("localhost", "127.0.0.1", "::1"):
-        return origin
+    # Only the console's OWN origin is reflected. It used to reflect every local hostname on any
+    # port, which handed the POST token to any page on any other local port (the audit's follow-up):
+    # a page can read /api/session's answer when CORS allows it, and the Host header it must send is
+    # trivially local. The pane is served by this server, so it is same-origin and needs no grant.
     if host and parsed.netloc == host:
         return origin
     return None
@@ -1501,14 +1503,23 @@ class Handler(BaseHTTPRequestHandler):
     def _host_ok(self) -> bool:
         """Refuse a Host that is not this machine's — a DNS-rebinding page reaches 127.0.0.1 with
         its own Host header, and that is the one case where the browser treats it as same-origin."""
-        host = (self.headers.get("Host") or "").split(":")[0]
+        host = (self.headers.get("Host") or "").strip()
+        if not host:
+            return False                              # no Host at all is not this machine's
+        if host.startswith("["):                      # IPv6: `[::1]:8787` — the brackets are not part
+            host = host[1:host.find("]")] if "]" in host else host[1:]
+        else:
+            host = host.split(":")[0]
         return host in LOCAL_HOSTS
 
     def _origin_ok(self) -> bool:
-        """A POST may carry no Origin (CLI, MCP, curl) or a local one — never a page from elsewhere."""
+        """A POST may carry no Origin (CLI, MCP, curl) or a local one — never a page from elsewhere.
+        A literal `null` origin (sandboxed iframe, file://) is refused: nothing in this app sends it."""
         origin = self.headers.get("Origin")
         if not origin:
             return True
+        if origin.strip().lower() == "null":
+            return False
         try:
             return (urlparse(origin).hostname or "") in LOCAL_HOSTS
         except ValueError:

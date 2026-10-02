@@ -9,7 +9,7 @@ stated.
 ## Vela — the chart engine
 
 - **Licence:** Apache-2.0 — <https://github.com/LuxAlgo/Vela>
-- **How it is used:** loaded from jsDelivr at runtime (`@luxalgo/vela@0.7.3`), pinned by URL.
+- **How it is used:** **vendored** at `console/frontend/vendor/vela/dist/` (unmodified, `@luxalgo/vela@0.7.3`) and served from disk — the same files `index.html`'s import map and script tags load. `./install.sh --vendor` refreshes exactly those paths.
 - **Attribution requirement (Vela `NOTICE`, Apache-2.0 §4(d)):** *"Any product, website, or
   application that displays charts rendered by this software must show a visible attribution to the
   Vela project on every page or screen where such a chart is displayed."* The library satisfies this
