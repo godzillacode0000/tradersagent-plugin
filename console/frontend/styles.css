@@ -417,7 +417,27 @@ input:focus-visible, textarea:focus-visible {
   .main[data-library="on"],
   .main[data-detail="on"],
   .main[data-library="on"][data-detail="on"] { grid-template-columns: minmax(0, 1fr); }
-  .panel--left { max-height: 38dvh; }
+  /* The Library is a SHEET OVER the chart (operator's ask, 2 Oct: "Make the Velachart full screen
+     or utilising 80% of the view"). Stacked in the grid it took ~45% of the pane and shrank the
+     chart to about half; as a fixed sheet it costs the chart nothing — same pattern the Details
+     pane has used since 25 Sep — so the chart owns the whole pane at rest, and the sheet closes
+     from the same toggle (☰ Library, or Escape). It starts under the topbar/pane-top like the
+     Details sheet, so the toggles that open it stay reachable. */
+  .panel--left {
+    position: fixed; inset-inline: 0;
+    inset-block-start: var(--lx-pane-top, calc(var(--lx-topbar-h) + 44px));
+    /* A plain vh cap: the first cut used `min(60dvh, 540px)` and the pane's engine dropped the
+       declaration — the sheet ran its full content height down the pane (measured live, 2 Oct),
+       while the same sheet capped correctly in a current Chromium. Never rely on the fancy
+       units here; 65vh is the cap that renders everywhere. */
+    max-height: 65vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    z-index: var(--lx-z-overlay);
+    box-shadow: var(--lx-shadow-4);
+    border-right: 0;
+    border-bottom: 1px solid var(--lx-border);
+  }
   .panel--chart { min-height: 360px; }
   .panel--right { position: static; width: auto; max-height: 40dvh; box-shadow: none; transform: none; }
 }

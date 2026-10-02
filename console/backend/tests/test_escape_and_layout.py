@@ -104,5 +104,33 @@ class APaneDragRepaintsTheChart(unittest.TestCase):
         self.assertIn("nudgeChart()", body[:1500], "the resize handler does not nudge the chart")
 
 
+class TheLibraryIsASheetAtPaneWidths(unittest.TestCase):
+    """2 Oct — the operator, looking at the pane: "Make the Velachart full screen or utilising 80%
+    of the view". Stacked in the grid, the Library took ~45% of the pane's height and shrank the
+    chart to about half of it. At pane widths (≤1099px) it is now a fixed SHEET OVER the chart —
+    the same "costs the chart nothing" pattern the Details pane has used since 25 Sep — so the
+    chart owns every row that is left, and the sheet closes from the same toggle that opened it
+    (☰ Library, or Escape)."""
+
+    def test_the_pane_width_library_is_an_overlay_not_a_stacked_row(self):
+        css = read(CSS)
+        i = css.find("@media (max-width: 1099px)")
+        self.assertGreater(i, -1, "the pane-width media block is gone")
+        depth, j = 0, i
+        for j in range(i, len(css)):
+            if css[j] == "{":
+                depth += 1
+            elif css[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+        block = css[i:j]
+        self.assertIn("position: fixed", block,
+                      "the Library stacks in the grid again — the chart loses ~half the pane")
+        self.assertIn("--lx-pane-top", block,
+                      "the sheet must start under the topbar (it may not swallow its own toggles)")
+        self.assertNotIn("max-height: 38dvh", block, "the old stacked cap is back")
+
+
 if __name__ == "__main__":
     unittest.main()
