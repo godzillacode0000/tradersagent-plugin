@@ -144,7 +144,9 @@ and paints it as a native series; it says plainly when a script uses something t
 (`import` is the one). **Add to chart** asks Vela's own Pine engine, which here is the workspace's
 `PineEngine` — built on that same patched runtime. (vela-pinets' `PineWorkerEngine` would run its
 copy *inlined* in vela-pinets, without the patches; the console therefore does not use it.) The app
-reports what actually happened rather than pretending.
+reports what actually happened rather than pretending. (A heavy script can be run off the page's main
+thread instead with `?engine=worker` on the console URL, or localStorage `luxalgo-web:pine-engine` =
+`worker` — at the cost of running vela-pinets' copy, which does not carry the patches.)
 
 ### Letting your agent drive the chart
 

@@ -19,9 +19,13 @@ See `THIRD-PARTY.md` for what redistributing it means for the combined work.
 
 Which class runs these patches: **`PineEngine`** (main thread) — the workspace registers it for the
 cell, and its module does `import { PineTS } from 'pinets'`, which the page's import map resolves to
-this file. vela-pinets' `PineWorkerEngine` is NOT covered: that class's worker carries an engine copy
-inlined into vela-pinets' dist, which is why the console does not register it (the audit's #17). The
-console reports the class it actually registered — the heartbeat's `diag.engine`.
+this file. That class runs on the page's main thread: a heavy script blocks the heartbeat and the
+command bridge for its whole run, and nothing can interrupt it (the coverage doc measured a 20 s run
+that ticked a 250 ms timer zero times, and a 301 s worst case). So the engine is a choice —
+`?engine=worker` on the console URL, or localStorage `luxalgo-web:pine-engine` = `worker`, switches to
+vela-pinets' `PineWorkerEngine` for an off-thread run. That class is NOT covered by these patches: its
+worker carries an engine copy inlined into vela-pinets' dist, which is why it is not the default (the
+audit's #17). The console reports the class it actually registered — the heartbeat's `diag.engine`.
 
 To rebuild after changing the fork:
 

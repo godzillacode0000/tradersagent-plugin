@@ -26,8 +26,10 @@ stated.
   `console/frontend/vendor/vela-pinets/dist/` and served from there. Its `PineEngine` imports `pinets`
   as an external module, which the page's import map resolves to the patched build below — so
   "Add to chart" runs the fork's engine. Its `PineWorkerEngine` is the exception: that class's worker
-  is an engine copy **inlined into vela-pinets' dist** (unpatched), so the console does not register
-  it; `workerUrl`/`createWorker` exist but the worker also carries the model builder, which is not
+  is an engine copy **inlined into vela-pinets' dist** (unpatched), so the console does not register it
+  by default; `?engine=worker` on the console URL (or localStorage `luxalgo-web:pine-engine` = `worker`)
+  opts into it, trading the patches for an off-thread run. `workerUrl`/`createWorker` exist but the
+  worker also carries the model builder, which is not
   exported for reuse.
   The **`pinets` engine is redistributed in this repository** at
   `console/frontend/vendor/pinets/pinets.min.browser.es.js` (659 KB, browser-ES build) and is what the

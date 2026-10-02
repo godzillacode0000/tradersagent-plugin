@@ -23,8 +23,13 @@ Each pin below corresponds to a defect or a claim, and each would come back sile
 
 import io
 import os
+import socket
 import sys
+import tempfile
+import threading
 import unittest
+import urllib.error
+import urllib.request
 from email.message import Message
 from pathlib import Path
 from unittest import mock
@@ -160,6 +165,100 @@ class TestTheFrontendReportsWhatLanded(unittest.TestCase):
         self.assertIn("out.ok = paintedAnything(r)", self.src)              # draw + script
         self.assertIn("out.ok = paintedOverlay || paintedNative", self.src)  # apply (with its fields)
         self.assertNotIn("out.ok = Boolean(r.ok)", self.src)                 # the old "it ran" rule
+
+
+class TestOverARealSocket(unittest.TestCase):
+    """The same door over an actual TCP socket, because the predicate tests cannot see two things the
+    round-3 check asked about: the ORDER of the checks against the body read, and the body cap. A
+    source-shape test would also stay green if the code moved into a comment — this one cannot.
+
+    A threaded server on an ephemeral port, a temp frontend root and a temp chart root, so nothing
+    touches the live console's state. Stdlib only, like the rest of the suite."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        frontend = Path(cls.tmp.name) / "frontend"
+        frontend.mkdir()
+        (frontend / "index.html").write_text("<!doctype html><title>console</title>", encoding="utf-8")
+        srv.Handler.static = srv.StaticFiles(str(frontend))
+        cls.token = "test-token-0123456789"
+        cls.patches = [
+            mock.patch.object(srv, "CONSOLE_TOKEN", cls.token),
+            mock.patch.object(srv, "AGENTS_ROOT", cls.tmp.name),
+            mock.patch.dict(os.environ, {"LUXALGO_CHART_ROOT": cls.tmp.name}),
+        ]
+        for p in cls.patches:
+            p.start()
+        cls.httpd = srv.Server(("127.0.0.1", 0), srv.Handler)
+        cls.port = cls.httpd.server_address[1]
+        cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+        for p in cls.patches:
+            p.stop()
+        cls.tmp.cleanup()
+
+    def request(self, path, method="GET", headers=None, body=b""):
+        req = urllib.request.Request(f"http://127.0.0.1:{self.port}{path}", data=body or None,
+                                     method=method, headers=headers or {})
+        try:
+            with urllib.request.urlopen(req, timeout=5) as res:
+                return res.status, res.read()
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read()
+
+    def raw(self, request_line, headers):
+        """A raw connection, so headers urllib would rewrite (Host) and a body it would never send
+        (a Content-Length with no bytes) are exactly what the server sees."""
+        with socket.create_connection(("127.0.0.1", self.port), timeout=5) as sock:
+            head = request_line + "\r\n" + "".join(f"{k}: {v}\r\n" for k, v in headers.items()) + "\r\n"
+            sock.sendall(head.encode())
+            reply = sock.makefile("rb").read()
+        first = reply.split(b"\r\n", 1)[0].decode("latin-1")
+        return int(first.split()[1]), reply
+
+    def test_post_without_a_token_is_401(self):
+        code, body = self.request("/api/chart/state", "POST", {"content-type": "application/json"}, b"{}")
+        self.assertEqual(code, 401)
+        self.assertIn(b"no_token", body)
+
+    def test_foreign_host_is_403_even_on_a_get(self):
+        code, body = self.raw("GET /api/session HTTP/1.1", {"Host": f"evil.example:{self.port}"})
+        self.assertEqual(code, 403)
+        self.assertIn(b"non_local_host", body)
+
+    def test_null_origin_is_403(self):
+        code, body = self.request("/api/chart/state", "POST",
+                                  {"content-type": "application/json", "Origin": "null",
+                                   "X-Trader-Token": self.token}, b"{}")
+        self.assertEqual(code, 403)
+        self.assertIn(b"cross_origin", body)
+
+    def test_with_the_token_it_is_200(self):
+        code, body = self.request("/api/chart/state", "POST",
+                                  {"content-type": "application/json", "X-Trader-Token": self.token}, b"{}")
+        self.assertEqual(code, 200)
+        self.assertIn(b'"ok": true', body)
+
+    def test_a_body_over_the_cap_is_413_without_being_read(self):
+        code, body = self.raw("POST /api/chart/state HTTP/1.1",
+                              {"Host": f"127.0.0.1:{self.port}", "content-type": "application/json",
+                               "X-Trader-Token": self.token,
+                               "Content-Length": str(srv.MAX_BODY_BYTES + 1)})
+        self.assertEqual(code, 413)
+        self.assertIn(b"body_too_large", body)
+
+    def test_bad_json_from_an_authorized_caller_is_400(self):
+        code, body = self.request("/api/chart/state", "POST",
+                                  {"content-type": "application/json", "X-Trader-Token": self.token},
+                                  b"{not json")
+        self.assertEqual(code, 400)
+        self.assertIn(b"bad_json", body)
 
 
 if __name__ == "__main__":

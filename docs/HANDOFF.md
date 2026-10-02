@@ -45,7 +45,7 @@ native tools.
 | Credentials (LuxAlgo MCP URL + tokens, GitHub) | `~/.hermes/config.yaml` — **never** commit, never print |
 
 Versions at handoff: Hermes Desktop 0.21.3, console `SERVER_VERSION = 1.0.0`, CI green, ~350 backend tests,
-8 plugin contributions across 5 areas. The plugin harness prints 7 contributions (the eighth line is prose, not a contribution — the harness counts what the plugin declares).
+7 plugin contributions across 5 areas.
 
 ---
 
@@ -231,8 +231,9 @@ Full version: `docs/vela-chart-api-notes.md`. The essentials:
   *Previous Highs & Lows* (the PDH/PDL indicator) hits that wall. Vela's paid Pine engine is not used;
   the console runs Vela's own engine classes from `vela-pinets`, where `PineEngine` (main thread)
   builds on the patched `vendor/pinets` — what "Add to chart" uses — while `PineWorkerEngine`'s worker
-  carries an engine copy inlined in vela-pinets (unpatched), so it is not wired. When a Library script
-  hits the wall, compute the value from data and draw it.
+  carries an engine copy inlined in vela-pinets (unpatched), so it is not wired by default:
+  `?engine=worker` (or localStorage `luxalgo-web:pine-engine` = `worker`) opts in when a run must not
+  block the page. When a Library script hits the wall, compute the value from data and draw it.
 - **Library source is licence-bound:** fetch at runtime (`/api/source?slug=…`), never commit it.
 - **Stale frames:** compare the heartbeat's `build` with `/api/build`. A frozen/occluded frame executes
   nothing at all — no reload, no command — which is why the pane remounts on reveal.
@@ -254,7 +255,7 @@ Working, with evidence:
 - Latency: symbol switch **686–698 ms** end to end, screenshot **35 ms**, `clear` **7 ms**, SSE push
   single-digit ms (transport is not the bottleneck; the chart engine fetch+render is).
 - Console health: `/api/health` ok, LuxAlgo MCP connected, 19 endpoints.
-- ~350 backend tests, plugin harness OK (7 contributions / 5 areas), CI green on `5b11678`.
+- ~350 backend tests, plugin harness OK (7 contributions / 5 areas), CI green.
 
 Current live state (transient): chart on **SOLUSDT**, console theme **light** (so the chart matches it),
 a hand-made palette parked; the docked pane may be hidden — check the heartbeat, not the screen.

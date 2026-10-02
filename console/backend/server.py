@@ -1422,7 +1422,36 @@ class StaticFiles:
 # HTTP handler
 # --------------------------------------------------------------------------
 
-LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0", ""}
+def _machine_addresses() -> set:
+    """This machine's own names and addresses — a local client may legitimately send any of them as
+    its Host. Includes the LAN address a peer would dial when the operator runs `--host 0.0.0.0`
+    on purpose (see HANDOFF): the Host check must not break that option, and it must still refuse a
+    name that is not this machine's (a DNS-rebinding page sends its own)."""
+    names = {"localhost", "127.0.0.1", "::1", "0.0.0.0", ""}
+    try:
+        import socket as _socket
+        names.add(_socket.gethostname())
+        for info in _socket.getaddrinfo(_socket.gethostname(), None):
+            names.add(str(info[4][0]))
+    except OSError:
+        pass
+    try:
+        import socket as _socket
+        probe = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+        probe.connect(("192.0.2.1", 9))        # TEST-NET-1: no packet leaves the machine
+        names.add(probe.getsockname()[0])
+        probe.close()
+    except OSError:
+        pass
+    return names
+
+
+LOCAL_HOSTS = _machine_addresses()
+
+# One JSON body cannot be worth more than this: the biggest real one is a Pine source in a `draw`
+# command (~40 KB). The cap exists because the door now runs BEFORE the body is read, and the read
+# used to trust Content-Length with no limit (the audit's round 3). Anything larger is refused whole.
+MAX_BODY_BYTES = 8 * 1024 * 1024
 
 
 def cors_origin(origin: str | None, host: str | None) -> str | None:
@@ -1433,11 +1462,12 @@ def cors_origin(origin: str | None, host: str | None) -> str | None:
         parsed = urlparse(origin)
     except Exception:
         return None
-    # Only the console's OWN origin is reflected. It used to reflect every local hostname on any
-    # port, which handed the POST token to any page on any other local port (the audit's follow-up):
-    # a page can read /api/session's answer when CORS allows it, and the Host header it must send is
-    # trivially local. The pane is served by this server, so it is same-origin and needs no grant.
-    if host and parsed.netloc == host:
+    # Only the console's OWN origin is reflected, and only when the Host is this machine's. It used to
+    # reflect every local hostname on any port (the token leaked to any local page), then every
+    # same-netloc origin — which a DNS-rebinding page satisfies, since it sends its own name as both
+    # Host and Origin. Both gates now: same origin AND a Host that is actually this machine's.
+    if (host and parsed.netloc == host
+            and (host.split(":")[0].strip("[]") in LOCAL_HOSTS or host.split(":")[0] in LOCAL_HOSTS)):
         return origin
     return None
 
@@ -1642,7 +1672,34 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802
         try:
+            path = urlparse(self.path).path.rstrip("/") or "/"
+            # The door is checked BEFORE the body is read (the audit's round 3): a request that fails
+            # here must not be able to make this process allocate or parse anything, and a malformed
+            # body from a refused caller must answer 401/403, not 400. Those refusals leave the body
+            # unread, so the connection is closed instead of being reused with a mis-framed stream.
+            if not self._host_ok():
+                self.close_connection = True
+                self._fail("refused: non-local Host", HTTPStatus.FORBIDDEN, "non_local_host")
+                return
+            if not self._origin_ok():
+                self.close_connection = True
+                self._fail("cross-origin POST refused", HTTPStatus.FORBIDDEN, "cross_origin")
+                return
+            if not self._token_ok():
+                self.close_connection = True
+                self._fail(
+                    "missing console token — send X-Trader-Token (see ~/.local/state/traders-agent/console.token) "
+                    "or open the console page once so the browser receives its cookie",
+                    HTTPStatus.UNAUTHORIZED,
+                    "no_token",
+                )
+                return
             length = int(self.headers.get("Content-Length") or 0)
+            if length > MAX_BODY_BYTES:
+                self.close_connection = True
+                self._fail(f"body too large ({length} bytes; the cap is {MAX_BODY_BYTES})",
+                           HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "body_too_large")
+                return
             raw = self.rfile.read(length) if length else b"{}"
             try:
                 payload = json.loads(raw.decode("utf-8") or "{}")
@@ -1651,21 +1708,6 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if not isinstance(payload, dict):
                 self._fail("body must be a JSON object", HTTPStatus.BAD_REQUEST, "bad_body")
-                return
-            path = urlparse(self.path).path.rstrip("/") or "/"
-            if not self._host_ok():
-                self._fail("refused: non-local Host", HTTPStatus.FORBIDDEN, "non_local_host")
-                return
-            if not self._origin_ok():
-                self._fail("cross-origin POST refused", HTTPStatus.FORBIDDEN, "cross_origin")
-                return
-            if not self._token_ok():
-                self._fail(
-                    "missing console token — send X-Trader-Token (see ~/.local/state/traders-agent/console.token) "
-                    "or open the console page once so the browser receives its cookie",
-                    HTTPStatus.UNAUTHORIZED,
-                    "no_token",
-                )
                 return
             if path == "/api/agents":
                 self._ok({"agent": upsert_study(AGENTS_ROOT, payload)})
@@ -1840,6 +1882,15 @@ class Handler(BaseHTTPRequestHandler):
     def _handle(self, head_only: bool):
         try:
             parsed = urlparse(self.path)
+            # EVERY request passes the Host gate, not just POST and /api/session: a DNS-rebinding page
+            # reaches 127.0.0.1 carrying its own name as Host, and with that it could read the state,
+            # the stream and the agent routes while the token gate (POST-only) never applied — the
+            # audit's round 3. A local client sends a Host this machine owns (see _machine_addresses).
+            if not self._host_ok():
+                self.close_connection = True
+                self._fail("refused: non-local Host", HTTPStatus.FORBIDDEN, "non_local_host",
+                           head_only=head_only)
+                return
             if parsed.path.rstrip("/") == "/api/backtest/health":
                 self._backtest_proxy("/api/backtest/health", {})
                 return
