@@ -12,6 +12,11 @@
 <body>
 <div class="app">
   <header class="topbar">
+    <!-- ☰ The drawer door (3 Oct): every LuxAlgo Library script, one click from the chart. -->
+    <button type="button" class="hamburger" id="drawer-open" aria-expanded="false"
+            aria-controls="lib-drawer" aria-label="Open the LuxAlgo script drawer" title="LuxAlgo scripts">
+      <span></span><span></span><span></span>
+    </button>
     <div class="brand">
       <span class="brand__mark" title="tools by luxalgo-mcp-server · chart by Vela · Pine engine vela-pinets">▲</span>
       <span class="brand__name">LuxAlgo Library</span>
@@ -57,6 +62,27 @@
       <button type="button" class="btn btn--ghost" id="theme-toggle" title="Switch light / dark" aria-label="Switch theme">◐</button>
     </div>
   </header>
+
+  <!-- The drawer slides over the chart from the left; the scrim catches the click-away. -->
+  <div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
+  <aside class="lib-drawer" id="lib-drawer" aria-hidden="true" aria-label="LuxAlgo scripts">
+    <div class="drawer__head">
+      <div class="drawer__title">
+        <strong>LuxAlgo scripts</strong>
+        <span class="muted" id="drawer-count"></span>
+      </div>
+      <button type="button" class="drawer__x" id="drawer-close" aria-label="Close the drawer">✕</button>
+    </div>
+    <label class="drawer__search">
+      <span aria-hidden="true">⌕</span>
+      <input id="drawer-q" type="search" placeholder="Search 800 scripts — order block, FVG, RSI…"
+             autocomplete="off" aria-label="Search LuxAlgo scripts" />
+    </label>
+    <div class="drawer__fams" id="drawer-fams" role="toolbar" aria-label="Families"></div>
+    <div class="drawer__now" id="drawer-now" hidden></div>
+    <ul class="drawer__list" id="drawer-list" aria-live="polite"></ul>
+    <p class="drawer__foot muted">▶ Run paints the script on this chart · one at a time · it stays after a restart</p>
+  </aside>
 
   <main class="main">
     <!-- LEFT: the library — hidden until its topbar toggle asks for it -->
@@ -333,5 +359,6 @@
 </script>
 <script type="module" src="./workspace.js"></script>
 <script src="./app.js"></script>
+<script src="./drawer.js"></script>
 </body>
 </html>

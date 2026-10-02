@@ -2176,6 +2176,10 @@ async function main() {
     if (ev.key !== 'Escape' || ev.defaultPrevented) return;
     /* The Indicators surface is the topmost thing when it is up, so it takes the Escape first —
        one Escape closes ONE surface (the F6 rule below). */
+    if (typeof window.closeDrawerIfOpen === 'function' && window.closeDrawerIfOpen()) {
+      ev.preventDefault();
+      return;
+    }
     if (typeof closeIndicatorsIfOpen === 'function' && closeIndicatorsIfOpen()) {
       ev.preventDefault();
       return;
