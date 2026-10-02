@@ -50,6 +50,29 @@ class TheSyncListCoversEveryModule(unittest.TestCase):
             "add them to tools/sync-live.sh",
         )
 
+    def test_sync_live_mirrors_every_vendor_directory(self):
+        """Every vendored browser family must be mirrored, not just pinets.
+
+        A family the sync skips stays at its old release in the live tree — and that is not merely
+        stale: releases rename their content-hashed `chunk-*.js` files (the vela 0.7.3 -> 0.8.1 move
+        renamed six), so the new entry files import chunks the old tree never had. A live tree that
+        skips the family is a page that dies at boot with "Failed to fetch dynamically imported
+        module".
+        """
+        sync = read(SYNC)
+        found = re.search(r"for fam in ([^;]+);\s*do", sync)
+        if found is None:
+            self.fail("the sync script must mirror the vendored families it copies")
+        listed = set(found.group(1).split())
+        vendor = os.path.join(ROOT, "console", "frontend", "vendor")
+        present = {n for n in os.listdir(vendor) if os.path.isdir(os.path.join(vendor, n))}
+        missing = sorted(present - listed)
+        self.assertEqual(
+            missing, [],
+            f"{missing} would stay at their old release in the live tree — "
+            "add them to tools/sync-live.sh's vendor loop",
+        )
+
     def test_the_thumb_cache_module_is_stdlib_only(self):
         """The console's rule: no third-party imports (the resizer is a CLI, not a Python dep)."""
         src = read(THUMBS)

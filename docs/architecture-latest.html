@@ -324,8 +324,8 @@
     <span class="badge">build 1790584678</span>
     <span class="badge">console 1.0.0</span>
     <span class="badge">39 MCP tools</span>
-    <span class="badge">pinets 0.10.0 (vendored)</span>
-    <span class="badge">Vela 0.7.3</span>
+    <span class="badge">pinets 0.11.0-fork (vendored)</span>
+    <span class="badge">Vela 0.8.1</span>
     <span class="badge live">293 backend tests green</span>
   </div>
 </header>
@@ -458,8 +458,8 @@
       </div>
       <div class="cards">
         <div class="card"><h4><span class="k">index.html</span> — two ways in</h4>
-          <p>Vela 0.7.3 and vela-pinets 0.2.12 arrive as global CDN scripts, and an import map then names the ESM builds. The map is also where the engine is pinned.</p>
-          <div class="meta"><span class="k">@luxalgo/vela@0.7.3</span><span class="k">/workspace</span><span class="k">/providers/binance</span></div></div>
+          <p>Vela 0.8.1 and vela-pinets 0.2.15 arrive as vendored global scripts, and an import map then names the ESM builds. The map is also where the engine is pinned.</p>
+          <div class="meta"><span class="k">@luxalgo/vela@0.8.1</span><span class="k">/workspace</span><span class="k">/providers/binance</span></div></div>
         <div class="card"><h4><span class="k">workspace.js</span> — the grid</h4>
           <p>The Vela workspace: real chart cells. Layouts <span class="k">1 · 2h · 2v · 4 · 8 · g&lt;cols&gt;x&lt;rows&gt;</span>. A grid already in page state wins over the boot preset, so a change made from chat survives a reload.</p></div>
         <div class="card"><h4><span class="k">app.js</span> — console shell</h4>
@@ -506,14 +506,14 @@
         <div class="layer-where">what draws, and<br>what computes<br><span class="k">two of three are LuxAlgo’s</span></div>
       </div>
       <div class="cards">
-        <div class="card"><h4>Vela 0.7.3 — the chart</h4>
-          <p>LuxAlgo’s chart package from jsDelivr. This build ships ~80 natives. <span class="k">addNativeIndicator()</span> genuinely paints;
+        <div class="card"><h4>Vela 0.8.1 — the chart</h4>
+          <p>LuxAlgo’s chart package, vendored into the repo. This build ships ~80 natives. <span class="k">addNativeIndicator()</span> genuinely paints;
           <span class="k">drawings.add()</span> creates a real core-owned drawing and the renderer never paints it — measured on a bare chart and on a cell, after pan and resize.</p></div>
-        <div class="card"><h4>vela-pinets 0.2.12 — Vela’s Pine engine</h4>
+        <div class="card"><h4>vela-pinets 0.2.15 — Vela’s Pine engine</h4>
           <p>Loaded, registered, and unreliable on a live chart. It is the reason we run our own engine rather than calling theirs.</p></div>
-        <div class="card"><h4>pinets 0.10.0 — our fork, vendored</h4>
+        <div class="card"><h4>pinets 0.11.0-fork — our fork, vendored</h4>
           <p>Bundled <b>into the repo</b> now, not fetched from a CDN: the import map serves the repo’s copy, so the engine is pinned, works offline, and can carry fixes.</p>
-          <div class="meta"><span class="k">godzillacode0000/PineTS @ 1f65fa2</span><span>653,095 bytes</span><span>sha256 80f3a8d8…</span></div></div>
+          <div class="meta"><span class="k">godzillacode0000/PineTS @ f5ec571</span><span>690,220 bytes</span><span>sha256 eb1df264…</span></div></div>
         <div class="card"><h4>Licence, said plainly</h4>
           <p>The fork is AGPL-3.0-only and the licence text travels beside the bundle; <span class="k">PROVENANCE.md</span> carries version, commit and hash.
           The combined distribution is therefore AGPL — fine to give away, a blocker only if this is ever sold. Library Pine is CC BY-NC-SA 4.0 and is never committed.</p></div>

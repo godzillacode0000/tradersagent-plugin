@@ -1,4 +1,4 @@
-import { overlayScrollbarCss, isDarkColor, mix, HIGHLIGHT, ACCENT_BRIGHT, ACCENT, withAlpha, injectStyles, iconAt, iconEl, BULLISH, BEARISH, WARNING, NEUTRAL } from './chunk-CAFCLMPF.js';
+import { overlayScrollbarCss, isDarkColor, mix, HIGHLIGHT, ACCENT_BRIGHT, ACCENT, withAlpha, injectStyles, iconAt, iconEl, BULLISH, BEARISH, WARNING, NEUTRAL } from './chunk-BZQM2XO7.js';
 import { VanillaMachine, normalizeProps, spreadProps } from '@zag-js/vanilla';
 export { normalizeProps, spreadProps } from '@zag-js/vanilla';
 import * as menu from '@zag-js/menu';
@@ -1505,6 +1505,264 @@ var Dialog = class {
   }
 };
 
+// src/ui/components/date-picker/controller.ts
+var MONTH_LABELS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+var WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+function isoDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function normalizeDateInput(raw) {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(raw.trim());
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+  return isoDate(dt);
+}
+function parseIsoDate(raw) {
+  const iso = raw ? normalizeDateInput(raw) : null;
+  if (!iso) return null;
+  const [y, mo, d] = iso.split("-").map(Number);
+  return new Date(y, mo - 1, d);
+}
+function datePickerController(opts = {}) {
+  const today = opts.today ?? /* @__PURE__ */ new Date();
+  let selected = parseIsoDate(opts.value);
+  let year = selected?.getFullYear() ?? today.getFullYear();
+  let month = selected?.getMonth() ?? today.getMonth();
+  let panel = "date";
+  const decade = () => Math.floor(year / 10) * 10;
+  return {
+    get panel() {
+      return panel;
+    },
+    get year() {
+      return year;
+    },
+    get month() {
+      return month;
+    },
+    get value() {
+      return selected ? isoDate(selected) : null;
+    },
+    header() {
+      return {
+        month: MONTH_LABELS[month] ?? "",
+        monthVisible: panel === "date",
+        year: panel === "year" ? `${decade()}-${decade() + 9}` : String(year),
+        yearDisabled: panel === "year"
+        // in the decade panel the year reads as its title
+      };
+    },
+    navLabels() {
+      if (panel === "date") return { prev: "Previous month", next: "Next month" };
+      if (panel === "month") return { prev: "Previous year", next: "Next year" };
+      return { prev: "Previous decade", next: "Next decade" };
+    },
+    cells() {
+      const out = [];
+      if (panel === "date") {
+        const startPad = new Date(year, month, 1).getDay();
+        const days = new Date(year, month + 1, 0).getDate();
+        const todayIso = isoDate(today);
+        const selectedIso = selected ? isoDate(selected) : "";
+        for (let i = 0; i < startPad; i++) out.push({ label: "", value: "", checked: false, today: false, blank: true });
+        for (let day = 1; day <= days; day++) {
+          const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          out.push({ label: String(day), value: iso, checked: iso === selectedIso, today: iso === todayIso });
+        }
+        return out;
+      }
+      if (panel === "month") {
+        for (let m = 0; m < 12; m++) {
+          out.push({
+            label: MONTH_SHORT[m] ?? "",
+            value: m,
+            checked: selected?.getFullYear() === year && selected.getMonth() === m,
+            today: today.getFullYear() === year && today.getMonth() === m
+          });
+        }
+        return out;
+      }
+      const d = decade();
+      for (let y = d - 1; y <= d + 10; y++) {
+        out.push({ label: String(y), value: y, checked: selected?.getFullYear() === y, today: today.getFullYear() === y, outside: y < d || y > d + 9 });
+      }
+      return out;
+    },
+    step(dir) {
+      if (panel === "date") {
+        month += dir;
+        if (month < 0) {
+          month = 11;
+          year -= 1;
+        }
+        if (month > 11) {
+          month = 0;
+          year += 1;
+        }
+      } else {
+        year += panel === "month" ? dir : dir * 10;
+      }
+    },
+    showMonths() {
+      panel = "month";
+    },
+    showYears() {
+      panel = "year";
+    },
+    choose(cell) {
+      if (cell.blank) return null;
+      if (panel === "date") {
+        selected = parseIsoDate(String(cell.value));
+        return selected ? isoDate(selected) : null;
+      }
+      if (panel === "month") {
+        month = Number(cell.value);
+        panel = "date";
+        return null;
+      }
+      year = Number(cell.value);
+      panel = "month";
+      return null;
+    },
+    setValue(value) {
+      selected = parseIsoDate(value);
+      if (selected) {
+        year = selected.getFullYear();
+        month = selected.getMonth();
+      }
+      panel = "date";
+    }
+  };
+}
+
+// src/ui/components/date-picker/styles.ts
+var DATE_PICKER_STYLE_ID = "vela-date-picker-styles";
+var DATE_PICKER_CSS = `
+.vela-date-picker{color:var(--vela-fg);font:14px var(--vela-font);user-select:none;}
+.vela-date-picker [hidden]{display:none !important;}
+.vela-date-picker-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
+.vela-date-picker-title{flex:1;display:flex;align-items:center;justify-content:center;gap:2px;min-width:0;}
+.vela-date-picker-switch{border:none;background:transparent;color:var(--vela-fg-bright);font:inherit;font-weight:600;font-size:14px;padding:2px 6px;border-radius:4px;cursor:pointer;}
+.vela-date-picker-switch:not(:disabled):hover{background:var(--vela-hover);}
+.vela-date-picker-switch:disabled{cursor:default;}
+.vela-date-picker-nav{width:24px;height:24px;border:none;background:transparent;color:var(--vela-fg-muted);border-radius:4px;padding:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:14px;}
+.vela-date-picker-nav:hover{background:var(--vela-hover);color:var(--vela-fg-bright);}
+.vela-date-picker-week,.vela-date-picker-grid{display:grid;grid-template-columns:repeat(7,28px);gap:2px;}
+.vela-date-picker-week{margin-bottom:4px;color:var(--vela-fg-muted);font-size:11px;text-align:center;}
+.vela-date-picker-week span{line-height:20px;}
+.vela-date-picker-blank{width:28px;height:28px;}
+.vela-date-picker-day{width:28px;height:28px;border:none;background:transparent;color:inherit;border-radius:4px;padding:0;cursor:pointer;font:inherit;font-size:14px;}
+.vela-date-picker-day:hover{background:var(--vela-hover);}
+.vela-date-picker-day[data-checked]{background:var(--vela-hover-strong);color:var(--vela-fg-bright);}
+.vela-date-picker-day[data-today]:not([data-checked]){box-shadow:inset 0 0 0 1px var(--vela-border-strong);}
+.vela-date-picker-cells{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;width:calc(7 * 28px + 6 * 2px);}
+.vela-date-picker-cell{height:36px;border:none;background:transparent;color:inherit;border-radius:4px;padding:0 4px;cursor:pointer;font:inherit;font-size:14px;}
+.vela-date-picker-cell:hover{background:var(--vela-hover);}
+.vela-date-picker-cell[data-checked]{background:var(--vela-hover-strong);color:var(--vela-fg-bright);}
+.vela-date-picker-cell[data-today]:not([data-checked]){box-shadow:inset 0 0 0 1px var(--vela-border-strong);}
+.vela-date-picker-cell[data-outside]{opacity:0.45;}
+`;
+
+// src/ui/components/date-picker/view.ts
+var DatePicker = class {
+  constructor(opts = {}) {
+    this.opts = opts;
+    const doc = document;
+    injectStyles(DATE_PICKER_STYLE_ID, DATE_PICKER_CSS, doc);
+    this.ctrl = datePickerController(opts);
+    const button = (className) => {
+      const b = doc.createElement("button");
+      b.type = "button";
+      b.className = className;
+      return b;
+    };
+    this.prev = button("vela-date-picker-nav");
+    this.prev.append(iconEl("chevron-left", doc));
+    this.next = button("vela-date-picker-nav");
+    this.next.append(iconEl("chevron-right", doc));
+    this.monthBtn = button("vela-date-picker-switch");
+    this.monthBtn.setAttribute("aria-label", "Choose month");
+    this.yearBtn = button("vela-date-picker-switch");
+    this.yearBtn.setAttribute("aria-label", "Choose year");
+    const title = doc.createElement("div");
+    title.className = "vela-date-picker-title";
+    title.append(this.monthBtn, this.yearBtn);
+    const head = doc.createElement("div");
+    head.className = "vela-date-picker-head";
+    head.append(this.prev, title, this.next);
+    this.week = doc.createElement("div");
+    this.week.className = "vela-date-picker-week";
+    for (const d of WEEKDAY_LABELS) {
+      const cell = doc.createElement("span");
+      cell.textContent = d;
+      this.week.appendChild(cell);
+    }
+    this.grid = doc.createElement("div");
+    const on = (el, run) => el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      run();
+      this.paint();
+    });
+    on(this.prev, () => this.ctrl.step(-1));
+    on(this.next, () => this.ctrl.step(1));
+    on(this.monthBtn, () => this.ctrl.showMonths());
+    on(this.yearBtn, () => this.ctrl.showYears());
+    this.el = doc.createElement("div");
+    this.el.className = "vela-date-picker";
+    this.el.append(head, this.week, this.grid);
+    this.paint();
+  }
+  get value() {
+    return this.ctrl.value;
+  }
+  /** Rewrite the selection without emitting (the calendar opens on its month). */
+  setValue(value) {
+    this.ctrl.setValue(value);
+    this.paint();
+  }
+  paint() {
+    const doc = this.el.ownerDocument;
+    const h = this.ctrl.header();
+    this.monthBtn.hidden = !h.monthVisible;
+    this.monthBtn.textContent = h.month;
+    this.yearBtn.textContent = h.year;
+    this.yearBtn.disabled = h.yearDisabled;
+    const nav = this.ctrl.navLabels();
+    this.prev.setAttribute("aria-label", nav.prev);
+    this.next.setAttribute("aria-label", nav.next);
+    const dates = this.ctrl.panel === "date";
+    this.week.hidden = !dates;
+    this.grid.className = dates ? "vela-date-picker-grid" : "vela-date-picker-cells";
+    this.grid.replaceChildren(...this.ctrl.cells().map((cell) => this.cellEl(doc, cell, dates)));
+  }
+  cellEl(doc, cell, dates) {
+    if (cell.blank) {
+      const blank = doc.createElement("span");
+      blank.className = "vela-date-picker-blank";
+      return blank;
+    }
+    const b = doc.createElement("button");
+    b.type = "button";
+    b.className = dates ? "vela-date-picker-day" : "vela-date-picker-cell";
+    b.textContent = cell.label;
+    if (cell.checked) b.dataset.checked = "1";
+    if (cell.today) b.dataset.today = "1";
+    if (cell.outside) b.dataset.outside = "1";
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const picked = this.ctrl.choose(cell);
+      if (picked) this.opts.onPick?.(picked);
+      else this.paint();
+    });
+    return b;
+  }
+};
+
 // src/ui/components/switch/controller.ts
 function switchController(opts = {}) {
   let checked = opts.checked ?? false;
@@ -2177,7 +2435,8 @@ function addRecent(hex6) {
   recents.unshift(hex6);
   if (recents.length > 10) recents.length = 10;
 }
-function buildColorPicker(color, theme, onChange) {
+function buildColorPicker(color, theme, onChange, options = {}) {
+  const commit = options.commit ?? "live";
   const parsed = splitColor(color);
   let curHex = parsed.hex6;
   let curAlpha = parsed.alpha;
@@ -2247,20 +2506,60 @@ function buildColorPicker(color, theme, onChange) {
   const knob = document.createElement("div");
   knob.style.cssText = "position:absolute;top:50%;width:15px;height:15px;border-radius:50%;background:var(--vela-selected-bg);box-shadow:0 1px 3px rgba(0,0,0,0.55);transform:translate(-50%,-50%);pointer-events:none;";
   track.appendChild(knob);
-  const pctBox = document.createElement("div");
-  pctBox.style.cssText = `min-width:42px;text-align:center;font:var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-fg);border:1px solid var(--vela-border);border-radius:5px;padding:3px 4px;`;
+  const pctBox = document.createElement("input");
+  pctBox.type = "text";
+  pctBox.inputMode = "numeric";
+  pctBox.title = "Opacity (%)";
+  pctBox.style.cssText = `width:46px;box-sizing:border-box;text-align:center;font:var(--vela-font-size-md) ${theme.fontFamily};color:var(--vela-fg);background:transparent;border:1px solid var(--vela-border);border-radius:5px;padding:3px 4px;outline:none;`;
+  pctBox.addEventListener("focus", () => {
+    pctBox.style.borderColor = "var(--vela-border-strong)";
+    pctBox.select();
+  });
   opRow.append(track, pctBox);
   const paintOpacity = () => {
     track.style.background = `linear-gradient(to right, ${curHex}00, ${curHex}ff), ${CHECKER}`;
     knob.style.left = `${curAlpha * 100}%`;
-    pctBox.textContent = `${Math.round(curAlpha * 100)}%`;
+    pctBox.value = `${Math.round(curAlpha * 100)}%`;
   };
+  const commitTyped = () => {
+    pctBox.style.borderColor = "var(--vela-border)";
+    const n = parseFloat(pctBox.value.replace("%", ""));
+    if (Number.isFinite(n)) {
+      const next = Math.max(0, Math.min(100, n)) / 100;
+      if (Math.round(next * 100) !== Math.round(curAlpha * 100)) {
+        curAlpha = next;
+        paintOpacity();
+        emit();
+        return;
+      }
+    }
+    paintOpacity();
+  };
+  pctBox.addEventListener("change", commitTyped);
+  pctBox.addEventListener("blur", () => {
+    pctBox.style.borderColor = "var(--vela-border)";
+    paintOpacity();
+  });
+  pctBox.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") return;
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitTyped();
+      pctBox.blur();
+    }
+  });
   let dragging = false;
   const onDrag = (clientX) => {
     const r = track.getBoundingClientRect();
     curAlpha = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
     paintOpacity();
-    emit();
+    if (commit === "live") emit();
+  };
+  const endDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    if (commit === "release") emit();
   };
   track.addEventListener("pointerdown", (e) => {
     e.stopPropagation();
@@ -2271,7 +2570,8 @@ function buildColorPicker(color, theme, onChange) {
   track.addEventListener("pointermove", (e) => {
     if (dragging) onDrag(e.clientX);
   });
-  track.addEventListener("pointerup", () => dragging = false);
+  track.addEventListener("pointerup", endDrag);
+  track.addEventListener("pointercancel", endDrag);
   function emit() {
     onChange(combineColor(curHex, curAlpha));
   }
@@ -2294,7 +2594,7 @@ function buildColorPicker(color, theme, onChange) {
   return root;
 }
 function colorField(theme, getVal, onVal, opts) {
-  return new ColorField({ theme, getVal, onVal, shape: opts?.shape, id: opts?.id, popover: opts?.popover }).el;
+  return new ColorField({ theme, getVal, onVal, shape: opts?.shape, id: opts?.id, popover: opts?.popover, commit: opts?.commit }).el;
 }
 var ColorField = class {
   constructor(opts) {
@@ -2303,6 +2603,7 @@ var ColorField = class {
     this.getVal = opts.getVal;
     this.onVal = opts.onVal;
     this.popoverOpts = opts.popover;
+    this.commit = opts.commit;
     const trigger = document.createElement("button");
     trigger.type = "button";
     if (opts.id) trigger.id = opts.id;
@@ -2342,10 +2643,15 @@ var ColorField = class {
       boundary: this.popoverOpts?.boundary,
       zIndex: this.popoverOpts?.zIndex,
       className: "vela-color-field-pop",
-      content: buildColorPicker(this.getVal(), this.theme, (val) => {
-        this.onVal(val);
-        this.paint();
-      })
+      content: buildColorPicker(
+        this.getVal(),
+        this.theme,
+        (val) => {
+          this.onVal(val);
+          this.paint();
+        },
+        { commit: this.commit }
+      )
     });
     pop.show();
   }
@@ -2829,7 +3135,8 @@ function buildFieldControl(desc) {
     const el2 = colorField(desc.theme, desc.get, desc.onChange, {
       shape: "circle",
       id: desc.id,
-      popover: desc.popover
+      popover: desc.popover,
+      commit: desc.commit
     });
     if (desc.title) el2.title = desc.title;
     return { el: el2 };
@@ -2874,4 +3181,4 @@ function buildFieldControl(desc) {
   return { el };
 }
 
-export { CALLOUT_CSS, CALLOUT_STYLE_ID, CalloutBubble, ColorField, Dialog, FIELD_GAP_PX, GlyphSelect, Menu, NumberInput, Popover, STATIC_TOKENS, Select, Switch, TextArea, TextField, WIDTH_FIELD_OPTIONS, applyPlotOverlayTokens, applyThemeTokens, blendOver, buildColorPicker, buildFieldControl, buildPalette, calloutPanelRows, clampNumber, closeColorPopover, closeOpenPopovers, closeWidthPopover, closesPanel, colorField, colorPickerController, combineColor, decorateSelectScroll, dialogController, ensureUIHost, eventDismissedPopover, fieldGrid, fieldGridColumns, fieldRow, fieldSection, fieldSeparator, fillSelectList, glyphSelectController, hslHex, insetRect, intersectRects, isPopoverOpen, lineWidthGlyph, menuController, nextUid, numberInputController, openPopoverTrigger, openSelectList, placePopover, popoverController, runMachine, selectController, snapToStep, splitColor, switchController, textAreaController, textFieldController, themeTokens, toggleSelectList, transparencyChecker, viewportRect, widthField, widthFieldOptions };
+export { CALLOUT_CSS, CALLOUT_STYLE_ID, CalloutBubble, ColorField, DatePicker, Dialog, FIELD_GAP_PX, GlyphSelect, Menu, NumberInput, Popover, STATIC_TOKENS, Select, Switch, TextArea, TextField, WIDTH_FIELD_OPTIONS, applyPlotOverlayTokens, applyThemeTokens, blendOver, buildColorPicker, buildFieldControl, buildPalette, calloutPanelRows, clampNumber, closeColorPopover, closeOpenPopovers, closeWidthPopover, closesPanel, colorField, colorPickerController, combineColor, datePickerController, decorateSelectScroll, dialogController, ensureUIHost, eventDismissedPopover, fieldGrid, fieldGridColumns, fieldRow, fieldSection, fieldSeparator, fillSelectList, glyphSelectController, hslHex, insetRect, intersectRects, isPopoverOpen, isoDate, lineWidthGlyph, menuController, nextUid, normalizeDateInput, numberInputController, openPopoverTrigger, openSelectList, placePopover, popoverController, runMachine, selectController, snapToStep, splitColor, switchController, textAreaController, textFieldController, themeTokens, toggleSelectList, transparencyChecker, viewportRect, widthField, widthFieldOptions };

@@ -1,6 +1,6 @@
-import { deserializeDrawing, chartTypes, rendererLayers, isLineLikeSeries, seriesShownOn, foldBaseModulation, registerChartType, rendererDefaults, getDrawingType, settingsRowVisible, normalizeSettingsRow, Magnifier, TextLabel, Callout, resetDrawingSettings, registerNativeIndicator, chartType, getNativeIndicator, nativeIndicatorDescriptors, nativeInstanceChannel, drawingTypes, settingsRowValueKeys, formatDuration, RegressionChannel, FixedRangeVolumeProfile, DEFAULT_DRAWING_COLOR, SegmentDrawing, ArrowMark, GlyphStamp, RadialFib, FibSpiral, DedekindTessellation, MachFigure, GannSquare, FibRatios, MeasureBox, PositionTool, AnchoredVwap, PatternDrawing, Comment, PriceNote, Signpost, Note, PriceLabel, GANN_SQUARE_ARCS, magnifierTimeframeLabel, lineSegmentIntersection, MAGNIFIER_TIMEFRAME_OPTIONS, GLYPH_OPTIONS, STAMP_SIZE_OPTIONS, LINE_STYLE_OPTIONS, DEDEKIND_CURVATURE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, TEXT_SIZE_OPTIONS, createDrawing, inputVisible, seriesInScale, tickerModifierIds, CalloutBase, DIRECTION_OPTIONS, stableSeriesId } from './chunk-BFA32GOU.js';
-import { themeTokens, Dialog, closeOpenPopovers, closeWidthPopover, fieldSection, buildFieldControl, fieldSeparator, fieldGrid, fieldRow, CALLOUT_STYLE_ID, CALLOUT_CSS, Popover, blendOver, splitColor, CalloutBubble, Menu, TextArea, NumberInput, buildColorPicker, isPopoverOpen, eventDismissedPopover, toggleSelectList, openPopoverTrigger, fieldGridColumns, FIELD_GAP_PX, STATIC_TOKENS } from './chunk-BKHSQ4YM.js';
-import { icon, iconAt, withAlpha, WARNING, ACCENT, NEUTRAL, BULLISH, CATEGORICAL, SERIES_LINE, BEARISH, isDarkColor, INFO, injectStyles, CHIP_PLATE, CROSSHAIR, TRADE_EXIT, TRADE_SHORT, TRADE_LONG, iconMarkup, overlayScrollbarCss, SLATE_DEEP, VALID, INVALID, SLATE, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, svg24, svg24Solid } from './chunk-CAFCLMPF.js';
+import { deserializeDrawing, chartTypes, rendererLayers, isLineLikeSeries, seriesShownOn, foldBaseModulation, registerChartType, rendererDefaults, getDrawingType, settingsRowVisible, normalizeSettingsRow, Magnifier, TextLabel, Callout, resetDrawingSettings, registerNativeIndicator, chartType, getNativeIndicator, nativeIndicatorDescriptors, nativeInstanceChannel, drawingTypes, settingsRowValueKeys, formatDuration, RegressionChannel, FixedRangeVolumeProfile, DEFAULT_DRAWING_COLOR, SegmentDrawing, ArrowMark, GlyphStamp, RadialFib, FibSpiral, DedekindTessellation, MachFigure, GannSquare, FibRatios, MeasureBox, PositionTool, AnchoredVwap, PatternDrawing, Comment, PriceNote, Signpost, Note, PriceLabel, GANN_SQUARE_ARCS, magnifierTimeframeLabel, lineSegmentIntersection, MAGNIFIER_TIMEFRAME_OPTIONS, GLYPH_OPTIONS, STAMP_SIZE_OPTIONS, LINE_STYLE_OPTIONS, DEDEKIND_CURVATURE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, TEXT_SIZE_OPTIONS, createDrawing, inputVisible, seriesInScale, tickerModifierIds, CalloutBase, DIRECTION_OPTIONS, stableSeriesId } from './chunk-EZ5FWVLA.js';
+import { themeTokens, Dialog, closeOpenPopovers, closeWidthPopover, fieldSection, buildFieldControl, fieldSeparator, fieldGrid, fieldRow, CALLOUT_STYLE_ID, CALLOUT_CSS, Popover, blendOver, splitColor, CalloutBubble, Menu, TextArea, NumberInput, buildColorPicker, isPopoverOpen, DatePicker, eventDismissedPopover, toggleSelectList, normalizeDateInput, openPopoverTrigger, fieldGridColumns, FIELD_GAP_PX, STATIC_TOKENS } from './chunk-NELQJCGK.js';
+import { icon, iconAt, withAlpha, WARNING, ACCENT, NEUTRAL, INFO, BULLISH, BEARISH, isDarkColor, injectStyles, SERIES_LINE, CHIP_PLATE, CROSSHAIR, TRADE_EXIT, TRADE_SHORT, TRADE_LONG, iconMarkup, overlayScrollbarCss, SLATE_DEEP, VALID, INVALID, SLATE, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, svg24, svg24Solid } from './chunk-BZQM2XO7.js';
 
 // src/core/events/EventBus.ts
 var TypedEventBus = class {
@@ -513,6 +513,12 @@ var RendererControl = class {
    */
   onCrosshairMove(cb) {
     return this.renderer.onCrosshairMove(cb);
+  }
+  /** A click — or a touch tap — on the plot, never the end of a pan: the open time of
+   *  the bar under it (`null` off the bars). On touch, where a tap moves no crosshair,
+   *  this is how an interaction learns which bar was chosen. */
+  onClick(cb) {
+    return this.renderer.onClick(cb);
   }
   /** Touch long-press on a price or time axis strip — silent no-op without the seam. */
   onAxisLongPress(cb) {
@@ -1179,6 +1185,8 @@ var MultiProviderFeed = class {
     this.liveBars = [];
     /** Sync-accessible symbol metadata, warmed by load()/symbolInfoFor (the engine reads it synchronously). */
     this.symInfoCache = /* @__PURE__ */ new Map();
+    /** Requests in flight, keyed like the cache — every concurrent asker shares one round trip. */
+    this.symInfoInflight = /* @__PURE__ */ new Map();
     this.cache = new CachingDataFeed(new RegistryFetchFeed(this.registry), store);
   }
   // ── Registry surface (driven by chart.data / DataControl) ──────────────
@@ -1239,9 +1247,36 @@ var MultiProviderFeed = class {
   async symbolInfoFor(raw) {
     const resolved = this.registry.resolve(raw, { default: this.primaryProvider });
     if (!resolved) return void 0;
-    const info = await this.registry.get(resolved.provider)?.getSymbolInfo?.(resolved.ticker);
-    if (info) this.symInfoCache.set(symKey(resolved), info);
-    return info;
+    return this.fetchSymbolInfo(resolved);
+  }
+  /**
+   * One round trip per symbol, shared. A market switch probes this metadata from five
+   * places at once (the bar load's prefetch, the renderer's tick size, the market-status
+   * badge, the session shading, the session toggle) — without the in-flight map each
+   * would open its own request for the same answer, and the last one to land decided how
+   * late the chrome settled.
+   *
+   * Cached for {@link SYMBOL_INFO_TTL_MS}: this metadata is stable within a session
+   * (tick size, session vocabulary, listing prefix), but not immutable — a continuous
+   * futures row rolls its current contract — so the entry expires rather than pinning the
+   * session's first answer forever. A failed probe is NOT remembered: the next asker retries.
+   */
+  fetchSymbolInfo(resolved) {
+    const key = symKey(resolved);
+    const hit = this.symInfoCache.get(key);
+    if (hit && Date.now() - hit.at < SYMBOL_INFO_TTL_MS) return Promise.resolve(hit.info);
+    const inflight = this.symInfoInflight.get(key);
+    if (inflight) return inflight;
+    const getSymbolInfo = this.registry.get(resolved.provider)?.getSymbolInfo;
+    if (!getSymbolInfo) return Promise.resolve(void 0);
+    const p = Promise.resolve(getSymbolInfo.call(this.registry.get(resolved.provider), resolved.ticker)).then((info) => {
+      if (info) this.symInfoCache.set(key, { info, at: Date.now() });
+      return info;
+    }).finally(() => {
+      this.symInfoInflight.delete(key);
+    });
+    this.symInfoInflight.set(key, p);
+    return p;
   }
   /**
    * Per-symbol capabilities, resolved through the owning provider's `capabilitiesFor`
@@ -1285,16 +1320,10 @@ var MultiProviderFeed = class {
   symbolInfo(cfg) {
     if (cfg.data && cfg.data.length > 0) return void 0;
     const resolved = this.registry.resolve(rawSymbol(cfg), { default: this.primaryProvider });
-    return resolved ? this.symInfoCache.get(symKey(resolved)) : void 0;
+    return resolved ? this.symInfoCache.get(symKey(resolved))?.info : void 0;
   }
   prefetchSymbolInfo(resolved) {
-    const key = symKey(resolved);
-    if (this.symInfoCache.has(key)) return;
-    const provider = this.registry.get(resolved.provider);
-    if (!provider?.getSymbolInfo) return;
-    void provider.getSymbolInfo(resolved.ticker).then((info) => {
-      if (info) this.symInfoCache.set(key, info);
-    }).catch(() => {
+    void this.fetchSymbolInfo(resolved).catch(() => {
     });
   }
   async loadRange(cfg, range) {
@@ -1344,8 +1373,9 @@ function canonical(cfg, resolved) {
   return { ...cfg, symbol: `${resolved.provider}:${resolved.ticker}` };
 }
 function symKey(resolved) {
-  return `${resolved.provider}|${resolved.ticker}`;
+  return `${resolved.provider}|${resolved.ticker.trim().toUpperCase()}`;
 }
+var SYMBOL_INFO_TTL_MS = 10 * 6e4;
 async function safeBars(provider, ticker, tf, range) {
   try {
     return await provider.getBars(ticker, tf, range);
@@ -1756,11 +1786,76 @@ var MarksControl = class {
   }
 };
 
+// src/core/ReplayControl.ts
+var ReplayControl = class {
+  constructor(ctrl) {
+    this.ctrl = ctrl;
+  }
+  /**
+   * Enter replay (or seek, when already replaying) at `opts.from`. Resolves once the
+   * chart shows the rewound history — after any in-flight history load has finished.
+   * Starts paused; call {@link play} or {@link step}.
+   */
+  start(opts) {
+    return this.ctrl.replayStart(opts);
+  }
+  /** Reveal the next bar — or, mid-way through a bar played tick by tick, complete it.
+   *  Returns false when replay is off or nothing is left. */
+  step() {
+    return this.ctrl.replayStep();
+  }
+  /** Reveal the next UPDATE: with {@link setTicks}, the next tick of the forming bar — or
+   *  the next bar opened at its first tick (once its ticks are in, if still loading);
+   *  otherwise the next whole bar, like {@link step}. Returns false when nothing is left. */
+  stepUpdate() {
+    return this.ctrl.replayStepUpdate();
+  }
+  /** Reveal one bar (one tick, with {@link setTicks}) every `intervalMs` (default: the last
+   *  interval used, else 1000). Calling it again while playing changes the pace. */
+  play(intervalMs2) {
+    this.ctrl.replayPlay(intervalMs2);
+    return this;
+  }
+  pause() {
+    this.ctrl.replayPause();
+    return this;
+  }
+  /** Leave replay: the full history comes back and live updates resume. Also cancels a
+   *  `start()` still loading older history (the chart returns to its previous depth). */
+  stop() {
+    this.ctrl.replayStop();
+    return this;
+  }
+  get state() {
+    return this.ctrl.replayState();
+  }
+  /** The loaded history a replay can walk — hidden bars included while replaying. Null
+   *  before any bar loaded. A start older than `first` deepens the history first. */
+  get bounds() {
+    return this.ctrl.replayBounds();
+  }
+  /**
+   * Play each revealed bar as a series of intrabar updates instead of whole: while
+   * playing, the forming candle opens at the first tick, then every tick moves its close
+   * and stretches its high and low, exactly like a live tick — indicators, chart types
+   * and the `bar` event follow — and the last one settles it on the stored bar. The play
+   * interval is then the time between two TICKS: a bar lasts as many intervals as it
+   * has ticks (below ~16 ms, ticks are batched per frame). The next bar's ticks are
+   * requested while the current one plays; playback waits for them. `null` goes back to
+   * whole bars. Takes effect from the next bar; a bar forming when the source changes
+   * completes at once.
+   */
+  setTicks(source) {
+    this.ctrl.replaySetTicks(source);
+    return this;
+  }
+};
+
 // src/core/util/wall-clock.ts
 var BOUNDARY_SLACK_MS = 5;
 var SecondClock = class _SecondClock {
-  constructor(now = () => Date.now()) {
-    this.now = now;
+  constructor(now2 = () => Date.now()) {
+    this.now = now2;
     this.subs = /* @__PURE__ */ new Set();
     this.timer = null;
   }
@@ -1776,15 +1871,15 @@ var SecondClock = class _SecondClock {
     };
   }
   /** Milliseconds from `now` to just past the next second boundary. */
-  static delayToNextSecond(now) {
-    const intoSecond = (now % 1e3 + 1e3) % 1e3;
+  static delayToNextSecond(now2) {
+    const intoSecond = (now2 % 1e3 + 1e3) % 1e3;
     return 1e3 - intoSecond + BOUNDARY_SLACK_MS;
   }
   arm() {
     this.timer = setTimeout(() => {
       this.timer = null;
-      const now = this.now();
-      for (const cb of this.subs) cb(now);
+      const now2 = this.now();
+      for (const cb of this.subs) cb(now2);
       if (this.subs.size > 0) this.arm();
     }, _SecondClock.delayToNextSecond(this.now()));
   }
@@ -1845,8 +1940,21 @@ var TIMEZONES = [
   { value: "Pacific/Apia", label: "Apia" },
   { value: "Pacific/Kiritimati", label: "Kiritimati" }
 ];
+var EXCHANGE_TIMEZONE = "exchange";
+function isExchangeTimezone(zone) {
+  return zone === EXCHANGE_TIMEZONE;
+}
+function resolveTimezone(zone, exchangeZone) {
+  if (!isExchangeTimezone(zone)) return zone;
+  return exchangeZone && exchangeZone !== "" ? exchangeZone : "Etc/UTC";
+}
 function normalizeTimezone(zone) {
   return zone === "UTC" || zone === "Etc/UTC" || zone === "Etc/GMT" ? "Etc/UTC" : zone;
+}
+function timezoneMenuRows(current) {
+  const active = normalizeTimezone(current);
+  const [utc, ...zones] = TIMEZONES.map((t) => ({ value: t.value, label: tzMenuLabel(t.value, t.label), checked: t.value === active }));
+  return [utc, { value: EXCHANGE_TIMEZONE, label: "Exchange", checked: isExchangeTimezone(current) }, ...zones];
 }
 function tzOffset(zone, date = /* @__PURE__ */ new Date()) {
   try {
@@ -3503,7 +3611,10 @@ var IndicatorInputsDialog = class {
         id,
         theme: this.host.theme(),
         get: () => String(bagOf(row, inp)[inp.key] ?? inp.defval),
-        onChange: (v) => emit(v)
+        onChange: (v) => emit(v),
+        // An input change re-executes the script over its whole history: commit the
+        // opacity drag once on release, not once per pointer move.
+        commit: "release"
       }).el;
     }
     if (inp.type === "symbol") return this.buildSymbol(id, String(current), emit);
@@ -3750,10 +3861,6 @@ var IndicatorInputsDialog = class {
   }
   /** Open a themed month calendar under `anchor` — same surface + shadow as the choice list. */
   openCalendar(anchor, current, onPick) {
-    const parsed = parseIsoDate(current);
-    let year = parsed?.getFullYear() ?? (/* @__PURE__ */ new Date()).getFullYear();
-    let month = parsed?.getMonth() ?? (/* @__PURE__ */ new Date()).getMonth();
-    const selected = parsed ? isoDate(parsed) : current;
     const pop = new Popover({
       trigger: anchor,
       theme: this.host.theme(),
@@ -3766,78 +3873,14 @@ var IndicatorInputsDialog = class {
         this.calendarAnchor = null;
       },
       content: (el) => {
-        const title = document.createElement("div");
-        title.className = "vela-ind-cal-title";
-        const prev2 = document.createElement("button");
-        prev2.type = "button";
-        prev2.className = "vela-ind-cal-nav";
-        prev2.setAttribute("aria-label", "Previous month");
-        prev2.innerHTML = iconAt("chevron-left", 14);
-        const next = document.createElement("button");
-        next.type = "button";
-        next.className = "vela-ind-cal-nav";
-        next.setAttribute("aria-label", "Next month");
-        next.innerHTML = iconAt("chevron-right", 14);
-        const head = document.createElement("div");
-        head.className = "vela-ind-cal-head";
-        head.append(prev2, title, next);
-        const week = document.createElement("div");
-        week.className = "vela-ind-cal-week";
-        for (const d of WEEKDAY_LABELS) {
-          const cell = document.createElement("span");
-          cell.textContent = d;
-          week.appendChild(cell);
-        }
-        const grid = document.createElement("div");
-        grid.className = "vela-ind-cal-grid";
-        const paint = () => {
-          title.textContent = `${MONTH_LABELS[month]} ${year}`;
-          grid.replaceChildren();
-          const first = new Date(year, month, 1);
-          const startPad = first.getDay();
-          const days = new Date(year, month + 1, 0).getDate();
-          const today = isoDate(/* @__PURE__ */ new Date());
-          for (let i = 0; i < startPad; i++) {
-            const blank = document.createElement("span");
-            blank.className = "vela-ind-cal-blank";
-            grid.appendChild(blank);
+        const picker = new DatePicker({
+          value: current,
+          onPick: (iso) => {
+            pop.hide();
+            onPick(iso);
           }
-          for (let day = 1; day <= days; day++) {
-            const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-            const b = document.createElement("button");
-            b.type = "button";
-            b.className = "vela-ind-cal-day";
-            b.textContent = String(day);
-            if (iso === selected) b.dataset.checked = "1";
-            if (iso === today) b.dataset.today = "1";
-            b.addEventListener("click", (e) => {
-              e.stopPropagation();
-              pop.hide();
-              onPick(iso);
-            });
-            grid.appendChild(b);
-          }
-        };
-        prev2.addEventListener("click", (e) => {
-          e.stopPropagation();
-          month -= 1;
-          if (month < 0) {
-            month = 11;
-            year -= 1;
-          }
-          paint();
         });
-        next.addEventListener("click", (e) => {
-          e.stopPropagation();
-          month += 1;
-          if (month > 11) {
-            month = 0;
-            year += 1;
-          }
-          paint();
-        });
-        paint();
-        el.append(head, week, grid);
+        el.append(picker.el);
       }
     });
     this.calendarPop = pop;
@@ -3947,7 +3990,7 @@ function groupInputs(inputs) {
 var CALENDAR_SVG = iconAt("calendar", 14);
 var CLOCK_SVG = iconAt("clock", 14);
 var DIALOG_STYLE_ID = "vela-ind-dialog-styles";
-var DIALOG_STYLE_REV = "29";
+var DIALOG_STYLE_REV = "30";
 var LEGEND_ICON_PX = 16;
 function ensureDialogStyles() {
   if (typeof document === "undefined") return;
@@ -3963,18 +4006,6 @@ function ensureDialogStyles() {
 .vela-ind-combo-chevron{position:absolute;right:0;top:0;bottom:0;width:26px;border:none;background:transparent;color:inherit;opacity:0.55;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
 .vela-ind-combo-chevron:hover{opacity:0.9;}
 .vela-ind-cal{background:var(--vela-bg);color:var(--vela-fg);border:none;border-radius:6px;box-shadow:var(--vela-shadow);font:14px var(--vela-font);padding:10px 12px;user-select:none;}
-.vela-ind-cal-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
-.vela-ind-cal-title{flex:1;text-align:center;font-weight:600;font-size:14px;color:var(--vela-fg-bright);}
-.vela-ind-cal-nav{width:24px;height:24px;border:none;background:transparent;color:var(--vela-fg-muted);border-radius:4px;padding:0;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
-.vela-ind-cal-nav:hover{background:var(--vela-hover);color:var(--vela-fg-bright);}
-.vela-ind-cal-week,.vela-ind-cal-grid{display:grid;grid-template-columns:repeat(7,28px);gap:2px;}
-.vela-ind-cal-week{margin-bottom:4px;color:var(--vela-fg-muted);font-size:11px;text-align:center;}
-.vela-ind-cal-week span{line-height:20px;}
-.vela-ind-cal-blank{width:28px;height:28px;}
-.vela-ind-cal-day{width:28px;height:28px;border:none;background:transparent;color:inherit;border-radius:4px;padding:0;cursor:pointer;font:inherit;font-size:14px;}
-.vela-ind-cal-day:hover{background:var(--vela-hover);}
-.vela-ind-cal-day[data-checked]{background:var(--vela-hover-strong);color:var(--vela-fg-bright);}
-.vela-ind-cal-day[data-today]:not([data-checked]){box-shadow:inset 0 0 0 1px var(--vela-border-strong);}
 ${overlayScrollbarCss(".vela-dialog.vela-ind-dialog *", 9)}
 .vela-ind-tab{font-weight:600;font-size:13px;line-height:20px;transition:color var(--vela-dur-fast) ease,border-color var(--vela-dur-fast) ease;}
 .vela-ind-tab:not(.vela-ind-tab-active):hover{color:var(--vela-fg-bright);}
@@ -4008,28 +4039,6 @@ var TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
   const v = `${hh}:${mm}`;
   return { value: v, label: v };
 });
-var MONTH_LABELS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-var WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-function normalizeDateInput(raw) {
-  const t = raw.trim();
-  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
-  if (!m) return null;
-  const y = Number(m[1]);
-  const mo = Number(m[2]);
-  const d = Number(m[3]);
-  const dt = new Date(y, mo - 1, d);
-  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
-  return isoDate(dt);
-}
-function parseIsoDate(raw) {
-  const iso = normalizeDateInput(raw);
-  if (!iso) return null;
-  const [y, mo, d] = iso.split("-").map(Number);
-  return new Date(y, mo - 1, d);
-}
-function isoDate(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 function normalizeTimeInput(raw) {
   const t = raw.trim();
   const m = /^(\d{1,2}):(\d{2})$/.exec(t) ?? /^(\d{2})(\d{2})$/.exec(t);
@@ -5311,10 +5320,12 @@ var BASELINE_LEVEL_DEFAULT = 50;
 var PREMARKET_SHADE = withAlpha(WARNING, 0.08);
 var POSTMARKET_SHADE = withAlpha(ACCENT, 0.08);
 var EXTENDED_SHADE = POSTMARKET_SHADE;
+var DEFAULT_MARGINS = { top: 10, bottom: 10, right: 10 };
 function defaultChartStyle() {
   return {
     chartTypes: {},
     fontSize: 11,
+    margins: { ...DEFAULT_MARGINS },
     gridVert: { visible: true, color: null },
     gridHorz: { visible: true, color: null },
     borderColor: null,
@@ -5356,6 +5367,17 @@ function hasOwnCandlePaint(style) {
   for (const t of chartTypes()) if (t.id === style) return (t.basePainting ?? "candles") === "candles";
   return false;
 }
+var CANDLE_OVERRIDE_KEYS = [
+  "candleUpColor",
+  "candleDownColor",
+  "candleBodyVisible",
+  "candleBorderVisible",
+  "candleBorderUpColor",
+  "candleBorderDownColor",
+  "candleWickVisible",
+  "candleWickUpColor",
+  "candleWickDownColor"
+];
 function candleOverrideFor(style, bags) {
   if (!hasOwnCandlePaint(style)) return null;
   const bag = bags[style] ?? {};
@@ -5394,6 +5416,22 @@ function priceStyleIds() {
   for (const t of chartTypes()) if (!out.includes(t.id)) out.push(t.id);
   return out;
 }
+function sanitizeCrosshairOverride(value) {
+  if (!value || typeof value !== "object") return null;
+  const v = value;
+  const out = {};
+  if (isBool(v.vertical)) out.vertical = v.vertical;
+  if (isBool(v.horizontal)) out.horizontal = v.horizontal;
+  if (isColor(v.color)) out.color = v.color;
+  if (isNum(v.width)) out.width = Math.max(0.5, Math.min(8, v.width));
+  if (isLineStyle(v.style)) out.style = v.style;
+  if (isNum(v.opacity)) out.opacity = clampOpacity(v.opacity);
+  const shade = v.shadeRight;
+  if (shade && typeof shade === "object" && isColor(shade.color)) {
+    out.shadeRight = isNum(shade.opacity) ? { color: shade.color, opacity: clampOpacity(shade.opacity) } : { color: shade.color };
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
 function isColor(v) {
   return typeof v === "string" && v.trim().length > 0;
 }
@@ -5427,7 +5465,13 @@ function clampLevel(v) {
 function clampSpacing(v) {
   return v < 0.1 ? 0.1 : v > 10 ? 10 : v;
 }
-function factoryResetConfig(factory) {
+function clampMarginPct(v) {
+  return v < 0 ? 0 : v > 40 ? 40 : v;
+}
+function clampMarginBars(v) {
+  return Math.round(v < 0 ? 0 : v > 200 ? 200 : v);
+}
+function factoryResetConfig(factory, priceStyle = factory.series.style) {
   const bag = {};
   for (const t of chartTypes()) {
     const section = t.settings;
@@ -5449,10 +5493,16 @@ function factoryResetConfig(factory) {
     if (!section.instances) addRows(section.rows);
     bag[t.id] = defaults;
   }
+  for (const t of chartTypes()) {
+    if (!hasOwnCandlePaint(t.id)) continue;
+    const defaults = bag[t.id] ?? {};
+    for (const key of CANDLE_OVERRIDE_KEYS) defaults[key] = null;
+    bag[t.id] = defaults;
+  }
   for (const [typeId, vals] of Object.entries(factory.chartTypes)) {
     bag[typeId] = { ...bag[typeId] ?? {}, ...vals };
   }
-  return { ...factory, chartTypes: bag };
+  return { ...factory, chartTypes: bag, series: { ...factory.series, style: priceStyle } };
 }
 function mergeConfig(base, patch) {
   const p = asObject(patch);
@@ -5469,6 +5519,7 @@ function mergeConfig(base, patch) {
   const ps = asObject(p.priceScale);
   const anim = asObject(p.animations);
   const panes = asObject(p.panes);
+  const margins = asObject(p.margins);
   const trades = asObject(p.trades);
   const ts = asObject(p.timeScale);
   const marks = asObject(p.marks);
@@ -5527,6 +5578,11 @@ function mergeConfig(base, patch) {
     },
     panes: {
       separatorColor: isColor(panes.separatorColor) ? panes.separatorColor : base.panes.separatorColor
+    },
+    margins: {
+      top: isNum(margins.top) ? clampMarginPct(margins.top) : base.margins.top,
+      bottom: isNum(margins.bottom) ? clampMarginPct(margins.bottom) : base.margins.bottom,
+      right: isNum(margins.right) ? clampMarginBars(margins.right) : base.margins.right
     },
     trades: {
       visible: isBool(trades.visible) ? trades.visible : base.trades.visible,
@@ -7037,7 +7093,7 @@ var Scheduler = class {
 
 // src/renderers/native/core/Animator.ts
 var Animator = class {
-  constructor(tick, raf, cancel, now) {
+  constructor(tick, raf, cancel, now2) {
     this.tick = tick;
     this.handle = null;
     this.last = 0;
@@ -7051,7 +7107,7 @@ var Animator = class {
     };
     this.raf = raf ?? ((cb) => requestAnimationFrame(cb));
     this.cancel = cancel ?? ((h) => cancelAnimationFrame(h));
-    this.now = now ?? (() => performance.now());
+    this.now = now2 ?? (() => performance.now());
   }
   get active() {
     return this.handle !== null;
@@ -7183,6 +7239,12 @@ var InputController = class {
     this.lastTapT = 0;
     this.lastTapX = 0;
     this.lastTapY = 0;
+    // Whether the last two primary presses were claimed by the drawings layer. A double-click
+    // is the last press plus the one before it; a tool-driven click pair must never fall through
+    // to the pane maximize toggle, even when the tool disarmed itself between the two clicks
+    // (a finished placement leaves plain cursor mode for the second click).
+    this.lastPressDrawing = false;
+    this.prevPressDrawing = false;
     this.onTouchContextMenu = (e) => {
       if (this.touches.size === 0) return;
       if (!(e.target instanceof Node) || !this.el?.contains(e.target)) return;
@@ -7237,19 +7299,24 @@ var InputController = class {
       this.moved = false;
       this.startX = x;
       this.startY = y;
+      this.prevPressDrawing = this.lastPressDrawing;
+      this.lastPressDrawing = false;
       if (this.deps.drawingsClaim?.(x, y)) {
         this.region = "drawing";
+        this.lastPressDrawing = true;
         this.deps.drawingsPointerDown?.(x, y, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);
         this.capture(e.pointerId);
         return;
       }
       if (e.shiftKey && this.regionAt(x, y) === "data" && this.deps.drawingsMeasureStart?.(x, y, this.snapMode(e))) {
         this.region = "drawing";
+        this.lastPressDrawing = true;
         this.capture(e.pointerId);
         return;
       }
       if ((e.ctrlKey || e.metaKey) && this.regionAt(x, y) === "data" && this.deps.drawingsMarqueeStart?.(x, y)) {
         this.region = "drawing";
+        this.lastPressDrawing = true;
         this.capture(e.pointerId);
         return;
       }
@@ -7571,6 +7638,7 @@ var InputController = class {
     if (region === "price") this.deps.resetPriceScale(x, y);
     else if (region === "separator") this.deps.resetPaneSize(y);
     else if (region === "time") this.deps.resetView();
+    else if (this.lastPressDrawing || this.prevPressDrawing) return;
     else this.deps.dataDblClick(x, y);
   }
 };
@@ -7819,6 +7887,42 @@ function drawTextLines(ctx, lines, x, firstY, step, color) {
   for (let i = 0; i < lines.length; i += 1) ctx.fillText(lines[i], x, firstY + i * step);
 }
 
+// src/core/marks/visibility.ts
+function markGroupOwnVisible(choices, groupId, groups) {
+  const chosen = choices[groupId];
+  if (typeof chosen === "boolean") return chosen;
+  return groups.find((g) => g.id === groupId)?.visible !== false;
+}
+function markGroupVisible(choices, groupId, groups) {
+  if (groupId === void 0) return true;
+  const seen = /* @__PURE__ */ new Set();
+  let id = groupId;
+  while (id !== void 0 && !seen.has(id)) {
+    seen.add(id);
+    if (!markGroupOwnVisible(choices, id, groups)) return false;
+    const parent = groups.find((g) => g.id === id)?.parent;
+    id = parent !== void 0 && groups.some((g) => g.id === parent) ? parent : void 0;
+  }
+  return true;
+}
+function markGroupRows(groups) {
+  const ids = new Set(groups.map((g) => g.id));
+  const out = [];
+  const placed = /* @__PURE__ */ new Set();
+  const place = (group, depth) => {
+    if (placed.has(group.id)) return;
+    placed.add(group.id);
+    out.push({ group, depth });
+    for (const child of groups) if (child.parent === group.id && child.id !== group.id) place(child, depth + 1);
+  };
+  for (const g of groups) {
+    const parentKnown = g.parent !== void 0 && ids.has(g.parent) && g.parent !== g.id;
+    if (!parentKnown) place(g, 0);
+  }
+  for (const g of groups) place(g, 0);
+  return out;
+}
+
 // src/renderers/shared/marks-state.ts
 function defaultMarksState() {
   return { visible: true, groups: {} };
@@ -7831,11 +7935,8 @@ function mergeMarksState(base, patch) {
   for (const [id, v] of Object.entries(g)) if (typeof v === "boolean") groups[id] = v;
   return { visible: typeof p.visible === "boolean" ? p.visible : base.visible, groups };
 }
-function markGroupVisible(state, groupId, groups) {
-  if (groupId === void 0) return true;
-  const chosen = state.groups[groupId];
-  if (typeof chosen === "boolean") return chosen;
-  return groups.find((g) => g.id === groupId)?.visible !== false;
+function markGroupVisible2(state, groupId, groups) {
+  return markGroupVisible(state.groups, groupId, groups);
 }
 
 // src/renderers/native/core/SceneGraph.ts
@@ -7853,6 +7954,8 @@ var SceneGraph = class {
     /** VPVR-layer config pushed by the VPVR native indicator (null ⇒ layer off). Ephemeral. */
     this.vpvrLayer = null;
     this.crosshair = null;
+    /** Runtime override of the crosshair's lines and style (the `crosshairOverride` feature). Ephemeral. */
+    this.crosshairOverride = null;
     /** How the base price series is drawn on the price pane (candles by default). */
     this.priceStyle = "candles";
     /** Price-series base painting for the ACTIVE style (see ChartTypeDefinition.basePainting). */
@@ -9737,6 +9840,7 @@ function timeTicks(fromMs, toMs, target = 8, offsetMs = 0) {
   const step = pickStep(span / Math.max(1, target));
   const zFrom = fromMs + offsetMs;
   const zTo = toMs + offsetMs;
+  if (step >= MONTH) return calendarTicks(zFrom, zTo, step >= YEAR ? 12 : step >= 3 * MONTH ? 3 : 1, offsetMs);
   const first = Math.ceil(zFrom / step) * step;
   const out = [];
   for (let zt = first; zt <= zTo; zt += step) {
@@ -9767,11 +9871,23 @@ function timeTicks(fromMs, toMs, target = 8, offsetMs = 0) {
   }
   return out;
 }
+function calendarTicks(zFrom, zTo, months, offsetMs) {
+  const d0 = new Date(zFrom);
+  let idx = d0.getUTCFullYear() * 12 + d0.getUTCMonth();
+  if (Date.UTC(Math.floor(idx / 12), idx % 12, 1) < zFrom) idx += 1;
+  idx = Math.ceil(idx / months) * months;
+  const out = [];
+  for (let zt = Date.UTC(Math.floor(idx / 12), idx % 12, 1); zt <= zTo; idx += months, zt = Date.UTC(Math.floor(idx / 12), idx % 12, 1)) {
+    const label = months === 12 ? String(Math.floor(idx / 12)) : MONTHS[idx % 12];
+    out.push({ time: zt - offsetMs, label, major: true });
+  }
+  return out;
+}
 
 // src/renderers/native/chrome/countdown.ts
-function countdownText(barOpen, barMs, now) {
+function countdownText(barOpen, barMs, now2) {
   if (!(barMs > 0)) return null;
-  const remaining = barOpen + barMs - now;
+  const remaining = barOpen + barMs - now2;
   if (remaining <= 0) return null;
   return formatCountdown(remaining);
 }
@@ -9847,6 +9963,32 @@ function clusterMarks(marks, barTimes, intervalMs2, hidden) {
   }
   return out;
 }
+function foldOverlappingClusters(clusters, xOf, bucketPx = MARK_CLUSTER_PX) {
+  const byGroup = /* @__PURE__ */ new Map();
+  for (const c of clusters) {
+    const list = byGroup.get(c.group);
+    if (list) list.push(c);
+    else byGroup.set(c.group, [c]);
+  }
+  const out = [];
+  for (const list of byGroup.values()) {
+    list.sort((a, b) => a.bar - b.bar);
+    const runs = [];
+    let anchorX = Number.NaN;
+    for (const c of list) {
+      const x = xOf(c.bar);
+      const run = runs[runs.length - 1];
+      if (run && Number.isFinite(x) && Number.isFinite(anchorX) && x - anchorX < bucketPx) {
+        run.marks.push(...c.marks);
+      } else {
+        runs.push({ key: c.key, bar: c.bar, group: c.group, marks: [...c.marks] });
+        anchorX = x;
+      }
+    }
+    out.push(...runs);
+  }
+  return out;
+}
 function groupRank(groups, clusters) {
   const rank = /* @__PURE__ */ new Map();
   groups.forEach((g, i) => rank.set(g.id, i));
@@ -9856,7 +9998,7 @@ function groupRank(groups, clusters) {
   return (group) => group === void 0 ? Number.MAX_SAFE_INTEGER : rank.get(group) ?? Number.MAX_SAFE_INTEGER - 1;
 }
 function layoutMarkLane(input) {
-  const clusters = clusterMarks(input.marks, input.barTimes, input.intervalMs, input.hidden);
+  const clusters = foldOverlappingClusters(clusterMarks(input.marks, input.barTimes, input.intervalMs, input.hidden), input.xOf);
   const rankOf = groupRank(input.groups, clusters);
   const byBar = /* @__PURE__ */ new Map();
   for (const c of clusters) {
@@ -9985,12 +10127,28 @@ function paintMarkLane(ctx, layout, deps) {
       const img = deps.icons.get(mark.glyph.icon, ink, symbolPx, deps.dpr);
       if (img) ctx.drawImage(img, center.x - symbolPx / 2, center.y - symbolPx / 2, symbolPx, symbolPx);
     } else if (mark.glyph.letter) {
+      const letter = mark.glyph.letter.slice(0, 2);
       ctx.fillStyle = ink;
-      ctx.font = `600 ${Math.round(size * 0.58)}px ${deps.fontFamily}`;
-      ctx.fillText(mark.glyph.letter.slice(0, 2), center.x, center.y + 0.5);
+      let px = letterFontPx(size, letter);
+      ctx.font = `600 ${px}px ${deps.fontFamily}`;
+      if (letter.length > 1) {
+        px = fitLetterPx(px, ctx.measureText(letter).width, symbolInnerWidth(shape, size));
+        ctx.font = `600 ${px}px ${deps.fontFamily}`;
+      }
+      ctx.fillText(letter, center.x, center.y + 0.5);
     }
   }
   ctx.restore();
+}
+function letterFontPx(size, letter) {
+  return Math.round(size * (letter.length > 1 ? 0.38 : 0.58));
+}
+function symbolInnerWidth(shape, size) {
+  return (shape === "pin" ? size * 0.82 : size) - 3;
+}
+function fitLetterPx(px, width, inner) {
+  if (!(width > inner) || !(width > 0)) return px;
+  return Math.max(4, Math.floor(px * inner / width));
 }
 function traceShape(ctx, shape, x, y, size) {
   const r = size / 2;
@@ -10193,7 +10351,7 @@ var ChromeRenderer = class {
     this.markLayout = layoutMarkLane({
       marks: scene.timelineMarks,
       groups: scene.markGroups,
-      hidden: (groupId) => !markGroupVisible(scene.marks, groupId, scene.markGroups),
+      hidden: (groupId) => !markGroupVisible2(scene.marks, groupId, scene.markGroups),
       barTimes: this.barTimes(scene),
       intervalMs: coords.barInterval,
       xOf: (bar) => coords.logicalToX(bar),
@@ -10541,19 +10699,35 @@ var CrosshairRenderer = class {
     const dataH = coords.height;
     if (!ch || ch.x < 0 || ch.x > dataW || ch.y < 0 || ch.y > dataH) return;
     const cs = scene.style.crosshair;
+    const ov = scene.crosshairOverride;
+    const vertical = ov?.vertical !== false;
+    const horizontal = ov?.horizontal !== false;
     ctx.font = `${scene.style.fontSize}px ${theme.fontFamily}`;
     ctx.textBaseline = "middle";
     const logical = Math.round(coords.xToLogical(ch.x));
-    const x = Math.round(coords.logicalToX(logical)) + 0.5;
-    ctx.strokeStyle = cs.color ?? theme.textColor;
-    ctx.lineWidth = cs.width;
-    ctx.globalAlpha = cs.opacity;
-    setDash3(ctx, cs.style);
+    const x = crisp(coords.logicalToX(logical), ov?.width ?? cs.width);
+    if (vertical && ov?.shadeRight) {
+      const from = Math.max(0, Math.round(coords.logicalToX(logical + 0.5)));
+      if (from < dataW) {
+        ctx.fillStyle = ov.shadeRight.color;
+        ctx.globalAlpha = ov.shadeRight.opacity ?? 1;
+        ctx.fillRect(from, 0, dataW - from, dataH);
+        ctx.globalAlpha = 1;
+      }
+    }
+    ctx.strokeStyle = ov?.color ?? cs.color ?? theme.textColor;
+    ctx.lineWidth = ov?.width ?? cs.width;
+    ctx.globalAlpha = ov?.opacity ?? cs.opacity;
+    setDash3(ctx, ov?.style ?? cs.style);
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, dataH);
-    ctx.moveTo(0, Math.round(ch.y) + 0.5);
-    ctx.lineTo(dataW, Math.round(ch.y) + 0.5);
+    if (vertical) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, dataH);
+    }
+    if (horizontal) {
+      ctx.moveTo(0, Math.round(ch.y) + 0.5);
+      ctx.lineTo(dataW, Math.round(ch.y) + 0.5);
+    }
     ctx.stroke();
     ctx.setLineDash([]);
     ctx.lineWidth = 1;
@@ -10566,11 +10740,11 @@ var CrosshairRenderer = class {
       }
     }
     const chipBg = cs.labelBackground ?? theme.borderColor;
-    if (pane && pane.axisFormat !== "none") {
+    if (horizontal && pane && pane.axisFormat !== "none") {
       const price = coords.yToPrice(ch.y, pane.scale, pane.bounds);
       this.chip(ctx, dataW + 1, ch.y, formatAxisValue(pane.scale, pane.bounds.height, price, percentScaleFor(scene, pane), scene.priceMintick, pane.axisFormat), chipBg, "left", false, theme.background);
     }
-    this.chip(ctx, x, dataH + 1, formatTimeStamp(coords.logicalToTime(logical), scene.timezone, coords.barInterval), chipBg, "center", true, theme.background);
+    if (vertical) this.chip(ctx, x, dataH + 1, formatTimeStamp(coords.logicalToTime(logical), scene.timezone, coords.barInterval), chipBg, "center", true, theme.background);
   }
   destroy() {
     this.canvas = null;
@@ -10581,23 +10755,37 @@ var CrosshairRenderer = class {
    *  along), with that bar's time chip in this chart's own timezone and — when the
    *  level resolved — the price chip on the right axis. The snap happened upstream
    *  (`externalCrossPx`, floor-to-containing-bar) — this method only draws. Chips
-   *  render slightly dimmed so the ghost still reads as foreign. */
+   *  render slightly dimmed so the ghost still reads as foreign. A `crosshairOverride`
+   *  applies to the ghost as well — its line style, a dropped horizontal line, and the
+   *  `shadeRight` veil from the ghost bar's right edge — so a pick that spans several
+   *  charts reads the same on every one of them. */
   drawExternal(ctx, ext, scene, coords, theme) {
     const cs = scene.style.crosshair;
+    const ov = scene.crosshairOverride;
     const dataW = coords.width;
     const dataH = coords.height;
-    const x = Math.round(ext.x) + 0.5;
-    if (x < 0 || x > dataW) return;
+    const x = crisp(ext.x, ov?.width ?? cs.width);
+    if (ov?.vertical === false) return;
+    if (ov?.shadeRight) {
+      const from = Math.max(0, Math.round(coords.logicalToX(Math.round(coords.xToLogical(ext.x)) + 0.5)));
+      if (from < dataW) {
+        ctx.fillStyle = ov.shadeRight.color;
+        ctx.globalAlpha = ov.shadeRight.opacity ?? 1;
+        ctx.fillRect(from, 0, dataW - from, dataH);
+        ctx.globalAlpha = 1;
+      }
+    }
+    if (ext.line === false || x < 0 || x > dataW) return;
     ctx.font = `${scene.style.fontSize}px ${theme.fontFamily}`;
     ctx.textBaseline = "middle";
-    ctx.strokeStyle = cs.color ?? theme.textColor;
-    ctx.lineWidth = cs.width;
-    ctx.globalAlpha = cs.opacity * 0.55;
-    setDash3(ctx, cs.style);
+    ctx.strokeStyle = ov?.color ?? cs.color ?? theme.textColor;
+    ctx.lineWidth = ov?.width ?? cs.width;
+    ctx.globalAlpha = (ov?.opacity ?? cs.opacity) * 0.55;
+    setDash3(ctx, ov?.style ?? cs.style);
     ctx.beginPath();
     ctx.moveTo(x, 0);
     ctx.lineTo(x, dataH);
-    if (ext.y != null) {
+    if (ext.y != null && ov?.horizontal !== false) {
       ctx.moveTo(0, Math.round(ext.y) + 0.5);
       ctx.lineTo(dataW, Math.round(ext.y) + 0.5);
     }
@@ -10606,7 +10794,7 @@ var CrosshairRenderer = class {
     ctx.lineWidth = 1;
     ctx.globalAlpha = 0.8;
     const chipBg = cs.labelBackground ?? theme.borderColor;
-    if (ext.y != null && ext.price != null) {
+    if (ext.y != null && ext.price != null && ov?.horizontal !== false) {
       let pane;
       for (const p of scene.panes.values()) {
         if (ext.y >= p.bounds.top && ext.y <= p.bounds.top + p.bounds.height) {
@@ -10646,6 +10834,9 @@ var CrosshairRenderer = class {
     ctx.textAlign = "start";
   }
 };
+function crisp(px, width) {
+  return Math.round(px) + (Math.round(width) % 2 === 1 ? 0.5 : 0);
+}
 function setDash3(ctx, style) {
   if (style === "dashed") ctx.setLineDash([6, 4]);
   else if (style === "dotted") ctx.setLineDash([2, 3]);
@@ -10782,6 +10973,10 @@ var BUILTIN_SETTINGS_IDS = [
   "canvas.grid",
   "canvas.grid.vertical",
   "canvas.grid.horizontal",
+  "canvas.margins",
+  "canvas.margins.top",
+  "canvas.margins.bottom",
+  "canvas.margins.right",
   "canvas.theme"
 ];
 function settingsIdCatalog(hostSections, markGroups = []) {
@@ -10883,6 +11078,10 @@ ${overlayScrollbarCss(".vela-sd-pane")}
    muted and non-interactive. Applied to each row's children so it survives display:contents;
    !important beats the inline opacity on labels. */
 .vela-sd-soft>*{opacity:0.4 !important;pointer-events:none !important;}
+/* A mark group nested under a parent group on the Events tab: indented one step per level
+   (--vela-sd-depth). The indent rides the first child (the switch) as a MARGIN \u2014 padding
+   would push the switch's own tick out of its box. */
+.vela-sd-nested>*:first-child{margin-left:calc(var(--vela-sd-depth,1)*24px);}
 /* \u2500\u2500 mobile presentation (.vela-sd-mobile on the scrim; structural sizes are inline in open()) \u2500\u2500
    The tab rail becomes a burger-opened overlay sidebar; the group TOC becomes a sticky
    row of horizontally scrollable tabs; the instance strip scrolls instead of wrapping;
@@ -10931,6 +11130,8 @@ var SettingsDialog = class {
     this.hostSections = [];
     /** The timeline-mark groups (defined + named by marks) — one checkbox each on the Events tab. */
     this.markGroups = [];
+    /** A group's OWN switch (what its checkbox shows) — a child under an off parent keeps its own state. */
+    this.markGroupOwnVisible = () => true;
     this.markGroupVisible = () => true;
     /** The Canvas → Theme row: current app theme + where a pick is raised. The row is a
      *  host callback, NOT a config patch — the app theme stays out of the persisted
@@ -10948,6 +11149,9 @@ var SettingsDialog = class {
     this.activeSection = null;
     /** Mobile chrome: fullscreen card, burger-opened section sidebar, TOC as top tabs. */
     this.mobileLayout = false;
+    /** Opens/closes the mobile section sidebar of the CURRENT build (the burger in the
+     *  shell header outlives pane rebuilds, so it reaches the rail through here). */
+    this.toggleRail = null;
     /** The visibility policy: setting ids hidden by the host (subtree semantics). */
     this.hiddenSettings = /* @__PURE__ */ new Set();
     if (getComputedStyle(container).position === "static") container.style.position = "relative";
@@ -10957,7 +11161,8 @@ var SettingsDialog = class {
     this.hostSections = sections;
   }
   /** The timeline-mark groups and their current visibility — the Events tab's rows on next open. */
-  setMarkGroups(groups, visible) {
+  setMarkGroups(groups, visible, ownVisible = visible) {
+    this.markGroupOwnVisible = ownVisible;
     this.markGroups = groups;
     this.markGroupVisible = visible;
   }
@@ -11023,7 +11228,6 @@ var SettingsDialog = class {
     this.onReset = onReset ?? null;
     ensureControlStyles();
     const mobile = this.mobileLayout;
-    let toggleRail = null;
     let burger;
     if (mobile) {
       burger = document.createElement("button");
@@ -11031,8 +11235,83 @@ var SettingsDialog = class {
       burger.className = "vela-sd-burger";
       burger.innerHTML = iconAt("burger", 16);
       burger.title = "Sections";
-      burger.addEventListener("click", () => toggleRail?.());
+      burger.addEventListener("click", () => this.toggleRail?.());
     }
+    const ui = new Dialog({
+      host: this.container,
+      title: "Chart settings",
+      // Non-modal: a live-edit dialog must leave the page interactive — a modal
+      // machine locks pointer events on the whole body, killing the chart, the
+      // legend, and the body-portaled popovers (color picker, select lists).
+      modal: false,
+      contained: true,
+      align: "top",
+      draggable: !mobile,
+      flush: true,
+      className: "vela-dialog--settings",
+      headerStart: burger,
+      closeOnBackdrop: true,
+      footer: (foot) => {
+        foot.style.cssText = `padding:10px 14px;display:flex;align-items:center;justify-content:flex-start;gap:8px;`;
+        const resetBtn = document.createElement("button");
+        resetBtn.type = "button";
+        resetBtn.textContent = "Reset defaults";
+        resetBtn.className = "vela-sd-btn";
+        resetBtn.addEventListener("click", () => this.onReset?.());
+        foot.appendChild(resetBtn);
+      },
+      // A close signal may only close ITS OWN dialog: the machine reports the exit
+      // asynchronously, so a close-then-reopen in one tick would otherwise see the
+      // old instance's signal tear down the freshly opened one.
+      onOpenChange: (open) => {
+        if (!open && this.ui === ui) this.close();
+      }
+    });
+    if (mobile) ui.positioner.classList.add("vela-sd-mobile");
+    ui.positioner.style.paddingTop = mobile ? "0" : "8vh";
+    this.root = ui.positioner;
+    this.ui = ui;
+    const panes = this.buildContent(ui, config, section, mobile);
+    ui.show();
+    this.layoutPanes(panes);
+  }
+  /**
+   * Re-seed every control of an OPEN dialog from `config`, in place: the shell stays
+   * (no close/open transition), only the tab rail and panes rebuild, landing back on
+   * the current tab. The reset path — the restored values must show without the
+   * dialog re-entering. No-op while closed.
+   */
+  refresh(config) {
+    const ui = this.ui;
+    if (!ui) return;
+    closeOpenPopovers();
+    closeWidthPopover();
+    for (const dispose of this.hintTips) dispose();
+    this.hintTips = [];
+    this.config = config;
+    ui.body.replaceChildren();
+    this.layoutPanes(this.buildContent(ui, config, this.activeSection ?? void 0, this.mobileLayout));
+  }
+  /** Structured chart-type panes (instance strip / group TOC) own their layout and
+   *  tag their rows hosts instead; each host gets its own field grid. Runs on a SHOWN
+   *  dialog — the grids measure their labels. */
+  layoutPanes(panes) {
+    for (const el of panes) {
+      const hosts = [...el.querySelectorAll("[data-sd-rows-host]")];
+      if (hosts.length === 0) {
+        this.layoutSettingsGrids(el);
+        continue;
+      }
+      for (const h of hosts) this.layoutSettingsGrids(h);
+    }
+  }
+  /**
+   * Build the tab rail + one pane per section into `ui.body` (the linear `body` of
+   * section markers and rows is split afterwards), select `section` (the active
+   * style's own tab when none is asked for), and return the pane elements for
+   * {@link layoutPanes}.
+   */
+  buildContent(ui, config, section, mobile) {
     const body = document.createElement("div");
     body.style.cssText = "display:flex;flex-direction:column;gap:0;";
     const sid = (el, id) => {
@@ -11178,7 +11457,7 @@ var SettingsDialog = class {
           if (hr.kind === "heading") body.append(this.sectionTitle(hr.label));
           else if (hr.kind === "toggle") body.append(this.boolRow(hr.label, hr.get(), (v) => hr.set(v)));
           else if (hr.kind === "color") body.append(this.colorRow(hr.label, hr.get(), (v) => hr.set(v)));
-          else body.append(this.selectRowLabeled(hr.label, hr.get(), hr.options.map((o) => [o, o]), (v) => hr.set(v)));
+          else body.append(this.selectRowLabeled(hr.label, hr.get(), normalizeSelectOptions(hr.options), (v) => hr.set(v)));
         }
       }
     };
@@ -11228,6 +11507,10 @@ var SettingsDialog = class {
     body.append(sid(this.toggleRow("Horizontal", config.grid.horzLines.visible, (v) => this.emit({ grid: { horzLines: { visible: v } } }), [
       this.swatch(config.grid.horzLines.color, (v) => this.emit({ grid: { horzLines: { color: v } } }))
     ]), "canvas.grid.horizontal"));
+    body.append(sid(this.sectionTitle("Margins"), "canvas.margins"));
+    body.append(sid(this.numberRow("Top", config.margins.top, 0, 40, 1, (v) => this.emit({ margins: { top: v } }), "%"), "canvas.margins.top"));
+    body.append(sid(this.numberRow("Bottom", config.margins.bottom, 0, 40, 1, (v) => this.emit({ margins: { bottom: v } }), "%"), "canvas.margins.bottom"));
+    body.append(sid(this.numberRow("Right", config.margins.right, 0, 200, 1, (v) => this.emit({ margins: { right: v } }), "bars"), "canvas.margins.right"));
     if (this.themeControl) {
       const tc = this.themeControl;
       body.append(sid(this.sectionTitle("Theme"), "canvas.theme"));
@@ -11236,9 +11519,28 @@ var SettingsDialog = class {
     if (this.markGroups.length > 0) {
       body.append(sid(this.section("Events"), MARKS_SETTINGS_ID));
       body.append(sid(this.sectionTitle("Visible events"), MARKS_GROUPS_SETTINGS_ID));
-      for (const g of this.markGroups) {
-        body.append(sid(this.boolRow(g.label, this.markGroupVisible(g.id), (v) => this.emit({ marks: { groups: { [g.id]: v } } })), markGroupSettingsId(g.id)));
+      const rowsById = /* @__PURE__ */ new Map();
+      const rows = markGroupRows(this.markGroups);
+      const refreshDimming = () => {
+        for (const { group } of rows) {
+          const el = rowsById.get(group.id);
+          if (!el || group.parent === void 0) continue;
+          el.classList.toggle("vela-sd-soft", !this.markGroupVisible(group.parent));
+        }
+      };
+      for (const { group: g, depth } of rows) {
+        const row = this.boolRow(g.label, this.markGroupOwnVisible(g.id), (v) => {
+          this.emit({ marks: { groups: { [g.id]: v } } });
+          refreshDimming();
+        });
+        if (depth > 0) {
+          row.classList.add("vela-sd-nested");
+          row.style.setProperty("--vela-sd-depth", String(depth));
+        }
+        rowsById.set(g.id, row);
+        body.append(sid(row, markGroupSettingsId(g.id)));
       }
+      refreshDimming();
     }
     renderChartTypeSections("end");
     renderHostSections("end");
@@ -11266,8 +11568,8 @@ var SettingsDialog = class {
     if (mobile) {
       railScrim = document.createElement("div");
       railScrim.className = "vela-sd-railscrim";
-      railScrim.addEventListener("click", () => toggleRail?.());
-      toggleRail = (open) => {
+      railScrim.addEventListener("click", () => this.toggleRail?.());
+      this.toggleRail = (open) => {
         const on = open ?? !rail.classList.contains("open");
         rail.classList.toggle("open", on);
         railScrim?.classList.toggle("open", on);
@@ -11307,35 +11609,6 @@ var SettingsDialog = class {
       });
       if (hidActive) activate(0);
     };
-    const ui = new Dialog({
-      host: this.container,
-      title: "Chart settings",
-      // Non-modal: a live-edit dialog must leave the page interactive — a modal
-      // machine locks pointer events on the whole body, killing the chart, the
-      // legend, and the body-portaled popovers (color picker, select lists).
-      modal: false,
-      contained: true,
-      align: "top",
-      draggable: !mobile,
-      flush: true,
-      className: "vela-dialog--settings",
-      headerStart: burger,
-      closeOnBackdrop: true,
-      footer: (foot) => {
-        foot.style.cssText = `padding:10px 14px;display:flex;align-items:center;justify-content:flex-start;gap:8px;`;
-        const resetBtn = document.createElement("button");
-        resetBtn.type = "button";
-        resetBtn.textContent = "Reset defaults";
-        resetBtn.className = "vela-sd-btn";
-        resetBtn.addEventListener("click", () => this.onReset?.());
-        foot.appendChild(resetBtn);
-      },
-      onOpenChange: (open) => {
-        if (!open) this.close();
-      }
-    });
-    if (mobile) ui.positioner.classList.add("vela-sd-mobile");
-    ui.positioner.style.paddingTop = mobile ? "0" : "8vh";
     const activate = (idx) => {
       panes.forEach((p, i) => {
         p.el.style.display = i === idx ? "block" : "none";
@@ -11344,7 +11617,7 @@ var SettingsDialog = class {
       this.activeSection = panes[idx]?.title ?? null;
       if (mobile) {
         ui.titleEl.textContent = panes[idx]?.title ?? "Chart settings";
-        toggleRail?.(false);
+        this.toggleRail?.(false);
       }
     };
     panes.forEach((p, i) => {
@@ -11359,17 +11632,7 @@ var SettingsDialog = class {
     shell.append(rail, paneHost);
     if (railScrim) shell.append(railScrim);
     ui.body.appendChild(shell);
-    this.root = ui.positioner;
-    this.ui = ui;
-    ui.show();
-    for (const p of panes) {
-      const hosts = [...p.el.querySelectorAll("[data-sd-rows-host]")];
-      if (hosts.length === 0) {
-        this.layoutSettingsGrids(p.el);
-        continue;
-      }
-      for (const h of hosts) this.layoutSettingsGrids(h);
-    }
+    return panes.map((p) => p.el);
   }
   close() {
     closeOpenPopovers();
@@ -11377,6 +11640,7 @@ var SettingsDialog = class {
     const ui = this.ui;
     this.ui = null;
     this.root = null;
+    this.toggleRail = null;
     this.tabs = [];
     for (const dispose of this.hintTips) dispose();
     this.hintTips = [];
@@ -11818,23 +12082,16 @@ var SettingsDialog = class {
     this.hintTips.push(dispose);
     return el;
   }
-  numberRow(label, value, min, max, step, onChange) {
-    return fieldRow({
-      label,
-      labelSize: "sm",
-      className: "vela-sd-row",
-      control: buildFieldControl({
-        kind: "number",
-        value,
-        min,
-        max,
-        step,
-        fill: false,
-        commit: "live",
-        steppers: true,
-        onChange
-      }).el
-    });
+  /** `unit` (optional) trails the input as muted text — "%", "bars". */
+  numberRow(label, value, min, max, step, onChange, unit) {
+    const controls = [buildFieldControl({ kind: "number", value, min, max, step, fill: false, commit: "live", steppers: true, onChange }).el];
+    if (unit) {
+      const u = document.createElement("span");
+      u.textContent = unit;
+      u.style.cssText = "color:var(--vela-fg-muted);";
+      controls.push(u);
+    }
+    return this.rowWith(label, controls);
   }
   /** A dropdown whose option values differ from their display labels. */
   selectRowLabeled(label, value, options, onChange) {
@@ -16720,9 +16977,7 @@ function createProjector(coords, paneOf, paneIdAtY, barsInRange, seriesInRange) 
 }
 
 // src/renderers/native/core/autoscale.ts
-var MARGIN_TOP = 2 / 7;
-var MARGIN_BOTTOM = 1 / 7;
-function computePaneScale(models, bars, includeCandles, i0, i1, drawings, log = false, offsetOf = () => 0) {
+function computePaneScale(models, bars, includeCandles, i0, i1, drawings, log = false, offsetOf = () => 0, margins = DEFAULT_MARGINS) {
   let min = Infinity;
   let max = -Infinity;
   const consider = (v) => {
@@ -16757,14 +17012,17 @@ function computePaneScale(models, bars, includeCandles, i0, i1, drawings, log = 
     const pad = Math.abs(min) * 0.1 || 1;
     return { min: min - pad, max: max + pad, log: log && min - pad > 0 };
   }
+  const content = Math.max(0.1, 1 - (margins.top + margins.bottom) / 100);
+  const above = margins.top / 100 / content;
+  const below = margins.bottom / 100 / content;
   if (log && min > 0) {
     const lmin = Math.log(min);
     const lmax = Math.log(max);
     const lspan = lmax - lmin;
-    return { min: Math.exp(lmin - lspan * MARGIN_BOTTOM), max: Math.exp(lmax + lspan * MARGIN_TOP), log: true };
+    return { min: Math.exp(lmin - lspan * below), max: Math.exp(lmax + lspan * above), log: true };
   }
   const span = max - min;
-  return { min: min - span * MARGIN_BOTTOM, max: max + span * MARGIN_TOP };
+  return { min: min - span * below, max: max + span * above };
 }
 function considerSeries(s, i0, i1, off, consider) {
   if (!seriesInScale(s)) return;
@@ -17434,23 +17692,21 @@ function stackLayers(entries, candleZ) {
   return { below, above };
 }
 
-// src/renderers/native/chrome/luxalgo-logos.ts
-var LUXALGO_SYMBOL_SVG = '<svg viewBox="0 0 45 40" aria-hidden="true"><g fill="currentColor"><path d="m40.25 38 4.58-7.998L28.802 2l-16.03 28 9.16-.001 6.87-12z"/><path d="M34.525 32.002 9.33 31.997 27.655 0h-9.158L.18 31.993 4.759 40h34.347z"/></g></svg>';
-var LUXALGO_WORDMARK_SVG = '<svg viewBox="0 0 964 252" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M 614 94.500 L 614 189 633.500 189 L 653 189 653 94.500 L 653 0 633.500 0 L 614 0 614 94.500 M 0 97.500 L 0 189 63.023 189 L 126.045 189 125.773 170.750 L 125.500 152.500 84.250 152.239 L 43 151.978 43 78.989 L 43 6 21.500 6 L 0 6 0 97.500 M 450.387 96.451 C 421.871 146.253, 398.306 186.994, 398.020 186.987 C 397.423 186.972, 362 124.724, 362 123.691 C 362 123.316, 370.100 108.818, 380 91.472 C 389.900 74.127, 398 59.500, 398 58.968 C 398 58.380, 391.007 58, 380.210 58 L 362.420 58 348.060 83.138 C 334.400 107.052, 333.637 108.160, 332.399 105.888 C 331.682 104.575, 325.287 93.375, 318.187 81 L 305.277 58.500 287.139 58.227 C 277.162 58.078, 269 58.186, 269 58.469 C 269 58.751, 277.154 73.274, 287.120 90.741 C 297.086 108.209, 305.261 122.983, 305.287 123.574 C 305.312 124.164, 297.318 138.789, 287.522 156.074 C 277.725 173.358, 269.524 187.838, 269.296 188.250 C 269.068 188.662, 276.977 189, 286.870 189 L 304.859 189 319.163 163.959 C 331.321 142.674, 333.647 139.165, 334.670 140.563 C 335.331 141.468, 341.864 152.737, 349.186 165.606 L 362.500 189.003 402.442 188.752 L 442.384 188.500 472.080 136.695 C 488.413 108.203, 501.939 84.729, 502.138 84.531 C 502.337 84.333, 516 107.757, 532.500 136.583 L 562.500 188.994 584.750 188.997 C 596.987 188.999, 607 188.854, 607 188.675 C 607 188.319, 503.014 6.686, 502.532 6.201 C 502.369 6.037, 478.904 46.649, 450.387 96.451 M 717.500 55.017 C 697.175 57.389, 680.641 68.752, 672.036 86.264 C 665.866 98.818, 663.840 108.024, 663.840 123.500 C 663.840 133.409, 664.328 138.355, 665.892 144.300 C 672.076 167.810, 689.191 184.757, 711.529 189.489 C 730.549 193.518, 747.264 189.540, 761.282 177.648 C 764.944 174.542, 768.178 172, 768.470 172 C 769.345 172, 769.030 185.018, 767.979 192.285 C 765.618 208.613, 755.148 218.672, 738.473 220.632 C 732.586 221.324, 723.136 219.599, 717.709 216.843 C 712.693 214.295, 706.636 207.946, 703.972 202.443 C 702.789 199.999, 701.749 198, 701.661 198.001 C 700.201 198.007, 665.596 205.071, 665.230 205.437 C 664.326 206.341, 669.156 218.313, 672.607 223.721 C 682.146 238.672, 700.008 248.257, 723.500 251.033 C 758.132 255.124, 788.930 241.875, 800.287 218 C 806.923 204.047, 807 203.001, 807 126.542 L 807 58 788.500 58 L 770 58 770 66.500 C 770 71.175, 769.641 75, 769.203 75 C 768.765 75, 766.627 73.142, 764.453 70.872 C 752.805 58.708, 735.614 52.903, 717.500 55.017 M 878.500 55.031 C 850.107 59.412, 830.755 75.064, 822.285 100.500 C 819.905 107.644, 819.614 110.051, 819.565 123 C 819.501 139.581, 820.786 145.825, 826.763 158 C 832.104 168.880, 842.842 179.424, 854.077 184.822 C 867.651 191.343, 873.132 192.462, 891.500 192.462 C 909.868 192.462, 915.349 191.343, 928.923 184.822 C 944.653 177.265, 956.667 162.306, 961.710 144 C 963.074 139.048, 963.481 134.047, 963.418 123 C 963.346 110.140, 963.038 107.595, 960.694 100.500 C 953.325 78.193, 936.695 62.854, 913.500 56.969 C 904.262 54.625, 887.240 53.682, 878.500 55.031 M 134.015 102.750 C 134.027 139.250, 134.310 148.689, 135.549 153.947 C 141.139 177.663, 159.815 193, 183.105 193 C 196.453 193, 210.163 186.171, 217.936 175.650 C 219.826 173.093, 221.738 171, 222.186 171 C 222.634 171, 223 175.050, 223 180 L 223 189 242.507 189 L 262.014 189 261.757 123.750 L 261.500 58.500 242.500 58.500 L 223.500 58.500 223 99.500 C 222.513 139.406, 222.441 140.610, 220.289 144.634 C 209.729 164.377, 183.014 164.880, 174.299 145.500 C 172.677 141.895, 172.469 137.382, 172.190 99.750 L 171.880 58 152.940 58 L 134 58 134.015 102.750 M 729.932 87.998 C 719.311 89.821, 710.155 97.164, 705.141 107.880 C 702.851 112.772, 702.510 114.798, 702.505 123.521 C 702.500 132.834, 702.732 134.014, 705.787 140.218 C 709.761 148.290, 715.989 154.097, 723.853 157.063 C 731.409 159.912, 744.359 159.466, 750.795 156.136 C 767.289 147.601, 774.103 127.713, 767.019 108.780 C 761.433 93.851, 746.051 85.232, 729.932 87.998 M 883.972 88.348 C 865.749 92.310, 854.873 109.966, 858.119 130.316 C 860.933 147.963, 872.346 158.830, 889.084 159.799 C 900.714 160.472, 906.867 158.234, 914.650 150.497 C 919.856 145.323, 921.123 143.340, 922.900 137.587 C 925.412 129.456, 925.655 118.570, 923.489 111.275 C 918.479 94.405, 901.478 84.541, 883.972 88.348"/></svg>';
+// src/renderers/native/chrome/vela-logos.ts
+var VELA_MARK_SVG = '<svg viewBox="0 -142 161.66 148" aria-hidden="true"><g fill="currentColor"><path d="M0 -140L32.91 -140L77.52 -62.73L61.06 -34.24Z"/><path d="M161.66 -140L128.75 -140L84.14 -62.73L100.59 -34.24Z"/><path d="M80.83 -52.04L95.85 -26.02L80.83 0L65.81 -26.02Z"/></g></svg>';
+var VELA_LETTERS_SVG = '<svg viewBox="161.66 -142 310.57 148" aria-hidden="true"><g fill="currentColor"><path d="M226.3 1.17Q200.81 1.17 186.12 -12.99Q171.42 -27.15 171.42 -51.17Q171.42 -75.2 185.87 -89.6Q200.33 -104 224.25 -104Q247.4 -104 261.7 -90.58Q276.01 -77.15 276.3 -54.59Q276.3 -49.9 275.42 -45.02H200.81V-43.55Q201.2 -32.62 207.75 -26.42Q214.29 -20.21 225.03 -20.21Q233.72 -20.21 239.34 -23.93Q244.95 -27.64 246.81 -34.77H274.64Q272.1 -19.14 259.16 -8.98Q246.22 1.17 226.3 1.17ZM201.5 -63.38H247.88Q246.42 -72.75 240.27 -77.88Q234.12 -83.01 224.45 -83.01Q215.17 -83.01 208.92 -77.73Q202.67 -72.46 201.5 -63.38ZM287.54 0V-140.04H315.76V0ZM429.34 -23.83H432.56V0H418.11Q407.76 0 403.36 -4.44Q398.97 -8.89 399.16 -16.8Q387.83 1.17 365.57 1.17Q348.48 1.17 337.88 -6.74Q327.29 -14.65 327.29 -29Q327.29 -45.41 339.45 -54.3Q351.6 -63.18 374.55 -63.18H394.96V-68.16Q394.96 -75.2 390.08 -79.3Q385.2 -83.4 376.51 -83.4Q368.3 -83.4 363.03 -79.98Q357.76 -76.56 356.88 -70.8H329.73Q331.19 -85.84 344.08 -94.92Q356.97 -104 377.29 -104Q399.06 -104 410.88 -94.43Q422.7 -84.86 422.7 -66.6V-30.18Q422.7 -26.37 424.26 -25.1Q425.82 -23.83 429.34 -23.83ZM394.96 -42.38V-44.43H374.36Q365.47 -44.43 360.59 -40.92Q355.7 -37.4 355.7 -30.96Q355.7 -25.59 359.81 -22.41Q363.91 -19.24 370.94 -19.24Q381.97 -19.24 388.37 -25.54Q394.77 -31.84 394.96 -42.38Z"/><path fill-opacity="0.55" d="M437.44 -124.28H441.96V-113.41H445.34V-124.28H449.87V-127.4H437.44ZM451.43 -113.41H454.7V-123.29L458.97 -113.41H461.62L465.99 -123.29V-113.41H469.21V-127.4H464.53L460.42 -117.68L456.16 -127.4H451.43Z"/></g></svg>';
 
 // src/renderers/native/chrome/AttributionMark.ts
-var ATTRIBUTION_URL = "https://luxalgo.com/vela";
+var ATTRIBUTION_URL = "https://velacharts.dev/?utm_source=vela&utm_medium=attribution";
 var STYLE_ID5 = "vela-attribution-styles";
 var CSS = `
 .vela-attribution {
     text-decoration: none;
     display: flex;
     align-items: center;
-    /* Gutter, wordmark size and offset below are the brand lockup's own ratios,
-       measured off the official horizontal logo: gutter 0.157, wordmark height
-       0.966, and wordmark 0.109 LOWER than the symbol \u2014 box-centering the two
-       reads wrong because the symbol's ink hangs low and the wordmark descends. */
-    gap: 4px;
+    /* No gutter: the V is the wordmark's first letter, and the letters' viewBox starts
+       where the V's ends, so the kit's own letter spacing comes with them. */
+    gap: 0;
 }
 .vela-attribution .vela-attr-symbol {
     flex: none;
@@ -17458,7 +17714,7 @@ var CSS = `
     line-height: 0;
 }
 .vela-attribution .vela-attr-symbol svg {
-    height: 28px;
+    height: 24px;
     width: auto;
     display: block;
     filter: drop-shadow(0 1px 2px var(--vela-attr-shadow, rgba(0,0,0,0.45)));
@@ -17469,15 +17725,13 @@ var CSS = `
     opacity: 0;
     display: flex;
     align-items: center;
-    /* Offset here, not on the image: the clip box must not crop the descender. */
-    position: relative;
-    top: 3px;
+    /* Same height and baseline as the V (one viewBox height), so no vertical offset. */
     transform: translateX(-8px);
     transition: max-width 0.3s ease, opacity 0.25s ease, transform 0.3s ease;
     flex: none;
 }
 .vela-attribution .vela-attr-wordmark svg {
-    height: 27px;
+    height: 24px;
     width: auto;
     display: block;
     filter: drop-shadow(0 1px 2px var(--vela-attr-shadow, rgba(0,0,0,0.45)));
@@ -17492,14 +17746,11 @@ var CSS = `
    (data-layout): the workspace's single grid-wide mark lives OUTSIDE any renderer
    container, so only the shell attribute reaches it. */
 [data-vela-layout='mobile'] .vela-attribution .vela-attr-symbol svg,
-[data-layout='mobile'] .vela-attribution .vela-attr-symbol svg { height: 22px; }
+[data-layout='mobile'] .vela-attribution .vela-attr-symbol svg { height: 20px; }
 [data-vela-layout='mobile'] .vela-attribution .vela-attr-wordmark,
-[data-layout='mobile'] .vela-attribution .vela-attr-wordmark {
-    top: 2px;
-    transform: translateX(-6px);
-}
+[data-layout='mobile'] .vela-attribution .vela-attr-wordmark { transform: translateX(-6px); }
 [data-vela-layout='mobile'] .vela-attribution .vela-attr-wordmark svg,
-[data-layout='mobile'] .vela-attribution .vela-attr-wordmark svg { height: 21px; }
+[data-layout='mobile'] .vela-attribution .vela-attr-wordmark svg { height: 20px; }
 [data-vela-layout='mobile'] .vela-attribution:hover .vela-attr-wordmark,
 [data-layout='mobile'] .vela-attribution:hover .vela-attr-wordmark { transform: translateX(0); }
 `;
@@ -17556,10 +17807,10 @@ function createAttributionMark(doc, background) {
   const symbol = doc.createElement("span");
   symbol.className = "vela-attr-symbol";
   symbol.setAttribute("aria-hidden", "true");
-  symbol.innerHTML = LUXALGO_SYMBOL_SVG;
+  symbol.innerHTML = VELA_MARK_SVG;
   const wordmark = doc.createElement("span");
   wordmark.className = "vela-attr-wordmark";
-  wordmark.innerHTML = LUXALGO_WORDMARK_SVG;
+  wordmark.innerHTML = VELA_LETTERS_SVG;
   a.append(symbol, wordmark);
   return a;
 }
@@ -18139,7 +18390,7 @@ var NativeRenderer = class {
     this.moveIndicatorCbs = /* @__PURE__ */ new Set();
     this.priceStyleCbs = /* @__PURE__ */ new Set();
     this.name = "native";
-    this.features = ["logScale", "currentPriceLine", "priceLabel", "countdown", "upColor", "downColor", "glow", "animZoom", "animPan", "animScroll", "animAutoscale", "animLiveBar", "intro", "zoomAnchor", "axisDrag", "paneResize", "candleZOrder", "candleVisible", "seriesOrder", "highlights", "sessionZones", "gridlines", "axisLabels", "scaleMode", "invertScale", "paneScales", "autoScale", "timezone", "keyboard", "historyChords", "priceStyle", "priceBaseline", "baselinePrice", "settings", "attribution", "dialogHost", "tradeMarkers", "marks", "indicatorTitles", "indicatorValues"];
+    this.features = ["logScale", "currentPriceLine", "priceLabel", "countdown", "upColor", "downColor", "glow", "animZoom", "animPan", "animScroll", "animAutoscale", "animLiveBar", "intro", "zoomAnchor", "axisDrag", "paneResize", "candleZOrder", "candleVisible", "seriesOrder", "highlights", "sessionZones", "gridlines", "axisLabels", "scaleMode", "invertScale", "paneScales", "autoScale", "timezone", "keyboard", "historyChords", "priceStyle", "priceBaseline", "baselinePrice", "settings", "attribution", "dialogHost", "tradeMarkers", "marks", "indicatorTitles", "indicatorValues", "crosshairOverride"];
     /** Track cursor proximity to the scroll button on the plot (bubbles from the button too,
      *  so moving onto the button doesn't count as leaving). */
     this.onScrollProximityMove = (e) => {
@@ -18318,6 +18569,9 @@ var NativeRenderer = class {
         this.scene.marks = mergeMarksState(this.scene.marks, value);
         this.markPopover?.close();
         break;
+      case "crosshairOverride":
+        this.scene.crosshairOverride = sanitizeCrosshairOverride(value);
+        break;
       case "keyboard":
         this.setKeyboardEnabled(Boolean(value));
         return;
@@ -18431,6 +18685,8 @@ var NativeRenderer = class {
         return { ...this.scene.tradeMarkers, colors: { ...this.scene.tradeMarkers.colors } };
       case "marks":
         return { visible: this.scene.marks.visible, groups: { ...this.scene.marks.groups } };
+      case "crosshairOverride":
+        return this.scene.crosshairOverride ? { ...this.scene.crosshairOverride } : null;
       case "keyboard":
         return this.keyboardEnabled;
       case "historyChords":
@@ -18565,6 +18821,7 @@ var NativeRenderer = class {
         intro: this.intro.style !== false
       },
       panes: { separatorColor: s.separatorColor ?? t.borderColor },
+      margins: { ...s.margins },
       trades: {
         visible: this.scene.tradeMarkers.visible,
         labels: this.scene.tradeMarkers.labels,
@@ -18677,6 +18934,10 @@ var NativeRenderer = class {
     this.animAutoscale.toggle(next.animations.autoscale);
     this.intro = { style: next.animations.intro ? this.introOnStyle : false, duration: this.intro.duration || INTRO_DURATION_DEFAULT_MS };
     s.separatorColor = keepInherit(s.separatorColor, next.panes.separatorColor, prevTheme.borderColor);
+    if (next.margins.right !== s.margins.right && this.coords.barCount > 0) {
+      this.applyViewport({ barSpacing: this.coords.getViewport().barSpacing, rightOffset: next.margins.right });
+    }
+    s.margins = { ...next.margins };
     this.scene.tradeMarkers = {
       visible: next.trades.visible,
       labels: next.trades.labels,
@@ -18817,7 +19078,11 @@ var NativeRenderer = class {
     }
     this.settingsDialog.setTheme(this.theme);
     this.settingsDialog.setHostSections(this.hostSettingsSections);
-    this.settingsDialog.setMarkGroups(this.markGroupsInUse(), (id) => markGroupVisible(this.scene.marks, id, this.scene.markGroups));
+    this.settingsDialog.setMarkGroups(
+      this.markGroupsForEventsTab(),
+      (id) => markGroupVisible2(this.scene.marks, id, this.scene.markGroups),
+      (id) => markGroupOwnVisible(this.scene.marks.groups, id, this.scene.markGroups)
+    );
     this.settingsDialog.setHiddenSettings(this.hiddenSettings);
     this.syncThemeControl();
     this.settingsDialog.toggle(
@@ -18825,12 +19090,23 @@ var NativeRenderer = class {
       (patch) => this.applyConfig(patch),
       (json) => this.applyConfig(json),
       () => {
-        if (this.factoryConfig) this.applyConfig(factoryResetConfig(this.factoryConfig));
-        this.settingsDialog?.close();
-        this.openSettingsDialog();
+        if (this.factoryConfig) this.applyConfig(this.factoryResetDocument(this.factoryConfig));
+        this.settingsDialog?.refresh(this.getConfig());
       },
       section
     );
+  }
+  /**
+   * The document "Reset defaults" applies: every setting back to its first-run value,
+   * with two things that are NOT settings held or resolved here — the price style
+   * stays the one the user is looking at, and the timeline-mark groups (an additive
+   * merge, like the type bags) are named back to their host-declared visibility.
+   */
+  factoryResetDocument(factory) {
+    const doc = factoryResetConfig(factory, this.scene.priceStyle);
+    const groups = { ...doc.marks.groups };
+    for (const g of this.markGroupsInUse()) groups[g.id] = g.visible !== false;
+    return { ...doc, marks: { ...doc.marks, groups } };
   }
   /** Close the in-chart dialogs (indicator settings + chart-settings gear). No-op when none are open. */
   closeDialogs() {
@@ -18905,7 +19181,7 @@ var NativeRenderer = class {
   /** Glide the view back to the most recent bars, keeping the current zoom (barSpacing). */
   scrollToRealtime() {
     if (this.coords.barCount === 0) return;
-    this.glideRightOffset(ZOOM_OUT_MARGIN_BARS);
+    this.glideRightOffset(this.scene.style.margins.right);
   }
   /** Ease rightOffset to `target` at constant zoom (see animTick's scroll glide);
    *  instant when the scroll glide is off. Shared by scroll-to-latest and panBy. */
@@ -18989,8 +19265,8 @@ var NativeRenderer = class {
     for (const pane of this.scene.panes.values()) pane.scale = { ...pane.scaleTarget };
     this.modelAlpha = 0;
     const start = performance.now();
-    const step = (now) => {
-      const p = Math.min(1, (now - start) / duration);
+    const step = (now2) => {
+      const p = Math.min(1, (now2 - start) / duration);
       this.scene.bars = p >= 1 ? real : real.map((b, i) => this.revealCandle(b, i, p, n, style));
       this.paintData();
       if (p < 1) {
@@ -19006,8 +19282,8 @@ var NativeRenderer = class {
   fadeInModels() {
     const fade = Math.min(INTRO_MODEL_FADE_MS, this.intro.duration || INTRO_MODEL_FADE_MS);
     const start = performance.now();
-    const step = (now) => {
-      this.modelAlpha = Math.min(1, (now - start) / fade);
+    const step = (now2) => {
+      this.modelAlpha = Math.min(1, (now2 - start) / fade);
       this.paintData();
       if (this.modelAlpha < 1) {
         this.introRaf = requestAnimationFrame(step);
@@ -19530,10 +19806,13 @@ var NativeRenderer = class {
         this.animator.start();
       }
     } else if (!last || bar.time > last.time) {
+      const vp = this.coords.getViewport();
+      const holdView = n > 0 && vp.rightOffset < 0 && this.scrollTargetRO === null;
       this.bars.push(bar);
       this.syncLiveEase(bar);
       if (this.coords.barInterval > 0) this.coords.appendBar(bar.time);
       else this.coords.setBars(this.bars.map((b) => b.time));
+      if (holdView) this.coords.setViewport({ ...vp, rightOffset: vp.rightOffset - 1 });
     } else {
       return;
     }
@@ -19894,6 +20173,15 @@ var NativeRenderer = class {
   markGroupsInUse() {
     return effectiveMarkGroups(this.scene.timelineMarks, this.scene.markGroups);
   }
+  /**
+   * The groups as the Events tab lists them: nested only under a DEFINED parent. The
+   * painter's visibility chain resolves parents against the defined groups alone, so a
+   * parent that marks merely name must not nest (and dim) a child the painter still shows.
+   */
+  markGroupsForEventsTab() {
+    const defined = new Set(this.scene.markGroups.map((g) => g.id));
+    return this.markGroupsInUse().map((g) => g.parent !== void 0 && !defined.has(g.parent) ? { ...g, parent: void 0 } : g);
+  }
   onViewportChange(cb) {
     this.viewportCbs.add(cb);
     return () => this.viewportCbs.delete(cb);
@@ -20206,10 +20494,10 @@ var NativeRenderer = class {
     if (this.markPulseRaf !== null || typeof requestAnimationFrame !== "function") return;
     const tick = () => {
       this.markPulseRaf = null;
-      const now = frameNow();
-      if (this.scene.marksFlash && this.scene.marksFlash.until <= now) this.scene.marksFlash = null;
+      const now2 = frameNow();
+      if (this.scene.marksFlash && this.scene.marksFlash.until <= now2) this.scene.marksFlash = null;
       this.scheduler?.invalidate(2 /* Chrome */);
-      const pulsing = this.scene.marksHoverKey !== null && now - this.scene.marksHoverSince < MARK_PULSE_MS;
+      const pulsing = this.scene.marksHoverKey !== null && now2 - this.scene.marksHoverSince < MARK_PULSE_MS;
       if (pulsing || this.scene.marksFlash !== null) this.markPulseRaf = requestAnimationFrame(tick);
     };
     this.markPulseRaf = requestAnimationFrame(tick);
@@ -20770,9 +21058,10 @@ var NativeRenderer = class {
     const ext = this.externalCross;
     if (!ext || this.coords.barCount === 0) return null;
     const logical = Math.floor(this.coords.timeToLogical(ext.time));
-    if (logical < 0 || logical >= this.coords.barCount) return null;
-    const x = this.coords.logicalToX(logical);
-    if (!Number.isFinite(x) || x < 0 || x > this.coords.width) return null;
+    if (!(logical < this.coords.barCount)) return null;
+    const x = this.coords.logicalToX(Math.max(logical, -1));
+    if (!Number.isFinite(x)) return null;
+    const line = logical >= 0 && x >= 0 && x <= this.coords.width;
     let y = null;
     if (ext.price != null) {
       const pricePane = this.scene.orderedPanes().find((p) => p.kind === "price");
@@ -20781,7 +21070,7 @@ var NativeRenderer = class {
         if (!Number.isFinite(y) || y < pricePane.bounds.top || y > pricePane.bounds.top + pricePane.bounds.height) y = null;
       }
     }
-    return { x, y, time: this.coords.logicalToTime(logical), price: y != null ? ext.price : null };
+    return { x, y, time: this.coords.logicalToTime(Math.max(logical, 0)), price: y != null ? ext.price : null, line };
   }
   /** Set the sticky magnet mode (called by the drawings toolbar's 3-state button). */
   setSnapMode(mode) {
@@ -20838,6 +21127,7 @@ var NativeRenderer = class {
     const pricePane = panes.find((p) => p.kind === "price") ?? null;
     this.chrome.prepare(this.scene, this.coords, this.theme);
     const animating = this.animator.active;
+    const margins = this.scene.style.margins;
     for (const pane of panes) {
       if (pane.manualScale) {
         pane.scaleTarget = pane.manualScale;
@@ -20852,8 +21142,8 @@ var NativeRenderer = class {
         const or = overlaySeriesRange(this.scene.indicators.values(), i0, i1, (id) => this.scene.offsetOf(id));
         if (or) dr = dr ? { min: Math.min(dr.min, or.min), max: Math.max(dr.max, or.max) } : or;
       }
-      const includeCandles = pane.kind === "price" && (!this.scene.candlesHidden || this.priceLayersAnchoredToBars(masterModels));
-      pane.scaleTarget = computePaneScale(masterModels, this.bars, includeCandles, i0, i1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id));
+      const includeCandles = pane.kind === "price" && (!this.scene.candlesHidden || this.priceLayersAnchoredToBars(masterModels) || !this.paneHasMeasurableContent(masterModels, dr));
+      pane.scaleTarget = computePaneScale(masterModels, this.bars, includeCandles, i0, i1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id), margins);
       pane.percentBaseline = pane.kind === "price" ? this.bars[i0]?.close ?? 0 : this.firstVisibleValue(masterModels, i0);
       pane.axisFormat = void 0;
       pane.axisBands = void 0;
@@ -20864,7 +21154,7 @@ var NativeRenderer = class {
           pane.axisFormat = "volume";
         }
       } else if (this.layerNativesOwnPane(pane, masterModels)) {
-        pane.scaleTarget = computePaneScale([], this.bars, true, i0, i1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id));
+        pane.scaleTarget = computePaneScale([], this.bars, true, i0, i1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id), margins);
         pane.percentBaseline = this.bars[i0]?.close ?? 0;
         if (masterModels.every((m) => m.paneAxis != null)) {
           pane.axisFormat = "none";
@@ -20893,7 +21183,7 @@ var NativeRenderer = class {
           continue;
         }
         const mdr = this.chrome.paneDrawingsRange([model], this.scene, false, vr);
-        sl.scaleTarget = computePaneScale([model], this.bars, false, i0, i1, mdr, false, (id) => this.scene.offsetOf(id));
+        sl.scaleTarget = computePaneScale([model], this.bars, false, i0, i1, mdr, false, (id) => this.scene.offsetOf(id), margins);
         if (!animating || !sl.initialized) {
           sl.scale = { ...sl.scaleTarget };
           sl.initialized = true;
@@ -20934,13 +21224,13 @@ var NativeRenderer = class {
     for (const pane of this.scene.panes.values()) pane.manualScale = null;
     for (const sl of this.scene.indicatorScales.values()) sl.manualScale = null;
     const visibleBars = Math.min(n, 200);
-    const rightOffset = 6;
+    const rightOffset = this.scene.style.margins.right;
     const v = this.clampViewport(w / ((visibleBars + rightOffset) * this.coords.spacingScale), rightOffset);
     this.coords.setViewport(v);
     this.targetBarSpacing = v.barSpacing;
   }
   /** Re-frame after a series replacement (a symbol/timeframe switch): keep the user's
-   *  zoom (bar spacing), re-anchor the newest bars at the default right offset.
+   *  zoom (bar spacing), re-anchor the newest bars at the configured right margin.
    *  `clampViewport`'s fit-all-bars floor deliberately does NOT apply — a progressive
    *  head may still be backfilling toward the previous depth, and raising the spacing
    *  to its temporary bar count would lose the zoom this exists to keep. */
@@ -20949,7 +21239,7 @@ var NativeRenderer = class {
     this.panVelocity = 0;
     for (const pane of this.scene.panes.values()) pane.manualScale = null;
     for (const sl of this.scene.indicatorScales.values()) sl.manualScale = null;
-    const v = { barSpacing: clampBarSpacing(this.coords.getViewport().barSpacing), rightOffset: defaultViewport().rightOffset };
+    const v = { barSpacing: clampBarSpacing(this.coords.getViewport().barSpacing), rightOffset: this.scene.style.margins.right };
     this.coords.setViewport(v);
     this.targetBarSpacing = v.barSpacing;
   }
@@ -21101,6 +21391,13 @@ var NativeRenderer = class {
    */
   priceLayersAnchoredToBars(masterModels) {
     return masterModels.some((m) => m.series.length === 0 && !!m.native && this.extLayers.some((l) => l.def.id === m.native.type));
+  }
+  /** True when the pane's master content contributes SOMETHING to its autoscale besides
+   *  the candles: a series painted on the pane (force_overlay ones scale elsewhere), a
+   *  price line, or a measured drawings range. Mirrors what `computePaneScale` considers. */
+  paneHasMeasurableContent(masterModels, drawings) {
+    if (drawings) return true;
+    return masterModels.some((m) => m.priceLines.length > 0 || m.series.some((s) => s.overlay !== true));
   }
   /** Per-pane scale state for a host UI (e.g. a price-axis context menu): the pane's pixel
    *  band (`top`/`height`, so a click y maps to a pane) plus its current axis `mode`/`log`.
@@ -21519,10 +21816,18 @@ var IndicatorRegistry = class {
     this.records = /* @__PURE__ */ new Map();
     this.counter = 0;
   }
-  /** Allocate a unique, stable per-instance id. */
-  nextId(prefix = "ind") {
-    this.counter += 1;
-    return `${prefix}-${this.counter}`;
+  /**
+   * Mint a unique per-instance id. Host-supplied ids share the namespace, so a minted
+   * id skips anything already recorded — and anything `taken` reports live elsewhere
+   * (a handle the orchestrator holds outside the records, e.g. a fail-soft native).
+   */
+  nextId(prefix = "ind", taken = () => false) {
+    let id;
+    do {
+      this.counter += 1;
+      id = `${prefix}-${this.counter}`;
+    } while (this.records.has(id) || taken(id));
+    return id;
   }
   add(record) {
     this.records.set(record.id, record);
@@ -21758,6 +22063,7 @@ var MarksController = class {
   defineGroup(group) {
     if (!group || typeof group.id !== "string" || group.id.length === 0) throw new Error("[vela] marks.defineGroup: `id` must be a non-empty string");
     if (typeof group.label !== "string") throw new Error(`[vela] marks.defineGroup: group "${group.id}" needs a string \`label\``);
+    if (group.parent !== void 0 && (typeof group.parent !== "string" || group.parent.length === 0)) throw new Error(`[vela] marks.defineGroup: group "${group.id}" has a \`parent\` that is not a group id`);
     this.groups.set(group.id, { ...group });
     this.sync();
   }
@@ -21777,12 +22083,16 @@ var MarksController = class {
     }
     this.renderer.applyFeature("marks", { groups: { [id]: visible } });
   }
-  /** A group's effective visibility: the user's (persisted) choice, else the group's declared default, else visible. */
+  /**
+   * A group's effective visibility: its own switch — the user's (persisted) choice, else
+   * the declared default, else visible — AND every ancestor's, so a child under a
+   * switched-off parent reads hidden whatever its own choice says.
+   */
   isGroupVisible(id) {
     const state = this.renderer.readFeature("marks");
-    const chosen = state?.groups?.[id];
-    if (typeof chosen === "boolean") return chosen;
-    return this.groups.get(id)?.visible !== false;
+    const groups = {};
+    for (const [gid, v] of Object.entries(state?.groups ?? {})) if (typeof v === "boolean") groups[gid] = v;
+    return markGroupVisible(groups, id, [...this.groups.values()]);
   }
   destroy() {
     for (const unsub of this.subs) unsub();
@@ -21984,6 +22294,7 @@ var CHUNK_BARS = 1e4;
 var FIRST_PAINT_BARS = 20;
 var GAP_FACTOR = 1.5;
 var HEAL_COOLDOWN_MS = 5e3;
+var MIN_TICK_UPDATE_MS = 16;
 var EngineOrchestrator = class _EngineOrchestrator {
   constructor(container, renderer, feed, engines, config, dataControl) {
     this.renderer = renderer;
@@ -22036,6 +22347,32 @@ var EngineOrchestrator = class _EngineOrchestrator {
     this.lastHealAt = 0;
     /** The `visibilitychange` catch-up listener (removed on destroy). */
     this.onVisible = null;
+    // ── bar replay: `rawBars` holds the history up to the cursor, the rest waits here ──
+    /** Bars still hidden right of the replay cursor, oldest first; null ≡ replay off. */
+    this.replayQueue = null;
+    this.replayTimer = null;
+    this.replayPlaying = false;
+    this.replayIntervalMs = 1e3;
+    /** The depth (`market.bars`) before a replay deepened the history — restored when it ends. */
+    this.replayDepth = null;
+    /** A start is loading older history before it can cut; `seek` = a replay was running
+     *  (and left silently to deepen), so abandoning the load must announce its end. */
+    this.replayLoading = null;
+    /** A replay carried over a timeframe/session switch, between the old series' silent end
+     *  and the cut of the new one: still ACTIVE for the outside (`replayState`), resumed
+     *  at `revealedEnd` once the new bars land, unless stopped (`cancelled`) meanwhile. */
+    this.replayCarrying = null;
+    /** Intrabar prices for the bars replay reveals — null ≡ whole bars. */
+    this.replayTickSource = null;
+    /** The bar being revealed tick by tick: its stored form (what it settles on), its ticks,
+     *  the next tick to apply, the candle built so far, the volume each tick adds when the
+     *  ticks carry none, and its pacing (ticks per update, ms between updates — one play
+     *  interval per tick — and the clock time tick 0 is due at, so late timers catch up). */
+    this.replayForming = null;
+    /** Tick requests by bar time, shared by prefetch and playback; `ticks` once they landed. */
+    this.replayTickFetches = /* @__PURE__ */ new Map();
+    /** Aborts the tick requests in flight — renewed whenever the replay moves on. */
+    this.replayTickAbort = null;
     /** What the last applied bar did: refine the open candle, or open a new one (which
      *  settles the previous). Read by the `script:run` cause attribution. */
     this.barCause = "tick";
@@ -22259,6 +22596,10 @@ var EngineOrchestrator = class _EngineOrchestrator {
       const paint = (bars, final) => {
         if (this.generation !== gen || !final && bars.length === 0) return;
         if (!painted && !final && bars.length < Math.min(requested, FIRST_PAINT_BARS)) return;
+        if (painted && this.replayQueue) {
+          this.mergeHistoryIntoReplay(bars);
+          return;
+        }
         this.setBarSeries(bars, painted ? { preserveView: true } : void 0);
         if (!painted && bars.length > 0) {
           painted = true;
@@ -22401,6 +22742,36 @@ var EngineOrchestrator = class _EngineOrchestrator {
     // exactly like a timeframe change; the cache keys the sessions apart.
     next.session !== void 0 && next.session !== m.session || next.data !== void 0;
     const depthChanged = next.bars !== void 0 && next.bars !== m.bars;
+    const sameClock = identityChanged && next.data === void 0 && (next.symbol === void 0 || next.symbol === m.symbol) && (next.timeframe !== void 0 || next.session !== void 0);
+    const pending = identityChanged ? this.replayCarrying : null;
+    if (pending) {
+      this.replayCarrying = null;
+      if (!sameClock) {
+        pending.cancelled = true;
+        this.events.emit("replay:end", { reason: "market" });
+      }
+    }
+    const replayCarry = this.replayQueue && sameClock && this.rawBars.length > 0 ? { revealedEnd: this.rawBars[this.rawBars.length - 1].time + this.barIntervalMs(), playing: this.replayPlaying, cancelled: false } : pending && sameClock ? { revealedEnd: pending.revealedEnd, playing: pending.playing, cancelled: false } : null;
+    if (pending) pending.cancelled = true;
+    if (replayCarry) this.replayCarrying = replayCarry;
+    if (replayCarry && this.replayQueue) {
+      this.endReplay(null, { restore: false, resume: false });
+      const depth = this.replayDepth;
+      this.replayDepth = null;
+      if (depth && next.bars === void 0) {
+        if (depth.bars === void 0) delete m.bars;
+        else m.bars = depth.bars;
+      }
+    }
+    if (this.replayQueue && (identityChanged || depthChanged)) this.endReplay("market", { restore: !identityChanged, resume: false });
+    if (this.replayLoading && (identityChanged || depthChanged)) {
+      const depth = this.replayDepth;
+      this.abandonReplayLoad("market");
+      if (depth && next.bars === void 0) {
+        if (depth.bars === void 0) delete m.bars;
+        else m.bars = depth.bars;
+      }
+    }
     const depthOnly = depthChanged && !identityChanged && this.rawBars.length > 0 && !m.data?.length && ((next.bars ?? 0) <= this.rawBars.length || typeof this.feed.loadRange === "function");
     if (!identityChanged && !depthChanged) {
       if (typeof next.visibleRange === "string") this.setVisibleRangePreset(next.visibleRange);
@@ -22458,15 +22829,20 @@ var EngineOrchestrator = class _EngineOrchestrator {
       const from = bars[Math.max(0, idx - (carriedCount - 1))].time;
       this.renderer.setVisibleRange({ from, to: Math.max(carried.right, bars[idx].time + 1) });
     }
-    if (!depthOnly) {
+    const carry = replayCarry && !replayCarry.cancelled ? replayCarry : null;
+    const carryFrom = carry ? carry.revealedEnd - this.barIntervalMs() : 0;
+    const carryNow = carry != null && this.rawBars.length > 0 && carryFrom >= this.rawBars[0].time;
+    const replayBack = carryNow && this.resumeCarriedReplay(this.replayStart({ from: carryFrom }), carry);
+    if (!depthOnly && !replayBack) {
       this.restartNativeIndicators();
       this.restartChartTypeEngine();
       this.reexecuteIndicators();
     }
-    this.startLive();
+    if (!replayBack) this.startLive();
     if (identityChanged) {
       this.events.emit("market:changed", { symbol: m.symbol ?? "TEST", timeframe: m.timeframe ?? "60", prev: prev2 });
     }
+    if (carry && !carryNow) this.resumeCarriedReplay(this.replayStart({ from: carryFrom }), carry);
   }
   /**
    * Restart every native indicator over the new market: a `NativeIndicatorContext`
@@ -22590,6 +22966,397 @@ var EngineOrchestrator = class _EngineOrchestrator {
   historyComplete() {
     return this.historyCompletePromise;
   }
+  // ── bar replay ──────────────────────────────────────────────
+  /**
+   * Enter replay — or seek, when already replaying — keeping every bar opened at or before
+   * `opts.from` and queueing the rest. A `from` inside the loaded bars cuts at once, even
+   * while older history is still streaming in: what lands later joins the tape's head
+   * (see {@link mergeHistoryIntoReplay}) and leaves the cut alone. An older `from` waits
+   * for that load, then deepens if it still has to. Consumers restart over the cut exactly
+   * as on a market switch — their models describe bars that are now hidden — and the
+   * active chart-type engine is rebuilt without live data.
+   */
+  async replayStart(opts) {
+    if (this.rawBars.length === 0) {
+      console.warn("[vela] chart.replay.start() ignored \u2014 the chart has no bars yet");
+      return;
+    }
+    let gen = this.generation;
+    if (opts.from < this.rawBars[0].time) {
+      await this.historyCompletePromise;
+      if (this.generation !== gen || this.rawBars.length === 0) return;
+    }
+    const oldest = this.rawBars[0].time;
+    if (opts.from < oldest && this.canHeal() && typeof this.feed.loadRange === "function") {
+      const held = this.rawBars.length + (this.replayQueue?.length ?? 0);
+      const bars = held + Math.ceil((oldest - opts.from) / this.barIntervalMs()) + 1;
+      const seek = this.replayQueue !== null;
+      if (seek) this.endReplay(null, { restore: true, resume: false });
+      this.replayDepth ?? (this.replayDepth = { bars: this.config.market.bars });
+      const deepened = this.setMarket({ bars });
+      this.replayLoading = { seek };
+      await deepened;
+      gen = this.generation;
+      await this.historyCompletePromise;
+      if (!this.replayLoading || this.generation !== gen || this.rawBars.length === 0) return;
+      this.replayLoading = null;
+    }
+    this.settleFormingBar();
+    this.dropTickFetches();
+    const tape = this.replayQueue ? [...this.rawBars, ...this.replayQueue] : this.rawBars;
+    let cut = 0;
+    while (cut < tape.length && tape[cut].time <= opts.from) cut += 1;
+    cut = Math.max(1, cut);
+    if (cut >= tape.length) {
+      console.warn("[vela] chart.replay.start() ignored \u2014 no bar opens after the requested time");
+      return;
+    }
+    const wasPlaying = this.replayPlaying;
+    this.clearReplayTimer();
+    if (!this.replayQueue) this.stopLive();
+    this.replayQueue = tape.slice(cut);
+    this.setBarSeries(tape.slice(0, cut));
+    this.restartBarConsumers({ blank: true });
+    if (wasPlaying) this.events.emit("replay:pause", void 0);
+    this.events.emit("replay:start", { cursorTime: tape[cut - 1].time, remaining: this.replayQueue.length });
+    this.prefetchTicks();
+  }
+  /** Reveal the next queued bar through the live-bar path — or complete the bar forming
+   *  tick by tick; the last one ends the replay. */
+  replayStep() {
+    if (this.replayForming) {
+      this.finishFormingBar();
+      return true;
+    }
+    const queue = this.replayQueue;
+    const bar = queue?.shift();
+    if (!queue || !bar) return false;
+    this.replayTickFetches.delete(bar.time);
+    this.applyBar(bar);
+    this.completeReveal(bar);
+    this.prefetchTicks();
+    return true;
+  }
+  /**
+   * Follow up a replay carried onto a new series of the same symbol (another timeframe or
+   * session). The cut asked for keeps the bars that CLOSED by the end of what was revealed —
+   * every finer bar of the last revealed one, never a coarser bar still open at that point
+   * (no look-ahead). Once it settles: playback resumes if it was on; if the replay did not
+   * come back (nothing left after that point, or a later switch took over), it ends as a
+   * market switch would. Returns whether the replay is back already — a start with no
+   * history to wait for cuts synchronously (an async function runs up to its first await).
+   */
+  resumeCarriedReplay(start, carry) {
+    if (this.replayQueue && this.replayCarrying === carry) this.replayCarrying = null;
+    void start.then(() => {
+      if (this.replayCarrying === carry) this.replayCarrying = null;
+      if (carry.cancelled) return;
+      if (!this.replayQueue) this.events.emit("replay:end", { reason: "market" });
+      else if (carry.playing) this.replayPlay();
+    });
+    return this.replayQueue !== null;
+  }
+  replayStepUpdate() {
+    if (!this.replayQueue) return false;
+    if (this.replayForming) {
+      this.applyReplayTicks(1);
+      return true;
+    }
+    const bar = this.replayQueue[0];
+    if (!bar) return false;
+    const entry = this.replayTickSource ? this.requestTicks(bar) : null;
+    if (entry && !entry.ticks) {
+      const epoch = this.replayTickAbort;
+      void entry.done.then(() => {
+        if (!this.replayPlaying && !this.replayForming && this.replayTickAbort === epoch && this.replayQueue?.[0] === bar) this.replayStepUpdate();
+      });
+      return true;
+    }
+    if (!entry?.ticks?.length) return this.replayStep();
+    this.openFormingBar(entry.ticks, 1);
+    return true;
+  }
+  replaySetTicks(source) {
+    this.finishFormingBar();
+    this.dropTickFetches();
+    this.replayTickSource = source;
+    this.prefetchTicks();
+  }
+  replayPlay(intervalMs2) {
+    if (!this.replayQueue) return;
+    if (intervalMs2 !== void 0) {
+      if (!(Number.isFinite(intervalMs2) && intervalMs2 > 0)) {
+        console.warn(`[vela] chart.replay.play(${intervalMs2}) ignored \u2014 the interval must be a positive number of ms`);
+        return;
+      }
+      this.replayIntervalMs = intervalMs2;
+    }
+    this.clearReplayTimer();
+    this.replayPlaying = true;
+    if (this.replayForming) this.paceFormingBar(this.replayForming);
+    this.scheduleReplayStep(this.replayForming?.delayMs);
+    this.events.emit("replay:play", { intervalMs: this.replayIntervalMs });
+  }
+  replayPause() {
+    if (!this.replayPlaying) return;
+    this.clearReplayTimer();
+    this.events.emit("replay:pause", void 0);
+  }
+  replayStop() {
+    const carrying = this.replayCarrying;
+    if (carrying) {
+      carrying.cancelled = true;
+      this.replayCarrying = null;
+      this.events.emit("replay:end", { reason: "stopped" });
+    }
+    if (this.replayLoading) {
+      const depth = this.replayDepth;
+      this.abandonReplayLoad("stopped");
+      void this.setMarket({ bars: depth?.bars ?? 500 });
+      return;
+    }
+    this.endReplay("stopped", { restore: true, resume: true });
+  }
+  abandonReplayLoad(reason) {
+    const loading = this.replayLoading;
+    if (!loading) return;
+    this.replayLoading = null;
+    this.replayDepth = null;
+    if (loading.seek) this.events.emit("replay:end", { reason });
+  }
+  replayState() {
+    const active = this.replayQueue !== null;
+    return {
+      active: active || this.replayCarrying !== null,
+      // a replay carried over a switch stays on while the new bars load
+      playing: this.replayCarrying?.playing ?? this.replayPlaying,
+      cursorTime: active ? this.rawBars[this.rawBars.length - 1]?.time ?? null : null,
+      remaining: this.replayQueue?.length ?? 0,
+      nextTime: this.replayForming?.bar.time ?? this.replayQueue?.[0]?.time ?? null,
+      intervalMs: this.replayIntervalMs
+    };
+  }
+  replayBounds() {
+    const first = this.rawBars[0];
+    const last = this.replayQueue?.[this.replayQueue.length - 1] ?? this.rawBars[this.rawBars.length - 1];
+    return first && last ? { first: first.time, last: last.time } : null;
+  }
+  scheduleReplayStep(delayMs = this.replayIntervalMs) {
+    this.replayTimer = setTimeout(() => {
+      this.replayTimer = null;
+      this.replayAdvance();
+    }, delayMs);
+  }
+  /** One beat of timed playback: the forming bar's next ticks, else the next bar — whole,
+   *  or opened from its ticks (waiting for them when they have not landed yet). */
+  replayAdvance() {
+    if (!this.replayPlaying || !this.replayQueue) return;
+    const forming = this.replayForming;
+    if (forming) {
+      const due = Math.floor((now() - forming.origin) / this.replayIntervalMs) + 1;
+      this.applyReplayTicks(Math.max(forming.batch, due - forming.next));
+      if (this.replayPlaying) this.scheduleReplayStep(forming.delayMs);
+      return;
+    }
+    const bar = this.replayQueue[0];
+    if (!bar) return;
+    const entry = this.replayTickSource ? this.requestTicks(bar) : null;
+    if (entry && !entry.ticks) {
+      const epoch = this.replayTickAbort;
+      void entry.done.then(() => {
+        if (this.replayPlaying && this.replayTimer == null && this.replayTickAbort === epoch && this.replayQueue?.[0] === bar) this.replayAdvance();
+      });
+      return;
+    }
+    if (!entry?.ticks?.length) {
+      if (this.replayStep() && this.replayPlaying) this.scheduleReplayStep();
+      return;
+    }
+    this.openFormingBar(entry.ticks);
+    if (this.replayPlaying) this.scheduleReplayStep(this.replayForming?.delayMs);
+  }
+  /** Take the next queued bar off the tape and open it at its first tick (the first
+   *  `count` ticks — default: one timed update's worth). */
+  openFormingBar(ticks, count) {
+    const bar = this.replayQueue.shift();
+    const volumeEach = ticks.every((t) => t.volume === void 0) ? (bar.volume ?? 0) / ticks.length : null;
+    const forming = { bar, ticks, next: 0, candle: null, volumeEach, batch: 1, delayMs: this.replayIntervalMs, origin: 0 };
+    this.paceFormingBar(forming);
+    this.replayForming = forming;
+    this.applyReplayTicks(count ?? forming.batch);
+    this.prefetchTicks();
+  }
+  /** One tick per interval, batched when the interval is shorter than a frame; the clock
+   *  is anchored on the ticks already applied (a resume or a pace change carries on from
+   *  there, never jumps). */
+  paceFormingBar(f) {
+    f.batch = Math.max(1, Math.ceil(MIN_TICK_UPDATE_MS / this.replayIntervalMs));
+    f.delayMs = this.replayIntervalMs * f.batch;
+    f.origin = now() - Math.max(0, f.next - 1) * this.replayIntervalMs;
+  }
+  /** Fold the next `count` ticks into the forming candle; the last one settles the bar. */
+  applyReplayTicks(count) {
+    const f = this.replayForming;
+    if (!f) return;
+    let c = f.candle;
+    const stop = Math.min(f.ticks.length, f.next + count);
+    for (; f.next < stop; f.next += 1) {
+      const t = f.ticks[f.next];
+      const v = f.volumeEach ?? t.volume ?? 0;
+      const hi = Math.max(t.high ?? t.price, t.price);
+      const lo = Math.min(t.low ?? t.price, t.price);
+      if (c) {
+        c = { ...c, high: Math.max(c.high, hi), low: Math.min(c.low, lo), close: t.price, volume: (c.volume ?? 0) + v };
+      } else {
+        const open = t.open ?? t.price;
+        c = { time: f.bar.time, open, high: Math.max(open, hi), low: Math.min(open, lo), close: t.price, volume: v };
+      }
+    }
+    f.candle = c;
+    if (f.next >= f.ticks.length) {
+      this.finishFormingBar();
+      return;
+    }
+    this.applyBar(c);
+    this.events.emit("replay:tick", { cursorTime: f.bar.time, index: f.next - 1, count: f.ticks.length });
+  }
+  /** Settle the forming bar on its stored values and announce it revealed. */
+  finishFormingBar() {
+    const f = this.replayForming;
+    if (!f) return;
+    this.replayForming = null;
+    this.replayTickFetches.delete(f.bar.time);
+    this.applyBar(f.bar);
+    this.events.emit("replay:tick", { cursorTime: f.bar.time, index: f.ticks.length - 1, count: f.ticks.length });
+    this.completeReveal(f.bar);
+  }
+  /** Put the forming bar back in its stored form, silently — a seek or an end rebuilds
+   *  from the tape, which must hold the stored bar. */
+  settleFormingBar() {
+    const f = this.replayForming;
+    if (!f) return;
+    this.replayForming = null;
+    this.applyBar(f.bar);
+  }
+  /**
+   * A history answer landing mid-replay (a progressive snapshot — the whole answer so far):
+   * the tape keeps its cut and its hidden queue; bars older than the tape join its head,
+   * bars newer than it join the queue's end.
+   */
+  mergeHistoryIntoReplay(bars) {
+    const queue = this.replayQueue;
+    const head = this.rawBars[0];
+    if (!queue || !head) return;
+    const tail = queue[queue.length - 1] ?? this.rawBars[this.rawBars.length - 1];
+    let older = 0;
+    while (older < bars.length && bars[older].time < head.time) older += 1;
+    let newer = bars.length;
+    while (newer > older && bars[newer - 1].time > tail.time) newer -= 1;
+    if (newer < bars.length) queue.push(...bars.slice(newer));
+    if (older > 0) {
+      this.setBarSeries([...bars.slice(0, older), ...this.rawBars], { preserveView: true });
+      this.notifySessionsBars("backfill");
+    }
+  }
+  /** A bar is fully on screen: announce it, and end the replay if it was the last. */
+  completeReveal(bar) {
+    const queue = this.replayQueue;
+    if (!queue) return;
+    this.events.emit("replay:step", { cursorTime: bar.time, remaining: queue.length });
+    if (queue.length === 0) this.endReplay("finished", { restore: true, resume: true });
+  }
+  /** Ask for the ticks of the next hidden bar ahead of time. */
+  prefetchTicks() {
+    const next = this.replayQueue?.[0];
+    if (next && this.replayTickSource) this.requestTicks(next);
+  }
+  /** The (shared) tick request of a queued bar — the source runs once per bar. */
+  requestTicks(bar) {
+    const known = this.replayTickFetches.get(bar.time);
+    if (known) return known;
+    const source = this.replayTickSource;
+    this.replayTickAbort ?? (this.replayTickAbort = new AbortController());
+    const signal = this.replayTickAbort.signal;
+    const queue = this.replayQueue ?? [];
+    const end = queue[queue.indexOf(bar) + 1]?.time ?? bar.time + this.barIntervalMs();
+    const entry = { ticks: null, done: Promise.resolve() };
+    const land = (ticks) => {
+      entry.ticks = usableTicks(ticks);
+    };
+    const fail = (e) => {
+      if (!signal.aborted) console.warn(`[vela] replay tick source failed \u2014 revealing the bar whole (${e instanceof Error ? e.message : String(e)})`);
+      land([]);
+    };
+    try {
+      const out = source(bar, { end, signal });
+      if (Array.isArray(out)) land(out);
+      else entry.done = Promise.resolve(out).then(land, fail);
+    } catch (e) {
+      fail(e);
+    }
+    this.replayTickFetches.set(bar.time, entry);
+    return entry;
+  }
+  /** Abort the tick requests in flight and forget the landed ones. */
+  dropTickFetches() {
+    this.replayTickAbort?.abort();
+    this.replayTickAbort = null;
+    this.replayTickFetches.clear();
+  }
+  clearReplayTimer() {
+    if (this.replayTimer != null) clearTimeout(this.replayTimer);
+    this.replayTimer = null;
+    this.replayPlaying = false;
+  }
+  /**
+   * Leave replay. `restore` puts the queued bars back and restarts the consumers over the
+   * full history (a market switch skips it: its load replaces everything anyway); `resume`
+   * restarts live updates and heals the bars that closed while replaying. A null reason
+   * leaves silently — a seek that re-enters right after.
+   */
+  endReplay(reason, opts) {
+    const queue = this.replayQueue;
+    if (!queue) return;
+    this.clearReplayTimer();
+    if (opts.restore) this.settleFormingBar();
+    else this.replayForming = null;
+    this.dropTickFetches();
+    this.replayQueue = null;
+    const depth = reason ? this.replayDepth : null;
+    if (reason) this.replayDepth = null;
+    if (depth) {
+      if (depth.bars === void 0) delete this.config.market.bars;
+      else this.config.market.bars = depth.bars;
+    }
+    if (opts.restore) {
+      const keep = depth ? depth.bars ?? 500 : Infinity;
+      if (queue.length > 0 || this.rawBars.length > keep) {
+        const full = [...this.rawBars, ...queue];
+        this.setBarSeries(full.length > keep ? full.slice(full.length - keep) : full);
+        this.restartBarConsumers({ blank: false });
+      } else if (this.config.live) {
+        this.restartNativeIndicators();
+        this.restartChartTypeEngine();
+      }
+    }
+    if (opts.resume && this.config.live) {
+      this.startLive();
+      const last = this.rawBars[this.rawBars.length - 1];
+      if (last && this.canHeal()) void this.healGap(last.time);
+    }
+    if (reason) this.events.emit("replay:end", { reason });
+  }
+  /**
+   * The bars were replaced by a cut or a restore of the SAME market: every consumer re-runs.
+   * A cut also blanks the mounted models first — they still paint the hidden bars' values,
+   * which must not show until the re-runs land.
+   */
+  restartBarConsumers(opts) {
+    if (opts.blank) this.blankIndicatorVisuals();
+    this.restartNativeIndicators();
+    this.restartChartTypeEngine();
+    this.reexecuteIndicators();
+  }
   /** The primary symbol as the data layer resolves it, or null if no symbol is set. */
   qualifiedSymbol() {
     const market = this.config.market;
@@ -22661,7 +23428,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     engine.start({
       symbol: this.config.market.symbol ?? "TEST",
       timeframe: this.config.market.timeframe ?? "60",
-      live: this.config.live ?? false,
+      live: (this.config.live ?? false) && this.replayQueue === null,
       session: this.config.market.session,
       bars: () => this.bars,
       data: this.dataControl,
@@ -22787,6 +23554,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
         record.session.notifyBars(reason);
       } else if (record.native) record.native.instance.onBars();
     }
+    if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.onBars?.();
   }
   /** Gap healing needs a ranged feed and a provider-backed series (offline `data` has no source). */
   canHeal() {
@@ -22809,10 +23577,11 @@ var EngineOrchestrator = class _EngineOrchestrator {
     try {
       const bars = await this.feed.loadRange(this.config.market, { from: fromMs });
       if (this.generation !== gen) return;
+      if (this.replayQueue) return;
       for (const b of bars) this.applyBar(b, false);
     } catch {
     } finally {
-      if (this.generation === gen) {
+      if (this.generation === gen && !this.replayQueue) {
         this.healing = false;
         const pending = this.healBuffer;
         this.healBuffer = [];
@@ -22837,7 +23606,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     this.engines.set(language, engine);
   }
   addIndicator(source, options = {}) {
-    const id = this.registry.nextId();
+    const id = this.claimIndicatorId(options.id);
     const title = options.title ?? "Indicator";
     const handle = new IndicatorHandleImpl(id, title, this, source);
     this.handles.set(id, handle);
@@ -22859,7 +23628,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
       const existing = this.registry.all().find((r) => r.native?.type === type);
       if (existing) return this.handles.get(existing.id) ?? new IndicatorHandleImpl(existing.id, existing.title, this, void 0, type);
     }
-    const id = this.registry.nextId("native");
+    const id = this.registry.nextId("native", (candidate) => this.handles.has(candidate));
     const title = descriptor?.title ?? type;
     const handle = new IndicatorHandleImpl(id, title, this, void 0, type);
     this.handles.set(id, handle);
@@ -23117,6 +23886,13 @@ var EngineOrchestrator = class _EngineOrchestrator {
   destroy() {
     this.bumpGeneration();
     this.resolveHistoryComplete();
+    this.clearReplayTimer();
+    this.replayQueue = null;
+    this.replayForming = null;
+    this.replayCarrying = null;
+    this.dropTickFetches();
+    this.replayDepth = null;
+    this.replayLoading = null;
     this.stopLive();
     if (this.viewportTimer != null) clearTimeout(this.viewportTimer);
     this.viewportUnsub?.();
@@ -23137,6 +23913,24 @@ var EngineOrchestrator = class _EngineOrchestrator {
     this.events.clear();
   }
   // ── internals ───────────────────────────────────────────────
+  /**
+   * The id a new script indicator runs under: the host's when supplied, else a minted
+   * one. A host id is opaque but must be a non-empty string, and it must not be live
+   * on this chart — a duplicate is a programming error surfaced synchronously, never
+   * renamed behind the caller's back (the whole point of supplying one is that
+   * `handle.id` equals what was passed). "Live" reads both the records and the handle
+   * map: a fail-soft handle never enters the registry but still owns its id.
+   */
+  claimIndicatorId(requested) {
+    if (requested === void 0) return this.registry.nextId("ind", (candidate) => this.handles.has(candidate));
+    if (typeof requested !== "string" || requested.length === 0) {
+      throw new TypeError("[vela] addIndicator: `id` must be a non-empty string");
+    }
+    if (this.handles.has(requested) || this.registry.get(requested)) {
+      throw new Error(`[vela] addIndicator: indicator id "${requested}" is already live on this chart`);
+    }
+    return requested;
+  }
   async startIndicator(id, source, options, handle) {
     try {
       await this.readyPromise;
@@ -23197,6 +23991,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
           this.emitScriptRun(id, cause, first);
         },
         onAlert: (a) => {
+          if (this.replayQueue || this.replayCarrying) return;
           const indicator = record.options?.title ?? record.prepared?.meta.title ?? record.title;
           this.events.emit("alert", { ...a, indicator });
           handle.emit("alert", { id: a.id, message: a.message, title: a.title, time: a.time });
@@ -23223,7 +24018,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
         id,
         symbol: this.config.market.symbol ?? "TEST",
         timeframe: this.config.market.timeframe ?? "60",
-        live: this.config.live,
+        live: this.config.live && this.replayQueue === null,
         session: this.config.market.session,
         bars: () => this.bars,
         data: this.dataControl,
@@ -23626,17 +24421,17 @@ var EngineOrchestrator = class _EngineOrchestrator {
   }
   emitContextChanged(id) {
     if (!this.registry.get(id)?.session?.getContext) return;
-    const now = Date.now();
-    if (now - (this.contextEmitAt.get(id) ?? 0) < 1e3) return;
-    this.contextEmitAt.set(id, now);
+    const now2 = Date.now();
+    if (now2 - (this.contextEmitAt.get(id) ?? 0) < 1e3) return;
+    this.contextEmitAt.set(id, now2);
     this.events.emit("context:changed", { id });
   }
   emitScriptRun(id, cause, first) {
     const record = this.registry.get(id);
     if (!record || record.native || !this.events.hasListeners("script:run")) return;
-    const now = Date.now();
-    if (cause === "tick" && now - (this.runEmitAt.get(id) ?? 0) < RUN_EMIT_THROTTLE_MS) return;
-    this.runEmitAt.set(id, now);
+    const now2 = Date.now();
+    if (cause === "tick" && now2 - (this.runEmitAt.get(id) ?? 0) < RUN_EMIT_THROTTLE_MS) return;
+    this.runEmitAt.set(id, now2);
     void Promise.resolve().then(() => this.buildScriptRun(record, cause, first)).then((run) => {
       if (run && this.registry.get(id)) this.events.emit("script:run", run);
     });
@@ -23689,6 +24484,16 @@ var EngineOrchestrator = class _EngineOrchestrator {
     handle?.emit("error", { error });
   }
 };
+function now() {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+function usableTicks(value) {
+  if (!Array.isArray(value)) return [];
+  const optional = (n) => n === void 0 || Number.isFinite(n);
+  return value.filter(
+    (t) => t != null && Number.isFinite(t.price) && optional(t.volume) && optional(t.high) && optional(t.low) && optional(t.open)
+  );
+}
 function yieldToPaint() {
   if (typeof requestAnimationFrame === "function") {
     return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
@@ -24058,7 +24863,8 @@ var ClassicIndicator = class {
           lineStyle: plot.lineStyle ?? "solid",
           ...plot.base != null ? { base: plot.base } : {}
         },
-        ...plot.overlay ? { overlay: true } : {}
+        ...plot.overlay ? { overlay: true } : {},
+        ...plot.display ? { display: plot.display } : {}
       });
     });
     if (out.markers && out.markers.length > 0) {
@@ -24080,7 +24886,9 @@ var ClassicIndicator = class {
           paneId: "",
           fromSeriesId: from,
           toSeriesId: to,
-          color: band.color
+          color: band.color,
+          ...band.colors ? { colors: [...band.colors] } : {},
+          ...band.gradient ? { gradient: [...band.gradient] } : {}
         }
       ];
     });
@@ -24238,6 +25046,16 @@ function stdev(v, len) {
     return Math.sqrt(sq / len);
   });
 }
+function meanDev(v, len) {
+  return windowed(v, len, (w, from, to) => {
+    let s = 0;
+    for (let k = from; k <= to; k++) s += w[k];
+    const mean = s / len;
+    let dev = 0;
+    for (let k = from; k <= to; k++) dev += Math.abs(w[k] - mean);
+    return dev / len;
+  });
+}
 function highest(v, len) {
   return windowed(v, len, (w, from, to) => {
     let m = -Infinity;
@@ -24369,7 +25187,7 @@ function stoch(v, hi, lo, len) {
   }
   return out;
 }
-function linreg(v, len) {
+function linreg(v, len, offset = 0) {
   const sx = (len - 1) * len / 2;
   const sxx = (len - 1) * len * (2 * len - 1) / 6;
   const denom = len * sxx - sx * sx;
@@ -24383,8 +25201,100 @@ function linreg(v, len) {
     }
     const slope = denom === 0 ? 0 : (len * sxy - sx * sy) / denom;
     const intercept = (sy - slope * sx) / len;
-    return intercept + slope * (len - 1);
+    return intercept + slope * (len - 1 - offset);
   });
+}
+function hma(v, len) {
+  const n = Math.max(2, Math.trunc(len));
+  const raw = sub(map(wma(v, Math.max(1, Math.trunc(n / 2))), (x) => 2 * x), wma(v, n));
+  return wma(raw, Math.max(1, Math.round(Math.sqrt(n))));
+}
+function alma(v, len, offset, sigma) {
+  const m = offset * (len - 1);
+  const s = len / Math.max(sigma, 1e-9);
+  const weights = new Array(len);
+  let norm = 0;
+  for (let i = 0; i < len; i++) {
+    const d = i - m;
+    const w = Math.exp(-(d * d) / (2 * s * s));
+    weights[i] = w;
+    norm += w;
+  }
+  return windowed(v, len, (win, from, to) => {
+    let acc = 0;
+    for (let k = from; k <= to; k++) acc += win[k] * weights[k - from];
+    return norm === 0 ? Number.NaN : acc / norm;
+  });
+}
+function dema(v, len) {
+  const e1 = ema(v, len);
+  return sub(map(e1, (x) => 2 * x), ema(e1, len));
+}
+function tema(v, len) {
+  const e1 = ema(v, len);
+  const e2 = ema(e1, len);
+  const e3 = ema(e2, len);
+  return zip(zip(map(e1, (x) => 3 * x), map(e2, (x) => 3 * x), (a, b) => a - b), e3, (a, b) => a + b);
+}
+function kama(v, len, fastAlpha = 2 / 3, slowAlpha = 2 / 31) {
+  const direction = map(change(v, len), Math.abs);
+  const volatility = sum(map(change(v), Math.abs), len);
+  const out = new Array(v.length).fill(Number.NaN);
+  let prev2 = Number.NaN;
+  for (let i = 0; i < v.length; i++) {
+    const x = v[i];
+    if (!Number.isFinite(x)) continue;
+    const d = direction[i];
+    const w = volatility[i];
+    if (!Number.isFinite(d) || !Number.isFinite(w)) {
+      prev2 = Number.isFinite(prev2) ? prev2 : x;
+      out[i] = prev2;
+      continue;
+    }
+    const er = w === 0 ? 0 : d / w;
+    const sc = (er * (fastAlpha - slowAlpha) + slowAlpha) ** 2;
+    prev2 = Number.isFinite(prev2) ? prev2 + sc * (x - prev2) : x;
+    out[i] = prev2;
+  }
+  return out;
+}
+function mcginley(v, len) {
+  const out = new Array(v.length).fill(Number.NaN);
+  let prev2 = Number.NaN;
+  for (let i = 0; i < v.length; i++) {
+    const x = v[i];
+    if (!Number.isFinite(x)) continue;
+    if (!Number.isFinite(prev2)) {
+      prev2 = x;
+    } else {
+      const ratio = prev2 === 0 ? 0 : x / prev2;
+      const denom = len * ratio ** 4;
+      prev2 += denom === 0 ? 0 : (x - prev2) / denom;
+    }
+    out[i] = prev2;
+  }
+  return out;
+}
+function hamming(v, len, a0 = 0.54, a1 = 0.46) {
+  if (len <= 1) return v.map((x) => Number.isFinite(x) ? x : Number.NaN);
+  const weights = new Array(len);
+  let norm = 0;
+  for (let i = 0; i < len; i++) {
+    const w = a0 - a1 * Math.cos(2 * Math.PI * i / (len - 1));
+    weights[i] = w;
+    norm += w;
+  }
+  return windowed(v, len, (win, from, to) => {
+    let acc = 0;
+    for (let k = from; k <= to; k++) acc += win[k] * weights[to - k];
+    return norm === 0 ? Number.NaN : acc / norm;
+  });
+}
+function cmo(v, len) {
+  const d = change(v);
+  const up = sum(map(d, (x) => Math.max(x, 0)), len);
+  const dn = sum(map(d, (x) => Math.max(-x, 0)), len);
+  return zip(up, dn, (u, w) => u + w === 0 ? 0 : 100 * (u - w) / (u + w));
 }
 function swma(v) {
   const out = new Array(v.length).fill(Number.NaN);
@@ -24435,38 +25345,253 @@ function cumSum(v) {
 }
 
 // src/core/native-indicators/classics/shared.ts
-function lengthInput(defval, key = "length", title = "Length", max = 5e3) {
-  return { key, title, type: "int", defval, min: 1, max, step: 1 };
+var SETTINGS = "Settings";
+var STYLE = "Style";
+function lengthInput(defval, key = "length", title = "Length", max = 5e3, tooltip) {
+  return { key, title, type: "int", defval, min: 1, max, step: 1, group: SETTINGS, ...tooltip != null ? { tooltip } : {} };
 }
-function sourceInput(defval = "Close") {
-  return { key: "source", title: "Source", type: "string", defval, options: SOURCES2 };
+function intInput(key, title, defval, min = 1, max = 5e3, tooltip) {
+  return { key, title, type: "int", defval, min, max, step: 1, group: SETTINGS, ...tooltip != null ? { tooltip } : {} };
 }
-function colorInput(defval = SERIES_LINE, title = "Color", key = "color") {
-  return { key, title, type: "color", defval };
+function floatInput(key, title, defval, min = 0, max = 1e3, step = 0.1, tooltip) {
+  return { key, title, type: "float", defval, min, max, step, group: SETTINGS, ...tooltip != null ? { tooltip } : {} };
+}
+function boolInput(key, title, defval, group = SETTINGS, tooltip) {
+  return { key, title, type: "bool", defval, group, ...tooltip != null ? { tooltip } : {} };
+}
+function optionInput(key, title, defval, options, tooltip) {
+  return { key, title, type: "string", defval, options, group: SETTINGS, ...tooltip != null ? { tooltip } : {} };
+}
+function sourceInput(defval = "Close", key = "source", title = "Source", tooltip) {
+  return { key, title, type: "string", defval, options: SOURCES2, group: SETTINGS, ...tooltip != null ? { tooltip } : {} };
+}
+function colorInput(defval = INFO, title = "Color", key = "color", tooltip) {
+  return { key, title, type: "color", defval, group: STYLE, ...tooltip != null ? { tooltip } : {} };
+}
+function widthInput(defval = 2, key = "lineWidth", title = "Line Width") {
+  return { key, title, type: "int", defval, min: 1, max: 5, step: 1, group: STYLE, tooltip: "Width of the plotted line, in pixels." };
+}
+function transp(hex, transparency) {
+  return withAlpha2(hex, (100 - transparency) / 100);
 }
 function withAlpha2(hex, alpha = 0.08) {
   const m = /^#([0-9a-f]{6})$/i.exec(hex.trim());
   if (!m) return hex;
-  const a = Math.round(alpha * 255).toString(16).padStart(2, "0");
+  const a = Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, "0");
   return `#${m[1]}${a}`;
+}
+function channelStyleInputs(basisTitle = "Basis") {
+  return [
+    colorInput(BULLISH, "Bullish", "bullColor", "Color of the lower band and of the basis while price holds above it."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of the upper band and of the basis while price sits below it."),
+    colorInput(NEUTRAL, basisTitle, "basisColor", "Color of the basis line while price sits exactly on it.")
+  ];
+}
+function directionalChannel(bars, basis, upper, lower, ink, key) {
+  const basisColors = basis.map((b, i) => {
+    if (!Number.isFinite(b)) return null;
+    const c = bars[i].close;
+    return c > b ? ink.bull : c < b ? ink.bear : ink.neutral;
+  });
+  const wash = upper.map((u, i) => {
+    const l = lower[i];
+    if (!Number.isFinite(u) || !Number.isFinite(l)) return null;
+    return { topValue: u, bottomValue: l, topColor: transp(ink.bear, 90), bottomColor: transp(ink.bull, 90) };
+  });
+  return {
+    plots: [
+      { key: "basis", title: "Basis", values: [...basis], color: ink.neutral, colors: basisColors },
+      { key: "upper", title: "Upper", values: [...upper], color: transp(ink.bear, 30) },
+      { key: "lower", title: "Lower", values: [...lower], color: transp(ink.bull, 30) }
+    ],
+    bands: [{ key, from: "upper", to: "lower", color: transp(NEUTRAL, 90), gradient: wash }]
+  };
+}
+function anchorPlot(key, title, length, level) {
+  return {
+    key,
+    title,
+    values: new Array(length).fill(level),
+    color: transp(NEUTRAL, 100),
+    display: { pane: false, legend: false, dataWindow: false }
+  };
+}
+function thresholdZones(length, levels, ink, transparency = 92) {
+  return {
+    plots: [
+      anchorPlot("obAnchor", "Overbought Anchor", length, levels.overbought),
+      anchorPlot("osAnchor", "Oversold Anchor", length, levels.oversold),
+      anchorPlot("topAnchor", "Top Anchor", length, levels.top),
+      anchorPlot("bottomAnchor", "Bottom Anchor", length, levels.bottom)
+    ],
+    bands: [
+      { key: "obZone", from: "obAnchor", to: "topAnchor", color: transp(ink.overbought, transparency) },
+      { key: "osZone", from: "osAnchor", to: "bottomAnchor", color: transp(ink.oversold, transparency) }
+    ]
+  };
+}
+function rampColors(values, levels, ink) {
+  return values.map((x) => {
+    if (!Number.isFinite(x)) return null;
+    return x <= levels.mid ? gradient(x, levels.low, levels.mid, ink.low, ink.mid) : gradient(x, levels.mid, levels.high, ink.mid, ink.high);
+  });
+}
+function baselineGradient(values, baseline, inkOf, valueTransparency = 50, baseTransparency = 100) {
+  return values.map((x, i) => {
+    if (!Number.isFinite(x)) return null;
+    const ink = inkOf(x, i);
+    const above = x > baseline;
+    return {
+      topValue: Math.max(x, baseline),
+      bottomValue: Math.min(x, baseline),
+      topColor: transp(ink, above ? valueTransparency : baseTransparency),
+      bottomColor: transp(ink, above ? baseTransparency : valueTransparency)
+    };
+  });
+}
+function momentumColumnColors(values, ink) {
+  return values.map((x, i) => {
+    if (!Number.isFinite(x)) return null;
+    const prev2 = i > 0 && Number.isFinite(values[i - 1]) ? values[i - 1] : x;
+    const rising = x > prev2;
+    if (x >= 0) return rising ? ink.growAbove : ink.fallAbove;
+    return rising ? ink.growBelow : ink.fallBelow;
+  });
+}
+function boundedOscillator(opts) {
+  const mid = (opts.overbought + opts.oversold) / 2;
+  const ramp = rampColors(opts.values, { low: opts.oversold, mid, high: opts.overbought }, opts.ink);
+  const zones = thresholdZones(
+    opts.values.length,
+    { overbought: opts.overbought, oversold: opts.oversold, top: opts.scale.top, bottom: opts.scale.bottom },
+    { overbought: opts.ink.high, oversold: opts.ink.low },
+    opts.zoneTransparency
+  );
+  const plots = [{ key: opts.key, title: opts.title, values: opts.values, color: opts.ink.mid, width: opts.width ?? 1, colors: ramp }, ...zones.plots];
+  const bands = [...zones.bands];
+  if (opts.bandFill != null) bands.push({ key: "band", from: "obAnchor", to: "osAnchor", color: opts.bandFill });
+  if (opts.midpointWash) {
+    plots.push(anchorPlot("midAnchor", "Midpoint Anchor", opts.values.length, mid));
+    bands.push({ key: "wash", from: opts.key, to: "midAnchor", color: transp(NEUTRAL, 100), gradient: baselineGradient(opts.values, mid, (_x, i) => ramp[i] ?? opts.ink.mid) });
+  }
+  const levels = [
+    { key: "overbought", price: opts.overbought, color: opts.levelInk, lineStyle: "dashed", title: opts.levelTitles?.overbought ?? "Overbought" },
+    { key: "oversold", price: opts.oversold, color: opts.levelInk, lineStyle: "dashed", title: opts.levelTitles?.oversold ?? "Oversold" }
+  ];
+  if (opts.midline != null) levels.splice(1, 0, { key: "midline", price: opts.midline, color: opts.levelInk, lineStyle: "dotted", title: "Midline" });
+  return { plots, bands, levels };
+}
+function centeredOscillator(opts) {
+  const baseline = opts.baseline ?? 0;
+  const inkOf = (x) => x > baseline ? opts.ink.bull : x < baseline ? opts.ink.bear : opts.ink.neutral;
+  const plots = [
+    { key: opts.key, title: opts.title, values: opts.values, color: opts.ink.neutral, width: opts.width ?? 1, colors: opts.values.map((x) => Number.isFinite(x) ? inkOf(x) : null) },
+    ...opts.extraPlots ?? []
+  ];
+  const bands = [];
+  if (opts.fill !== false) {
+    plots.push(anchorPlot("baseline", "Baseline Anchor", opts.values.length, baseline));
+    bands.push({ key: "wash", from: opts.key, to: "baseline", color: transp(NEUTRAL, 100), gradient: baselineGradient(opts.values, baseline, inkOf, opts.valueTransparency) });
+  }
+  return {
+    plots,
+    bands,
+    levels: [{ key: "zero", price: baseline, color: opts.zeroInk, lineStyle: opts.zeroLineStyle ?? "dashed", title: opts.zeroTitle ?? "Zero Line" }, ...opts.extraLevels ?? []]
+  };
+}
+function channels(hex) {
+  const m = /^#([0-9a-f]{6})/i.exec(hex.trim());
+  if (!m) return null;
+  const n = parseInt(m[1], 16);
+  return [n >> 16 & 255, n >> 8 & 255, n & 255];
+}
+function gradient(value, low, high, from, to) {
+  const a = channels(from);
+  const b = channels(to);
+  if (!a || !b || !Number.isFinite(value)) return from;
+  const span = high - low;
+  const t = span === 0 ? 0 : Math.max(0, Math.min(1, (value - low) / span));
+  const mix = (i) => Math.round(a[i] + (b[i] - a[i]) * t).toString(16).padStart(2, "0");
+  return `#${mix(0)}${mix(1)}${mix(2)}`;
 }
 
 // src/core/native-indicators/classics/averages.ts
-var MA_KINDS = ["SMA", "EMA", "WMA", "RMA", "VWMA"];
-var offsetInput = { key: "offset", title: "Offset", type: "int", defval: 0, min: -500, max: 500, step: 1 };
+var MA_TYPES = ["SMA", "EMA", "WMA", "RMA (SMMA)", "HMA", "ALMA", "VWMA", "DEMA", "TEMA", "KAMA", "LSMA", "McGinley", "Hamming"];
+var ENVELOPE_MA_TYPES = ["SMA", "EMA", "WMA", "RMA (SMMA)", "HMA", "VWMA"];
+function movingAverageOf(kind, src, bars, len, opts = {}) {
+  switch (kind) {
+    case "EMA":
+      return ema(src, len);
+    case "WMA":
+      return wma(src, len);
+    case "RMA":
+    case "RMA (SMMA)":
+      return rma(src, len);
+    case "HMA":
+      return hma(src, len);
+    case "ALMA":
+      return alma(src, len, opts.almaOffset ?? 0.85, opts.almaSigma ?? 6);
+    case "VWMA":
+      return vwma(src, volumes(bars), len);
+    case "DEMA":
+      return dema(src, len);
+    case "TEMA":
+      return tema(src, len);
+    case "KAMA":
+      return kama(src, len);
+    case "LSMA":
+      return linreg(src, len, opts.lsmaOffset ?? 0);
+    case "McGinley":
+      return mcginley(src, len);
+    case "Hamming":
+      return hamming(src, len);
+    default:
+      return sma(src, len);
+  }
+}
+function slopeColors(values, bull, bear, flat) {
+  return values.map((x, i) => {
+    if (!Number.isFinite(x)) return null;
+    const prev2 = i > 0 ? values[i - 1] : Number.NaN;
+    if (!Number.isFinite(prev2)) return flat;
+    return x > prev2 ? bull : x < prev2 ? bear : flat;
+  });
+}
+function directionInputs() {
+  return [
+    boolInput("trendColor", "Slope Trend Coloring", true, STYLE, "Colors the line by its slope \u2014 bullish while it rises, bearish while it falls. Disable to draw it in the neutral color."),
+    colorInput(BULLISH, "Bullish", "bullColor"),
+    colorInput(BEARISH, "Bearish", "bearColor"),
+    colorInput(NEUTRAL, "Neutral", "neutralColor"),
+    widthInput()
+  ];
+}
+function slopeColoredPlot(key, title, values, inputs) {
+  const neutral = str3(inputs, "neutralColor", NEUTRAL);
+  const colored = bool(inputs, "trendColor", true);
+  return {
+    key,
+    title,
+    values,
+    color: neutral,
+    width: num3(inputs, "lineWidth", 2),
+    ...colored ? { colors: slopeColors(values, str3(inputs, "bullColor", BULLISH), str3(inputs, "bearColor", BEARISH), neutral) } : {}
+  };
+}
+var offsetInput = { key: "offset", title: "Offset", type: "int", defval: 0, min: -500, max: 500, step: 1, group: SETTINGS, tooltip: "Bars the plotted line is displaced by. Positive values push it to the right." };
 function fixedAverage(type, title, shortTitle, smooth) {
   return {
     type,
     title,
     shortTitle,
     overlay: true,
-    inputs: [lengthInput(20), sourceInput(), offsetInput, colorInput()],
+    inputs: [lengthInput(20, "length", "Length", 5e3, `Number of bars used in the ${shortTitle} calculation.`), sourceInput("Close", "source", "Source", `Price series the ${shortTitle} is calculated on.`), offsetInput, colorInput()],
     compute: (bars, inputs) => {
       const len = num3(inputs, "length", 20);
       let values = smooth(sourceValues(bars, str3(inputs, "source", "Close")), len);
       const offset = Math.trunc(num3(inputs, "offset", 0));
       if (offset !== 0) values = shift(values, offset);
-      return { plots: [{ key: shortTitle.toLowerCase(), title: shortTitle, values, color: str3(inputs, "color", SERIES_LINE), width: 2 }] };
+      return { plots: [{ key: shortTitle.toLowerCase(), title: shortTitle, values, color: str3(inputs, "color", INFO), width: 2 }] };
     }
   };
 }
@@ -24478,36 +25603,37 @@ var movingAverage = {
   shortTitle: "MA",
   overlay: true,
   inputs: [
-    { key: "maType", title: "Type", type: "string", defval: "SMA", options: MA_KINDS },
-    lengthInput(20),
-    sourceInput(),
+    optionInput("maType", "MA 1 Type", "SMA", MA_TYPES, "Moving average calculation used for MA 1."),
+    lengthInput(20, "length", "MA 1 Length", 5e3, "Number of bars used in the MA 1 calculation."),
+    sourceInput("Close", "source", "MA 1 Source", "Price series MA 1 is calculated on."),
+    boolInput("showMa2", "Show MA 2", false, SETTINGS, "Displays the optional second moving average."),
+    optionInput("ma2Type", "MA 2 Type", "SMA", MA_TYPES, "Moving average calculation used for MA 2."),
+    lengthInput(50, "ma2Length", "MA 2 Length", 5e3, "Number of bars used in the MA 2 calculation."),
+    sourceInput("Close", "ma2Source", "MA 2 Source", "Price series MA 2 is calculated on."),
+    floatInput("almaOffset", "ALMA Offset", 0.85, 0, 1, 0.05, "ALMA type only. Values near 1 make the average more responsive, values near 0 make it smoother."),
+    floatInput("almaSigma", "ALMA Sigma", 6, 0.1, 100, 0.5, "ALMA type only. Larger values widen the Gaussian window for a smoother average."),
+    intInput("lsmaOffset", "LSMA Offset", 0, 0, 500, "LSMA type only. Bar offset applied to the linear regression value."),
     offsetInput,
-    colorInput()
+    colorInput(INFO, "MA 1", "color", "MA 1 line color."),
+    colorInput(WARNING, "MA 2", "ma2Color", "MA 2 line color.")
   ],
   compute: (bars, inputs) => {
-    const len = num3(inputs, "length", 20);
-    const src = sourceValues(bars, str3(inputs, "source", "Close"));
-    const kind = str3(inputs, "maType", "SMA");
-    let values;
-    switch (kind) {
-      case "EMA":
-        values = ema(src, len);
-        break;
-      case "WMA":
-        values = wma(src, len);
-        break;
-      case "RMA":
-        values = rma(src, len);
-        break;
-      case "VWMA":
-        values = vwma(src, volumes(bars), len);
-        break;
-      default:
-        values = sma(src, len);
-    }
+    const opts = {
+      almaOffset: num3(inputs, "almaOffset", 0.85),
+      almaSigma: num3(inputs, "almaSigma", 6),
+      lsmaOffset: Math.trunc(num3(inputs, "lsmaOffset", 0))
+    };
     const offset = Math.trunc(num3(inputs, "offset", 0));
-    if (offset !== 0) values = shift(values, offset);
-    return { plots: [{ key: "ma", title: kind, values, color: str3(inputs, "color", SERIES_LINE), width: 2 }] };
+    const displace = (v) => offset === 0 ? v : shift(v, offset);
+    const kind = str3(inputs, "maType", "SMA");
+    const ma1 = displace(movingAverageOf(kind, sourceValues(bars, str3(inputs, "source", "Close")), bars, num3(inputs, "length", 20), opts));
+    const plots = [{ key: "ma", title: kind, values: ma1, color: str3(inputs, "color", INFO), width: 2 }];
+    if (bool(inputs, "showMa2", false)) {
+      const kind2 = str3(inputs, "ma2Type", "SMA");
+      const ma2 = displace(movingAverageOf(kind2, sourceValues(bars, str3(inputs, "ma2Source", "Close")), bars, num3(inputs, "ma2Length", 50), opts));
+      plots.push({ key: "ma2", title: `${kind2} 2`, values: ma2, color: str3(inputs, "ma2Color", WARNING), width: 2 });
+    }
+    return { plots };
   }
 };
 var smoothedMa = {
@@ -24515,17 +25641,13 @@ var smoothedMa = {
   title: "Smoothed Moving Average",
   shortTitle: "RMA",
   overlay: true,
-  inputs: [lengthInput(14), sourceInput(), colorInput()],
+  inputs: [
+    sourceInput("Close", "source", "Source", "Price series the average smooths. Wilder computed his 1978 indicators on the close, but the recursion accepts any source."),
+    lengthInput(14, "length", "RMA Length", 5e3, "Number of bars N in Wilder's smoothing: the line keeps (N \u2212 1)/N of its previous value and blends in 1/N of the new price. That alpha is smaller than an EMA's, so an N-period RMA responds like a (2N \u2212 1)-period EMA."),
+    ...directionInputs()
+  ],
   compute: (bars, inputs) => ({
-    plots: [
-      {
-        key: "rma",
-        title: "RMA",
-        values: rma(sourceValues(bars, str3(inputs, "source", "Close")), num3(inputs, "length", 14)),
-        color: str3(inputs, "color", SERIES_LINE),
-        width: 2
-      }
-    ]
+    plots: [slopeColoredPlot("rma", "RMA", rma(sourceValues(bars, str3(inputs, "source", "Close")), num3(inputs, "length", 14)), inputs)]
   })
 };
 var zlema = {
@@ -24533,61 +25655,86 @@ var zlema = {
   title: "Zero-Lag Exponential Moving Average",
   shortTitle: "ZLEMA",
   overlay: true,
-  inputs: [lengthInput(14), sourceInput(), colorInput()],
+  inputs: [
+    sourceInput("Close", "source", "Source", "Price series the average de-lags and then smooths."),
+    lengthInput(21, "length", "ZLEMA Length", 5e3, "EMA length N. It sets both the smoothing (alpha = 2 / (N + 1)) and the correction: an EMA of length N lags by about (N \u2212 1)/2 bars, and the de-lagging step is sized to cancel exactly that."),
+    ...directionInputs()
+  ],
   compute: (bars, inputs) => {
-    const len = num3(inputs, "length", 14);
+    const len = num3(inputs, "length", 21);
     const src = sourceValues(bars, str3(inputs, "source", "Close"));
-    const lag = Math.floor((len - 1) / 2);
-    const lagged = shift(src, lag);
-    const delagged = zip(src, lagged, (a, b) => 2 * a - b);
-    return { plots: [{ key: "zlema", title: "ZLEMA", values: ema(delagged, len), color: str3(inputs, "color", SERIES_LINE), width: 2 }] };
+    const lag = Math.round((len - 1) / 2);
+    const delagged = zip(src, shift(src, lag), (a, b) => 2 * a - b);
+    return { plots: [slopeColoredPlot("zlema", "ZLEMA", ema(delagged, len), inputs)] };
   }
 };
+var MOMENTUM_SCALER = "Momentum (|CMO|)";
+var VOLATILITY_SCALER = "Volatility (StDev Ratio)";
+var REGIME = "Trend Regime";
 var vidya = {
   type: "vidya",
   title: "Variable Index Dynamic Average",
   shortTitle: "VIDYA",
   overlay: true,
-  inputs: [lengthInput(14), { key: "cmoLength", title: "Momentum length", type: "int", defval: 9, min: 1, max: 500, step: 1 }, sourceInput(), colorInput()],
+  inputs: [
+    sourceInput("Close", "source", "Source", "Price series the average smooths. VIDYA is classically computed on the close."),
+    lengthInput(12, "length", "VIDYA Length", 5e3, "EMA-equivalent length N of the base smoothing constant, alpha = 2 / (N + 1). The adaptive scaler rescales this base speed bar by bar."),
+    optionInput("scaler", "Adaptive Scaler", MOMENTUM_SCALER, [MOMENTUM_SCALER, VOLATILITY_SCALER], "Bar-by-bar measure that rescales the smoothing constant. Momentum divides the absolute Chande Momentum Oscillator by 100; Volatility is Chande's original short-term over reference standard deviation."),
+    intInput("scalerLength", "Scaler Lookback", 9, 1, 5e3, "Lookback of the adaptive scaler \u2014 the CMO period in momentum mode, or the short-term standard deviation window in volatility mode."),
+    intInput("refLength", "Reference StDev Length", 30, 2, 5e3, "Volatility mode only \u2014 window of the reference standard deviation the short-term reading is divided by."),
+    { ...floatInput("flatThreshold", "Flat Threshold", 0.05, 0, 10, 0.01, "One-bar change of VIDYA, as a fraction of ATR, below which the line reads as flat."), group: REGIME },
+    { ...intInput("atrLength", "ATR Normalization Length", 14, 1, 5e3, "ATR window used to normalize VIDYA's one-bar slope, so the flat threshold behaves consistently across symbols and timeframes."), group: REGIME },
+    boolInput("trendColor", "Trend Regime Coloring", true, STYLE, "Colors VIDYA by its regime read \u2014 bullish while sloping up beyond the flat threshold, bearish while sloping down, flat inside congestion."),
+    boolInput("adaptiveGradient", "Adaptive Gradient", true, STYLE, "Blends the trend color toward the flat color according to the adaptive scaler, so the line pales as momentum dies."),
+    colorInput(BULLISH, "Bullish", "bullColor"),
+    colorInput(BEARISH, "Bearish", "bearColor"),
+    colorInput(NEUTRAL, "Flat", "flatColor"),
+    colorInput(NEUTRAL, "Neutral", "neutralColor"),
+    widthInput()
+  ],
   compute: (bars, inputs) => {
-    const len = num3(inputs, "length", 14);
-    const cmoLen = num3(inputs, "cmoLength", 9);
+    const len = num3(inputs, "length", 12);
     const src = sourceValues(bars, str3(inputs, "source", "Close"));
-    const d = change(src);
-    const su = new Array(src.length).fill(Number.NaN);
-    const sd = new Array(src.length).fill(Number.NaN);
-    for (let i = cmoLen; i < src.length; i++) {
-      let u = 0;
-      let w = 0;
-      let ok = true;
-      for (let k = i - cmoLen + 1; k <= i; k++) {
-        const x = d[k];
-        if (!Number.isFinite(x)) {
-          ok = false;
-          break;
-        }
-        if (x > 0) u += x;
-        else w -= x;
-      }
-      if (ok) {
-        su[i] = u;
-        sd[i] = w;
-      }
-    }
-    const alpha = 2 / (len + 1);
+    const scalerLen = num3(inputs, "scalerLength", 9);
+    const momentum = map(cmo(src, scalerLen), (x) => Math.abs(x) / 100);
+    const shortDev = stdev(src, scalerLen);
+    const refDev = stdev(src, num3(inputs, "refLength", 30));
+    const volatility = zip(shortDev, refDev, (s, r) => r > 0 ? s / r : 0);
+    const scale = str3(inputs, "scaler", MOMENTUM_SCALER) === VOLATILITY_SCALER ? volatility : momentum;
+    const alphaBase = 2 / (len + 1);
     const out = new Array(src.length).fill(Number.NaN);
     let prev2 = Number.NaN;
     for (let i = 0; i < src.length; i++) {
       const x = src[i];
-      const u = su[i];
-      const w = sd[i];
-      if (!Number.isFinite(x) || !Number.isFinite(u) || !Number.isFinite(w)) continue;
-      const total = u + w;
-      const k = total === 0 ? 0 : Math.abs((u - w) / total);
-      prev2 = Number.isFinite(prev2) ? alpha * k * x + (1 - alpha * k) * prev2 : x;
+      if (!Number.isFinite(x)) continue;
+      const k = scale[i];
+      if (!Number.isFinite(prev2) || !Number.isFinite(k)) prev2 = x;
+      else {
+        const alpha = Math.min(alphaBase * k, 1);
+        prev2 = alpha * x + (1 - alpha) * prev2;
+      }
       out[i] = prev2;
     }
-    return { plots: [{ key: "vidya", title: "VIDYA", values: out, color: str3(inputs, "color", SERIES_LINE), width: 2 }] };
+    const neutral = str3(inputs, "neutralColor", NEUTRAL);
+    if (!bool(inputs, "trendColor", true)) {
+      return { plots: [{ key: "vidya", title: "VIDYA", values: out, color: neutral, width: num3(inputs, "lineWidth", 2) }] };
+    }
+    const bull = str3(inputs, "bullColor", BULLISH);
+    const bear = str3(inputs, "bearColor", BEARISH);
+    const flat = str3(inputs, "flatColor", NEUTRAL);
+    const threshold = num3(inputs, "flatThreshold", 0.05);
+    const range = atr(bars, num3(inputs, "atrLength", 14));
+    const fade = bool(inputs, "adaptiveGradient", true);
+    const colors = out.map((x, i) => {
+      if (!Number.isFinite(x)) return null;
+      const r = range[i];
+      const slope = i > 0 && Number.isFinite(out[i - 1]) ? x - out[i - 1] : 0;
+      const normalized = Number.isFinite(r) && r !== 0 ? slope / r : 0;
+      const ink = normalized > threshold ? bull : normalized < -threshold ? bear : null;
+      if (ink == null) return flat;
+      return fade ? gradient(Math.min(scale[i] ?? 0, 1), 0, 1, flat, ink) : ink;
+    });
+    return { plots: [{ key: "vidya", title: "VIDYA", values: out, color: flat, width: num3(inputs, "lineWidth", 2), colors }] };
   }
 };
 var maEnvelope = {
@@ -24596,115 +25743,218 @@ var maEnvelope = {
   shortTitle: "MA Env",
   overlay: true,
   inputs: [
-    { key: "maType", title: "Type", type: "string", defval: "SMA", options: ["SMA", "EMA"] },
-    lengthInput(20),
-    sourceInput(),
-    { key: "percent", title: "Percent", type: "float", defval: 2.5, min: 0.01, max: 50, step: 0.1 },
-    colorInput()
+    optionInput("maType", "MA Type", "SMA", ENVELOPE_MA_TYPES, "Moving average type used as the envelope basis."),
+    { ...lengthInput(20, "length", "Length", 5e3, "Number of bars in the basis moving average."), min: 2 },
+    sourceInput("Close", "source", "Source", "Price series the basis moving average is calculated on."),
+    floatInput("percent", "Percent", 2.5, 0, 50, 0.1, "Envelope offset as a percentage of the basis. Upper = basis \xD7 (1 + percent / 100), lower = basis \xD7 (1 \u2212 percent / 100)."),
+    ...channelStyleInputs()
   ],
   compute: (bars, inputs) => {
-    const len = num3(inputs, "length", 20);
     const src = sourceValues(bars, str3(inputs, "source", "Close"));
-    const basis = str3(inputs, "maType", "SMA") === "EMA" ? ema(src, len) : sma(src, len);
+    const basis = movingAverageOf(str3(inputs, "maType", "SMA"), src, bars, num3(inputs, "length", 20));
     const k = num3(inputs, "percent", 2.5) / 100;
-    const ink = str3(inputs, "color", SERIES_LINE);
-    return {
-      plots: [
-        { key: "basis", title: "Basis", values: basis, color: ink, width: 2 },
-        { key: "upper", title: "Upper", values: map(basis, (x) => x * (1 + k)), color: ink },
-        { key: "lower", title: "Lower", values: map(basis, (x) => x * (1 - k)), color: ink }
-      ],
-      bands: [{ key: "envelope", from: "upper", to: "lower", color: withAlpha2(ink) }]
-    };
+    const ink = { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "basisColor", NEUTRAL) };
+    return directionalChannel(bars, basis, map(basis, (x) => x * (1 + k)), map(basis, (x) => x * (1 - k)), ink, "envelope");
   }
 };
+var LINREG_CURVE = "Curve";
+var LINREG_SLOPE = "Slope";
 var linearRegression = {
   type: "linear-regression",
   title: "Linear Regression Curve",
   shortTitle: "LinReg",
-  overlay: true,
-  inputs: [lengthInput(14), sourceInput(), colorInput()],
-  compute: (bars, inputs) => ({
-    plots: [
-      {
-        key: "linreg",
-        title: "LinReg",
-        values: linreg(sourceValues(bars, str3(inputs, "source", "Close")), num3(inputs, "length", 14)),
-        color: str3(inputs, "color", SERIES_LINE),
-        width: 2
-      }
-    ]
-  })
+  // Slope lives in its own pane; Curve force-overlays itself onto the price candles.
+  overlay: false,
+  inputs: [
+    optionInput("mode", "Mode", LINREG_CURVE, [LINREG_CURVE, LINREG_SLOPE], "Curve plots the regression value on the price chart; Slope plots the per-bar slope of the fit in the pane."),
+    { ...lengthInput(100, "length", "Length", 5e3, "Number of bars used to fit the linear regression."), min: 2 },
+    sourceInput("Close", "source", "Source", "Price series the regression is fitted to."),
+    colorInput(BULLISH, "Rising", "bullColor", "Color of the regression curve and slope line while the fit slopes upward."),
+    colorInput(BEARISH, "Falling", "bearColor", "Color of the regression curve and slope line while the fit slopes downward."),
+    colorInput(NEUTRAL, "Regression Line", "lineColor", "Color of the regression curve and slope line while the fit is flat.")
+  ],
+  compute: (bars, inputs) => {
+    const len = num3(inputs, "length", 100);
+    const src = sourceValues(bars, str3(inputs, "source", "Close"));
+    const curve = linreg(src, len, 0);
+    const slope = zip(curve, linreg(src, len, 1), (a, b) => a - b);
+    const bull = str3(inputs, "bullColor", BULLISH);
+    const bear = str3(inputs, "bearColor", BEARISH);
+    const flat = str3(inputs, "lineColor", NEUTRAL);
+    const colors = slope.map((s) => Number.isFinite(s) ? s > 0 ? bull : s < 0 ? bear : flat : null);
+    if (str3(inputs, "mode", LINREG_CURVE) === LINREG_SLOPE) {
+      return {
+        plots: [{ key: "slope", title: "Slope", values: slope, color: flat, width: 2, colors }],
+        levels: [{ key: "zero", price: 0, color: transp(NEUTRAL, 50), lineStyle: "dashed" }]
+      };
+    }
+    return { plots: [{ key: "curve", title: "Curve", values: curve, color: flat, width: 2, colors, overlay: true }] };
+  }
 };
 var averageSpecs = [simpleMa, exponentialMa, movingAverage, smoothedMa, zlema, vidya, maEnvelope, linearRegression];
 
 // src/core/native-indicators/classics/bands.ts
+var JAW_COLOR = "#ab47bc";
+var TEETH_COLOR = WARNING;
+var LIPS_COLOR = "#ffd700";
 function bollinger(bars, inputs) {
   const len = num3(inputs, "length", 20);
   const mult = num3(inputs, "mult", 2);
   const src = sourceValues(bars, str3(inputs, "source", "Close"));
   const basis = sma(src, len);
   const dev = map(stdev(src, len), (x) => x * mult);
-  return { basis, upper: zip(basis, dev, (b, d) => b + d), lower: zip(basis, dev, (b, d) => b - d) };
+  return { src, basis, upper: zip(basis, dev, (b, d) => b + d), lower: zip(basis, dev, (b, d) => b - d) };
 }
-var BB_INPUTS = [lengthInput(20), sourceInput(), { key: "mult", title: "StdDev", type: "float", defval: 2, min: 0.1, max: 50, step: 0.1 }];
+function bollingerInputs(multMin, multStep) {
+  return [
+    { ...lengthInput(20, "length", "Length", 5e3, "Number of bars used for the Bollinger Bands basis (a simple moving average) and for the standard deviation."), min: 2 },
+    sourceInput("Close", "source", "Source", "Price series the bands are computed from."),
+    floatInput("mult", "Multiplier", 2, multMin, 50, multStep, "Standard deviation multiplier for the upper and lower bands.")
+  ];
+}
 var bollingerBands = {
   type: "bollinger-bands",
   title: "Bollinger Bands",
   shortTitle: "BB",
   overlay: true,
-  inputs: [...BB_INPUTS, colorInput()],
+  inputs: [
+    lengthInput(20, "length", "Length", 5e3, "Number of bars used to calculate the basis SMA and the standard deviation."),
+    sourceInput("Close", "source", "Source", "Price series the bands are calculated on."),
+    floatInput("mult", "Multiplier", 2, 0, 50, 0.1, "Number of standard deviations added above and below the basis to form the bands."),
+    colorInput(WARNING, "Basis", "basisColor", "Color of the basis (middle band) moving average."),
+    colorInput(INFO, "Bands", "color", "Color of the upper and lower bands."),
+    colorInput(transp(INFO, 92), "Fill", "fillColor", "Fill color of the area between the upper and lower bands.")
+  ],
   compute: (bars, inputs) => {
     const { basis, upper, lower } = bollinger(bars, inputs);
-    const ink = str3(inputs, "color", SERIES_LINE);
+    const ink = str3(inputs, "color", INFO);
     return {
       plots: [
-        { key: "basis", title: "Basis", values: basis, color: WARNING },
+        { key: "basis", title: "Basis", values: basis, color: str3(inputs, "basisColor", WARNING) },
         { key: "upper", title: "Upper", values: upper, color: ink },
         { key: "lower", title: "Lower", values: lower, color: ink }
       ],
-      bands: [{ key: "bb", from: "upper", to: "lower", color: withAlpha2(ink) }]
+      bands: [{ key: "bb", from: "upper", to: "lower", color: str3(inputs, "fillColor", transp(INFO, 92)) }]
     };
   }
 };
+var PERCENT_B_MID = 0.5;
+var THRESHOLDS = "Thresholds";
 var percentB = {
   type: "percent-b",
   title: "Bollinger Bands %B",
   shortTitle: "%B",
   overlay: false,
-  inputs: [...BB_INPUTS, colorInput()],
+  inputs: [
+    ...bollingerInputs(1e-3, 0.25),
+    { ...floatInput("overbought", "Overbought", 1, -10, 10, 0.05, "Level treated as overbought. 1 is the upper band itself, so readings above the default mean price sits outside the bands."), group: THRESHOLDS },
+    { ...floatInput("oversold", "Oversold", 0, -10, 10, 0.05, "Level treated as oversold. 0 is the lower band itself, so readings below the default mean price sits outside the bands."), group: THRESHOLDS },
+    colorInput(BULLISH, "Bullish", "bullColor", "Color of %B above the 0.5 midline, where price trades in the upper half of the bands."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of %B below the 0.5 midline, where price trades in the lower half of the bands."),
+    boolInput("gradientFill", "Gradient Fill", true, STYLE, "Vertical gradient between %B and the 0.5 midline, fully transparent at the midline and more opaque at the oscillator value."),
+    colorInput(NEUTRAL, "Levels Color", "levelsColor", "Color of the dashed overbought/oversold levels and of the dotted midline.")
+  ],
   compute: (bars, inputs) => {
-    const { upper, lower } = bollinger(bars, inputs);
-    const src = sourceValues(bars, str3(inputs, "source", "Close"));
+    const { src, upper, lower } = bollinger(bars, inputs);
     const values = src.map((x, i) => {
       const u = upper[i];
       const l = lower[i];
       return Number.isFinite(u) && Number.isFinite(l) && u !== l ? (x - l) / (u - l) : Number.NaN;
     });
+    const bull = str3(inputs, "bullColor", BULLISH);
+    const bear = str3(inputs, "bearColor", BEARISH);
+    const levels = str3(inputs, "levelsColor", NEUTRAL);
+    const colors = values.map((x) => Number.isFinite(x) ? x > PERCENT_B_MID ? bull : bear : null);
+    const plots = [
+      { key: "pb", title: "%B", values, color: bear, colors },
+      { key: "mid", title: "Midline", values: values.map((x) => Number.isFinite(x) ? PERCENT_B_MID : Number.NaN), color: levels, display: { pane: false, legend: false, dataWindow: false } }
+    ];
+    const bands = bool(inputs, "gradientFill", true) ? [
+      {
+        key: "pbFill",
+        from: "pb",
+        to: "mid",
+        color: transp(NEUTRAL, 100),
+        // Opaque at the oscillator, invisible where it meets the midline.
+        gradient: values.map((x) => {
+          if (!Number.isFinite(x)) return null;
+          const up = x > PERCENT_B_MID;
+          const ink = up ? bull : bear;
+          return {
+            topValue: Math.max(x, PERCENT_B_MID),
+            bottomValue: Math.min(x, PERCENT_B_MID),
+            topColor: up ? transp(ink, 50) : transp(ink, 100),
+            bottomColor: up ? transp(ink, 100) : transp(ink, 50)
+          };
+        })
+      }
+    ] : [];
     return {
-      plots: [{ key: "pb", title: "%B", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
+      plots,
+      bands,
       levels: [
-        { key: "upper", price: 1, color: NEUTRAL },
-        { key: "middle", price: 0.5, color: NEUTRAL, lineStyle: "dotted" },
-        { key: "lower", price: 0, color: NEUTRAL }
+        { key: "overbought", price: num3(inputs, "overbought", 1), color: levels, lineStyle: "dashed", title: "Overbought" },
+        { key: "oversold", price: num3(inputs, "oversold", 0), color: levels, lineStyle: "dashed", title: "Oversold" },
+        { key: "midline", price: PERCENT_B_MID, color: transp(levels, 50), lineStyle: "dotted", title: "Midline" }
       ]
     };
   }
 };
+var SQUEEZE_BULGE = "Squeeze & Bulge";
 var bandwidth = {
   type: "bandwidth",
   title: "Bollinger Bands Width",
   shortTitle: "BandWidth",
   overlay: false,
-  inputs: [...BB_INPUTS, colorInput()],
+  inputs: [
+    ...bollingerInputs(1e-3, 0.25),
+    { ...intInput("lookback", "Reference Lookback", 125, 2, 5e3, "Window used to locate the lowest (Squeeze) and highest (Bulge) BandWidth references."), group: SQUEEZE_BULGE },
+    boolInput("showSqueeze", "Show Squeeze Level", true, SQUEEZE_BULGE, "Plots the lowest BandWidth of the reference lookback \u2014 unusually compressed volatility, a condition rather than a directional signal."),
+    boolInput("showBulge", "Show Bulge Level", true, SQUEEZE_BULGE, "Plots the highest BandWidth of the reference lookback \u2014 extreme width that is unlikely to be sustained."),
+    colorInput(NEUTRAL, "BandWidth", "color", "Color of the BandWidth line. At its Squeeze reference the line takes the Squeeze color, at its Bulge reference the Bulge color."),
+    boolInput("gradientFill", "Gradient Fill", true, STYLE, "Fills the area between zero and BandWidth with a vertical gradient, fully transparent at zero."),
+    colorInput(WARNING, "Squeeze Level", "squeezeColor", "Color of the lowest-BandWidth reference line."),
+    colorInput(BEARISH, "Bulge Level", "bulgeColor", "Color of the highest-BandWidth reference line.")
+  ],
   compute: (bars, inputs) => {
     const { basis, upper, lower } = bollinger(bars, inputs);
     const values = basis.map((b, i) => {
       const u = upper[i];
       const l = lower[i];
-      return Number.isFinite(b) && b !== 0 && Number.isFinite(u) && Number.isFinite(l) ? (u - l) / b * 100 : Number.NaN;
+      return Number.isFinite(b) && b !== 0 && Number.isFinite(u) && Number.isFinite(l) ? (u - l) / b : Number.NaN;
     });
-    return { plots: [{ key: "bbw", title: "BBW", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }] };
+    const lookback = num3(inputs, "lookback", 125);
+    const squeezeLevel = lowest(values, lookback);
+    const bulgeLevel = highest(values, lookback);
+    const base = str3(inputs, "color", NEUTRAL);
+    const squeezeInk = str3(inputs, "squeezeColor", WARNING);
+    const bulgeInk = str3(inputs, "bulgeColor", BEARISH);
+    const colors = values.map((x, i) => {
+      if (!Number.isFinite(x)) return null;
+      if (x <= squeezeLevel[i]) return squeezeInk;
+      if (x >= bulgeLevel[i]) return bulgeInk;
+      return base;
+    });
+    const plots = [
+      { key: "bbw", title: "BandWidth", values, color: base, colors },
+      { key: "zero", title: "Zero Line", values: values.map((x) => Number.isFinite(x) ? 0 : Number.NaN), color: transp(NEUTRAL, 90) }
+    ];
+    if (bool(inputs, "showSqueeze", true)) plots.push({ key: "squeeze", title: "Squeeze Level", values: squeezeLevel, color: squeezeInk });
+    if (bool(inputs, "showBulge", true)) plots.push({ key: "bulge", title: "Bulge Level", values: bulgeLevel, color: bulgeInk });
+    const bands = bool(inputs, "gradientFill", true) ? [
+      {
+        key: "bbwFill",
+        from: "bbw",
+        to: "zero",
+        color: transp(NEUTRAL, 100),
+        gradient: values.map((x, i) => {
+          if (!Number.isFinite(x)) return null;
+          const ink = colors[i] ?? base;
+          return { topValue: x, bottomValue: 0, topColor: transp(ink, 50), bottomColor: transp(ink, 100) };
+        })
+      }
+    ] : [];
+    return { plots, bands };
   }
 };
 var keltner = {
@@ -24713,26 +25963,17 @@ var keltner = {
   shortTitle: "KC",
   overlay: true,
   inputs: [
-    lengthInput(20),
-    { key: "mult", title: "Multiplier", type: "float", defval: 2, min: 0.1, max: 50, step: 0.1 },
-    { key: "atrLength", title: "ATR length", type: "int", defval: 10, min: 1, max: 500, step: 1 },
-    sourceInput(),
-    colorInput()
+    lengthInput(20, "length", "EMA Length", 5e3, "Number of bars used to compute the exponential moving average basis line."),
+    intInput("atrLength", "ATR Length", 10, 1, 5e3, "Number of bars used to compute the Average True Range (Wilder smoothing)."),
+    floatInput("mult", "Multiplier", 2, 0, 50, 0.1, "ATR multiple used to offset the upper and lower bands from the basis line."),
+    sourceInput("Close", "source", "Source", "Price series used to compute the basis line."),
+    ...channelStyleInputs("Basis Color")
   ],
   compute: (bars, inputs) => {
-    const len = num3(inputs, "length", 20);
-    const mult = num3(inputs, "mult", 2);
-    const basis = ema(sourceValues(bars, str3(inputs, "source", "Close")), len);
-    const range = map(atr(bars, num3(inputs, "atrLength", 10)), (x) => x * mult);
-    const ink = str3(inputs, "color", SERIES_LINE);
-    return {
-      plots: [
-        { key: "basis", title: "Basis", values: basis, color: WARNING },
-        { key: "upper", title: "Upper", values: zip(basis, range, (b, r) => b + r), color: ink },
-        { key: "lower", title: "Lower", values: zip(basis, range, (b, r) => b - r), color: ink }
-      ],
-      bands: [{ key: "kc", from: "upper", to: "lower", color: withAlpha2(ink) }]
-    };
+    const basis = ema(sourceValues(bars, str3(inputs, "source", "Close")), num3(inputs, "length", 20));
+    const range = map(atr(bars, num3(inputs, "atrLength", 10)), (x) => x * num3(inputs, "mult", 2));
+    const ink = { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "basisColor", NEUTRAL) };
+    return directionalChannel(bars, basis, zip(basis, range, (b, r) => b + r), zip(basis, range, (b, r) => b - r), ink, "kc");
   }
 };
 var donchian = {
@@ -24740,19 +25981,24 @@ var donchian = {
   title: "Donchian Channels",
   shortTitle: "DC",
   overlay: true,
-  inputs: [lengthInput(20), colorInput()],
+  inputs: [
+    lengthInput(20, "length", "Length", 5e3, "Lookback length. The upper and lower channels are the highest high and lowest low over this many bars."),
+    colorInput(BEARISH, "Upper", "upperColor", "Color of the upper channel line."),
+    colorInput(NEUTRAL, "Middle", "middleColor", "Color of the channel midline."),
+    colorInput(BULLISH, "Lower", "lowerColor", "Color of the lower channel line."),
+    colorInput(transp(NEUTRAL, 92), "Fill", "fillColor", "Color of the channel interior fill.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 20);
     const upper = highest(highs(bars), len);
     const lower = lowest(lows(bars), len);
-    const ink = str3(inputs, "color", SERIES_LINE);
     return {
       plots: [
-        { key: "basis", title: "Basis", values: zip(upper, lower, (u, l) => (u + l) / 2), color: WARNING },
-        { key: "upper", title: "Upper", values: upper, color: ink },
-        { key: "lower", title: "Lower", values: lower, color: ink }
+        { key: "upper", title: "Upper", values: upper, color: str3(inputs, "upperColor", BEARISH) },
+        { key: "middle", title: "Middle", kind: "circles", values: zip(upper, lower, (u, l) => (u + l) / 2), color: str3(inputs, "middleColor", NEUTRAL) },
+        { key: "lower", title: "Lower", values: lower, color: str3(inputs, "lowerColor", BULLISH) }
       ],
-      bands: [{ key: "dc", from: "upper", to: "lower", color: withAlpha2(ink) }]
+      bands: [{ key: "dc", from: "upper", to: "lower", color: str3(inputs, "fillColor", transp(NEUTRAL, 92)) }]
     };
   }
 };
@@ -24761,16 +26007,37 @@ var chandelier = {
   title: "Chandelier Exit",
   shortTitle: "CE",
   overlay: true,
-  inputs: [lengthInput(22), { key: "mult", title: "ATR multiplier", type: "float", defval: 3, min: 0.1, max: 50, step: 0.1 }],
+  inputs: [
+    lengthInput(22, "length", "Length", 5e3, "Lookback used for both the highest high / lowest low extremes and the ATR."),
+    floatInput("mult", "ATR Multiplier", 3, 0, 50, 0.1, "Multiple of ATR subtracted from the highest high (long stop) and added to the lowest low (short stop)."),
+    boolInput("ratchet", "Ratchet Stops", false, void 0, "Prevents the long stop from falling and the short stop from rising, resetting once close crosses through the stop."),
+    colorInput(BULLISH, "Long Stop", "longColor", "Color of the long trailing stop line."),
+    colorInput(BEARISH, "Short Stop", "shortColor", "Color of the short trailing stop line.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 22);
     const range = map(atr(bars, len), (x) => x * num3(inputs, "mult", 3));
-    const long = zip(highest(highs(bars), len), range, (h, r) => h - r);
-    const short = zip(lowest(lows(bars), len), range, (l, r) => l + r);
+    const basicLong = zip(highest(highs(bars), len), range, (h, r) => h - r);
+    const basicShort = zip(lowest(lows(bars), len), range, (l, r) => l + r);
+    let long = basicLong;
+    let short = basicShort;
+    if (bool(inputs, "ratchet", false)) {
+      long = new Array(bars.length).fill(Number.NaN);
+      short = new Array(bars.length).fill(Number.NaN);
+      for (let i = 0; i < bars.length; i++) {
+        const bl = basicLong[i];
+        const bs = basicShort[i];
+        const prevClose = i > 0 ? bars[i - 1].close : bars[i].close;
+        const prevLong = i > 0 && Number.isFinite(long[i - 1]) ? long[i - 1] : bl;
+        const prevShort = i > 0 && Number.isFinite(short[i - 1]) ? short[i - 1] : bs;
+        long[i] = Number.isFinite(bl) ? prevClose > prevLong ? Math.max(bl, prevLong) : bl : Number.NaN;
+        short[i] = Number.isFinite(bs) ? prevClose < prevShort ? Math.min(bs, prevShort) : bs : Number.NaN;
+      }
+    }
     return {
       plots: [
-        { key: "long", title: "Long stop", values: long, color: BULLISH },
-        { key: "short", title: "Short stop", values: short, color: BEARISH }
+        { key: "long", title: "Long Stop", values: long, color: str3(inputs, "longColor", BULLISH) },
+        { key: "short", title: "Short Stop", values: short, color: str3(inputs, "shortColor", BEARISH) }
       ]
     };
   }
@@ -24781,21 +26048,22 @@ var chandeKroll = {
   shortTitle: "CKS",
   overlay: true,
   inputs: [
-    { key: "p", title: "ATR length", type: "int", defval: 10, min: 1, max: 500, step: 1 },
-    { key: "x", title: "ATR multiplier", type: "float", defval: 1, min: 0.1, max: 50, step: 0.1 },
-    { key: "q", title: "Stop length", type: "int", defval: 9, min: 1, max: 500, step: 1 }
+    intInput("p", "ATR Length (P)", 10, 1, 5e3, "Lookback used for both the ATR and the highest high / lowest low price extremes."),
+    floatInput("x", "ATR Multiplier (X)", 1, 0, 50, 0.1, "Multiplier applied to the ATR to offset the preliminary stops from the price extremes."),
+    intInput("q", "Stop Length (Q)", 9, 1, 5e3, "Lookback over which the preliminary stops are extended into the final stop levels."),
+    colorInput(BEARISH, "Stop Short", "shortColor", "Color of the protective stop line for short positions."),
+    colorInput(BULLISH, "Stop Long", "longColor", "Color of the protective stop line for long positions.")
   ],
   compute: (bars, inputs) => {
     const p = num3(inputs, "p", 10);
-    const x = num3(inputs, "x", 1);
     const q = num3(inputs, "q", 9);
-    const range = map(atr(bars, p), (v) => v * x);
+    const range = map(atr(bars, p), (v) => v * num3(inputs, "x", 1));
     const firstHigh = zip(highest(highs(bars), p), range, (h, r) => h - r);
     const firstLow = zip(lowest(lows(bars), p), range, (l, r) => l + r);
     return {
       plots: [
-        { key: "stopShort", title: "Stop short", values: highest(firstHigh, q), color: BEARISH },
-        { key: "stopLong", title: "Stop long", values: lowest(firstLow, q), color: BULLISH }
+        { key: "stopShort", title: "Stop Short", values: highest(firstHigh, q), color: str3(inputs, "shortColor", BEARISH) },
+        { key: "stopLong", title: "Stop Long", values: lowest(firstLow, q), color: str3(inputs, "longColor", BULLISH) }
       ]
     };
   }
@@ -24806,36 +26074,42 @@ var supertrend = {
   shortTitle: "SuperTrend",
   overlay: true,
   inputs: [
-    { key: "atrLength", title: "ATR length", type: "int", defval: 10, min: 1, max: 500, step: 1 },
-    { key: "mult", title: "Factor", type: "float", defval: 3, min: 0.1, max: 50, step: 0.1 }
+    intInput("atrLength", "ATR Length", 10, 1, 5e3, "Number of bars used to compute the Wilder ATR."),
+    floatInput("mult", "Factor", 3, 0, 50, 0.1, "ATR multiplier setting how far the trailing stop sits from the bar midpoint."),
+    colorInput(BULLISH, "Uptrend Color", "upColor", "Line color while the trend is up."),
+    colorInput(BEARISH, "Downtrend Color", "downColor", "Line color while the trend is down.")
   ],
   compute: (bars, inputs) => {
-    const len = num3(inputs, "atrLength", 10);
     const mult = num3(inputs, "mult", 3);
-    const range = atr(bars, len);
+    const range = atr(bars, num3(inputs, "atrLength", 10));
     const n = bars.length;
-    const st = new Array(n).fill(Number.NaN);
-    const dir = new Array(n).fill(1);
-    let up = Number.NaN;
-    let dn = Number.NaN;
-    let trend = 1;
+    const up = new Array(n).fill(Number.NaN);
+    const down = new Array(n).fill(Number.NaN);
+    let finalUpper = Number.NaN;
+    let finalLower = Number.NaN;
+    let trend = -1;
     for (let i = 0; i < n; i++) {
       const r = range[i];
       if (!Number.isFinite(r)) continue;
       const b = bars[i];
       const mid = (b.high + b.low) / 2;
-      const basicUp = mid - mult * r;
-      const basicDn = mid + mult * r;
+      const basicUpper = mid + mult * r;
+      const basicLower = mid - mult * r;
+      const prevUpper = Number.isFinite(finalUpper) ? finalUpper : basicUpper;
+      const prevLower = Number.isFinite(finalLower) ? finalLower : basicLower;
       const prevClose = i > 0 ? bars[i - 1].close : b.close;
-      up = Number.isFinite(up) && prevClose > up ? Math.max(basicUp, up) : basicUp;
-      dn = Number.isFinite(dn) && prevClose < dn ? Math.min(basicDn, dn) : basicDn;
-      if (trend === 1 && b.close < up) trend = -1;
-      else if (trend === -1 && b.close > dn) trend = 1;
-      dir[i] = trend;
-      st[i] = trend === 1 ? up : dn;
+      finalUpper = prevClose <= prevUpper ? Math.min(basicUpper, prevUpper) : basicUpper;
+      finalLower = prevClose >= prevLower ? Math.max(basicLower, prevLower) : basicLower;
+      trend = b.close > finalUpper ? 1 : b.close < finalLower ? -1 : trend;
+      if (trend === 1) up[i] = finalLower;
+      else down[i] = finalUpper;
     }
-    const colors = dir.map((d, i) => Number.isFinite(st[i]) ? d === 1 ? BULLISH : BEARISH : null);
-    return { plots: [{ key: "st", title: "SuperTrend", values: st, color: BULLISH, width: 2, colors }] };
+    return {
+      plots: [
+        { key: "up", title: "Uptrend", values: up, color: str3(inputs, "upColor", BULLISH) },
+        { key: "down", title: "Downtrend", values: down, color: str3(inputs, "downColor", BEARISH) }
+      ]
+    };
   }
 };
 var alligator = {
@@ -24844,12 +26118,15 @@ var alligator = {
   shortTitle: "Alligator",
   overlay: true,
   inputs: [
-    { key: "jawLength", title: "Jaw length", type: "int", defval: 13, min: 1, max: 500, step: 1 },
-    { key: "teethLength", title: "Teeth length", type: "int", defval: 8, min: 1, max: 500, step: 1 },
-    { key: "lipsLength", title: "Lips length", type: "int", defval: 5, min: 1, max: 500, step: 1 },
-    { key: "jawOffset", title: "Jaw offset", type: "int", defval: 8, min: 0, max: 100, step: 1 },
-    { key: "teethOffset", title: "Teeth offset", type: "int", defval: 5, min: 0, max: 100, step: 1 },
-    { key: "lipsOffset", title: "Lips offset", type: "int", defval: 3, min: 0, max: 100, step: 1 }
+    intInput("jawLength", "Jaw Length", 13, 1, 5e3, "Smoothing length of the Jaw SMMA of median price (hl2), 13 in the classic setup."),
+    intInput("teethLength", "Teeth Length", 8, 1, 5e3, "Smoothing length of the Teeth SMMA of median price (hl2), 8 in the classic setup."),
+    intInput("lipsLength", "Lips Length", 5, 1, 5e3, "Smoothing length of the Lips SMMA of median price (hl2), 5 in the classic setup."),
+    intInput("jawOffset", "Jaw Offset", 8, 0, 100, "Number of bars the Jaw plot is shifted into the future, 8 in the classic setup."),
+    intInput("teethOffset", "Teeth Offset", 5, 0, 100, "Number of bars the Teeth plot is shifted into the future, 5 in the classic setup."),
+    intInput("lipsOffset", "Lips Offset", 3, 0, 100, "Number of bars the Lips plot is shifted into the future, 3 in the classic setup."),
+    colorInput(JAW_COLOR, "Jaw", "jawColor", "Color of the Jaw line."),
+    colorInput(TEETH_COLOR, "Teeth", "teethColor", "Color of the Teeth line."),
+    colorInput(LIPS_COLOR, "Lips", "lipsColor", "Color of the Lips line.")
   ],
   compute: (bars, inputs) => {
     const hl2 = sourceValues(bars, "HL2");
@@ -24858,99 +26135,134 @@ var alligator = {
     const lips = shift(rma(hl2, num3(inputs, "lipsLength", 5)), num3(inputs, "lipsOffset", 3));
     return {
       plots: [
-        { key: "jaw", title: "Jaw", values: jaw, color: SERIES_LINE },
-        { key: "teeth", title: "Teeth", values: teeth, color: BEARISH },
-        { key: "lips", title: "Lips", values: lips, color: BULLISH }
+        { key: "jaw", title: "Jaw", values: jaw, color: str3(inputs, "jawColor", JAW_COLOR) },
+        { key: "teeth", title: "Teeth", values: teeth, color: str3(inputs, "teethColor", TEETH_COLOR) },
+        { key: "lips", title: "Lips", values: lips, color: str3(inputs, "lipsColor", LIPS_COLOR) }
       ]
     };
   }
 };
+var GATOR_LINES = "Alligator Lines";
+var SMMA_TYPE = "SMMA (Wilder)";
 var gator = {
   type: "gator-oscillator",
   title: "Gator Oscillator",
   shortTitle: "Gator Oscillator",
   overlay: false,
-  inputs: [],
-  compute: (bars) => {
-    const hl2 = sourceValues(bars, "HL2");
-    const jaw = shift(rma(hl2, 13), 8);
-    const teeth = shift(rma(hl2, 8), 5);
-    const lips = shift(rma(hl2, 5), 3);
+  inputs: [
+    { ...sourceInput("HL2", "source", "Source", "Price series fed to the three Alligator averages. Bill Williams' original recipe uses the median price (high + low) / 2."), group: GATOR_LINES },
+    { ...optionInput("maType", "Smoothing", SMMA_TYPE, [SMMA_TYPE, "SMA", "EMA"], "Moving average applied to the source for the jaw, teeth and lips. The original uses the smoothed (Wilder-style) moving average."), group: GATOR_LINES },
+    { ...intInput("jawLength", "Jaw Length", 13, 1, 500, "Averaging length of the jaw line."), group: GATOR_LINES },
+    { ...intInput("jawOffset", "Jaw Offset", 8, 0, 100, "Bars the jaw is displaced forward, 8 in the original recipe. The upper histogram measures the absolute spread between the displaced jaw and teeth."), group: GATOR_LINES },
+    { ...intInput("teethLength", "Teeth Length", 8, 1, 500, "Averaging length of the teeth line."), group: GATOR_LINES },
+    { ...intInput("teethOffset", "Teeth Offset", 5, 0, 100, "Bars the teeth are displaced forward, 5 in the original recipe. The teeth line enters both spreads."), group: GATOR_LINES },
+    { ...intInput("lipsLength", "Lips Length", 5, 1, 500, "Averaging length of the lips line."), group: GATOR_LINES },
+    { ...intInput("lipsOffset", "Lips Offset", 3, 0, 100, "Bars the lips are displaced forward, 3 in the original recipe. The lower histogram measures the negative absolute spread between the displaced teeth and lips."), group: GATOR_LINES },
+    colorInput(BULLISH, "Expanding", "growColor", "Column color while a spread grew against its own previous bar \u2014 the averages are spreading apart."),
+    colorInput(BEARISH, "Contracting", "shrinkColor", "Column color while a spread shrank \u2014 the averages are converging. Color encodes expansion, not trade direction."),
+    colorInput(NEUTRAL, "Zero Line", "zeroColor", "Color of the zero line separating the two histograms.")
+  ],
+  compute: (bars, inputs) => {
+    const src = sourceValues(bars, str3(inputs, "source", "HL2"));
+    const kind = str3(inputs, "maType", SMMA_TYPE);
+    const smooth = (len) => kind === "SMA" ? sma(src, len) : kind === "EMA" ? ema(src, len) : rma(src, len);
+    const jaw = shift(smooth(num3(inputs, "jawLength", 13)), num3(inputs, "jawOffset", 8));
+    const teeth = shift(smooth(num3(inputs, "teethLength", 8)), num3(inputs, "teethOffset", 5));
+    const lips = shift(smooth(num3(inputs, "lipsLength", 5)), num3(inputs, "lipsOffset", 3));
     const upper = map(sub(jaw, teeth), Math.abs);
-    const lower = map(sub(teeth, lips), (x) => -Math.abs(x));
-    const colorByExpansion = (v) => v.map((x, i) => {
-      if (!Number.isFinite(x)) return null;
-      const prev2 = i > 0 ? v[i - 1] : Number.NaN;
-      return Number.isFinite(prev2) && Math.abs(x) > Math.abs(prev2) ? BULLISH : BEARISH;
-    });
+    const lower = map(sub(teeth, lips), Math.abs);
+    const grow = str3(inputs, "growColor", BULLISH);
+    const shrink = str3(inputs, "shrinkColor", BEARISH);
+    const expansionColors2 = (v) => {
+      let growing = false;
+      return v.map((x, i) => {
+        if (!Number.isFinite(x)) return null;
+        const prev2 = i > 0 ? v[i - 1] : Number.NaN;
+        if (Number.isFinite(prev2)) growing = x > prev2 ? true : x < prev2 ? false : growing;
+        return growing ? grow : shrink;
+      });
+    };
     return {
       plots: [
-        { key: "upper", title: "Upper", values: upper, kind: "histogram", color: BULLISH, colors: colorByExpansion(upper), base: 0 },
-        { key: "lower", title: "Lower", values: lower, kind: "histogram", color: BEARISH, colors: colorByExpansion(lower), base: 0 }
-      ]
+        { key: "upper", title: "Upper Histogram (Jaw - Teeth)", values: upper, kind: "columns", color: grow, colors: expansionColors2(upper), base: 0 },
+        { key: "lower", title: "Lower Histogram (Teeth - Lips)", values: map(lower, (x) => -x), kind: "columns", color: shrink, colors: expansionColors2(lower), base: 0 }
+      ],
+      levels: [{ key: "zero", price: 0, color: str3(inputs, "zeroColor", NEUTRAL), lineStyle: "solid", title: "Zero Line" }]
     };
   }
 };
 var bandSpecs = [bollingerBands, percentB, bandwidth, keltner, donchian, chandelier, chandeKroll, supertrend, alligator, gator];
 
 // src/core/native-indicators/classics/oscillators.ts
-function guideLevels(low, high, mid) {
-  const levels = [
-    { key: "upper", price: high, color: NEUTRAL },
-    { key: "lower", price: low, color: NEUTRAL }
+function thresholdInputs(obDefault, osDefault, min = 0, max = 100, obTitle = "Overbought Level", osTitle = "Oversold Level") {
+  return [
+    floatInput("overbought", obTitle, obDefault, min, max, 1, "Level above which the oscillator is considered overbought."),
+    floatInput("oversold", osTitle, osDefault, min, max, 1, "Level below which the oscillator is considered oversold.")
   ];
-  if (mid != null) levels.splice(1, 0, { key: "middle", price: mid, color: NEUTRAL, lineStyle: "dotted" });
-  return levels;
-}
-var ZERO_LEVEL = [{ key: "zero", price: 0, color: NEUTRAL }];
-function histColors(values) {
-  return values.map((x, i) => {
-    if (!Number.isFinite(x)) return null;
-    const prev2 = i > 0 ? values[i - 1] : Number.NaN;
-    const rising = Number.isFinite(prev2) ? x >= prev2 : true;
-    if (x >= 0) return rising ? BULLISH : `${BULLISH}80`;
-    return rising ? `${BEARISH}80` : BEARISH;
-  });
 }
 var rsiSpec = {
   type: "rsi",
   title: "Relative Strength Index",
   shortTitle: "RSI",
   overlay: false,
-  inputs: [lengthInput(14), sourceInput(), colorInput()],
-  compute: (bars, inputs) => ({
-    plots: [
-      {
-        key: "rsi",
-        title: "RSI",
-        values: rsi(sourceValues(bars, str3(inputs, "source", "Close")), num3(inputs, "length", 14)),
-        color: str3(inputs, "color", SERIES_LINE),
-        width: 2
-      }
-    ],
-    levels: guideLevels(30, 70, 50)
+  inputs: [
+    lengthInput(14, "length", "Length", 5e3, "Number of bars used in the Wilder smoothing of average gains and losses."),
+    sourceInput("Close", "source", "Source", "Price series the RSI is calculated on."),
+    ...thresholdInputs(70, 30, 0, 100, "Overbought", "Oversold"),
+    colorInput(NEUTRAL, "RSI", "color", "Color of the RSI line at the midline. Toward either threshold it blends into that threshold\u2019s color."),
+    colorInput(BULLISH, "Oversold", "oversoldColor", "Color of the line and zone shading at and below the oversold level."),
+    colorInput(BEARISH, "Overbought", "overboughtColor", "Color of the line and zone shading at and above the overbought level."),
+    colorInput(NEUTRAL, "Levels", "levelsColor", "Color of the overbought, midline and oversold levels."),
+    colorInput(transp(NEUTRAL, 90), "Band Fill", "fillColor", "Color of the fill between the overbought and oversold levels.")
+  ],
+  compute: (bars, inputs) => boundedOscillator({
+    key: "rsi",
+    title: "RSI",
+    values: rsi(sourceValues(bars, str3(inputs, "source", "Close")), num3(inputs, "length", 14)),
+    scale: { top: 100, bottom: 0 },
+    overbought: num3(inputs, "overbought", 70),
+    oversold: num3(inputs, "oversold", 30),
+    ink: { low: str3(inputs, "oversoldColor", BULLISH), mid: str3(inputs, "color", NEUTRAL), high: str3(inputs, "overboughtColor", BEARISH) },
+    levelInk: str3(inputs, "levelsColor", NEUTRAL),
+    width: 2,
+    midline: 50,
+    bandFill: str3(inputs, "fillColor", transp(NEUTRAL, 90))
   })
 };
+function stochasticOutput(k, d, inputs) {
+  const overbought = num3(inputs, "overbought", 80);
+  const oversold = num3(inputs, "oversold", 20);
+  return {
+    plots: [
+      { key: "k", title: "%K", values: k, color: str3(inputs, "kColor", INFO) },
+      { key: "d", title: "%D", values: d, color: str3(inputs, "dColor", WARNING) },
+      anchorPlot("obAnchor", "Overbought Anchor", k.length, overbought),
+      anchorPlot("osAnchor", "Oversold Anchor", k.length, oversold)
+    ],
+    bands: [{ key: "band", from: "obAnchor", to: "osAnchor", color: str3(inputs, "fillColor", transp(INFO, 90)) }],
+    levels: [
+      { key: "overbought", price: overbought, color: NEUTRAL, lineStyle: "dashed", title: "Overbought" },
+      { key: "oversold", price: oversold, color: NEUTRAL, lineStyle: "dashed", title: "Oversold" }
+    ]
+  };
+}
 var stochastic = {
   type: "stochastic",
   title: "Stochastic",
   shortTitle: "Stoch",
   overlay: false,
   inputs: [
-    lengthInput(14, "kLength", "%K length"),
-    lengthInput(1, "kSmoothing", "%K smoothing", 500),
-    lengthInput(3, "dLength", "%D smoothing", 500)
+    lengthInput(14, "kLength", "%K Length", 5e3, "Number of bars used for the highest high / lowest low range of the raw %K."),
+    lengthInput(3, "kSmoothing", "%K Smoothing", 500, "Simple moving average length applied to the raw %K. 1 gives the fast stochastic, 3 the classic slow stochastic."),
+    lengthInput(3, "dLength", "%D Smoothing", 500, "Simple moving average length of the %D signal line, applied to the smoothed %K."),
+    ...thresholdInputs(80, 20),
+    colorInput(INFO, "%K", "kColor", "Color of the %K line."),
+    colorInput(WARNING, "%D", "dColor", "Color of the %D signal line."),
+    colorInput(transp(INFO, 90), "Band Fill", "fillColor", "Fill color of the area between the overbought and oversold levels.")
   ],
   compute: (bars, inputs) => {
-    const k = sma(stoch(closes(bars), highs(bars), lows(bars), num3(inputs, "kLength", 14)), num3(inputs, "kSmoothing", 1));
-    const d = sma(k, num3(inputs, "dLength", 3));
-    return {
-      plots: [
-        { key: "k", title: "%K", values: k, color: SERIES_LINE, width: 2 },
-        { key: "d", title: "%D", values: d, color: WARNING }
-      ],
-      levels: guideLevels(20, 80)
-    };
+    const k = sma(stoch(closes(bars), highs(bars), lows(bars), num3(inputs, "kLength", 14)), num3(inputs, "kSmoothing", 3));
+    return stochasticOutput(k, sma(k, num3(inputs, "dLength", 3)), inputs);
   }
 };
 var stochasticRsi = {
@@ -24959,23 +26271,20 @@ var stochasticRsi = {
   shortTitle: "Stoch RSI",
   overlay: false,
   inputs: [
-    lengthInput(14, "rsiLength", "RSI length"),
-    lengthInput(14, "stochLength", "Stochastic length"),
-    lengthInput(3, "kSmoothing", "%K smoothing", 500),
-    lengthInput(3, "dLength", "%D smoothing", 500),
-    sourceInput()
+    sourceInput("Close", "source", "RSI Source", "Price series the RSI is computed on."),
+    lengthInput(14, "rsiLength", "RSI Length", 5e3, "Lookback length of the Wilder RSI."),
+    lengthInput(14, "stochLength", "Stochastic Length", 5e3, "Lookback over which the highest and lowest RSI values are taken."),
+    lengthInput(3, "kSmoothing", "%K Smoothing", 500, "Simple moving average length applied to the stochastic of RSI to form %K."),
+    lengthInput(3, "dLength", "%D Smoothing", 500, "Simple moving average length applied to %K to form the %D signal line."),
+    ...thresholdInputs(80, 20),
+    colorInput(INFO, "%K Color", "kColor", "Color of the %K line."),
+    colorInput(WARNING, "%D Color", "dColor", "Color of the %D signal line."),
+    colorInput(transp(INFO, 90), "Zone Fill", "fillColor", "Fill color of the area between the overbought and oversold levels.")
   ],
   compute: (bars, inputs) => {
     const r = rsi(sourceValues(bars, str3(inputs, "source", "Close")), num3(inputs, "rsiLength", 14));
     const k = sma(stoch(r, r, r, num3(inputs, "stochLength", 14)), num3(inputs, "kSmoothing", 3));
-    const d = sma(k, num3(inputs, "dLength", 3));
-    return {
-      plots: [
-        { key: "k", title: "%K", values: k, color: SERIES_LINE, width: 2 },
-        { key: "d", title: "%D", values: d, color: WARNING }
-      ],
-      levels: guideLevels(20, 80)
-    };
+    return stochasticOutput(k, sma(k, num3(inputs, "dLength", 3)), inputs);
   }
 };
 var macd = {
@@ -24983,23 +26292,35 @@ var macd = {
   title: "MACD",
   overlay: false,
   inputs: [
-    lengthInput(12, "fastLength", "Fast length"),
-    lengthInput(26, "slowLength", "Slow length"),
-    lengthInput(9, "signalLength", "Signal smoothing", 500),
-    sourceInput()
+    lengthInput(12, "fastLength", "Fast Length", 5e3, "Length of the fast EMA."),
+    lengthInput(26, "slowLength", "Slow Length", 5e3, "Length of the slow EMA."),
+    lengthInput(9, "signalLength", "Signal Smoothing", 500, "Length of the EMA applied to the MACD line to obtain the signal line."),
+    sourceInput("Close", "source", "Source", "Price series used to compute the fast and slow EMAs."),
+    colorInput(INFO, "MACD Line", "color", "Color of the MACD line."),
+    colorInput(WARNING, "Signal Line", "signalColor", "Color of the signal line."),
+    colorInput(BULLISH, "Grow Above", "growAboveColor", "Histogram color when above zero and rising."),
+    colorInput(transp(BULLISH, 50), "Fall Above", "fallAboveColor", "Histogram color when above zero and falling."),
+    colorInput(transp(BEARISH, 50), "Grow Below", "growBelowColor", "Histogram color when below zero and rising."),
+    colorInput(BEARISH, "Fall Below", "fallBelowColor", "Histogram color when below zero and falling.")
   ],
   compute: (bars, inputs) => {
     const src = sourceValues(bars, str3(inputs, "source", "Close"));
     const line = sub(ema(src, num3(inputs, "fastLength", 12)), ema(src, num3(inputs, "slowLength", 26)));
     const signal = ema(line, num3(inputs, "signalLength", 9));
     const hist = sub(line, signal);
+    const colors = momentumColumnColors(hist, {
+      growAbove: str3(inputs, "growAboveColor", BULLISH),
+      fallAbove: str3(inputs, "fallAboveColor", transp(BULLISH, 50)),
+      growBelow: str3(inputs, "growBelowColor", transp(BEARISH, 50)),
+      fallBelow: str3(inputs, "fallBelowColor", BEARISH)
+    });
     return {
       plots: [
-        { key: "hist", title: "Histogram", values: hist, kind: "histogram", color: BULLISH, colors: histColors(hist), base: 0 },
-        { key: "macd", title: "MACD", values: line, color: SERIES_LINE, width: 2 },
-        { key: "signal", title: "Signal", values: signal, color: WARNING }
+        { key: "hist", title: "Histogram", values: hist, kind: "columns", color: BULLISH, colors, base: 0 },
+        { key: "macd", title: "MACD", values: line, color: str3(inputs, "color", INFO) },
+        { key: "signal", title: "Signal", values: signal, color: str3(inputs, "signalColor", WARNING) }
       ],
-      levels: ZERO_LEVEL
+      levels: [{ key: "zero", price: 0, color: NEUTRAL, lineStyle: "dashed", title: "Zero Line" }]
     };
   }
 };
@@ -25009,26 +26330,49 @@ var ppo = {
   shortTitle: "PPO",
   overlay: false,
   inputs: [
-    lengthInput(12, "fastLength", "Fast length"),
-    lengthInput(26, "slowLength", "Slow length"),
-    lengthInput(9, "signalLength", "Signal smoothing", 500),
-    sourceInput()
+    sourceInput("Close", "source", "Source", "Price series fed into the fast and slow averages."),
+    lengthInput(12, "fastLength", "Fast Length", 5e3, "Length of the fast moving average."),
+    lengthInput(26, "slowLength", "Slow Length", 5e3, "Length of the slow moving average. The spread is divided by it and scaled to a percentage of price."),
+    optionInput("maType", "Average Type", "EMA", ["EMA", "SMA"], "Moving average type used for the fast and slow averages."),
+    lengthInput(9, "signalLength", "Signal Smoothing", 500, "Length of the signal line that smooths the PPO line."),
+    optionInput("signalType", "Signal Type", "EMA", ["EMA", "SMA"], "Moving average type used for the signal line."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Color of the PPO line, gradient fill and histogram above the zero line."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of the PPO line, gradient fill and histogram below the zero line."),
+    colorInput(WARNING, "Signal Line", "signalColor", "Color of the signal line."),
+    boolInput("showHistogram", "Show Histogram", true, STYLE, "Displays the histogram (PPO minus signal line) as columns. Bright columns mark a spread still widening, faded ones a spread narrowing back."),
+    boolInput("gradientFill", "Gradient Fill", true, STYLE, "Fills the area between the zero line and the PPO line with a vertical gradient.")
   ],
   compute: (bars, inputs) => {
     const src = sourceValues(bars, str3(inputs, "source", "Close"));
-    const fast = ema(src, num3(inputs, "fastLength", 12));
-    const slow = ema(src, num3(inputs, "slowLength", 26));
+    const average = (kind2, v, len) => kind2 === "SMA" ? sma(v, len) : ema(v, len);
+    const kind = str3(inputs, "maType", "EMA");
+    const fast = average(kind, src, num3(inputs, "fastLength", 12));
+    const slow = average(kind, src, num3(inputs, "slowLength", 26));
     const line = zip(fast, slow, (f, s) => s === 0 ? Number.NaN : (f - s) / s * 100);
-    const signal = ema(line, num3(inputs, "signalLength", 9));
+    const signal = average(str3(inputs, "signalType", "EMA"), line, num3(inputs, "signalLength", 9));
     const hist = sub(line, signal);
-    return {
-      plots: [
-        { key: "hist", title: "Histogram", values: hist, kind: "histogram", color: BULLISH, colors: histColors(hist), base: 0 },
-        { key: "ppo", title: "PPO", values: line, color: SERIES_LINE, width: 2 },
-        { key: "signal", title: "Signal", values: signal, color: WARNING }
-      ],
-      levels: ZERO_LEVEL
-    };
+    const bull = str3(inputs, "bullColor", BULLISH);
+    const bear = str3(inputs, "bearColor", BEARISH);
+    const out = centeredOscillator({
+      key: "ppo",
+      title: "PPO Line",
+      values: line,
+      ink: { bull, bear, neutral: bear },
+      zeroInk: transp(NEUTRAL, 90),
+      fill: bool(inputs, "gradientFill", true),
+      extraPlots: [{ key: "signal", title: "Signal Line", values: signal, color: str3(inputs, "signalColor", WARNING) }]
+    });
+    if (bool(inputs, "showHistogram", true)) {
+      const colors = hist.map((x, i) => {
+        if (!Number.isFinite(x)) return null;
+        const prev2 = i > 0 && Number.isFinite(hist[i - 1]) ? hist[i - 1] : x;
+        const ink = x >= 0 ? bull : bear;
+        const expanding = x >= 0 ? x > prev2 : x < prev2;
+        return transp(ink, expanding ? 40 : 70);
+      });
+      out.plots.unshift({ key: "hist", title: "Histogram", values: hist, kind: "columns", color: bull, colors, base: 0 });
+    }
+    return out;
   }
 };
 var awesome = {
@@ -25036,48 +26380,67 @@ var awesome = {
   title: "Awesome Oscillator",
   shortTitle: "AO",
   overlay: false,
-  inputs: [],
-  compute: (bars) => {
+  inputs: [
+    colorInput(BULLISH, "Rising", "risingColor", "Histogram color when the oscillator is higher than on the previous bar."),
+    colorInput(BEARISH, "Falling", "fallingColor", "Histogram color when the oscillator is lower than or equal to the previous bar."),
+    colorInput(NEUTRAL, "Zero Line", "zeroColor", "Color of the zero reference line.")
+  ],
+  compute: (bars, inputs) => {
     const hl2 = sourceValues(bars, "HL2");
     const ao = sub(sma(hl2, 5), sma(hl2, 34));
+    const rising = str3(inputs, "risingColor", BULLISH);
+    const falling = str3(inputs, "fallingColor", BEARISH);
     const colors = ao.map((x, i) => {
       if (!Number.isFinite(x)) return null;
       const prev2 = i > 0 ? ao[i - 1] : Number.NaN;
-      return Number.isFinite(prev2) && x < prev2 ? BEARISH : BULLISH;
+      return Number.isFinite(prev2) && x > prev2 ? rising : falling;
     });
     return {
-      plots: [{ key: "ao", title: "AO", values: ao, kind: "histogram", color: BULLISH, colors, base: 0 }],
-      levels: ZERO_LEVEL
+      plots: [{ key: "ao", title: "AO", values: ao, kind: "columns", color: rising, colors, base: 0 }],
+      levels: [{ key: "zero", price: 0, color: str3(inputs, "zeroColor", NEUTRAL), lineStyle: "dashed", title: "Zero Line" }]
     };
   }
 };
+var CCI_SCALING = 0.015;
 var cci = {
   type: "commodity-channel-index",
   title: "Commodity Channel Index",
   shortTitle: "CCI",
   overlay: false,
-  inputs: [lengthInput(20), sourceInput("HLC3"), colorInput()],
+  inputs: [
+    lengthInput(20, "length", "Length", 5e3, "Number of bars used for the moving average and the mean absolute deviation of the source."),
+    sourceInput("HLC3", "source", "Source", "Price series measured by the CCI; the typical price hlc3 is the classic choice."),
+    floatInput("upper", "Upper Level", 100, -1e3, 1e3, 10, "Overbought reference level, +100 classically."),
+    floatInput("lower", "Lower Level", -100, -1e3, 1e3, 10, "Oversold reference level, \u2212100 classically."),
+    colorInput(NEUTRAL, "CCI Line", "color", "Color of the CCI line."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Line and fill color while the CCI reads above zero."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Line and fill color while the CCI reads below zero."),
+    colorInput(NEUTRAL, "Levels", "levelsColor", "Color of the upper, lower and zero reference lines.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 20);
     const src = sourceValues(bars, str3(inputs, "source", "HLC3"));
     const basis = sma(src, len);
-    const dev = new Array(src.length).fill(Number.NaN);
-    for (let i = len - 1; i < src.length; i++) {
-      const mean = basis[i];
-      if (!Number.isFinite(mean)) continue;
-      let d = 0;
-      for (let k = i - len + 1; k <= i; k++) d += Math.abs(src[k] - mean);
-      dev[i] = d / len;
-    }
+    const dev = meanDev(src, len);
     const values = src.map((x, i) => {
       const b = basis[i];
       const d = dev[i];
-      return Number.isFinite(b) && Number.isFinite(d) && d !== 0 ? (x - b) / (0.015 * d) : Number.NaN;
+      if (!Number.isFinite(b) || !Number.isFinite(d)) return Number.NaN;
+      return d === 0 ? 0 : (x - b) / (CCI_SCALING * d);
     });
-    return {
-      plots: [{ key: "cci", title: "CCI", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: guideLevels(-100, 100, 0)
-    };
+    const levelInk = str3(inputs, "levelsColor", NEUTRAL);
+    return centeredOscillator({
+      key: "cci",
+      title: "CCI",
+      values,
+      ink: { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "color", NEUTRAL) },
+      zeroInk: levelInk,
+      zeroLineStyle: "dotted",
+      extraLevels: [
+        { key: "upper", price: num3(inputs, "upper", 100), color: levelInk, lineStyle: "dashed", title: "Upper Level" },
+        { key: "lower", price: num3(inputs, "lower", -100), color: levelInk, lineStyle: "dashed", title: "Lower Level" }
+      ]
+    });
   }
 };
 var williamsR = {
@@ -25085,31 +26448,78 @@ var williamsR = {
   title: "Williams %R",
   shortTitle: "%R",
   overlay: false,
-  inputs: [lengthInput(14), colorInput()],
+  inputs: [
+    lengthInput(14, "length", "Length", 5e3, "Lookback length of the highest high / lowest low range. 14 is the classic setting."),
+    sourceInput("Close", "source", "Source", "Series located within the lookback range. Close is the classic choice."),
+    ...thresholdInputs(-20, -80, -100, 0),
+    colorInput(NEUTRAL, "%R Line", "color", "Color of the %R line between the thresholds. Toward either level it blends into that level\u2019s color."),
+    colorInput(BEARISH, "Overbought", "overboughtColor", "Color of the line and zone shading at and above the overbought level."),
+    colorInput(BULLISH, "Oversold", "oversoldColor", "Color of the line and zone shading at and below the oversold level.")
+  ],
   compute: (bars, inputs) => {
-    const values = map(stoch(closes(bars), highs(bars), lows(bars), num3(inputs, "length", 14)), (x) => x - 100);
-    return {
-      plots: [{ key: "wr", title: "%R", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: guideLevels(-80, -20)
-    };
+    const len = num3(inputs, "length", 14);
+    const src = sourceValues(bars, str3(inputs, "source", "Close"));
+    const hh = highest(highs(bars), len);
+    const ll = lowest(lows(bars), len);
+    const values = src.map((x, i) => {
+      const h = hh[i];
+      const l = ll[i];
+      return Number.isFinite(h) && Number.isFinite(l) && h > l ? -100 * (h - x) / (h - l) : Number.NaN;
+    });
+    return boundedOscillator({
+      key: "wr",
+      title: "%R",
+      values,
+      scale: { top: 0, bottom: -100 },
+      overbought: num3(inputs, "overbought", -20),
+      oversold: num3(inputs, "oversold", -80),
+      ink: { low: str3(inputs, "oversoldColor", BULLISH), mid: str3(inputs, "color", NEUTRAL), high: str3(inputs, "overboughtColor", BEARISH) },
+      levelInk: NEUTRAL
+    });
   }
 };
-var cmo = {
+var cmoSpec = {
   type: "chande-momentum-oscillator",
   title: "Chande Momentum Oscillator",
   shortTitle: "CMO",
   overlay: false,
-  inputs: [lengthInput(9), sourceInput(), colorInput()],
+  inputs: [
+    lengthInput(9, "length", "Length", 5e3, "Number of bars over which up moves and down moves are summed."),
+    sourceInput("Close", "source", "Source", "Price series used to measure bar-to-bar changes."),
+    floatInput("overbought", "Overbought Level", 50, 0, 100, 1, "Level above which the oscillator is considered overbought."),
+    floatInput("oversold", "Oversold Level", -50, -100, 0, 1, "Level below which the oscillator is considered oversold."),
+    colorInput(NEUTRAL, "CMO Line", "color", "Color of the CMO line."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Line and fill color while momentum is positive, and shading of the oversold zone."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Line and fill color while momentum is negative, and shading of the overbought zone."),
+    colorInput(NEUTRAL, "Levels", "levelsColor", "Color of the overbought, oversold, and zero lines.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 9);
     const d = change(sourceValues(bars, str3(inputs, "source", "Close")));
-    const su = sum(map(d, (x) => Math.max(x, 0)), len);
-    const sd = sum(map(d, (x) => Math.max(-x, 0)), len);
-    const values = zip(su, sd, (u, w) => u + w === 0 ? 0 : 100 * (u - w) / (u + w));
-    return {
-      plots: [{ key: "cmo", title: "CMO", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: guideLevels(-50, 50, 0)
-    };
+    const up = sum(map(d, (x) => Math.max(x, 0)), len);
+    const down = sum(map(d, (x) => Math.max(-x, 0)), len);
+    const values = zip(up, down, (u, w) => u + w === 0 ? 0 : 100 * (u - w) / (u + w));
+    const bull = str3(inputs, "bullColor", BULLISH);
+    const bear = str3(inputs, "bearColor", BEARISH);
+    const levelInk = str3(inputs, "levelsColor", NEUTRAL);
+    const overbought = num3(inputs, "overbought", 50);
+    const oversold = num3(inputs, "oversold", -50);
+    const out = centeredOscillator({
+      key: "cmo",
+      title: "CMO",
+      values,
+      ink: { bull, bear, neutral: str3(inputs, "color", NEUTRAL) },
+      zeroInk: levelInk,
+      zeroLineStyle: "dotted",
+      extraLevels: [
+        { key: "overbought", price: overbought, color: levelInk, lineStyle: "dashed", title: "Overbought" },
+        { key: "oversold", price: oversold, color: levelInk, lineStyle: "dashed", title: "Oversold" }
+      ]
+    });
+    const zones = thresholdZones(values.length, { overbought, oversold, top: 100, bottom: -100 }, { overbought: bear, oversold: bull });
+    out.plots.push(...zones.plots);
+    out.bands = [...out.bands ?? [], ...zones.bands];
+    return out;
   }
 };
 var connorsRsi = {
@@ -25118,10 +26528,14 @@ var connorsRsi = {
   shortTitle: "CRSI",
   overlay: false,
   inputs: [
-    lengthInput(3, "rsiLength", "RSI length"),
-    lengthInput(2, "streakLength", "Streak RSI length"),
-    lengthInput(100, "rankLength", "Percent-rank length"),
-    colorInput()
+    lengthInput(3, "rsiLength", "RSI Length", 5e3, "Length of the Wilder RSI applied to the closing price."),
+    lengthInput(2, "streakLength", "Streak RSI Length", 5e3, "Length of the Wilder RSI applied to the up/down close streak."),
+    lengthInput(100, "rankLength", "Percent Rank Length", 5e3, "Lookback of the percent rank applied to the 1-bar rate of change of the closing price."),
+    ...thresholdInputs(90, 10),
+    colorInput(NEUTRAL, "CRSI Line", "color", "Color of the Connors RSI line."),
+    colorInput(BULLISH, "Oversold", "oversoldColor", "Line, fill and zone color toward and below the oversold level."),
+    colorInput(BEARISH, "Overbought", "overboughtColor", "Line, fill and zone color toward and above the overbought level."),
+    colorInput(NEUTRAL, "Levels", "levelsColor", "Color of the overbought and oversold levels.")
   ],
   compute: (bars, inputs) => {
     const c = closes(bars);
@@ -25139,10 +26553,17 @@ var connorsRsi = {
       const z = r[i];
       return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? (x + y + z) / 3 : Number.NaN;
     });
-    return {
-      plots: [{ key: "crsi", title: "CRSI", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: guideLevels(20, 80, 50)
-    };
+    return boundedOscillator({
+      key: "crsi",
+      title: "Connors RSI",
+      values,
+      scale: { top: 100, bottom: 0 },
+      overbought: num3(inputs, "overbought", 90),
+      oversold: num3(inputs, "oversold", 10),
+      ink: { low: str3(inputs, "oversoldColor", BULLISH), mid: str3(inputs, "color", NEUTRAL), high: str3(inputs, "overboughtColor", BEARISH) },
+      levelInk: str3(inputs, "levelsColor", NEUTRAL),
+      midpointWash: true
+    });
   }
 };
 var fisher = {
@@ -25150,7 +26571,13 @@ var fisher = {
   title: "Fisher Transform",
   shortTitle: "Fisher",
   overlay: false,
-  inputs: [lengthInput(9)],
+  inputs: [
+    lengthInput(9, "length", "Length", 5e3, "Lookback period used to locate the median price hl2 within its highest-lowest range. Ehlers' original length is 10; 9 is the common platform default."),
+    colorInput(NEUTRAL, "Fisher Line", "color", "Color of the Fisher line when it sits exactly on its trigger."),
+    colorInput(NEUTRAL, "Trigger Line", "triggerColor", "Color of the trigger line, the Fisher value delayed one bar."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Color of the Fisher line and fill while it is above the trigger."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of the Fisher line and fill while it is below the trigger.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 9);
     const hl2 = sourceValues(bars, "HL2");
@@ -25158,23 +26585,39 @@ var fisher = {
     const lo = lowest(hl2, len);
     const n = bars.length;
     const out = new Array(n).fill(Number.NaN);
+    let position = 0;
     let value = 0;
-    let fish = 0;
     for (let i = 0; i < n; i++) {
       const h = hi[i];
       const l = lo[i];
       if (!Number.isFinite(h) || !Number.isFinite(l)) continue;
-      const norm = h === l ? 0 : (hl2[i] - l) / (h - l) - 0.5;
-      value = Math.max(-0.999, Math.min(0.999, 0.66 * norm + 0.67 * value));
-      fish = 0.5 * Math.log((1 + value) / (1 - value)) + 0.5 * fish;
-      out[i] = fish;
+      const raw = h > l ? (hl2[i] - l) / (h - l) - 0.5 : 0;
+      position = 0.66 * raw + 0.67 * position;
+      position = position > 0.99 ? 0.999 : position < -0.99 ? -0.999 : position;
+      value = 0.5 * Math.log((1 + position) / (1 - position)) + 0.5 * value;
+      out[i] = value;
     }
+    const trigger = shift(out, 1);
+    const neutral = str3(inputs, "color", NEUTRAL);
+    const bull = str3(inputs, "bullColor", BULLISH);
+    const bear = str3(inputs, "bearColor", BEARISH);
+    const inkOf = (i) => {
+      const f = out[i];
+      const t = trigger[i];
+      if (!Number.isFinite(t)) return neutral;
+      return f > t ? bull : f < t ? bear : neutral;
+    };
     return {
       plots: [
-        { key: "fisher", title: "Fisher", values: out, color: SERIES_LINE, width: 2 },
-        { key: "trigger", title: "Trigger", values: shift(out, 1), color: WARNING }
+        { key: "fisher", title: "Fisher", values: out, color: neutral, width: 2, colors: out.map((x, i) => Number.isFinite(x) ? inkOf(i) : null) },
+        { key: "trigger", title: "Trigger", values: trigger, color: str3(inputs, "triggerColor", NEUTRAL) }
       ],
-      levels: ZERO_LEVEL
+      bands: [{ key: "spread", from: "fisher", to: "trigger", color: transp(neutral, 80), colors: out.map((x, i) => Number.isFinite(x) ? transp(inkOf(i), 80) : null) }],
+      levels: [
+        { key: "upper", price: 1.5, color: NEUTRAL, lineStyle: "dashed", title: "Upper Level" },
+        { key: "lower", price: -1.5, color: NEUTRAL, lineStyle: "dashed", title: "Lower Level" },
+        { key: "zero", price: 0, color: NEUTRAL, lineStyle: "dotted", title: "Zero Line" }
+      ]
     };
   }
 };
@@ -25182,93 +26625,180 @@ var trix = {
   type: "trix",
   title: "TRIX",
   overlay: false,
-  inputs: [lengthInput(18), colorInput()],
+  inputs: [
+    lengthInput(18, "length", "Length", 5e3, "Length of each of the three EMA smoothing passes applied to the close price."),
+    lengthInput(9, "signalLength", "Signal Length", 500, "Length of the EMA applied to TRIX to form the signal line."),
+    colorInput(NEUTRAL, "TRIX Color", "color", "Color of the TRIX line."),
+    colorInput(WARNING, "Signal Color", "signalColor", "Color of the signal line."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Color of the TRIX line and its gradient fill while TRIX holds above zero."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of the TRIX line and its gradient fill while TRIX holds below zero.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 18);
-    const logClose = map(closes(bars), Math.log);
-    const smooth = ema(ema(ema(logClose, len), len), len);
-    const values = map(change(smooth), (x) => x * 1e4);
-    return {
-      plots: [{ key: "trix", title: "TRIX", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: ZERO_LEVEL
-    };
+    const smooth = ema(ema(ema(closes(bars), len), len), len);
+    const values = roc(smooth, 1);
+    return centeredOscillator({
+      key: "trix",
+      title: "TRIX",
+      values,
+      ink: { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "color", NEUTRAL) },
+      zeroInk: NEUTRAL,
+      extraPlots: [{ key: "signal", title: "Signal", values: ema(values, num3(inputs, "signalLength", 9)), color: str3(inputs, "signalColor", WARNING) }]
+    });
   }
 };
-function tsiLine(src, long, short) {
+function tsiRatio(src, long, short) {
   const mom = change(src);
   const numer = ema(ema(mom, long), short);
   const denom = ema(ema(map(mom, Math.abs), long), short);
-  return zip(numer, denom, (a, b) => b === 0 ? 0 : 100 * a / b);
+  return zip(numer, denom, (a, b) => b === 0 ? 0 : a / b);
 }
 var tsi = {
   type: "true-strength-index",
   title: "True Strength Index",
   shortTitle: "TSI",
   overlay: false,
-  inputs: [lengthInput(25, "longLength", "Long length"), lengthInput(13, "shortLength", "Short length"), lengthInput(13, "signalLength", "Signal length")],
+  inputs: [
+    lengthInput(25, "longLength", "Long Length", 5e3, "Length of the first (long) EMA applied to the 1-bar price change."),
+    lengthInput(13, "shortLength", "Short Length", 5e3, "Length of the second (short) EMA applied to the long-smoothed price change."),
+    lengthInput(13, "signalLength", "Signal Length", 500, "Length of the EMA of TSI used as the signal line."),
+    colorInput(NEUTRAL, "TSI", "color", "Color of the TSI line."),
+    colorInput(WARNING, "Signal", "signalColor", "Color of the signal line."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Color of the TSI line and its gradient fill while TSI holds above zero."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of the TSI line and its gradient fill while TSI holds below zero.")
+  ],
   compute: (bars, inputs) => {
-    const line = tsiLine(closes(bars), num3(inputs, "longLength", 25), num3(inputs, "shortLength", 13));
-    return {
-      plots: [
-        { key: "tsi", title: "TSI", values: line, color: SERIES_LINE, width: 2 },
-        { key: "signal", title: "Signal", values: ema(line, num3(inputs, "signalLength", 13)), color: WARNING }
-      ],
-      levels: ZERO_LEVEL
-    };
+    const values = map(tsiRatio(closes(bars), num3(inputs, "longLength", 25), num3(inputs, "shortLength", 13)), (x) => 100 * x);
+    return centeredOscillator({
+      key: "tsi",
+      title: "TSI",
+      values,
+      ink: { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "color", NEUTRAL) },
+      zeroInk: NEUTRAL,
+      extraPlots: [{ key: "signal", title: "Signal", values: ema(values, num3(inputs, "signalLength", 13)), color: str3(inputs, "signalColor", WARNING) }]
+    });
   }
 };
+var SMI_INDICATOR = "Indicator";
+var SMI_OSCILLATOR = "Oscillator";
 var smiErgodic = {
   type: "smi-ergodic",
   title: "SMI Ergodic Oscillator",
   shortTitle: "SMIE",
   overlay: false,
-  inputs: [lengthInput(5, "shortLength", "Short length"), lengthInput(20, "longLength", "Long length"), lengthInput(5, "signalLength", "Signal length")],
+  inputs: [
+    lengthInput(20, "longLength", "Long Length", 5e3, "Length of the first EMA smoothing applied to the momentum of the closing price."),
+    lengthInput(5, "shortLength", "Short Length", 5e3, "Length of the second EMA smoothing applied to the momentum of the closing price."),
+    lengthInput(5, "signalLength", "Signal Length", 500, "Length of the EMA of the SMI that forms the signal line."),
+    optionInput("display", "Display", SMI_INDICATOR, [SMI_INDICATOR, SMI_OSCILLATOR], "Indicator plots the SMI and its signal line. Oscillator plots the difference between them as a histogram."),
+    colorInput(NEUTRAL, "SMI", "color", "Color of the SMI line while it sits exactly on its signal line."),
+    colorInput(WARNING, "Signal", "signalColor", "Color of the signal line."),
+    colorInput(BULLISH, "Oscillator Grow", "growColor", "Color of the rising oscillator histogram, and of the SMI line while it leads its signal."),
+    colorInput(BEARISH, "Oscillator Fall", "fallColor", "Color of the falling oscillator histogram, and of the SMI line while it lags its signal.")
+  ],
   compute: (bars, inputs) => {
-    const line = tsiLine(closes(bars), num3(inputs, "longLength", 20), num3(inputs, "shortLength", 5));
-    const signal = ema(line, num3(inputs, "signalLength", 5));
-    const osc = sub(line, signal);
+    const smi = tsiRatio(closes(bars), num3(inputs, "longLength", 20), num3(inputs, "shortLength", 5));
+    const signal = ema(smi, num3(inputs, "signalLength", 5));
+    const grow = str3(inputs, "growColor", BULLISH);
+    const fall = str3(inputs, "fallColor", BEARISH);
+    const zero = [{ key: "zero", price: 0, color: transp(NEUTRAL, 50), lineStyle: "dashed", title: "Zero" }];
+    if (str3(inputs, "display", SMI_INDICATOR) === SMI_OSCILLATOR) {
+      const osc = sub(smi, signal);
+      const colors = osc.map((x, i) => {
+        if (!Number.isFinite(x)) return null;
+        const prev2 = i > 0 && Number.isFinite(osc[i - 1]) ? osc[i - 1] : x;
+        return x > prev2 ? grow : fall;
+      });
+      return { plots: [{ key: "osc", title: "Oscillator", values: osc, kind: "columns", color: grow, colors, base: 0 }], levels: zero };
+    }
+    const neutral = str3(inputs, "color", NEUTRAL);
+    const inkOf = (i) => {
+      const a = smi[i];
+      const b = signal[i];
+      if (!Number.isFinite(b)) return neutral;
+      return a > b ? grow : a < b ? fall : neutral;
+    };
     return {
       plots: [
-        { key: "osc", title: "Oscillator", values: osc, kind: "histogram", color: BULLISH, colors: histColors(osc), base: 0 },
-        { key: "smi", title: "SMI", values: line, color: SERIES_LINE, width: 2 },
-        { key: "signal", title: "Signal", values: signal, color: WARNING }
+        { key: "smi", title: "SMI", values: smi, color: neutral, colors: smi.map((x, i) => Number.isFinite(x) ? inkOf(i) : null) },
+        { key: "signal", title: "Signal", values: signal, color: str3(inputs, "signalColor", WARNING) }
       ],
-      levels: ZERO_LEVEL
+      bands: [{ key: "spread", from: "smi", to: "signal", color: transp(neutral, 75), colors: smi.map((x, i) => Number.isFinite(x) ? transp(inkOf(i), 75) : null) }],
+      levels: zero
     };
   }
 };
+var STC_MID = 50;
+var TRIGGERS = "Trigger Levels";
 var stc = {
   type: "schaff-trend-cycle",
   title: "Schaff Trend Cycle",
   shortTitle: "Schaff Trend Cycle",
   overlay: false,
-  inputs: [lengthInput(10, "cycleLength", "Cycle length"), lengthInput(23, "fastLength", "Fast length"), lengthInput(50, "slowLength", "Slow length")],
+  inputs: [
+    sourceInput("Close", "source", "Source", "Price series used to build the MACD that the trend cycle is measured on."),
+    lengthInput(23, "fastLength", "Fast Length", 5e3, "Fast EMA length of the underlying MACD."),
+    lengthInput(50, "slowLength", "Slow Length", 5e3, "Slow EMA length of the underlying MACD."),
+    { ...lengthInput(10, "cycleLength", "Cycle Length", 5e3, "Window of the two stochastic passes. Each pass measures where its input sits inside the range of its own values over this many bars."), min: 2 },
+    floatInput("factor", "Smoothing Factor", 0.5, 0.01, 1, 0.05, "%D style recursive smoothing applied after each stochastic pass. 0.5 is the published default."),
+    { ...floatInput("upper", "Upper Trigger", 75, 0, 100, 1, "Upper trigger line. A cross down through it flags an emerging downtrend."), group: TRIGGERS },
+    { ...floatInput("lower", "Lower Trigger", 25, 0, 100, 1, "Lower trigger line. A cross up through it flags an emerging uptrend."), group: TRIGGERS },
+    colorInput(BULLISH, "Bullish Color", "bullColor", "Color of the trend cycle line and gradient while the cycle holds the upper half of its 0-100 scale."),
+    colorInput(BEARISH, "Bearish Color", "bearColor", "Color of the trend cycle line and gradient while the cycle holds the lower half of its 0-100 scale."),
+    colorInput(NEUTRAL, "Levels Color", "levelsColor", "Color of the dashed trigger lines and the dotted midline."),
+    boolInput("gradientFill", "Gradient Fill", true, STYLE, "Vertical gradient between the midline and the trend cycle, fading out toward the midline.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "cycleLength", 10);
-    const src = closes(bars);
+    const factor = num3(inputs, "factor", 0.5);
+    const src = sourceValues(bars, str3(inputs, "source", "Close"));
     const macdLine = sub(ema(src, num3(inputs, "fastLength", 23)), ema(src, num3(inputs, "slowLength", 50)));
-    const stochOf = (v) => {
+    const stochNorm = (v) => {
       const lo = lowest(v, len);
       const hi = highest(v, len);
       const out = new Array(v.length).fill(Number.NaN);
-      let prevRaw = Number.NaN;
-      let smoothed = Number.NaN;
+      let pct = Number.NaN;
       for (let i = 0; i < v.length; i++) {
         const x = v[i];
         const l = lo[i];
         const h = hi[i];
         if (!Number.isFinite(x) || !Number.isFinite(l) || !Number.isFinite(h)) continue;
-        const raw = h > l ? (x - l) / (h - l) * 100 : Number.isFinite(prevRaw) ? prevRaw : 50;
-        prevRaw = raw;
-        smoothed = Number.isFinite(smoothed) ? smoothed + 0.5 * (raw - smoothed) : raw;
+        if (h > l) pct = 100 * (x - l) / (h - l);
+        out[i] = pct;
+      }
+      return out;
+    };
+    const smoothStep = (v) => {
+      const out = new Array(v.length).fill(Number.NaN);
+      let smoothed = Number.NaN;
+      for (let i = 0; i < v.length; i++) {
+        const x = v[i];
+        if (!Number.isFinite(x)) continue;
+        smoothed = Number.isFinite(smoothed) ? smoothed + factor * (x - smoothed) : x;
         out[i] = smoothed;
       }
       return out;
     };
-    const values = stochOf(stochOf(macdLine));
+    const values = smoothStep(stochNorm(smoothStep(stochNorm(macdLine))));
+    const levelInk = str3(inputs, "levelsColor", NEUTRAL);
+    const bull = str3(inputs, "bullColor", BULLISH);
+    const bear = str3(inputs, "bearColor", BEARISH);
+    const plots = [
+      { key: "stc", title: "Schaff Trend Cycle", values, color: bear, width: 2, colors: values.map((x) => Number.isFinite(x) ? x > STC_MID ? bull : bear : null) }
+    ];
+    const bands = [];
+    if (bool(inputs, "gradientFill", true)) {
+      plots.push(anchorPlot("midAnchor", "Midline Anchor", values.length, STC_MID));
+      bands.push({ key: "wash", from: "stc", to: "midAnchor", color: transp(NEUTRAL, 100), gradient: baselineGradient(values, STC_MID, (x) => x > STC_MID ? bull : bear) });
+    }
     return {
-      plots: [{ key: "stc", title: "STC", values, color: SERIES_LINE, width: 2 }],
-      levels: guideLevels(25, 75)
+      plots,
+      bands,
+      levels: [
+        { key: "upper", price: num3(inputs, "upper", 75), color: transp(levelInk, 25), lineStyle: "dashed", title: "Upper Trigger" },
+        { key: "lower", price: num3(inputs, "lower", 25), color: transp(levelInk, 25), lineStyle: "dashed", title: "Lower Trigger" },
+        { key: "midline", price: STC_MID, color: transp(levelInk, 60), lineStyle: "dotted", title: "Midline" }
+      ]
     };
   }
 };
@@ -25277,22 +26807,37 @@ var kst = {
   title: "Know Sure Thing",
   shortTitle: "KST",
   overlay: false,
-  inputs: [sourceInput(), lengthInput(9, "signalLength", "Signal length")],
+  inputs: [
+    lengthInput(10, "rocLength1", "ROC Length #1", 5e3, "Lookback of the first (shortest) rate of change."),
+    lengthInput(15, "rocLength2", "ROC Length #2", 5e3, "Lookback of the second rate of change."),
+    lengthInput(20, "rocLength3", "ROC Length #3", 5e3, "Lookback of the third rate of change."),
+    lengthInput(30, "rocLength4", "ROC Length #4", 5e3, "Lookback of the fourth (longest) rate of change."),
+    lengthInput(10, "smaLength1", "SMA Length #1", 5e3, "Smoothing length applied to the first rate of change (RCMA #1)."),
+    lengthInput(10, "smaLength2", "SMA Length #2", 5e3, "Smoothing length applied to the second rate of change (RCMA #2)."),
+    lengthInput(10, "smaLength3", "SMA Length #3", 5e3, "Smoothing length applied to the third rate of change (RCMA #3)."),
+    lengthInput(15, "smaLength4", "SMA Length #4", 5e3, "Smoothing length applied to the fourth rate of change (RCMA #4)."),
+    lengthInput(9, "signalLength", "Signal Length", 500, "Simple moving average length of the signal line."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Color of the KST line while above zero."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of the KST line while below zero."),
+    colorInput(WARNING, "Signal", "signalColor", "Color of the signal line.")
+  ],
   compute: (bars, inputs) => {
-    const src = sourceValues(bars, str3(inputs, "source", "Close"));
-    const line = [
-      sma(roc(src, 10), 10),
-      sma(roc(src, 15), 10),
-      sma(roc(src, 20), 10),
-      sma(roc(src, 30), 15)
-    ].reduce((acc, r, i) => zip(acc, r, (a, b) => a + b * (i + 1)), new Array(src.length).fill(0));
-    return {
-      plots: [
-        { key: "kst", title: "KST", values: line, color: SERIES_LINE, width: 2 },
-        { key: "signal", title: "Signal", values: sma(line, num3(inputs, "signalLength", 9)), color: WARNING }
-      ],
-      levels: ZERO_LEVEL
-    };
+    const c = closes(bars);
+    const rcma = (rocKey, rocDefault, smaKey, smaDefault) => sma(roc(c, num3(inputs, rocKey, rocDefault)), num3(inputs, smaKey, smaDefault));
+    const values = [rcma("rocLength1", 10, "smaLength1", 10), rcma("rocLength2", 15, "smaLength2", 10), rcma("rocLength3", 20, "smaLength3", 10), rcma("rocLength4", 30, "smaLength4", 15)].reduce(
+      (acc, r, i) => zip(acc, r, (a, b) => a + b * (i + 1)),
+      new Array(c.length).fill(0)
+    );
+    const bull = str3(inputs, "bullColor", BULLISH);
+    return centeredOscillator({
+      key: "kst",
+      title: "KST",
+      values,
+      ink: { bull, bear: str3(inputs, "bearColor", BEARISH), neutral: bull },
+      zeroInk: NEUTRAL,
+      valueTransparency: 60,
+      extraPlots: [{ key: "signal", title: "Signal", values: sma(values, num3(inputs, "signalLength", 9)), color: str3(inputs, "signalColor", WARNING) }]
+    });
   }
 };
 var coppock = {
@@ -25301,19 +26846,25 @@ var coppock = {
   shortTitle: "Coppock",
   overlay: false,
   inputs: [
-    lengthInput(10, "wmaLength", "WMA length"),
-    lengthInput(14, "longRoc", "Long RoC length"),
-    lengthInput(11, "shortRoc", "Short RoC length"),
-    sourceInput(),
-    colorInput()
+    lengthInput(10, "wmaLength", "WMA Length", 5e3, "Length of the weighted moving average applied to the sum of the two rates of change."),
+    lengthInput(14, "longRoc", "Long RoC Length", 5e3, "Lookback of the long rate of change, in bars. The original definition uses 14 monthly closes."),
+    lengthInput(11, "shortRoc", "Short RoC Length", 5e3, "Lookback of the short rate of change, in bars. The original definition uses 11 monthly closes."),
+    sourceInput("Close", "source", "Source", "Price series used for the rate of change calculations."),
+    colorInput(NEUTRAL, "Coppock Curve", "color", "Color of the Coppock Curve line."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Line and fill color while the curve reads above zero."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Line and fill color while the curve reads below zero."),
+    colorInput(NEUTRAL, "Zero Line", "zeroColor", "Color of the zero reference line.")
   ],
   compute: (bars, inputs) => {
     const src = sourceValues(bars, str3(inputs, "source", "Close"));
     const values = wma(zip(roc(src, num3(inputs, "longRoc", 14)), roc(src, num3(inputs, "shortRoc", 11)), (a, b) => a + b), num3(inputs, "wmaLength", 10));
-    return {
-      plots: [{ key: "coppock", title: "Coppock", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: ZERO_LEVEL
-    };
+    return centeredOscillator({
+      key: "coppock",
+      title: "Coppock Curve",
+      values,
+      ink: { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "color", NEUTRAL) },
+      zeroInk: str3(inputs, "zeroColor", NEUTRAL)
+    });
   }
 };
 var dpo = {
@@ -25321,42 +26872,76 @@ var dpo = {
   title: "Detrended Price Oscillator",
   shortTitle: "DPO",
   overlay: false,
-  inputs: [lengthInput(21), colorInput()],
+  inputs: [
+    lengthInput(21, "length", "Length", 5e3, "Lookback of the simple moving average that price is detrended against. The comparison is displaced by Length / 2 + 1 bars."),
+    sourceInput("Close", "source", "Source", "Price series used in the detrending calculation."),
+    boolInput("centered", "Centered", false, void 0, "Shifts the oscillator back by Length / 2 + 1 bars so it is centered on the prices it detrends. The most recent bars then show no value."),
+    colorInput(NEUTRAL, "DPO", "color", "Color of the line when it sits exactly at zero."),
+    colorInput(BULLISH, "Above Zero", "bullColor", "Color of the line and fill while the oscillator is above zero."),
+    colorInput(BEARISH, "Below Zero", "bearColor", "Color of the line and fill while the oscillator is below zero."),
+    colorInput(NEUTRAL, "Zero Line", "zeroColor", "Color of the zero reference line.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 21);
-    const barsback = Math.floor(len / 2) + 1;
-    const values = sub(closes(bars), shift(sma(closes(bars), len), barsback));
-    return {
-      plots: [{ key: "dpo", title: "DPO", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: ZERO_LEVEL
-    };
+    const barsBack = Math.trunc(len / 2) + 1;
+    const src = sourceValues(bars, str3(inputs, "source", "Close"));
+    const basis = sma(src, len);
+    const centered = bool(inputs, "centered", false);
+    const values = centered ? shift(sub(shift(src, barsBack), basis), -barsBack) : sub(src, shift(basis, barsBack));
+    return centeredOscillator({
+      key: "dpo",
+      title: "DPO",
+      values,
+      ink: { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "color", NEUTRAL) },
+      zeroInk: str3(inputs, "zeroColor", NEUTRAL)
+    });
   }
 };
+var ROC_PERCENT = "ROC %";
+var ROC_MOMENTUM = "Momentum";
 var rocSpec = {
   type: "rate-of-change",
   title: "Rate of Change",
   shortTitle: "ROC",
   overlay: false,
-  inputs: [lengthInput(9), sourceInput(), colorInput()],
-  compute: (bars, inputs) => ({
-    plots: [
-      {
-        key: "roc",
-        title: "RoC",
-        values: roc(sourceValues(bars, str3(inputs, "source", "Close")), num3(inputs, "length", 9)),
-        color: str3(inputs, "color", SERIES_LINE),
-        width: 2
-      }
-    ],
-    levels: ZERO_LEVEL
-  })
+  inputs: [
+    lengthInput(9, "length", "Length", 5e3, "Lookback period; the source is compared with its value this many bars ago."),
+    sourceInput("Close", "source", "Source", "Series used as input for the calculation."),
+    optionInput("mode", "Mode", ROC_PERCENT, [ROC_PERCENT, ROC_MOMENTUM], "ROC % plots the change as a percentage of the source value from the lookback; Momentum plots the raw difference."),
+    colorInput(NEUTRAL, "Line", "color", "Color of the line when the reading sits exactly at zero."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Color of the line and fill while the reading is above zero."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of the line and fill while the reading is below zero."),
+    boolInput("gradientFill", "Gradient Fill", true, STYLE, "Fills the area between the line and zero, following the line color.")
+  ],
+  compute: (bars, inputs) => {
+    const len = num3(inputs, "length", 9);
+    const src = sourceValues(bars, str3(inputs, "source", "Close"));
+    const values = str3(inputs, "mode", ROC_PERCENT) === ROC_MOMENTUM ? change(src, len) : roc(src, len);
+    return centeredOscillator({
+      key: "roc",
+      title: "ROC",
+      values,
+      ink: { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "color", NEUTRAL) },
+      zeroInk: NEUTRAL,
+      fill: bool(inputs, "gradientFill", true)
+    });
+  }
 };
 var ultimate = {
   type: "ultimate-oscillator",
   title: "Ultimate Oscillator",
   shortTitle: "UO",
   overlay: false,
-  inputs: [lengthInput(7, "fastLength", "Fast length"), lengthInput(14, "middleLength", "Middle length"), lengthInput(28, "slowLength", "Slow length"), colorInput()],
+  inputs: [
+    lengthInput(7, "fastLength", "Fast Length", 5e3, "Bars in the fastest averaging window. Weighted 4 in the final blend, so it dominates the oscillator."),
+    lengthInput(14, "middleLength", "Middle Length", 5e3, "Bars in the intermediate averaging window. Weighted 2 in the final blend."),
+    lengthInput(28, "slowLength", "Slow Length", 5e3, "Bars in the slowest averaging window. Weighted 1 in the final blend."),
+    ...thresholdInputs(70, 30, 0, 100, "Overbought", "Oversold"),
+    colorInput(NEUTRAL, "Oscillator", "color", "Color of the line midway between the levels. Toward either level it blends into that level\u2019s color."),
+    colorInput(NEUTRAL, "Levels", "levelsColor", "Color of the overbought and oversold levels."),
+    colorInput(BULLISH, "Oversold", "oversoldColor", "Color of the line at the oversold level and of the oversold zone shading."),
+    colorInput(BEARISH, "Overbought", "overboughtColor", "Color of the line at the overbought level and of the overbought zone shading.")
+  ],
   compute: (bars, inputs) => {
     const n = bars.length;
     const bp = new Array(n).fill(Number.NaN);
@@ -25364,10 +26949,9 @@ var ultimate = {
     for (let i = 0; i < n; i++) {
       const b = bars[i];
       const pc = i > 0 ? bars[i - 1].close : b.close;
-      const lo = Math.min(b.low, pc);
-      const hi = Math.max(b.high, pc);
-      bp[i] = b.close - lo;
-      tr[i] = hi - lo;
+      const trueLow = Math.min(b.low, pc);
+      bp[i] = b.close - trueLow;
+      tr[i] = Math.max(b.high, pc) - trueLow;
     }
     const avg = (len) => zip(sum(bp, len), sum(tr, len), (a, b) => b === 0 ? Number.NaN : a / b);
     const a7 = avg(num3(inputs, "fastLength", 7));
@@ -25378,10 +26962,17 @@ var ultimate = {
       const z = a28[i];
       return Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z) ? 100 * (4 * x + 2 * y + z) / 7 : Number.NaN;
     });
-    return {
-      plots: [{ key: "uo", title: "UO", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: guideLevels(30, 70, 50)
-    };
+    return boundedOscillator({
+      key: "uo",
+      title: "UO",
+      values,
+      scale: { top: 100, bottom: 0 },
+      overbought: num3(inputs, "overbought", 70),
+      oversold: num3(inputs, "oversold", 30),
+      ink: { low: str3(inputs, "oversoldColor", BULLISH), mid: str3(inputs, "color", NEUTRAL), high: str3(inputs, "overboughtColor", BEARISH) },
+      levelInk: str3(inputs, "levelsColor", NEUTRAL),
+      zoneTransparency: 91
+    });
   }
 };
 var rvgi = {
@@ -25389,7 +26980,11 @@ var rvgi = {
   title: "Relative Vigor Index",
   shortTitle: "RVGI",
   overlay: false,
-  inputs: [lengthInput(10)],
+  inputs: [
+    lengthInput(10, "length", "Length", 5e3, "Number of bars summed for the smoothed numerator (close \u2212 open) and denominator (high \u2212 low)."),
+    colorInput(BULLISH, "RVGI", "color", "Color of the RVGI line."),
+    colorInput(BEARISH, "Signal", "signalColor", "Color of the signal line.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 10);
     const co = swma(sub(closes(bars), opens(bars)));
@@ -25397,31 +26992,49 @@ var rvgi = {
     const line = zip(sum(co, len), sum(hl, len), (a, b) => b === 0 ? 0 : a / b);
     return {
       plots: [
-        { key: "rvgi", title: "RVGI", values: line, color: SERIES_LINE, width: 2 },
-        { key: "signal", title: "Signal", values: swma(line), color: WARNING }
+        { key: "rvgi", title: "RVGI", values: line, color: str3(inputs, "color", BULLISH) },
+        { key: "signal", title: "Signal", values: swma(line), color: str3(inputs, "signalColor", BEARISH) }
       ],
-      levels: ZERO_LEVEL
+      levels: [{ key: "zero", price: 0, color: transp(NEUTRAL, 50), lineStyle: "dashed", title: "Zero" }]
     };
   }
 };
+var RVI_EMA = "EMA";
+var RVI_RMA = "Wilder (RMA)";
 var relVolatility = {
   type: "relative-volatility-index",
   title: "Relative Volatility Index",
   shortTitle: "RVI",
   overlay: false,
-  inputs: [lengthInput(10, "stdevLength", "StdDev length"), lengthInput(14, "smoothLength", "Smoothing length"), sourceInput(), colorInput()],
+  inputs: [
+    lengthInput(10, "stdevLength", "Stdev Length", 5e3, "Number of bars used for the standard deviation of closing prices that serves as each bar's volatility reading."),
+    lengthInput(14, "smoothLength", "Smoothing Length", 5e3, "Number of bars used to smooth the up and down volatility streams."),
+    optionInput("smoothType", "Smoothing Type", RVI_EMA, [RVI_EMA, RVI_RMA], "Moving average applied to the volatility streams. EMA is Dorsey's classic calculation; Wilder (RMA) matches platforms that use Wilder smoothing."),
+    ...thresholdInputs(80, 20),
+    colorInput(NEUTRAL, "RVI Line", "color", "Color of the RVI line at the midline. Toward either threshold it blends into that threshold\u2019s color."),
+    colorInput(BULLISH, "Up Volatility", "overboughtColor", "Color of the line and zone shading at and above the overbought level."),
+    colorInput(BEARISH, "Down Volatility", "oversoldColor", "Color of the line and zone shading at and below the oversold level.")
+  ],
   compute: (bars, inputs) => {
+    const c = closes(bars);
+    const sigma = stdev(c, num3(inputs, "stdevLength", 10));
+    const d = change(c);
+    const up = zip(sigma, d, (s, x) => x > 0 ? s : 0);
+    const down = zip(sigma, d, (s, x) => x < 0 ? s : 0);
     const smoothLen = num3(inputs, "smoothLength", 14);
-    const src = sourceValues(bars, str3(inputs, "source", "Close"));
-    const dev = stdev(src, num3(inputs, "stdevLength", 10));
-    const d = change(src);
-    const up = rma(zip(dev, d, (s, x) => x > 0 ? s : 0), smoothLen);
-    const dn = rma(zip(dev, d, (s, x) => x <= 0 ? s : 0), smoothLen);
-    const values = zip(up, dn, (u, w) => u + w === 0 ? 50 : 100 * u / (u + w));
-    return {
-      plots: [{ key: "rvi", title: "RVI", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: guideLevels(20, 80, 50)
-    };
+    const smooth = str3(inputs, "smoothType", RVI_EMA) === RVI_RMA ? rma : ema;
+    const values = zip(smooth(up, smoothLen), smooth(down, smoothLen), (u, w) => u + w === 0 ? 0 : 100 * u / (u + w));
+    return boundedOscillator({
+      key: "rvi",
+      title: "RVI",
+      values,
+      scale: { top: 100, bottom: 0 },
+      overbought: num3(inputs, "overbought", 80),
+      oversold: num3(inputs, "oversold", 20),
+      ink: { low: str3(inputs, "oversoldColor", BEARISH), mid: str3(inputs, "color", NEUTRAL), high: str3(inputs, "overboughtColor", BULLISH) },
+      levelInk: NEUTRAL,
+      width: 2
+    });
   }
 };
 var bop = {
@@ -25429,28 +27042,43 @@ var bop = {
   title: "Balance of Power",
   shortTitle: "BOP",
   overlay: false,
-  inputs: [colorInput()],
+  inputs: [
+    boolInput("smoothing", "Smoothing", false, void 0, "Smooth the raw Balance of Power with a simple moving average instead of plotting the single-bar value."),
+    lengthInput(14, "smoothLength", "Length", 5e3, "Simple moving average length applied when smoothing is enabled."),
+    colorInput(NEUTRAL, "BOP Color", "color", "Color of the line at exactly zero."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Line and fill color while the Balance of Power is above zero \u2014 buyers in control of the bar."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Line and fill color while the Balance of Power is below zero \u2014 sellers in control of the bar.")
+  ],
   compute: (bars, inputs) => {
-    const values = bars.map((b) => b.high === b.low ? 0 : (b.close - b.open) / (b.high - b.low));
-    return {
-      plots: [{ key: "bop", title: "BOP", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: ZERO_LEVEL
-    };
+    const raw = bars.map((b) => b.high === b.low ? 0 : (b.close - b.open) / (b.high - b.low));
+    const values = bool(inputs, "smoothing", false) ? sma(raw, num3(inputs, "smoothLength", 14)) : raw;
+    return centeredOscillator({
+      key: "bop",
+      title: "BOP",
+      values,
+      ink: { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "color", NEUTRAL) },
+      zeroInk: NEUTRAL,
+      valueTransparency: 60
+    });
   }
 };
 var elderRay = {
   type: "elder-ray",
   title: "Elder Ray",
   overlay: false,
-  inputs: [lengthInput(13)],
+  inputs: [
+    lengthInput(13, "length", "EMA Length", 5e3, "Number of bars in the exponential moving average of closing prices used as the reference level for Bull Power and Bear Power. Alexander Elder's classic setting is 13."),
+    colorInput(BULLISH, "Bull Power", "bullColor", "Color of the Bull Power columns."),
+    colorInput(BEARISH, "Bear Power", "bearColor", "Color of the Bear Power columns.")
+  ],
   compute: (bars, inputs) => {
     const basis = ema(closes(bars), num3(inputs, "length", 13));
     return {
       plots: [
-        { key: "bull", title: "Bull power", values: sub(highs(bars), basis), kind: "histogram", color: BULLISH, base: 0 },
-        { key: "bear", title: "Bear power", values: sub(lows(bars), basis), kind: "histogram", color: BEARISH, base: 0 }
+        { key: "bull", title: "Bull Power", values: sub(highs(bars), basis), kind: "columns", color: str3(inputs, "bullColor", BULLISH), base: 0 },
+        { key: "bear", title: "Bear Power", values: sub(lows(bars), basis), kind: "columns", color: str3(inputs, "bearColor", BEARISH), base: 0 }
       ],
-      levels: ZERO_LEVEL
+      levels: [{ key: "zero", price: 0, color: transp(NEUTRAL, 30), lineStyle: "dashed", title: "Zero Line" }]
     };
   }
 };
@@ -25459,31 +27087,66 @@ var ttmSqueeze = {
   title: "TTM Squeeze",
   overlay: false,
   inputs: [
-    lengthInput(20),
-    { key: "bbMult", title: "Bollinger multiplier", type: "float", defval: 2, min: 0.1, max: 50, step: 0.1 },
-    { key: "kcMult", title: "Keltner multiplier", type: "float", defval: 1.5, min: 0.1, max: 50, step: 0.1 }
+    { ...lengthInput(20, "length", "Length", 5e3, "Shared lookback for the Bollinger Bands, the Keltner Channels, and the momentum regression. John Carter's original setting is 20."), min: 2 },
+    sourceInput("Close", "source", "Source", "Price series used for the shared moving average basis, the standard deviation, and the momentum displacement."),
+    floatInput("bbMult", "Bollinger Bands Multiplier", 2, 0.1, 50, 0.1, "Standard deviation multiplier for the Bollinger Bands."),
+    floatInput("kcMult", "Keltner Channels Multiplier", 1.5, 0.1, 50, 0.1, "ATR multiplier for the Keltner Channels. A smaller multiplier demands a tighter compression before the squeeze turns on."),
+    colorInput(BULLISH, "Momentum Up", "bullColor", "Histogram color while momentum is positive. Bars building away from zero print solid, bars fading back print dimmed."),
+    colorInput(BEARISH, "Momentum Down", "bearColor", "Histogram color while momentum is negative. Bars building away from zero print solid, bars fading back print dimmed."),
+    colorInput(WARNING, "Squeeze On", "squeezeOnColor", "Zero-line dot color while both Bollinger Bands sit fully inside the Keltner Channels."),
+    colorInput(NEUTRAL, "Squeeze Off", "squeezeOffColor", "Zero-line dot color while the Bollinger Bands trade outside the Keltner Channels."),
+    boolInput("markFires", "Mark Squeeze Fires", true, STYLE, "Draws a cross on the zero line on the first bar where the bands re-emerge outside the channels, colored by the side of the momentum histogram.")
   ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 20);
-    const c = closes(bars);
-    const basis = sma(c, len);
-    const dev = map(stdev(c, len), (x) => x * num3(inputs, "bbMult", 2));
-    const kcRange = map(rma(trueRange(bars), len), (x) => x * num3(inputs, "kcMult", 1.5));
-    const donchianMid = zip(highest(highs(bars), len), lowest(lows(bars), len), (h, l) => (h + l) / 2);
-    const anchor = zip(donchianMid, basis, (d, b) => (d + b) / 2);
-    const mom = linreg(sub(c, anchor), len);
-    const squeezed = c.map((_, i) => {
+    const src = sourceValues(bars, str3(inputs, "source", "Close"));
+    const basis = sma(src, len);
+    const dev = map(stdev(src, len), (x) => x * num3(inputs, "bbMult", 2));
+    const kcRange = map(atr(bars, len), (x) => x * num3(inputs, "kcMult", 1.5));
+    const rangeMid = zip(highest(highs(bars), len), lowest(lows(bars), len), (h, l) => (h + l) / 2);
+    const anchor = zip(rangeMid, basis, (d, b) => (d + b) / 2);
+    const mom = linreg(sub(src, anchor), len, 0);
+    const squeezeOn = basis.map((b, i) => {
       const d = dev[i];
       const r = kcRange[i];
-      return Number.isFinite(d) && Number.isFinite(r) ? d < r : false;
+      if (!Number.isFinite(b) || !Number.isFinite(d) || !Number.isFinite(r)) return null;
+      return d < r;
     });
-    const stateColors = squeezed.map((s, i) => Number.isFinite(mom[i]) ? s ? BEARISH : BULLISH : null);
-    return {
-      plots: [
-        { key: "mom", title: "Momentum", values: mom, kind: "histogram", color: BULLISH, colors: histColors(mom), base: 0 },
-        { key: "squeeze", title: "Squeeze", values: mom.map((x) => Number.isFinite(x) ? 0 : Number.NaN), kind: "cross", color: INFO, colors: stateColors }
-      ]
-    };
+    const bull = str3(inputs, "bullColor", BULLISH);
+    const bear = str3(inputs, "bearColor", BEARISH);
+    const onInk = str3(inputs, "squeezeOnColor", WARNING);
+    const offInk = str3(inputs, "squeezeOffColor", NEUTRAL);
+    const momColors = mom.map((x, i) => {
+      if (!Number.isFinite(x)) return null;
+      const prev2 = i > 0 && Number.isFinite(mom[i - 1]) ? mom[i - 1] : x;
+      const rising = x > prev2;
+      return x >= 0 ? rising ? bull : transp(bull, 60) : rising ? transp(bear, 60) : bear;
+    });
+    const plots = [
+      { key: "mom", title: "Momentum", values: mom, kind: "columns", color: bull, colors: momColors, base: 0 },
+      {
+        key: "state",
+        title: "Squeeze State",
+        values: squeezeOn.map((s) => s == null ? Number.NaN : 0),
+        kind: "circles",
+        color: offInk,
+        width: 2,
+        colors: squeezeOn.map((s) => s == null ? null : s ? onInk : offInk)
+      }
+    ];
+    if (bool(inputs, "markFires", true)) {
+      const fires = squeezeOn.map((s, i) => s === false && squeezeOn[i - 1] === true ? 0 : Number.NaN);
+      plots.push({
+        key: "fire",
+        title: "Squeeze Fire",
+        values: fires,
+        kind: "cross",
+        color: offInk,
+        width: 3,
+        colors: fires.map((x, i) => Number.isFinite(x) ? Number.isFinite(mom[i]) ? mom[i] >= 0 ? bull : bear : offInk : null)
+      });
+    }
+    return { plots };
   }
 };
 var oscillatorSpecs = [
@@ -25495,7 +27158,7 @@ var oscillatorSpecs = [
   awesome,
   cci,
   williamsR,
-  cmo,
+  cmoSpec,
   connorsRsi,
   fisher,
   trix,
@@ -25519,15 +27182,19 @@ var aroon = {
   type: "aroon",
   title: "Aroon",
   overlay: false,
-  inputs: [lengthInput(14)],
+  inputs: [
+    lengthInput(14, "length", "Length", 5e3, "Lookback length used to locate the highest high and lowest low."),
+    colorInput(BULLISH, "Aroon Up", "upColor", "Color of the Aroon Up line."),
+    colorInput(BEARISH, "Aroon Down", "downColor", "Color of the Aroon Down line.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 14);
-    const up = map(barsSinceHighest(highs(bars), len + 1), (x) => 100 * (len - x) / len);
-    const down = map(barsSinceLowest(lows(bars), len + 1), (x) => 100 * (len - x) / len);
+    const up = map(barsSinceHighest(highs(bars), len), (x) => 100 * (len - x) / len);
+    const down = map(barsSinceLowest(lows(bars), len), (x) => 100 * (len - x) / len);
     return {
       plots: [
-        { key: "up", title: "Aroon up", values: up, color: BULLISH, width: 2 },
-        { key: "down", title: "Aroon down", values: down, color: BEARISH, width: 2 }
+        { key: "up", title: "Aroon Up", values: up, color: str3(inputs, "upColor", BULLISH) },
+        { key: "down", title: "Aroon Down", values: down, color: str3(inputs, "downColor", BEARISH) }
       ]
     };
   }
@@ -25537,10 +27204,16 @@ var adx = {
   title: "Average Directional Index",
   shortTitle: "ADX",
   overlay: false,
-  inputs: [lengthInput(14, "diLength", "DI length"), lengthInput(14, "adxLength", "ADX smoothing")],
+  inputs: [
+    lengthInput(14, "diLength", "DI Length", 5e3, "Wilder RMA smoothing length applied to directional movement and true range when computing +DI and \u2212DI."),
+    lengthInput(14, "adxLength", "ADX Smoothing", 5e3, "Wilder RMA smoothing length applied to DX to obtain the ADX line."),
+    floatInput("keyLevel", "Key Level", 25, 0, 100, 1, "Trend strength reference level; ADX above it is commonly read as a trending market."),
+    colorInput(BULLISH, "+DI Color", "plusDiColor", "Color of the plus directional indicator, and of the ADX line above the key level while +DI leads."),
+    colorInput(BEARISH, "-DI Color", "minusDiColor", "Color of the minus directional indicator, and of the ADX line above the key level while \u2212DI leads."),
+    colorInput(NEUTRAL, "ADX Color", "adxColor", "Color of the ADX line while it sits below the key level \u2014 no trend strong enough to trade.")
+  ],
   compute: (bars, inputs) => {
     const diLen = num3(inputs, "diLength", 14);
-    const adxLen = num3(inputs, "adxLength", 14);
     const n = bars.length;
     const plusDm = new Array(n).fill(Number.NaN);
     const minusDm = new Array(n).fill(Number.NaN);
@@ -25554,13 +27227,23 @@ var adx = {
     const plusDi = zip(rma(plusDm, diLen), atrLine, (d, a) => a === 0 ? 0 : 100 * d / a);
     const minusDi = zip(rma(minusDm, diLen), atrLine, (d, a) => a === 0 ? 0 : 100 * d / a);
     const dx = zip(plusDi, minusDi, (p, m) => p + m === 0 ? 0 : 100 * Math.abs(p - m) / (p + m));
+    const adxLine = rma(dx, num3(inputs, "adxLength", 14));
+    const plusInk = str3(inputs, "plusDiColor", BULLISH);
+    const minusInk = str3(inputs, "minusDiColor", BEARISH);
+    const neutralInk = str3(inputs, "adxColor", NEUTRAL);
+    const keyLevel = num3(inputs, "keyLevel", 25);
+    const adxColors = adxLine.map((x, i) => {
+      if (!Number.isFinite(x)) return null;
+      if (x <= keyLevel) return neutralInk;
+      return (plusDi[i] ?? 0) > (minusDi[i] ?? 0) ? plusInk : minusInk;
+    });
     return {
       plots: [
-        { key: "adx", title: "ADX", values: rma(dx, adxLen), color: SERIES_LINE, width: 2 },
-        { key: "plusDi", title: "+DI", values: plusDi, color: BULLISH },
-        { key: "minusDi", title: "-DI", values: minusDi, color: BEARISH }
+        { key: "plusDi", title: "+DI", values: plusDi, color: transp(plusInk, 30) },
+        { key: "minusDi", title: "-DI", values: minusDi, color: transp(minusInk, 30) },
+        { key: "adx", title: "ADX", values: adxLine, color: neutralInk, width: 2, colors: adxColors }
       ],
-      levels: [{ key: "threshold", price: 25, color: NEUTRAL, lineStyle: "dotted" }]
+      levels: [{ key: "keyLevel", price: keyLevel, color: NEUTRAL, lineStyle: "dashed", title: "Key Level" }]
     };
   }
 };
@@ -25569,7 +27252,12 @@ var vortex = {
   title: "Vortex Indicator",
   shortTitle: "VI",
   overlay: false,
-  inputs: [lengthInput(14)],
+  inputs: [
+    lengthInput(14, "length", "Length", 5e3, "Number of bars used to sum the vortex movements (VM+ and VM\u2212) and the true range."),
+    colorInput(BULLISH, "VI+", "plusColor", "Color of the positive vortex line (VI+)."),
+    colorInput(BEARISH, "VI-", "minusColor", "Color of the negative vortex line (VI\u2212)."),
+    colorInput(NEUTRAL, "Baseline", "baselineColor", "Color of the dotted baseline drawn at 1.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 14);
     const n = bars.length;
@@ -25582,25 +27270,48 @@ var vortex = {
     const trSum = sum(trueRange(bars), len);
     return {
       plots: [
-        { key: "viPlus", title: "VI+", values: zip(sum(vmPlus, len), trSum, (v, t) => t === 0 ? Number.NaN : v / t), color: BULLISH, width: 2 },
-        { key: "viMinus", title: "VI-", values: zip(sum(vmMinus, len), trSum, (v, t) => t === 0 ? Number.NaN : v / t), color: BEARISH, width: 2 }
+        { key: "viPlus", title: "VI+", values: zip(sum(vmPlus, len), trSum, (v, t) => t === 0 ? Number.NaN : v / t), color: str3(inputs, "plusColor", BULLISH) },
+        { key: "viMinus", title: "VI-", values: zip(sum(vmMinus, len), trSum, (v, t) => t === 0 ? Number.NaN : v / t), color: str3(inputs, "minusColor", BEARISH) }
       ],
-      levels: [{ key: "one", price: 1, color: NEUTRAL, lineStyle: "dotted" }]
+      levels: [{ key: "baseline", price: 1, color: str3(inputs, "baselineColor", NEUTRAL), lineStyle: "dotted", title: "Baseline" }]
     };
   }
 };
 var trendSpecs = [aroon, adx, vortex];
 
 // src/core/native-indicators/classics/volatility.ts
+function expansionColors(values, calm, expanding) {
+  return values.map((x, i) => {
+    if (!Number.isFinite(x)) return null;
+    const prev2 = i > 0 && Number.isFinite(values[i - 1]) ? values[i - 1] : x;
+    return x > prev2 ? expanding : calm;
+  });
+}
+function washedToZero(key, title, values, colors, fallback, valueTransparency, width = 1) {
+  return {
+    plots: [{ key, title, values, color: fallback, width, colors }, anchorPlot("zeroAnchor", "Zero Anchor", values.length, 0)],
+    bands: [{ key: "wash", from: key, to: "zeroAnchor", color: transp(NEUTRAL, 100), gradient: baselineGradient(values, 0, (_x, i) => colors[i] ?? fallback, valueTransparency) }]
+  };
+}
 var atrSpec = {
   type: "average-true-range",
   title: "Average True Range",
   shortTitle: "ATR",
   overlay: false,
-  inputs: [lengthInput(14), colorInput()],
-  compute: (bars, inputs) => ({
-    plots: [{ key: "atr", title: "ATR", values: atr(bars, num3(inputs, "length", 14)), color: str3(inputs, "color", SERIES_LINE), width: 2 }]
-  })
+  inputs: [
+    lengthInput(14, "length", "Length", 5e3, "Number of bars used to average the true range."),
+    optionInput("smoothing", "Smoothing", "RMA", ["RMA", "SMA", "EMA", "WMA"], "Moving average applied to the true range. RMA is Wilder's original smoothing used by the classic ATR."),
+    colorInput(NEUTRAL, "ATR Line", "color", "Color of the ATR line while volatility contracts or holds flat."),
+    colorInput(WARNING, "Expanding", "expandColor", "Color of the ATR line while it rises \u2014 volatility expanding bar to bar.")
+  ],
+  compute: (bars, inputs) => {
+    const len = num3(inputs, "length", 14);
+    const tr = trueRange(bars);
+    const kind = str3(inputs, "smoothing", "RMA");
+    const values = kind === "SMA" ? sma(tr, len) : kind === "EMA" ? ema(tr, len) : kind === "WMA" ? wma(tr, len) : rma(tr, len);
+    const calm = str3(inputs, "color", NEUTRAL);
+    return washedToZero("atr", "ATR", values, expansionColors(values, calm, str3(inputs, "expandColor", WARNING)), calm, 75);
+  }
 };
 var historicalVolatility = {
   type: "historical-volatility",
@@ -25608,14 +27319,23 @@ var historicalVolatility = {
   shortTitle: "HV",
   overlay: false,
   inputs: [
-    lengthInput(10),
-    { key: "annual", title: "Periods per year", type: "int", defval: 365, min: 1, max: 1e5, step: 1, tooltip: "Annualization factor (365 for daily crypto bars, 252 for stock sessions)" },
-    colorInput()
+    { ...lengthInput(10, "length", "Length", 5e3, "Lookback window in bars for the standard deviation of close-to-close log returns."), min: 2 },
+    boolInput("annualize", "Annualize", true, void 0, "Scale the per-bar volatility to an annual figure by multiplying by the square root of the periods per year."),
+    intInput("periodsPerYear", "Periods Per Year", 252, 1, 1e5, "Number of periods in a year used for annualization: 252 for daily bars, 52 for weekly, 12 for monthly."),
+    colorInput(WARNING, "Volatility Line", "color", "Color of the line at its recent highs; it fades toward grey as volatility contracts.")
   ],
   compute: (bars, inputs) => {
-    const logReturns = map(change(map(closes(bars), Math.log)), (x) => x);
-    const values = map(stdev(logReturns, num3(inputs, "length", 10)), (x) => x * Math.sqrt(num3(inputs, "annual", 365)) * 100);
-    return { plots: [{ key: "hv", title: "HV", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }] };
+    const len = num3(inputs, "length", 10);
+    const logReturns = sub(map(closes(bars), Math.log), shift(map(closes(bars), Math.log), 1));
+    const meanReturn = map(sum(logReturns, len), (s) => s / len);
+    const squaredSum = sum(map(logReturns, (r) => r * r), len);
+    const factor = bool(inputs, "annualize", true) ? Math.sqrt(num3(inputs, "periodsPerYear", 252)) : 1;
+    const values = zip(squaredSum, meanReturn, (sq, m) => Math.sqrt(Math.max(sq - len * m * m, 0) / (len - 1)) * factor * 100);
+    const low = lowest(values, 100);
+    const high = highest(values, 100);
+    const accent = str3(inputs, "color", WARNING);
+    const colors = values.map((x, i) => Number.isFinite(x) ? gradient(x, low[i] ?? 0, high[i] ?? 0, NEUTRAL, accent) : null);
+    return washedToZero("hv", "Historical Volatility", values, colors, accent, 75, 2);
   }
 };
 var chaikinVolatility = {
@@ -25623,13 +27343,26 @@ var chaikinVolatility = {
   title: "Chaikin Volatility",
   shortTitle: "CHV",
   overlay: false,
-  inputs: [lengthInput(10, "emaLength", "EMA length"), lengthInput(10, "rocLength", "RoC length"), colorInput()],
+  inputs: [
+    lengthInput(10, "emaLength", "EMA Length", 5e3, "Length of the exponential moving average applied to the bar high-low range."),
+    lengthInput(10, "rocLength", "ROC Length", 5e3, "Number of bars used for the rate of change of the smoothed high-low range."),
+    colorInput(NEUTRAL, "CHV Color", "color", "Color of the Chaikin Volatility line."),
+    colorInput(WARNING, "Expansion", "expansionColor", "Line and fill color while the reading is above zero \u2014 the smoothed range is wider than it was ROC Length bars ago.")
+  ],
   compute: (bars, inputs) => {
     const range = ema(sub(highs(bars), lows(bars)), num3(inputs, "emaLength", 10));
-    return {
-      plots: [{ key: "cv", title: "Chaikin Vol", values: roc(range, num3(inputs, "rocLength", 10)), color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: [{ key: "zero", price: 0, color: NEUTRAL }]
-    };
+    const prior = shift(range, num3(inputs, "rocLength", 10));
+    const values = zip(range, prior, (r, p) => p === 0 ? Number.NaN : 100 * (r - p) / p);
+    const calm = str3(inputs, "color", NEUTRAL);
+    const expansion = str3(inputs, "expansionColor", WARNING);
+    return centeredOscillator({
+      key: "chv",
+      title: "Chaikin Volatility",
+      values,
+      // Only expansion is a state worth accenting; contraction stays structural grey.
+      ink: { bull: expansion, bear: calm, neutral: calm },
+      zeroInk: NEUTRAL
+    });
   }
 };
 var massIndex = {
@@ -25637,14 +27370,42 @@ var massIndex = {
   title: "Mass Index",
   shortTitle: "MI",
   overlay: false,
-  inputs: [lengthInput(25), colorInput()],
+  inputs: [
+    lengthInput(25, "length", "Sum Length", 5e3, "Number of bars over which the single/double EMA ratio is summed."),
+    lengthInput(9, "emaLength", "EMA Length", 5e3, "Length of the single EMA of the high-low range and of its double smoothing."),
+    floatInput("setupLevel", "Setup Level", 27, 0, 1e3, 0.1, "Reversal bulge set-up level; a rise above it arms the pattern."),
+    floatInput("triggerLevel", "Trigger Level", 26.5, 0, 1e3, 0.1, "Reversal bulge trigger level; a decline below it after a set-up completes the pattern."),
+    colorInput(NEUTRAL, "Mass Index", "color", "Line color while no reversal bulge is armed."),
+    colorInput(WARNING, "Armed", "armedColor", "Line color from the rise above the setup level until the decline below the trigger level."),
+    colorInput(NEUTRAL, "Levels", "levelsColor", "Reversal bulge levels color.")
+  ],
   compute: (bars, inputs) => {
-    const range = sub(highs(bars), lows(bars));
-    const single = ema(range, 9);
-    const ratio = zip(single, ema(single, 9), (a, b) => b === 0 ? Number.NaN : a / b);
+    const emaLen = num3(inputs, "emaLength", 9);
+    const single = ema(sub(highs(bars), lows(bars)), emaLen);
+    const ratio = zip(single, ema(single, emaLen), (a, b) => b === 0 ? 1 : a / b);
+    const values = sum(ratio, num3(inputs, "length", 25));
+    const setup = num3(inputs, "setupLevel", 27);
+    const trigger = num3(inputs, "triggerLevel", 26.5);
+    const calm = str3(inputs, "color", NEUTRAL);
+    const armedInk = str3(inputs, "armedColor", WARNING);
+    const levelInk = str3(inputs, "levelsColor", NEUTRAL);
+    let armed = false;
+    const colors = values.map((x) => {
+      if (!Number.isFinite(x)) return null;
+      armed = x > setup ? true : x < trigger ? false : armed;
+      return armed ? armedInk : calm;
+    });
     return {
-      plots: [{ key: "mi", title: "Mass Index", values: sum(ratio, num3(inputs, "length", 25)), color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: [{ key: "reversal", price: 27, color: NEUTRAL, lineStyle: "dotted" }]
+      plots: [
+        { key: "mi", title: "Mass Index", values, color: calm, colors },
+        anchorPlot("setupAnchor", "Setup Anchor", values.length, setup),
+        anchorPlot("triggerAnchor", "Trigger Anchor", values.length, trigger)
+      ],
+      bands: [{ key: "bulge", from: "setupAnchor", to: "triggerAnchor", color: transp(armedInk, 90) }],
+      levels: [
+        { key: "setup", price: setup, color: levelInk, lineStyle: "dashed", title: "Setup Level" },
+        { key: "trigger", price: trigger, color: levelInk, lineStyle: "dashed", title: "Trigger Level" }
+      ]
     };
   }
 };
@@ -25653,30 +27414,83 @@ var standardDeviation = {
   title: "Standard Deviation",
   shortTitle: "StdDev",
   overlay: false,
-  inputs: [lengthInput(20), sourceInput(), colorInput()],
-  compute: (bars, inputs) => ({
-    plots: [
-      {
-        key: "stdev",
-        title: "StdDev",
-        values: stdev(sourceValues(bars, str3(inputs, "source", "Close")), num3(inputs, "length", 20)),
-        color: str3(inputs, "color", SERIES_LINE),
-        width: 2
-      }
-    ]
-  })
+  inputs: [
+    lengthInput(20, "length", "Length", 5e3, "Number of bars used to compute the standard deviation."),
+    sourceInput("Close", "source", "Source", "Price series the standard deviation is calculated on."),
+    colorInput(NEUTRAL, "Standard Deviation", "color", "Line color while volatility contracts or holds flat."),
+    colorInput(WARNING, "Expanding", "expandColor", "Line and fill color while volatility expands bar to bar.")
+  ],
+  compute: (bars, inputs) => {
+    const values = stdev(sourceValues(bars, str3(inputs, "source", "Close")), num3(inputs, "length", 20));
+    const calm = str3(inputs, "color", NEUTRAL);
+    return washedToZero("stdev", "Standard Deviation", values, expansionColors(values, calm, str3(inputs, "expandColor", WARNING)), calm, 80);
+  }
 };
 var ulcerIndex = {
   type: "ulcer-index",
   title: "Ulcer Index",
   overlay: false,
-  inputs: [lengthInput(14), colorInput()],
+  inputs: [
+    { ...lengthInput(14, "length", "Length", 500, "Lookback window. At each bar the percentage drawdown from the window's running maximum is squared; the squares are averaged and the root taken."), min: 2 },
+    sourceInput("Close", "source", "Source", "Price series the Ulcer Index is computed on. Close is the standard choice."),
+    floatInput("threshold", "Alert Threshold", 5, 0, 1e3, 0.25, "Reference level drawn as a dashed line. The index scales with the instrument's volatility and the window length, so set it relative to its own history."),
+    colorInput(NEUTRAL, "Ulcer Index", "color", "Color of the index near zero; it blends toward the stress color as the reading approaches the threshold."),
+    colorInput(BEARISH, "Stress", "stressColor", "Color of the index at and beyond the alert threshold."),
+    boolInput("gradientFill", "Gradient Fill", true, STYLE, "Vertical gradient between zero and the Ulcer Index, fully transparent at zero."),
+    boolInput("showDrawdown", "Drawdown %", false, STYLE, "Plot the current percentage drawdown from the window high as columns below zero \u2014 the raw ingredient the index averages."),
+    colorInput(transp(BEARISH, 50), "Drawdown Color", "drawdownColor", "Color of the drawdown columns."),
+    colorInput(NEUTRAL, "Threshold", "thresholdColor", "Color of the alert threshold line.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 14);
-    const c = closes(bars);
-    const drawdown = zip(c, highest(c, len), (x, h) => h === 0 ? 0 : 100 * (x - h) / h);
-    const values = map(sma(map(drawdown, (d) => d * d), len), Math.sqrt);
-    return { plots: [{ key: "ui", title: "Ulcer", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }] };
+    const src = sourceValues(bars, str3(inputs, "source", "Close"));
+    const n = src.length;
+    const values = new Array(n).fill(Number.NaN);
+    const drawdown = new Array(n).fill(Number.NaN);
+    for (let i = len - 1; i < n; i++) {
+      let runMax = Number.NaN;
+      let sumSq = 0;
+      let valid = true;
+      let last = Number.NaN;
+      for (let k = i - len + 1; k <= i; k++) {
+        const price = src[k];
+        if (!Number.isFinite(price)) {
+          valid = false;
+          break;
+        }
+        runMax = Number.isFinite(runMax) ? Math.max(runMax, price) : price;
+        if (runMax <= 0) {
+          valid = false;
+          break;
+        }
+        last = 100 * (price - runMax) / runMax;
+        sumSq += last * last;
+      }
+      if (!valid) continue;
+      values[i] = Math.sqrt(sumSq / len);
+      drawdown[i] = last;
+    }
+    const calm = str3(inputs, "color", NEUTRAL);
+    const stress = str3(inputs, "stressColor", BEARISH);
+    const threshold = num3(inputs, "threshold", 5);
+    const colors = values.map((x) => Number.isFinite(x) ? threshold > 0 ? gradient(x, 0, threshold, calm, stress) : stress : null);
+    const plots = [{ key: "ui", title: "Ulcer Index", values, color: calm, colors }];
+    const bands = [];
+    if (bool(inputs, "gradientFill", true)) {
+      plots.push(anchorPlot("zeroAnchor", "Zero Base", n, 0));
+      bands.push({ key: "wash", from: "ui", to: "zeroAnchor", color: transp(NEUTRAL, 100), gradient: baselineGradient(values, 0, (_x, i) => colors[i] ?? calm) });
+    }
+    if (bool(inputs, "showDrawdown", false)) {
+      plots.push({ key: "dd", title: "Drawdown %", values: drawdown, kind: "columns", color: str3(inputs, "drawdownColor", transp(BEARISH, 50)), base: 0 });
+    }
+    return {
+      plots,
+      bands,
+      levels: [
+        { key: "zero", price: 0, color: transp(NEUTRAL, 50), lineStyle: "dotted", title: "Zero Level" },
+        { key: "threshold", price: threshold, color: str3(inputs, "thresholdColor", NEUTRAL), lineStyle: "dashed", title: "Alert Threshold" }
+      ]
+    };
   }
 };
 var choppiness = {
@@ -25684,19 +27498,33 @@ var choppiness = {
   title: "Choppiness Index",
   shortTitle: "CHOP",
   overlay: false,
-  inputs: [lengthInput(14), colorInput()],
+  inputs: [
+    { ...lengthInput(14, "length", "Length", 5e3, "Number of bars used to sum true ranges and to measure the highest high \u2212 lowest low range."), min: 2 },
+    floatInput("upperBand", "Upper Band", 61.8, 0, 100, 0.1, "Readings above this level indicate a choppy, range-bound market."),
+    floatInput("lowerBand", "Lower Band", 38.2, 0, 100, 0.1, "Readings below this level indicate a strong trend."),
+    colorInput(NEUTRAL, "CHOP Line", "color", "Color of the Choppiness Index line."),
+    colorInput(BULLISH, "Trending", "trendingColor", "Line, fill and zone color toward and below the lower band \u2014 a trending market."),
+    colorInput(BEARISH, "Choppy", "choppyColor", "Line, fill and zone color toward and above the upper band \u2014 a choppy, range-bound market."),
+    colorInput(transp(NEUTRAL, 90), "Band Fill", "fillColor", "Fill color of the zone between the upper and lower bands.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 14);
     const trSum = sum(trueRange(bars), len);
     const span = zip(highest(highs(bars), len), lowest(lows(bars), len), (h, l) => h - l);
     const values = zip(trSum, span, (t, s) => s > 0 && t > 0 ? 100 * Math.log10(t / s) / Math.log10(len) : Number.NaN);
-    return {
-      plots: [{ key: "chop", title: "CHOP", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: [
-        { key: "upper", price: 61.8, color: NEUTRAL },
-        { key: "lower", price: 38.2, color: NEUTRAL }
-      ]
-    };
+    return boundedOscillator({
+      key: "chop",
+      title: "CHOP",
+      values,
+      scale: { top: 100, bottom: 0 },
+      overbought: num3(inputs, "upperBand", 61.8),
+      oversold: num3(inputs, "lowerBand", 38.2),
+      ink: { low: str3(inputs, "trendingColor", BULLISH), mid: str3(inputs, "color", NEUTRAL), high: str3(inputs, "choppyColor", BEARISH) },
+      levelInk: NEUTRAL,
+      bandFill: str3(inputs, "fillColor", transp(NEUTRAL, 90)),
+      midpointWash: true,
+      levelTitles: { overbought: "Upper Band", oversold: "Lower Band" }
+    });
   }
 };
 var volatilitySpecs = [atrSpec, historicalVolatility, chaikinVolatility, massIndex, standardDeviation, ulcerIndex, choppiness];
@@ -25709,17 +27537,85 @@ function moneyFlowVolume(bars) {
     return (2 * b.close - b.high - b.low) / (b.high - b.low) * b.volume;
   });
 }
+function slopeColors2(values, bull, bear, flat) {
+  return values.map((x, i) => {
+    if (!Number.isFinite(x)) return null;
+    const prev2 = i > 0 ? values[i - 1] : Number.NaN;
+    if (!Number.isFinite(prev2)) return flat;
+    return x > prev2 ? bull : x < prev2 ? bear : flat;
+  });
+}
+function volumeIndex(bars, src, base, when) {
+  const out = new Array(bars.length).fill(Number.NaN);
+  let index = base;
+  for (let i = 0; i < bars.length; i++) {
+    const v = bars[i].volume;
+    const pv = i > 0 ? bars[i - 1].volume : null;
+    const prev2 = i > 0 ? src[i - 1] : Number.NaN;
+    const active = v != null && pv != null && Number.isFinite(v) && Number.isFinite(pv) && when(v, pv);
+    if (active && Number.isFinite(prev2) && prev2 !== 0) index *= 1 + (src[i] - prev2) / prev2;
+    out[i] = index;
+  }
+  return out;
+}
+function regimeIndex(key, title, values, signal, ink, showSignal, gradientFill, singleColor = false) {
+  const inkOf = (i) => {
+    const s = signal[i];
+    const x = values[i];
+    if (singleColor || !Number.isFinite(s)) return ink.neutral;
+    return x > s ? ink.bull : x < s ? ink.bear : ink.neutral;
+  };
+  const plots = [
+    {
+      key: "signal",
+      title: "Signal EMA",
+      values: signal,
+      color: ink.signal,
+      ...showSignal ? {} : { display: { pane: false } }
+    },
+    { key, title, values, color: ink.neutral, width: 2, colors: values.map((x, i) => Number.isFinite(x) ? inkOf(i) : null) }
+  ];
+  const bands = gradientFill ? [
+    {
+      key: "regime",
+      from: key,
+      to: "signal",
+      color: transp(NEUTRAL, 100),
+      gradient: values.map((x, i) => {
+        const s = signal[i];
+        if (!Number.isFinite(x) || !Number.isFinite(s)) return null;
+        const above = x > s;
+        const c = above ? ink.bull : ink.bear;
+        return { topValue: Math.max(x, s), bottomValue: Math.min(x, s), topColor: transp(c, above ? 50 : 100), bottomColor: transp(c, above ? 100 : 50) };
+      })
+    }
+  ] : [];
+  return { plots, bands };
+}
 var obv = {
   type: "on-balance-volume",
   title: "On Balance Volume",
   shortTitle: "OBV",
   overlay: false,
-  inputs: [colorInput()],
+  inputs: [
+    boolInput("smoothing", "Smoothing MA", false, SETTINGS, "Display a moving average of OBV to act as a smoothing/signal line."),
+    optionInput("maType", "MA Type", "SMA", ["SMA", "EMA", "WMA", "RMA (SMMA)"], "Moving average type used for the smoothing MA."),
+    lengthInput(20, "maLength", "MA Length", 5e3, "Number of bars used for the smoothing MA."),
+    colorInput(INFO, "OBV", "color", "Color of the OBV line."),
+    colorInput(WARNING, "Smoothing MA", "maColor", "Color of the smoothing MA line.")
+  ],
   compute: (bars, inputs) => {
     const vol = volumes(bars);
     const d = change(closes(bars));
-    const signed2 = zip(vol, d, (v, x) => x > 0 ? v : x < 0 ? -v : 0);
-    return { plots: [{ key: "obv", title: "OBV", values: cumSum(signed2), color: str3(inputs, "color", SERIES_LINE), width: 2 }] };
+    const values = cumSum(zip(vol, d, (v, x) => x > 0 ? v : x < 0 ? -v : 0));
+    const plots = [{ key: "obv", title: "OBV", values, color: str3(inputs, "color", INFO) }];
+    if (bool(inputs, "smoothing", false)) {
+      const len = num3(inputs, "maLength", 20);
+      const kind = str3(inputs, "maType", "SMA");
+      const ma = kind === "EMA" ? ema(values, len) : kind === "WMA" ? wma(values, len) : kind === "RMA (SMMA)" ? rma(values, len) : sma(values, len);
+      plots.push({ key: "ma", title: "Smoothing MA", values: ma, color: str3(inputs, "maColor", WARNING) });
+    }
+    return { plots };
   }
 };
 var accDist = {
@@ -25727,24 +27623,50 @@ var accDist = {
   title: "Accumulation / Distribution",
   shortTitle: "A/D",
   overlay: false,
-  inputs: [colorInput()],
-  compute: (bars, inputs) => ({
-    plots: [{ key: "ad", title: "A/D", values: cumSum(moneyFlowVolume(bars)), color: str3(inputs, "color", SERIES_LINE), width: 2 }]
-  })
+  inputs: [
+    boolInput("slopeColoring", "Slope Coloring", true, STYLE, "Color the line by its slope \u2014 bullish while rising (accumulation), bearish while falling (distribution)."),
+    colorInput(NEUTRAL, "A/D Line", "color", "Color of the line when slope coloring is disabled or the line is flat."),
+    colorInput(BULLISH, "Rising", "bullColor", "Line color while the A/D Line rises."),
+    colorInput(BEARISH, "Falling", "bearColor", "Line color while the A/D Line falls.")
+  ],
+  compute: (bars, inputs) => {
+    const values = cumSum(moneyFlowVolume(bars));
+    const flat = str3(inputs, "color", NEUTRAL);
+    return {
+      plots: [
+        {
+          key: "ad",
+          title: "A/D",
+          values,
+          color: flat,
+          ...bool(inputs, "slopeColoring", true) ? { colors: slopeColors2(values, str3(inputs, "bullColor", BULLISH), str3(inputs, "bearColor", BEARISH), flat) } : {}
+        }
+      ]
+    };
+  }
 };
 var cmf = {
   type: "chaikin-money-flow",
   title: "Chaikin Money Flow",
   shortTitle: "CMF",
   overlay: false,
-  inputs: [lengthInput(20), colorInput()],
+  inputs: [
+    lengthInput(20, "length", "Length", 5e3, "Lookback length over which money flow volume and volume are summed."),
+    colorInput(NEUTRAL, "CMF Line", "color", "Color of the Chaikin Money Flow line."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Line and fill color while the CMF reads above zero (net money flowing in)."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Line and fill color while the CMF reads below zero (net money flowing out)."),
+    colorInput(NEUTRAL, "Zero Line", "zeroColor", "Color of the zero reference line.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 20);
     const values = zip(sum(moneyFlowVolume(bars), len), sum(volumes(bars), len), (m, v) => v === 0 ? 0 : m / v);
-    return {
-      plots: [{ key: "cmf", title: "CMF", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: [{ key: "zero", price: 0, color: NEUTRAL }]
-    };
+    return centeredOscillator({
+      key: "cmf",
+      title: "CMF",
+      values,
+      ink: { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "color", NEUTRAL) },
+      zeroInk: str3(inputs, "zeroColor", NEUTRAL)
+    });
   }
 };
 var chaikinOscillator = {
@@ -25752,14 +27674,23 @@ var chaikinOscillator = {
   title: "Chaikin Oscillator",
   shortTitle: "Chaikin Osc",
   overlay: false,
-  inputs: [lengthInput(3, "fastLength", "Fast length"), lengthInput(10, "slowLength", "Slow length"), colorInput()],
+  inputs: [
+    lengthInput(3, "fastLength", "Fast Length", 5e3, "Length of the fast EMA applied to the accumulation/distribution line."),
+    lengthInput(10, "slowLength", "Slow Length", 5e3, "Length of the slow EMA applied to the accumulation/distribution line."),
+    colorInput(NEUTRAL, "Oscillator", "color", "Color of the Chaikin Oscillator line."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Line and fill color while the oscillator reads above zero (accumulation)."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Line and fill color while the oscillator reads below zero (distribution).")
+  ],
   compute: (bars, inputs) => {
     const ad = cumSum(moneyFlowVolume(bars));
     const values = sub(ema(ad, num3(inputs, "fastLength", 3)), ema(ad, num3(inputs, "slowLength", 10)));
-    return {
-      plots: [{ key: "co", title: "Chaikin Osc", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: [{ key: "zero", price: 0, color: NEUTRAL }]
-    };
+    return centeredOscillator({
+      key: "co",
+      title: "Chaikin Oscillator",
+      values,
+      ink: { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "color", NEUTRAL) },
+      zeroInk: NEUTRAL
+    });
   }
 };
 var eom = {
@@ -25767,20 +27698,28 @@ var eom = {
   title: "Ease of Movement",
   shortTitle: "EOM",
   overlay: false,
-  inputs: [lengthInput(14), { key: "divisor", title: "Divisor", type: "int", defval: 1e4, min: 1, max: 1e9, step: 1 }, colorInput()],
+  inputs: [
+    lengthInput(14, "length", "Length", 5e3, "Number of bars in the simple moving average smoothing the 1-bar Ease of Movement values."),
+    intInput("divisor", "Divisor", 1e4, 1, 1e9, "Volume scaling constant of the box ratio; larger values scale the oscillator up. 10000 is the conventional default."),
+    colorInput(NEUTRAL, "EOM Line", "color", "Color of the line when it sits exactly at zero."),
+    colorInput(BULLISH, "Above Zero", "bullColor", "Color of the line and fill while Ease of Movement is positive."),
+    colorInput(BEARISH, "Below Zero", "bearColor", "Color of the line and fill while Ease of Movement is negative.")
+  ],
   compute: (bars, inputs) => {
     const div = num3(inputs, "divisor", 1e4);
-    const hl2 = sourceValues(bars, "HL2");
-    const move = change(hl2);
+    const move = change(sourceValues(bars, "HL2"));
     const raw = bars.map((b, i) => {
       const m = move[i];
-      if (b.volume == null || !Number.isFinite(b.volume) || b.volume === 0 || !Number.isFinite(m)) return Number.NaN;
-      return div * m * (b.high - b.low) / b.volume;
+      if (b.volume == null || !Number.isFinite(b.volume) || !Number.isFinite(m)) return Number.NaN;
+      return b.volume === 0 ? 0 : div * m * (b.high - b.low) / b.volume;
     });
-    return {
-      plots: [{ key: "eom", title: "EOM", values: sma(raw, num3(inputs, "length", 14)), color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: [{ key: "zero", price: 0, color: NEUTRAL }]
-    };
+    return centeredOscillator({
+      key: "eom",
+      title: "EOM",
+      values: sma(raw, num3(inputs, "length", 14)),
+      ink: { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "color", NEUTRAL) },
+      zeroInk: NEUTRAL
+    });
   }
 };
 var forceIndex = {
@@ -25788,13 +27727,24 @@ var forceIndex = {
   title: "Force Index",
   shortTitle: "FI",
   overlay: false,
-  inputs: [lengthInput(13), colorInput()],
+  inputs: [
+    lengthInput(13, "length", "Length", 5e3, "EMA length applied to the raw 1-bar force index, (close \u2212 close[1]) \xD7 volume. Elder used 13 for the intermediate trend and 2 for short-term timing."),
+    colorInput(BULLISH, "Force Index", "color", "Color of the line while above zero (buying pressure)."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of the line while below zero (selling pressure).")
+  ],
   compute: (bars, inputs) => {
     const raw = zip(change(closes(bars)), volumes(bars), (d, v) => d * v);
-    return {
-      plots: [{ key: "force", title: "Force", values: ema(raw, num3(inputs, "length", 13)), color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: [{ key: "zero", price: 0, color: NEUTRAL }]
-    };
+    const bull = str3(inputs, "color", BULLISH);
+    return centeredOscillator({
+      key: "force",
+      title: "Force Index",
+      values: ema(raw, num3(inputs, "length", 13)),
+      // The reference reads an exact zero as buying pressure, so neutral shares the bull ink.
+      ink: { bull, bear: str3(inputs, "bearColor", BEARISH), neutral: bull },
+      zeroInk: NEUTRAL,
+      width: 2,
+      valueTransparency: 60
+    });
   }
 };
 var klinger = {
@@ -25802,19 +27752,44 @@ var klinger = {
   title: "Klinger Oscillator",
   shortTitle: "KVO",
   overlay: false,
-  inputs: [lengthInput(34, "fastLength", "Fast length"), lengthInput(55, "slowLength", "Slow length"), lengthInput(13, "signalLength", "Signal length")],
+  inputs: [
+    lengthInput(34, "fastLength", "Fast Length", 5e3, "Length of the fast EMA applied to the volume force."),
+    lengthInput(55, "slowLength", "Slow Length", 5e3, "Length of the slow EMA applied to the volume force."),
+    lengthInput(13, "signalLength", "Signal Length", 500, "Length of the EMA applied to the oscillator to obtain the signal line."),
+    colorInput(BULLISH, "Bullish", "color", "Color of the Klinger oscillator while above zero."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of the Klinger oscillator while below zero."),
+    colorInput(WARNING, "Signal", "signalColor", "Color of the signal line.")
+  ],
   compute: (bars, inputs) => {
-    const hlc3 = sourceValues(bars, "HLC3");
-    const trend = change(hlc3);
-    const signedVolume = zip(volumes(bars), trend, (v, t) => t >= 0 ? v : -v);
-    const line = sub(ema(signedVolume, num3(inputs, "fastLength", 34)), ema(signedVolume, num3(inputs, "slowLength", 55)));
-    return {
-      plots: [
-        { key: "kvo", title: "KVO", values: line, color: SERIES_LINE, width: 2 },
-        { key: "signal", title: "Signal", values: ema(line, num3(inputs, "signalLength", 13)), color: WARNING }
-      ],
-      levels: [{ key: "zero", price: 0, color: NEUTRAL }]
-    };
+    const n = bars.length;
+    const force = new Array(n).fill(Number.NaN);
+    let trend = 1;
+    let prevTrend = 1;
+    let cm = 0;
+    let prevDm = 0;
+    for (let i = 0; i < n; i++) {
+      const b = bars[i];
+      const hlc = b.high + b.low + b.close;
+      const prevHlc = i > 0 ? bars[i - 1].high + bars[i - 1].low + bars[i - 1].close : hlc;
+      trend = hlc > prevHlc ? 1 : -1;
+      const dm = b.high - b.low;
+      cm = i > 0 && trend === prevTrend ? cm + dm : prevDm + dm;
+      const v = b.volume;
+      force[i] = v == null || !Number.isFinite(v) ? Number.NaN : cm === 0 ? 0 : v * Math.abs(2 * (dm / cm) - 1) * trend * 100;
+      prevTrend = trend;
+      prevDm = dm;
+    }
+    const line = sub(ema(force, num3(inputs, "fastLength", 34)), ema(force, num3(inputs, "slowLength", 55)));
+    const bull = str3(inputs, "color", BULLISH);
+    return centeredOscillator({
+      key: "kvo",
+      title: "KVO",
+      values: line,
+      ink: { bull, bear: str3(inputs, "bearColor", BEARISH), neutral: bull },
+      zeroInk: transp(NEUTRAL, 50),
+      valueTransparency: 60,
+      extraPlots: [{ key: "signal", title: "Signal", values: ema(line, num3(inputs, "signalLength", 13)), color: str3(inputs, "signalColor", WARNING) }]
+    });
   }
 };
 var mfi = {
@@ -25822,7 +27797,15 @@ var mfi = {
   title: "Money Flow Index",
   shortTitle: "MFI",
   overlay: false,
-  inputs: [lengthInput(14), colorInput()],
+  inputs: [
+    lengthInput(14, "length", "Length", 5e3, "Number of bars used to sum positive and negative money flow."),
+    floatInput("overbought", "Overbought Level", 80, 0, 100, 1, "Level above which the MFI is considered overbought."),
+    floatInput("oversold", "Oversold Level", 20, 0, 100, 1, "Level below which the MFI is considered oversold."),
+    colorInput(NEUTRAL, "MFI", "color", "Color of the MFI line between the levels. Toward either level it blends into that level\u2019s color."),
+    colorInput(BEARISH, "Overbought", "overboughtColor", "Color of the line and zone shading at and above the overbought level."),
+    colorInput(BULLISH, "Oversold", "oversoldColor", "Color of the line and zone shading at and below the oversold level."),
+    colorInput(transp(NEUTRAL, 94), "OB/OS Zone Fill", "fillColor", "Fill color of the area between the overbought and oversold levels.")
+  ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 14);
     const tp = sourceValues(bars, "HLC3");
@@ -25830,48 +27813,57 @@ var mfi = {
     const d = change(tp);
     const pos = sum(zip(rawFlow, d, (f, x) => x > 0 ? f : 0), len);
     const neg = sum(zip(rawFlow, d, (f, x) => x < 0 ? f : 0), len);
-    const values = zip(pos, neg, (p, n) => n === 0 ? 100 : 100 - 100 / (1 + p / n));
-    return {
-      plots: [{ key: "mfi", title: "MFI", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: [
-        { key: "upper", price: 80, color: NEUTRAL },
-        { key: "lower", price: 20, color: NEUTRAL }
-      ]
-    };
+    const values = zip(pos, neg, (p, w) => p + w > 0 ? 100 * p / (p + w) : Number.NaN);
+    return boundedOscillator({
+      key: "mfi",
+      title: "MFI",
+      values,
+      scale: { top: 100, bottom: 0 },
+      overbought: num3(inputs, "overbought", 80),
+      oversold: num3(inputs, "oversold", 20),
+      ink: { low: str3(inputs, "oversoldColor", BULLISH), mid: str3(inputs, "color", NEUTRAL), high: str3(inputs, "overboughtColor", BEARISH) },
+      levelInk: NEUTRAL,
+      zoneTransparency: 91,
+      bandFill: str3(inputs, "fillColor", transp(NEUTRAL, 94))
+    });
   }
 };
-function volumeIndex(bars, when) {
-  const out = new Array(bars.length).fill(Number.NaN);
-  let index = 1e3;
-  let started = false;
-  for (let i = 1; i < bars.length; i++) {
-    const v = bars[i].volume;
-    const pv = bars[i - 1].volume;
-    const pc = bars[i - 1].close;
-    if (v == null || pv == null || !Number.isFinite(v) || !Number.isFinite(pv) || pc === 0) {
-      if (started) out[i] = index;
-      continue;
-    }
-    started = true;
-    if (when(v, pv)) index += (bars[i].close - pc) / pc * index;
-    out[i] = index;
-  }
-  return out;
+function regimeStyleInputs(signalTitle) {
+  return [
+    colorInput(BULLISH, "Bullish", "bullColor", "Color of the line and gradient fill while it holds above its signal EMA."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of the line and gradient fill while it holds below its signal EMA."),
+    colorInput(NEUTRAL, "Neutral", "neutralColor", "Color used while the signal EMA is still forming, or the line sits exactly on it."),
+    colorInput(NEUTRAL, signalTitle, "signalColor", "Color of the signal EMA overlay."),
+    boolInput("gradientFill", "Gradient Fill", true, STYLE, "Fills the gap between the line and its signal EMA with a vertical gradient \u2014 transparent at the average, strongest at the line.")
+  ];
 }
+var NVI_POSITION = "Position vs Average";
+var NVI_SINGLE = "Single Color";
 var nvi = {
   type: "negative-volume-index",
   title: "Negative Volume Index",
   shortTitle: "Negative Volume Index",
   overlay: false,
-  inputs: [lengthInput(255, "signalLength", "Signal length"), colorInput()],
+  inputs: [
+    floatInput("base", "Base Level", 1e3, 0.01, 1e6, 1, "Arbitrary seed of the cumulative line, conventionally 1000. The absolute level carries no information \u2014 the line is read by slope and by position against the signal EMA."),
+    boolInput("showSignal", "Signal EMA", true, SETTINGS, "Displays the conventional signal overlay. Hiding it only removes the plotted average; the regime coloring and fill still use it."),
+    lengthInput(255, "signalLength", "Signal Length", 5e3, "Length of the signal EMA. The convention is one trading year \u2014 255 sessions on daily charts."),
+    optionInput("colorMode", "Line Coloring", NVI_POSITION, [NVI_POSITION, NVI_SINGLE], "'Position vs Average' colors the line by the classic regime read; 'Single Color' draws the whole line in the neutral color."),
+    ...regimeStyleInputs("Signal EMA")
+  ],
   compute: (bars, inputs) => {
-    const line = volumeIndex(bars, (v, pv) => v < pv);
-    return {
-      plots: [
-        { key: "nvi", title: "NVI", values: line, color: str3(inputs, "color", SERIES_LINE), width: 2 },
-        { key: "signal", title: "Signal", values: ema(line, num3(inputs, "signalLength", 255)), color: WARNING }
-      ]
-    };
+    const values = volumeIndex(bars, closes(bars), num3(inputs, "base", 1e3), (v, pv) => v < pv);
+    const signal = ema(values, num3(inputs, "signalLength", 255));
+    return regimeIndex(
+      "nvi",
+      "NVI",
+      values,
+      signal,
+      { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "neutralColor", NEUTRAL), signal: str3(inputs, "signalColor", NEUTRAL) },
+      bool(inputs, "showSignal", true),
+      bool(inputs, "gradientFill", true),
+      str3(inputs, "colorMode", NVI_POSITION) === NVI_SINGLE
+    );
   }
 };
 var pvi = {
@@ -25879,15 +27871,26 @@ var pvi = {
   title: "Positive Volume Index",
   shortTitle: "Positive Volume Index",
   overlay: false,
-  inputs: [lengthInput(255, "signalLength", "Signal length"), colorInput()],
+  inputs: [
+    sourceInput("Close", "source", "Source", "Price series whose one-bar percentage change moves PVI on its active sessions."),
+    floatInput("base", "Starting Value", 1e3, 1, 1e6, 1, "Seed of the cumulative line. The absolute level carries no information, so the reads are the slope and the position against the signal EMA."),
+    boolInput("showSignal", "Signal EMA", true, SETTINGS, "Plots the long EMA of PVI that anchors the classic regime read. Hiding it keeps the regime coloring and fill, which are always measured against it."),
+    lengthInput(255, "signalLength", "Signal Length", 5e3, "Length of the signal EMA. The classic reference is a one-year average \u2014 255 trading days on daily charts."),
+    ...regimeStyleInputs("Signal Line")
+  ],
   compute: (bars, inputs) => {
-    const line = volumeIndex(bars, (v, pv) => v > pv);
-    return {
-      plots: [
-        { key: "pvi", title: "PVI", values: line, color: str3(inputs, "color", SERIES_LINE), width: 2 },
-        { key: "signal", title: "Signal", values: ema(line, num3(inputs, "signalLength", 255)), color: WARNING }
-      ]
-    };
+    const src = sourceValues(bars, str3(inputs, "source", "Close"));
+    const values = volumeIndex(bars, src, num3(inputs, "base", 1e3), (v, pv) => v > pv);
+    const signal = ema(values, num3(inputs, "signalLength", 255));
+    return regimeIndex(
+      "pvi",
+      "PVI",
+      values,
+      signal,
+      { bull: str3(inputs, "bullColor", BULLISH), bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "neutralColor", NEUTRAL), signal: str3(inputs, "signalColor", NEUTRAL) },
+      bool(inputs, "showSignal", true),
+      bool(inputs, "gradientFill", true)
+    );
   }
 };
 var pvt = {
@@ -25895,7 +27898,15 @@ var pvt = {
   title: "Price Volume Trend",
   shortTitle: "PVT",
   overlay: false,
-  inputs: [colorInput()],
+  inputs: [
+    boolInput("showSignal", "Signal Line", false, SETTINGS, "Display a moving average of PVT acting as a signal line."),
+    optionInput("signalType", "Signal Type", "SMA", ["SMA", "EMA"], "Moving average type used for the signal line."),
+    lengthInput(21, "signalLength", "Signal Length", 5e3, "Number of bars used to compute the signal line."),
+    colorInput(NEUTRAL, "PVT Color", "color", "Color of the PVT line while it is flat."),
+    colorInput(BULLISH, "Rising", "bullColor", "Color of the PVT line while it rises bar to bar."),
+    colorInput(BEARISH, "Falling", "bearColor", "Color of the PVT line while it falls bar to bar."),
+    colorInput(WARNING, "Signal Color", "signalColor", "Color of the signal line.")
+  ],
   compute: (bars, inputs) => {
     const c = closes(bars);
     const raw = bars.map((b, i) => {
@@ -25903,7 +27914,17 @@ var pvt = {
       const pc = c[i - 1];
       return pc === 0 ? 0 : (c[i] - pc) / pc * b.volume;
     });
-    return { plots: [{ key: "pvt", title: "PVT", values: cumSum(raw), color: str3(inputs, "color", SERIES_LINE), width: 2 }] };
+    const values = cumSum(raw);
+    const flat = str3(inputs, "color", NEUTRAL);
+    const plots = [
+      { key: "pvt", title: "PVT", values, color: flat, width: 2, colors: slopeColors2(values, str3(inputs, "bullColor", BULLISH), str3(inputs, "bearColor", BEARISH), flat) }
+    ];
+    if (bool(inputs, "showSignal", false)) {
+      const len = num3(inputs, "signalLength", 21);
+      const signal = str3(inputs, "signalType", "SMA") === "EMA" ? ema(values, len) : sma(values, len);
+      plots.push({ key: "signal", title: "Signal", values: signal, color: str3(inputs, "signalColor", WARNING) });
+    }
+    return { plots };
   }
 };
 var volumeOscillator = {
@@ -25911,39 +27932,75 @@ var volumeOscillator = {
   title: "Volume Oscillator",
   shortTitle: "Vol Osc",
   overlay: false,
-  inputs: [lengthInput(5, "fastLength", "Fast length"), lengthInput(10, "slowLength", "Slow length"), colorInput()],
+  inputs: [
+    lengthInput(5, "fastLength", "Fast Length", 5e3, "Length of the fast EMA of volume."),
+    lengthInput(10, "slowLength", "Slow Length", 5e3, "Length of the slow EMA of volume."),
+    colorInput(BULLISH, "Above Zero", "color", "Color of the line and fill while it holds above zero \u2014 volume expanding."),
+    colorInput(BEARISH, "Below Zero", "bearColor", "Color of the line and fill while it holds below zero \u2014 volume contracting.")
+  ],
   compute: (bars, inputs) => {
     const vol = volumes(bars);
     const fast = ema(vol, num3(inputs, "fastLength", 5));
     const slow = ema(vol, num3(inputs, "slowLength", 10));
-    const values = zip(fast, slow, (f, s) => s === 0 ? Number.NaN : 100 * (f - s) / s);
-    return {
-      plots: [{ key: "vo", title: "Volume Osc", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: [{ key: "zero", price: 0, color: NEUTRAL }]
-    };
+    const values = zip(fast, slow, (f, s) => s === 0 ? 0 : 100 * (f - s) / s);
+    const bull = str3(inputs, "color", BULLISH);
+    return centeredOscillator({
+      key: "vo",
+      title: "Volume Oscillator",
+      values,
+      ink: { bull, bear: str3(inputs, "bearColor", BEARISH), neutral: bull },
+      zeroInk: NEUTRAL,
+      valueTransparency: 60
+    });
   }
 };
+var OSCILLATOR = "Oscillator";
 var pvo = {
   type: "pvo",
   title: "Percentage Volume Oscillator",
   shortTitle: "PVO",
   overlay: false,
-  inputs: [lengthInput(12, "fastLength", "Fast length"), lengthInput(26, "slowLength", "Slow length"), lengthInput(9, "signalLength", "Signal length")],
+  inputs: [
+    { ...lengthInput(12, "fastLength", "Fast Length", 5e3, "Period of the fast EMA of volume. The conventional setting is 12."), group: OSCILLATOR },
+    { ...lengthInput(26, "slowLength", "Slow Length", 5e3, "Period of the slow EMA of volume. The PVO expresses the fast/slow spread as a percentage of this slow average."), group: OSCILLATOR },
+    { ...lengthInput(9, "signalLength", "Signal Length", 500, "Period of the EMA applied to the PVO to form the signal line."), group: OSCILLATOR },
+    colorInput(BULLISH, "Expansion Color", "color", "Color of the oscillator and fill while participation expands."),
+    colorInput(BEARISH, "Contraction Color", "bearColor", "Color of the oscillator and fill while participation contracts."),
+    colorInput(WARNING, "Signal Line", "signalColor", "Color of the signal line."),
+    colorInput(transp(NEUTRAL, 50), "Zero Line", "zeroColor", "Color of the zero reference line."),
+    boolInput("showSignal", "Show Signal Line", true, STYLE, "Plot the signal line, an EMA of the PVO."),
+    boolInput("showHistogram", "Show Histogram", true, STYLE, "Plot the difference between the PVO and its signal line as columns behind the oscillator.")
+  ],
   compute: (bars, inputs) => {
     const vol = volumes(bars);
     const fast = ema(vol, num3(inputs, "fastLength", 12));
     const slow = ema(vol, num3(inputs, "slowLength", 26));
-    const line = zip(fast, slow, (f, s) => s === 0 ? Number.NaN : 100 * (f - s) / s);
-    const signal = ema(line, num3(inputs, "signalLength", 9));
-    const hist = sub(line, signal);
-    return {
-      plots: [
-        { key: "hist", title: "Histogram", values: hist, kind: "histogram", color: BULLISH, colors: hist.map((x) => Number.isFinite(x) ? x >= 0 ? BULLISH : BEARISH : null), base: 0 },
-        { key: "pvo", title: "PVO", values: line, color: SERIES_LINE, width: 2 },
-        { key: "signal", title: "Signal", values: signal, color: WARNING }
-      ],
-      levels: [{ key: "zero", price: 0, color: NEUTRAL }]
-    };
+    const values = zip(fast, slow, (f, s) => s > 0 ? 100 * (f - s) / s : Number.NaN);
+    const signal = ema(values, num3(inputs, "signalLength", 9));
+    const expansion = str3(inputs, "color", BULLISH);
+    const contraction = str3(inputs, "bearColor", BEARISH);
+    const extraPlots = [];
+    if (bool(inputs, "showHistogram", true)) {
+      const hist = sub(values, signal);
+      extraPlots.push({
+        key: "hist",
+        title: "Histogram",
+        values: hist,
+        kind: "columns",
+        color: transp(expansion, 60),
+        colors: hist.map((x) => Number.isFinite(x) ? transp(x > 0 ? expansion : contraction, 60) : null),
+        base: 0
+      });
+    }
+    if (bool(inputs, "showSignal", true)) extraPlots.push({ key: "signal", title: "Signal", values: signal, color: str3(inputs, "signalColor", WARNING) });
+    return centeredOscillator({
+      key: "pvo",
+      title: "PVO",
+      values,
+      ink: { bull: expansion, bear: contraction, neutral: contraction },
+      zeroInk: str3(inputs, "zeroColor", transp(NEUTRAL, 50)),
+      extraPlots
+    });
   }
 };
 var vfi = {
@@ -25952,55 +28009,86 @@ var vfi = {
   shortTitle: "Volume Flow Indicator",
   overlay: false,
   inputs: [
-    lengthInput(130),
-    { key: "coef", title: "Cutoff coefficient", type: "float", defval: 0.2, min: 0.01, max: 10, step: 0.01 },
-    { key: "volCoef", title: "Volume cap", type: "float", defval: 2.5, min: 0.1, max: 50, step: 0.1 },
-    lengthInput(3, "smoothLength", "Smoothing length")
+    { ...lengthInput(130, "length", "Length", 5e3, "Rolling summation window, also used for the average volume that scales the result. The published default of 130 bars targets position-horizon work on daily charts."), min: 2 },
+    floatInput("coef", "Cutoff Coefficient", 0.2, 0, 10, 0.05, "Scales the volatility-based minimum change in typical price. Moves smaller than the cutoff count as noise and contribute no volume."),
+    floatInput("volCoef", "Volume Cap Multiplier", 2.5, 0.1, 50, 0.1, "Caps each bar's volume contribution at this multiple of the average volume, so a single climactic print stays bounded."),
+    { ...lengthInput(30, "volLength", "Volatility Length", 5e3, "Window of the standard deviation of the log change in typical price used to build the adaptive cutoff."), min: 2 },
+    boolInput("smooth", "Smooth VFI", true, SETTINGS, "Applies the published light smoothing \u2014 an EMA of the summed line \u2014 before plotting."),
+    lengthInput(3, "smoothLength", "Smoothing Length", 500, "Length of the smoothing EMA. The published version uses 3 bars."),
+    boolInput("showSignal", "Signal Line", true, SETTINGS, "Plots an EMA of VFI as a signal line."),
+    lengthInput(5, "signalLength", "Signal Length", 500, "Length of the signal-line EMA."),
+    colorInput(BULLISH, "Bullish", "color", "Color of the VFI line and gradient fill above the zero line \u2014 the net accumulation regime."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of the VFI line and gradient fill below the zero line \u2014 the net distribution regime."),
+    colorInput(WARNING, "Signal Line", "signalColor", "Color of the signal line."),
+    boolInput("gradientFill", "Gradient Fill", true, STYLE, "Fills the area between the zero line and the VFI line with a vertical gradient.")
   ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 130);
+    const typical = sourceValues(bars, "HLC3");
+    const logChange = sub(map(typical, Math.log), shift(map(typical, Math.log), 1));
+    const volatility = stdev(logChange, num3(inputs, "volLength", 30));
     const coef = num3(inputs, "coef", 0.2);
     const volCoef = num3(inputs, "volCoef", 2.5);
-    const typical = map(sourceValues(bars, "HLC3"), Math.log);
-    const inter = change(typical);
-    const vInter = stdev(inter, 30);
     const vol = volumes(bars);
-    const vAve = sma(vol, len);
-    const mf = change(sourceValues(bars, "HLC3"));
-    const raw = bars.map((b, i) => {
-      const cutoff = Number.isFinite(vInter[i]) ? coef * vInter[i] * b.close : Number.NaN;
+    const avgVolume = shift(sma(vol, len), 1);
+    const typicalChange = change(typical);
+    const signed2 = bars.map((b, i) => {
+      const sd = volatility[i];
+      const m = typicalChange[i];
       const v = vol[i];
-      const ave = i > 0 ? vAve[i - 1] : Number.NaN;
-      const m = mf[i];
-      if (!Number.isFinite(cutoff) || !Number.isFinite(v) || !Number.isFinite(ave) || !Number.isFinite(m)) return Number.NaN;
-      const capped = Math.min(v, ave * volCoef);
+      if (!Number.isFinite(sd) || !Number.isFinite(m) || !Number.isFinite(v)) return Number.NaN;
+      const cutoff = coef * sd * b.close;
+      const avg = avgVolume[i];
+      const capped = Number.isFinite(avg) ? Math.min(v, avg * volCoef) : v;
       return m > cutoff ? capped : m < -cutoff ? -capped : 0;
     });
-    const values = bars.map((_, i) => {
-      const ave = i > 0 ? vAve[i - 1] : Number.NaN;
-      return Number.isFinite(ave) && ave !== 0 ? ave : Number.NaN;
+    const raw = zip(sum(signed2, len), avgVolume, (f, a) => a > 0 ? f / a : Number.NaN);
+    const values = bool(inputs, "smooth", true) ? ema(raw, num3(inputs, "smoothLength", 3)) : raw;
+    const bull = str3(inputs, "color", BULLISH);
+    const extraPlots = bool(inputs, "showSignal", true) ? [{ key: "signal", title: "Signal Line", values: ema(values, num3(inputs, "signalLength", 5)), color: str3(inputs, "signalColor", WARNING) }] : [];
+    return centeredOscillator({
+      key: "vfi",
+      title: "VFI",
+      values,
+      ink: { bull, bear: str3(inputs, "bearColor", BEARISH), neutral: str3(inputs, "bearColor", BEARISH) },
+      zeroInk: transp(NEUTRAL, 90),
+      fill: bool(inputs, "gradientFill", true),
+      extraPlots
     });
-    const flowSum = sum(raw, len);
-    const line = zip(flowSum, values, (f, a) => f / a);
-    return {
-      plots: [{ key: "vfi", title: "VFI", values: sma(line, num3(inputs, "smoothLength", 3)), color: SERIES_LINE, width: 2 }],
-      levels: [{ key: "zero", price: 0, color: NEUTRAL }]
-    };
   }
 };
+var II_OSCILLATOR = "Normalized Oscillator (II%)";
+var II_CUMULATIVE = "Cumulative Line";
 var intradayIntensity = {
   type: "intraday-intensity",
   title: "Intraday Intensity",
   shortTitle: "Intraday Intensity",
   overlay: false,
-  inputs: [lengthInput(21), colorInput()],
+  inputs: [
+    optionInput("mode", "Display", II_OSCILLATOR, [II_OSCILLATOR, II_CUMULATIVE], "The two published forms. The cumulative line is open-ended and read by slope against price; the normalized oscillator divides a rolling sum of intensity by the rolling sum of volume and oscillates around zero."),
+    lengthInput(21, "length", "Oscillator Length", 5e3, "Window of the rolling sums in the normalized form. The common setting is 21 bars. It has no effect on the cumulative line."),
+    colorInput(BULLISH, "Bullish", "color", "Color of positive readings, the rising cumulative line and the fill above zero \u2014 the accumulation side."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of negative readings, the falling cumulative line and the fill below zero \u2014 the distribution side."),
+    boolInput("gradientFill", "Gradient Fill", true, STYLE, "Fills the area between the zero line and the oscillator with a vertical gradient. Applies to the normalized oscillator only.")
+  ],
   compute: (bars, inputs) => {
+    const intensity = moneyFlowVolume(bars);
+    const bull = str3(inputs, "color", BULLISH);
+    const bear = str3(inputs, "bearColor", BEARISH);
+    if (str3(inputs, "mode", II_OSCILLATOR) === II_CUMULATIVE) {
+      const values2 = cumSum(intensity);
+      return { plots: [{ key: "ii", title: "Intraday Intensity", values: values2, color: bull, colors: slopeColors2(values2, bull, bear, bull) }] };
+    }
     const len = num3(inputs, "length", 21);
-    const values = zip(sum(moneyFlowVolume(bars), len), sum(volumes(bars), len), (m, v) => v === 0 ? 0 : 100 * m / v);
-    return {
-      plots: [{ key: "ii", title: "II%", values, color: str3(inputs, "color", SERIES_LINE), width: 2 }],
-      levels: [{ key: "zero", price: 0, color: NEUTRAL }]
-    };
+    const values = zip(sum(intensity, len), sum(volumes(bars), len), (m, v) => v > 0 ? 100 * m / v : Number.NaN);
+    return centeredOscillator({
+      key: "ii",
+      title: "Intraday Intensity",
+      values,
+      ink: { bull, bear, neutral: bear },
+      zeroInk: transp(NEUTRAL, 90),
+      fill: bool(inputs, "gradientFill", true)
+    });
   }
 };
 var volumeSpecs = [
@@ -26033,15 +28121,24 @@ function periodKey(anchor, time) {
   }
   return Math.floor(time / DAY_MS2);
 }
+function barInterval(bars) {
+  if (bars.length < 2) return 0;
+  const gaps = [];
+  for (let i = 1; i < bars.length; i++) gaps.push(bars[i].time - bars[i - 1].time);
+  gaps.sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)] ?? 0;
+}
 var parabolicSar = {
   type: "parabolic-sar",
   title: "Parabolic SAR",
   shortTitle: "SAR",
   overlay: true,
   inputs: [
-    { key: "start", title: "Start", type: "float", defval: 0.02, min: 1e-3, max: 1, step: 1e-3 },
-    { key: "increment", title: "Increment", type: "float", defval: 0.02, min: 1e-3, max: 1, step: 1e-3 },
-    { key: "maximum", title: "Max value", type: "float", defval: 0.2, min: 0.01, max: 1, step: 0.01 }
+    floatInput("start", "Start", 0.02, 0, 1, 0.01, "Initial acceleration factor applied when a new trend begins."),
+    floatInput("increment", "Increment", 0.02, 0, 1, 0.01, "Amount added to the acceleration factor each time the trend makes a new extreme point."),
+    floatInput("maximum", "Maximum", 0.2, 0.01, 1, 0.01, "Upper cap on the acceleration factor."),
+    colorInput(BULLISH, "Bullish", "bullColor", "Color of the SAR crosses while they trail below price \u2014 uptrend, the stop sits under the market."),
+    colorInput(BEARISH, "Bearish", "bearColor", "Color of the SAR crosses while they sit above price \u2014 downtrend, the stop sits over the market.")
   ],
   compute: (bars, inputs) => {
     const start = num3(inputs, "start", 0.02);
@@ -26049,7 +28146,6 @@ var parabolicSar = {
     const max = num3(inputs, "maximum", 0.2);
     const n = bars.length;
     const values = new Array(n).fill(Number.NaN);
-    const colors = new Array(n).fill(null);
     if (n >= 2) {
       let long = bars[1].close >= bars[0].close;
       let sar = long ? bars[0].low : bars[0].high;
@@ -26074,18 +28170,21 @@ var parabolicSar = {
           af = Math.min(max, af + inc);
         }
         values[i] = sar;
-        colors[i] = long ? BULLISH : BEARISH;
       }
     }
-    return { plots: [{ key: "sar", title: "PSAR", values, kind: "circles", color: SERIES_LINE, colors }] };
+    const bull = str3(inputs, "bullColor", BULLISH);
+    const bear = str3(inputs, "bearColor", BEARISH);
+    const colors = values.map((x, i) => Number.isFinite(x) ? x < bars[i].close ? bull : bear : null);
+    return { plots: [{ key: "sar", title: "SAR", values, kind: "cross", color: bull, colors }] };
   }
 };
-var VWAP_BANDS_GROUP = "Bands";
-var VWAP_STYLE = "Style";
+var VWAP_ANCHORS = ["Session", "Week", "Month", "Quarter", "Year"];
+var BANDS_STDEV = "Standard Deviation";
+var BANDS_PERCENT = "Percentage";
 var VWAP_BANDS = [
-  { on: "band1", mult: "band1Mult", color: "band1Color", fill: "band1Fill", fillColor: "band1FillColor", defMult: 1, defOn: true, defColor: BULLISH },
-  { on: "band2", mult: "band2Mult", color: "band2Color", fill: "band2Fill", fillColor: "band2FillColor", defMult: 2, defOn: false, defColor: WARNING },
-  { on: "band3", mult: "band3Mult", color: "band3Color", fill: "band3Fill", fillColor: "band3FillColor", defMult: 3, defOn: false, defColor: CATEGORICAL[4] }
+  { show: "band1", mult: "band1Mult", defMult: 1, defOn: true },
+  { show: "band2", mult: "band2Mult", defMult: 2, defOn: false },
+  { show: "band3", mult: "band3Mult", defMult: 3, defOn: false }
 ];
 var vwap = {
   type: "vwap",
@@ -26093,39 +28192,36 @@ var vwap = {
   shortTitle: "VWAP",
   overlay: true,
   inputs: [
-    { key: "anchor", title: "Period", type: "string", defval: "Day", options: ["Day", "Week", "Month", "Quarter", "Year"], tooltip: "Where the accumulation resets (UTC periods)" },
-    sourceInput("HLC3"),
-    // Each band is one row: its toggle leads, the multiplier follows unlabeled.
+    optionInput("anchor", "Anchor Period", "Session", VWAP_ANCHORS, "Period anchoring the average. VWAP and its bands reset on the first bar of each new session, week, month, quarter or year (UTC)."),
+    sourceInput("HLC3", "source", "Source", "Price used in the volume weighted average. Typical price (HLC3) is the classic choice."),
+    optionInput("bandsMode", "Bands Mode", BANDS_STDEV, [BANDS_STDEV, BANDS_PERCENT], "Bands offset method: multiples of the volume weighted standard deviation of price around VWAP, or a percentage of the VWAP value."),
     ...VWAP_BANDS.flatMap((b, i) => [
-      { key: b.on, title: `Band ${i + 1} multiplier`, type: "bool", defval: b.defOn, inline: b.on, group: VWAP_BANDS_GROUP },
-      { key: b.mult, title: "", type: "float", defval: b.defMult, min: 0.1, max: 10, step: 0.1, inline: b.on, group: VWAP_BANDS_GROUP }
+      boolInput(b.show, `Band #${i + 1}`, b.defOn, SETTINGS, `Show the ${["first", "second", "third"][i]} band pair.`),
+      floatInput(b.mult, `Band #${i + 1} Multiplier`, b.defMult, 0, 50, 0.5, "Multiplier for this band pair, in standard deviations or percent depending on the bands mode.")
     ]),
-    { ...colorInput(INFO, "VWAP color"), group: VWAP_STYLE },
-    // One row per band: its ink, then the fill toggle with the fill's own (translucent) color.
-    ...VWAP_BANDS.flatMap((b, i) => [
-      { ...colorInput(b.defColor, `Band ${i + 1} color`, b.color), inline: b.color, group: VWAP_STYLE },
-      { key: b.fill, title: "Fill", type: "bool", defval: true, inline: b.color, group: VWAP_STYLE },
-      { ...colorInput(withAlpha2(b.defColor), "", b.fillColor), inline: b.color, group: VWAP_STYLE }
-    ])
+    boolInput("hideDwm", "Hide VWAP on 1D or Above", true, SETTINGS, "Hide the VWAP and its bands on daily and higher timeframes, where an intraday anchored VWAP is not meaningful."),
+    colorInput(BULLISH, "Bullish", "bullColor", "VWAP line color while price closes above it, and the color of the lower (support) bands."),
+    colorInput(BEARISH, "Bearish", "bearColor", "VWAP line color while price closes below it, and the color of the upper (resistance) bands."),
+    colorInput(NEUTRAL, "Bands", "bandsColor", "Deviation bands fill color."),
+    boolInput("fill", "Bands Fill", true, STYLE, "Fill the area between each visible band pair.")
   ],
   compute: (bars, inputs) => {
-    const anchor = str3(inputs, "anchor", "Day");
+    const anchor = str3(inputs, "anchor", "Session");
     const src = sourceValues(bars, str3(inputs, "source", "HLC3"));
     const n = bars.length;
+    const hidden = bool(inputs, "hideDwm", true) && barInterval(bars) >= DAY_MS2;
     const values = new Array(n).fill(Number.NaN);
-    const bands = VWAP_BANDS.filter((b) => bool(inputs, b.on, b.defOn)).map((b) => ({
+    const bands = VWAP_BANDS.filter((b) => bool(inputs, b.show, b.defOn)).map((b) => ({
       mult: Math.max(0, num3(inputs, b.mult, b.defMult)),
-      color: str3(inputs, b.color, b.defColor),
-      fill: bool(inputs, b.fill, true),
-      fillColor: str3(inputs, b.fillColor, withAlpha2(b.defColor)),
       up: new Array(n).fill(Number.NaN),
       down: new Array(n).fill(Number.NaN)
     }));
+    const percentMode = str3(inputs, "bandsMode", BANDS_STDEV) === BANDS_PERCENT;
     let period = Number.NaN;
     let cumPV = 0;
     let cumPV2 = 0;
     let cumV = 0;
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < n && !hidden; i++) {
       const b = bars[i];
       const key = periodKey(anchor, b.time);
       if (key !== period) {
@@ -26143,38 +28239,58 @@ var vwap = {
       }
       if (cumV <= 0) continue;
       const mean = cumPV / cumV;
-      const sd = Math.sqrt(Math.max(0, cumPV2 / cumV - mean * mean));
+      const offset = percentMode ? mean / 100 : Math.sqrt(Math.max(0, cumPV2 / cumV - mean * mean));
       values[i] = mean;
       for (const band of bands) {
-        band.up[i] = mean + band.mult * sd;
-        band.down[i] = mean - band.mult * sd;
+        band.up[i] = mean + band.mult * offset;
+        band.down[i] = mean - band.mult * offset;
       }
     }
-    const plots = [{ key: "vwap", title: "VWAP", values, color: str3(inputs, "color", INFO), width: 2 }];
+    const bull = str3(inputs, "bullColor", BULLISH);
+    const bear = str3(inputs, "bearColor", BEARISH);
+    const fillColor = transp(str3(inputs, "bandsColor", NEUTRAL), 95);
+    const plots = [
+      { key: "vwap", title: "VWAP", values, color: bull, colors: values.map((x, i) => Number.isFinite(x) ? bars[i].close >= x ? bull : bear : null) }
+    ];
     const fills = [];
     bands.forEach((band, i) => {
       plots.push(
-        { key: `up${i}`, title: `Upper ${band.mult}\u03C3`, values: band.up, color: band.color },
-        { key: `down${i}`, title: `Lower ${band.mult}\u03C3`, values: band.down, color: band.color }
+        { key: `up${i}`, title: `Upper Band #${i + 1}`, values: band.up, color: transp(bear, 40) },
+        { key: `down${i}`, title: `Lower Band #${i + 1}`, values: band.down, color: transp(bull, 40) }
       );
-      if (band.fill) fills.push({ key: `band${i}`, from: `up${i}`, to: `down${i}`, color: band.fillColor });
+      if (bool(inputs, "fill", true)) fills.push({ key: `band${i}`, from: `up${i}`, to: `down${i}`, color: fillColor });
     });
     return { plots, bands: fills };
   }
 };
+var PIVOT_TRADITIONAL = "Traditional";
+var PIVOT_FIBONACCI = "Fibonacci";
+var PIVOT_CAMARILLA = "Camarilla";
+var PIVOT_WOODIE = "Woodie";
+var PIVOT_AUTO = "Auto";
 var pivotPoints = {
   type: "pivot-points",
-  title: "Pivot Points",
+  title: "Pivot Points Standard",
   shortTitle: "Pivots",
   overlay: true,
-  inputs: [{ key: "anchor", title: "Period", type: "string", defval: "Day", options: ["Day", "Week", "Month"] }],
+  inputs: [
+    optionInput("kind", "Type", PIVOT_TRADITIONAL, [PIVOT_TRADITIONAL, PIVOT_FIBONACCI, PIVOT_CAMARILLA, PIVOT_WOODIE], "Formula used to calculate the levels. Traditional is the classic floor-trader method; Fibonacci projects 38.2/61.8/100% of the prior range around the pivot; Camarilla scales the prior range around the prior close; Woodie gives extra weight to the period open."),
+    optionInput("anchor", "Pivots Timeframe", PIVOT_AUTO, [PIVOT_AUTO, "Daily", "Weekly", "Monthly", "Yearly"], "Period the pivots are anchored to. 'Auto' follows the chart's bar spacing: daily pivots up to 15-minute bars, weekly on other intraday bars, monthly on daily bars, yearly above."),
+    colorInput(WARNING, "Pivot", "pivotColor", "Color of the central pivot (P) level."),
+    colorInput(BEARISH, "Resistances", "resistanceColor", "Color of the resistance (R) levels."),
+    colorInput(BULLISH, "Supports", "supportColor", "Color of the support (S) levels.")
+  ],
   compute: (bars, inputs) => {
-    const anchor = str3(inputs, "anchor", "Day");
+    const interval = barInterval(bars);
+    const requested = str3(inputs, "anchor", PIVOT_AUTO);
+    const auto = interval <= 15 * 6e4 ? "Session" : interval < DAY_MS2 ? "Week" : interval <= DAY_MS2 ? "Month" : "Year";
+    const anchor = requested === "Daily" ? "Session" : requested === "Weekly" ? "Week" : requested === "Monthly" ? "Month" : requested === "Yearly" ? "Year" : auto;
+    const kind = str3(inputs, "kind", PIVOT_TRADITIONAL);
     const aggs = /* @__PURE__ */ new Map();
     for (const b of bars) {
       const key = periodKey(anchor, b.time);
       const a = aggs.get(key);
-      if (!a) aggs.set(key, { high: b.high, low: b.low, close: b.close });
+      if (!a) aggs.set(key, { open: b.open, high: b.high, low: b.low, close: b.close });
       else {
         a.high = Math.max(a.high, b.high);
         a.low = Math.min(a.low, b.low);
@@ -26183,31 +28299,61 @@ var pivotPoints = {
     }
     const n = bars.length;
     const mk = () => new Array(n).fill(Number.NaN);
-    const levels = { p: mk(), r1: mk(), s1: mk(), r2: mk(), s2: mk(), r3: mk(), s3: mk() };
+    const levels = { p: mk(), r1: mk(), s1: mk(), r2: mk(), s2: mk(), r3: mk(), s3: mk(), r4: mk(), s4: mk() };
+    let lastKey = Number.NaN;
     for (let i = 0; i < n; i++) {
-      const prev2 = aggs.get(periodKey(anchor, bars[i].time) - 1);
-      if (!prev2) continue;
-      const p = (prev2.high + prev2.low + prev2.close) / 3;
+      const key = periodKey(anchor, bars[i].time);
+      const fresh = key !== lastKey;
+      lastKey = key;
+      if (fresh) continue;
+      const prev2 = aggs.get(key - 1);
+      const curr = aggs.get(key);
+      if (!prev2 || !curr) continue;
+      const range = prev2.high - prev2.low;
+      const traditional = (prev2.high + prev2.low + prev2.close) / 3;
+      const p = kind === PIVOT_WOODIE ? (prev2.high + prev2.low + 2 * curr.open) / 4 : traditional;
       levels.p[i] = p;
-      levels.r1[i] = 2 * p - prev2.low;
-      levels.s1[i] = 2 * p - prev2.high;
-      levels.r2[i] = p + (prev2.high - prev2.low);
-      levels.s2[i] = p - (prev2.high - prev2.low);
-      levels.r3[i] = prev2.high + 2 * (p - prev2.low);
-      levels.s3[i] = prev2.low - 2 * (prev2.high - p);
+      if (kind === PIVOT_FIBONACCI) {
+        levels.r1[i] = traditional + 0.382 * range;
+        levels.s1[i] = traditional - 0.382 * range;
+        levels.r2[i] = traditional + 0.618 * range;
+        levels.s2[i] = traditional - 0.618 * range;
+        levels.r3[i] = traditional + range;
+        levels.s3[i] = traditional - range;
+      } else if (kind === PIVOT_CAMARILLA) {
+        const cam = 1.1 * range;
+        levels.r1[i] = prev2.close + cam / 12;
+        levels.s1[i] = prev2.close - cam / 12;
+        levels.r2[i] = prev2.close + cam / 6;
+        levels.s2[i] = prev2.close - cam / 6;
+        levels.r3[i] = prev2.close + cam / 4;
+        levels.s3[i] = prev2.close - cam / 4;
+        levels.r4[i] = prev2.close + cam / 2;
+        levels.s4[i] = prev2.close - cam / 2;
+      } else {
+        levels.r1[i] = 2 * p - prev2.low;
+        levels.s1[i] = 2 * p - prev2.high;
+        levels.r2[i] = p + range;
+        levels.s2[i] = p - range;
+        if (kind !== PIVOT_WOODIE) {
+          levels.r3[i] = prev2.high + 2 * (p - prev2.low);
+          levels.s3[i] = prev2.low - 2 * (prev2.high - p);
+        }
+      }
     }
-    const plot = (key, title, color) => ({ key, title, kind: "step", values: levels[key], color });
-    return {
-      plots: [
-        plot("p", "P", WARNING),
-        plot("r1", "R1", BEARISH),
-        plot("s1", "S1", BULLISH),
-        plot("r2", "R2", BEARISH),
-        plot("s2", "S2", BULLISH),
-        plot("r3", "R3", BEARISH),
-        plot("s3", "S3", BULLISH)
-      ]
-    };
+    const resistance = str3(inputs, "resistanceColor", BEARISH);
+    const support = str3(inputs, "supportColor", BULLISH);
+    const plot = (key, title, color) => ({ key, title, values: levels[key], color });
+    const plots = [
+      plot("p", "P", str3(inputs, "pivotColor", WARNING)),
+      plot("r1", "R1", resistance),
+      plot("s1", "S1", support),
+      plot("r2", "R2", resistance),
+      plot("s2", "S2", support)
+    ];
+    if (kind !== PIVOT_WOODIE) plots.push(plot("r3", "R3", resistance), plot("s3", "S3", support));
+    if (kind === PIVOT_CAMARILLA) plots.push(plot("r4", "R4", resistance), plot("s4", "S4", support));
+    return { plots };
   }
 };
 var fiftyTwoWeek = {
@@ -26215,15 +28361,25 @@ var fiftyTwoWeek = {
   title: "52 Week High/Low",
   shortTitle: "52W H/L",
   overlay: true,
-  inputs: [{ key: "weeks", title: "Weeks", type: "int", defval: 52, min: 1, max: 520, step: 1 }],
+  inputs: [
+    intInput("weeks", "Weeks", 52, 1, 520, "Length of the rolling window, in weeks."),
+    boolInput("showAllTime", "Show All-Time High/Low", false, SETTINGS, "Additionally display the all-time high and low, tracked over the symbol's full loaded history."),
+    colorInput(BULLISH, "52 Week High", "highColor", "Color of the 52 week high level."),
+    colorInput(BEARISH, "52 Week Low", "lowColor", "Color of the 52 week low level."),
+    colorInput(NEUTRAL, "All-Time High/Low", "allTimeColor", "Color of the all-time high and all-time low levels.")
+  ],
   compute: (bars, inputs) => {
     const span = num3(inputs, "weeks", 52) * 7 * DAY_MS2;
     const n = bars.length;
     const hi = new Array(n).fill(Number.NaN);
     const lo = new Array(n).fill(Number.NaN);
+    const ath = new Array(n).fill(Number.NaN);
+    const atl = new Array(n).fill(Number.NaN);
     const maxIdx = [];
     const minIdx = [];
     let from = 0;
+    let runHigh = -Infinity;
+    let runLow = Infinity;
     for (let i = 0; i < n; i++) {
       const b = bars[i];
       while (maxIdx.length > 0 && bars[maxIdx[maxIdx.length - 1]].high <= b.high) maxIdx.pop();
@@ -26235,13 +28391,20 @@ var fiftyTwoWeek = {
       while (minIdx[0] < from) minIdx.shift();
       hi[i] = bars[maxIdx[0]].high;
       lo[i] = bars[minIdx[0]].low;
+      runHigh = Math.max(runHigh, b.high);
+      runLow = Math.min(runLow, b.low);
+      ath[i] = runHigh;
+      atl[i] = runLow;
     }
-    return {
-      plots: [
-        { key: "high", title: "52W high", values: hi, kind: "step", color: BULLISH },
-        { key: "low", title: "52W low", values: lo, kind: "step", color: BEARISH }
-      ]
-    };
+    const plots = [
+      { key: "high", title: "52 Week High", values: hi, kind: "step", color: str3(inputs, "highColor", BULLISH), width: 2 },
+      { key: "low", title: "52 Week Low", values: lo, kind: "step", color: str3(inputs, "lowColor", BEARISH), width: 2 }
+    ];
+    if (bool(inputs, "showAllTime", false)) {
+      const ink = str3(inputs, "allTimeColor", NEUTRAL);
+      plots.push({ key: "ath", title: "All-Time High", values: ath, kind: "step", color: ink }, { key: "atl", title: "All-Time Low", values: atl, kind: "step", color: ink });
+    }
+    return { plots };
   }
 };
 var zigzag = {
@@ -26249,9 +28412,11 @@ var zigzag = {
   title: "ZigZag",
   overlay: true,
   inputs: [
-    { key: "deviation", title: "Deviation %", type: "float", defval: 5, min: 0.01, max: 100, step: 0.1 },
-    { key: "depth", title: "Depth", type: "int", defval: 10, min: 1, max: 500, step: 1 },
-    colorInput()
+    floatInput("deviation", "Deviation (%)", 5, 0.01, 100, 0.1, "Minimum reversal from the leg extreme, as a percentage of that extreme, required to confirm a new pivot."),
+    { ...intInput("depth", "Depth", 10, 2, 500, "Minimum number of bars required between two consecutive pivots.") },
+    colorInput(BULLISH, "Up Leg", "bullColor", "Color of rising zigzag segments."),
+    colorInput(BEARISH, "Down Leg", "bearColor", "Color of falling zigzag segments."),
+    { key: "lineWidth", title: "Width", type: "int", defval: 2, min: 1, max: 10, step: 1, group: STYLE, tooltip: "Width of the zigzag segments." }
   ],
   compute: (bars, inputs) => {
     const dev = num3(inputs, "deviation", 5) / 100;
@@ -26264,14 +28429,14 @@ var zigzag = {
         const b = bars[i];
         if (up) {
           if (b.high >= ext.price) ext = { i, price: b.high };
-          else if (b.low <= ext.price * (1 - dev) && i - (pivots[pivots.length - 1]?.i ?? -depth) >= depth) {
+          else if (b.low <= ext.price * (1 - dev) && ext.i - (pivots[pivots.length - 1]?.i ?? -depth) >= depth) {
             pivots.push(ext);
             up = false;
             ext = { i, price: b.low };
           }
         } else if (b.low <= ext.price) {
           ext = { i, price: b.low };
-        } else if (b.high >= ext.price * (1 + dev) && i - (pivots[pivots.length - 1]?.i ?? -depth) >= depth) {
+        } else if (b.high >= ext.price * (1 + dev) && ext.i - (pivots[pivots.length - 1]?.i ?? -depth) >= depth) {
           pivots.push(ext);
           up = true;
           ext = { i, price: b.high };
@@ -26279,22 +28444,29 @@ var zigzag = {
       }
       pivots.push(ext);
     }
-    return {
-      plots: [],
-      polylines: [
-        {
-          key: "zigzag",
-          points: pivots.map((p) => ({ xloc: "bar_time", x: bars[p.i].time, price: p.price })),
-          curved: false,
-          closed: false,
-          lineColor: str3(inputs, "color", SERIES_LINE),
-          lineWidth: 2,
-          lineStyle: "solid",
-          arrowLeft: false,
-          arrowRight: false
-        }
-      ]
-    };
+    const bull = str3(inputs, "bullColor", BULLISH);
+    const bear = str3(inputs, "bearColor", BEARISH);
+    const width = num3(inputs, "lineWidth", 2);
+    const polylines = [];
+    for (let k = 1; k < pivots.length; k++) {
+      const a = pivots[k - 1];
+      const b = pivots[k];
+      polylines.push({
+        key: `leg${k}`,
+        points: [
+          { xloc: "bar_time", x: bars[a.i].time, price: a.price },
+          { xloc: "bar_time", x: bars[b.i].time, price: b.price }
+        ],
+        curved: false,
+        closed: false,
+        lineColor: b.price >= a.price ? bull : bear,
+        lineWidth: width,
+        lineStyle: "solid",
+        arrowLeft: false,
+        arrowRight: false
+      });
+    }
+    return { plots: [], polylines };
   }
 };
 var williamsFractal = {
@@ -26302,10 +28474,16 @@ var williamsFractal = {
   title: "Williams Fractal",
   shortTitle: "Fractals",
   overlay: true,
-  inputs: [{ key: "periods", title: "Periods", type: "int", defval: 2, min: 1, max: 50, step: 1 }],
+  inputs: [
+    intInput("periods", "Periods", 2, 2, 50, "Bars required on each side of the candidate bar. 2 is Bill Williams' classic 5-bar fractal; a fractal is confirmed only once this many later bars have closed."),
+    colorInput(BEARISH, "Up Fractal", "upColor", "Color of the up fractal marker (swing high), drawn above the fractal bar."),
+    colorInput(BULLISH, "Down Fractal", "downColor", "Color of the down fractal marker (swing low), drawn below the fractal bar.")
+  ],
   compute: (bars, inputs) => {
     const p = num3(inputs, "periods", 2);
     const markers = [];
+    const up = str3(inputs, "upColor", BEARISH);
+    const down = str3(inputs, "downColor", BULLISH);
     const isExtreme = (i, pick, better) => {
       const v = pick(bars[i]);
       for (let k = i - p; k <= i + p; k++) {
@@ -26315,12 +28493,8 @@ var williamsFractal = {
       return true;
     };
     for (let i = p; i < bars.length - p; i++) {
-      if (isExtreme(i, (b) => b.high, (a, b) => a >= b)) {
-        markers.push({ time: bars[i].time, position: "aboveBar", shape: "triangleup", color: BULLISH });
-      }
-      if (isExtreme(i, (b) => b.low, (a, b) => a <= b)) {
-        markers.push({ time: bars[i].time, position: "belowBar", shape: "triangledown", color: BEARISH });
-      }
+      if (isExtreme(i, (b) => b.high, (a, b) => a > b)) markers.push({ time: bars[i].time, position: "aboveBar", shape: "triangleup", color: up });
+      if (isExtreme(i, (b) => b.low, (a, b) => a < b)) markers.push({ time: bars[i].time, position: "belowBar", shape: "triangledown", color: down });
     }
     return { plots: [], markers };
   }
@@ -26342,6 +28516,7 @@ function registerClassicIndicators() {
 }
 
 // src/Vela.ts
+var asError = (err) => err instanceof Error ? err : new Error(String(err));
 var Vela = class {
   constructor(container, options = {}, deps = {}) {
     registerBuiltinChartTypes();
@@ -26394,6 +28569,7 @@ var Vela = class {
     this.panesControl = new PanesControl(this.orchestrator);
     this.drawingsControl = new DrawingsControl(this.orchestrator.drawings);
     this.marksControl = new MarksControl(this.orchestrator.marks);
+    this.replayControl = new ReplayControl(this.orchestrator);
   }
   /**
    * Register a scripting engine so `addIndicator({ language })` can run that
@@ -26465,7 +28641,12 @@ var Vela = class {
    * fetch from — the same relationship `script:run` has to `context:changed`.
    */
   runScript(source, options) {
-    const handle = this.addIndicator(source, options);
+    let handle;
+    try {
+      handle = this.addIndicator(source, options);
+    } catch (err) {
+      return Promise.resolve({ ok: false, run: null, error: asError(err), onUpdate: () => () => void 0, remove: () => void 0 });
+    }
     const updates = /* @__PURE__ */ new Set();
     const drop = () => {
       try {
@@ -26509,7 +28690,12 @@ var Vela = class {
     });
   }
   runIndicator(source, options) {
-    const handle = this.addIndicator(source, options);
+    let handle;
+    try {
+      handle = this.addIndicator(source, options);
+    } catch (err) {
+      return Promise.resolve({ ok: false, handle: null, error: asError(err), context: null });
+    }
     return new Promise((resolve) => {
       const offReady = handle.on("ready", () => {
         offReady();
@@ -26623,6 +28809,16 @@ var Vela = class {
   get marks() {
     return this.marksControl;
   }
+  /**
+   * The chart's bar-replay control surface: rewind to a past bar and reveal the
+   * following ones by hand or on a timer, from the history already loaded —
+   * `await chart.replay.start({ from })`, `chart.replay.play(2000)`, `chart.replay.step()`,
+   * `chart.replay.stop()`. Revealed bars behave like live bars for indicators; live
+   * updates pause meanwhile. Follow it with the `replay:*` events.
+   */
+  get replay() {
+    return this.replayControl;
+  }
   on(event, handler) {
     return this.orchestrator.events.on(event, handler);
   }
@@ -26681,4 +28877,4 @@ function resolveElement(container) {
   return element;
 }
 
-export { BUILTIN_PRICE_STYLES, BarStore, CachingDataFeed, DARK_THEME, DataControl, DrawingStore, DrawingToolbar, DrawingsControl, LEGEND_AT_TOP_ATTR, LIGHT_THEME, MarksControl, MultiProviderFeed, NativeRenderer, RendererControl, SecondClock, TIMEZONES, TypedEventBus, Vela, applyAttributionMarkTheme, buildToolbar, createAttributionMark, createCustomMark, defaultMemberOf, defaultToolbar, groupKeyOf, groupMembers, isGroupRow, normalizeSession, normalizeTimezone, parseSymbol, priceStyleIds, registerBuiltinChartTypes, resolveTheme, sharedBarStore, timeframeToMs, tzButtonLabel, tzMenuLabel, tzOffset };
+export { BUILTIN_PRICE_STYLES, BarStore, CachingDataFeed, DARK_THEME, DataControl, DrawingStore, DrawingToolbar, DrawingsControl, LEGEND_AT_TOP_ATTR, LIGHT_THEME, MarksControl, MultiProviderFeed, NativeRenderer, RendererControl, ReplayControl, SecondClock, TIMEZONES, TypedEventBus, Vela, applyAttributionMarkTheme, buildToolbar, createAttributionMark, createCustomMark, defaultMemberOf, defaultToolbar, groupKeyOf, groupMembers, isExchangeTimezone, isGroupRow, normalizeSession, normalizeTimezone, parseSymbol, priceStyleIds, registerBuiltinChartTypes, resolveTheme, resolveTimezone, sharedBarStore, timeframeToMs, timezoneMenuRows, tzButtonLabel, tzMenuLabel, tzOffset };

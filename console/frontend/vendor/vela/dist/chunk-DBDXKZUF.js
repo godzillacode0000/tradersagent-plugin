@@ -1,8 +1,8 @@
-import { parseSymbol, priceStyleIds, BUILTIN_PRICE_STYLES, tzButtonLabel, SecondClock, TIMEZONES, normalizeTimezone, tzMenuLabel, isGroupRow, defaultMemberOf, groupKeyOf, groupMembers, LEGEND_AT_TOP_ATTR, normalizeSession, Vela, TypedEventBus, MultiProviderFeed, registerBuiltinChartTypes, resolveTheme, buildToolbar, createCustomMark, createAttributionMark, DrawingToolbar, applyAttributionMarkTheme, sharedBarStore, timeframeToMs } from './chunk-2EO74GIE.js';
-import { chartType, resolveTopbarComposition, topbarActionOverride, TOPBAR_BUILTIN_IDS, widgetActions, SidePanel, sidePanels, DEFAULT_PANEL_ORDER, symbolRanking, resolveEngines, legendActionsProviderFor, legendCalloutsProviderFor, statePersistenceHandlers, topbarHas, rendererDefaults, widgetAttachments, getDrawingType, inputDeltas } from './chunk-BFA32GOU.js';
-import { Tooltip, KeymapManager, isEditableTarget, Drawer } from './chunk-ZADTVRUO.js';
-import { Menu, Dialog, CalloutBubble, applyPlotOverlayTokens, ensureUIHost } from './chunk-BKHSQ4YM.js';
-import { registerIcon, svg16, injectStyles, iconEl, iconMarkup, iconAt, SESSION_OFF, SESSION_POST, SESSION_PRE, icon, categoricalColor } from './chunk-CAFCLMPF.js';
+import { parseSymbol, priceStyleIds, BUILTIN_PRICE_STYLES, tzButtonLabel, SecondClock, resolveTimezone, timezoneMenuRows, isGroupRow, defaultMemberOf, groupKeyOf, groupMembers, LEGEND_AT_TOP_ATTR, normalizeSession, Vela, normalizeTimezone, isExchangeTimezone, TypedEventBus, timeframeToMs, MultiProviderFeed, registerBuiltinChartTypes, resolveTheme, buildToolbar, createCustomMark, createAttributionMark, DrawingToolbar, applyAttributionMarkTheme, sharedBarStore } from './chunk-ATGTCWHJ.js';
+import { chartType, resolveTopbarComposition, topbarActionOverride, TOPBAR_BUILTIN_IDS, widgetActions, SidePanel, sidePanels, DEFAULT_PANEL_ORDER, symbolRanking, resolveEngines, legendActionsProviderFor, legendCalloutsProviderFor, statePersistenceHandlers, topbarHas, rendererDefaults, mobilePlacement, widgetAttachments, getDrawingType, inputDeltas } from './chunk-EZ5FWVLA.js';
+import { Tooltip, KeymapManager, isEditableTarget, Drawer } from './chunk-LMBYEGUR.js';
+import { Menu, Dialog, CalloutBubble, applyPlotOverlayTokens, ensureUIHost } from './chunk-NELQJCGK.js';
+import { registerIcon, svg16, injectStyles, iconEl, iconMarkup, iconAt, SESSION_OFF, SESSION_POST, SESSION_PRE, icon, categoricalColor } from './chunk-BZQM2XO7.js';
 import { baseOf } from './chunk-W4EJWLEO.js';
 
 // src/widget/timeframe.ts
@@ -1087,6 +1087,7 @@ var Bottombar = class {
     this.sessionButtons = /* @__PURE__ */ new Map();
     this.sessionEl = null;
     this.timezone = opts.timezone;
+    this.exchangeTimezone = opts.exchangeTimezone;
     const doc = host.ownerDocument;
     injectStyles(STYLE_ID3, CSS3, doc);
     this.el = doc.createElement("div");
@@ -1110,7 +1111,7 @@ var Bottombar = class {
     this.clockEl = doc.createElement("span");
     this.clockEl.className = "vela-bb-clock";
     this.tzLabelEl = doc.createElement("span");
-    this.tzLabelEl.textContent = tzButtonLabel(this.timezone);
+    this.tzLabelEl.textContent = tzButtonLabel(this.displayZone);
     this.tzButton.append(this.clockEl, this.tzLabelEl);
     const session = doc.createElement("span");
     session.className = "vela-bb-session";
@@ -1145,18 +1146,31 @@ var Bottombar = class {
       placement: "top-end",
       items: this.tzItems(),
       onSelect: (zone) => {
-        this.setTimezone(zone);
+        this.setTimezone(zone, this.exchangeTimezone);
         opts.onTimezone(zone);
       }
     });
     this.tick();
     this.unsubClock = (opts.clock ?? new SecondClock()).onTick(() => this.tick());
   }
-  setTimezone(zone) {
+  /**
+   * Reflect the stored choice AND the active chart's market zone. The clock and the
+   * offset label read the RESOLVED zone, so a workspace on the exchange rule re-labels
+   * when the active cell (or its symbol) changes market — the host re-projects on
+   * both. Idempotent: unchanged inputs leave the menu alone.
+   */
+  setTimezone(zone, exchangeTimezone) {
+    if (zone === this.timezone && exchangeTimezone === this.exchangeTimezone) return;
+    const choiceChanged = zone !== this.timezone;
     this.timezone = zone;
-    this.tzLabelEl.textContent = tzButtonLabel(zone);
-    this.tzMenu.setItems(this.tzItems());
+    this.exchangeTimezone = exchangeTimezone;
+    this.tzLabelEl.textContent = tzButtonLabel(this.displayZone);
+    if (choiceChanged) this.tzMenu.setItems(this.tzItems());
     this.tick();
+  }
+  /** The zone the bar's clock and label render in. */
+  get displayZone() {
+    return resolveTimezone(this.timezone, this.exchangeTimezone);
   }
   /** Highlight (or clear with null) the active range chip — cleared on manual tf changes. */
   setActiveRange(id) {
@@ -1185,11 +1199,7 @@ var Bottombar = class {
     this.el.remove();
   }
   tzItems() {
-    return TIMEZONES.map((t) => ({
-      id: t.value,
-      label: tzMenuLabel(t.value, t.label),
-      checked: t.value === normalizeTimezone(this.timezone)
-    }));
+    return timezoneMenuRows(this.timezone).map((r) => ({ id: r.value, label: r.label, checked: r.checked }));
   }
   tick() {
     try {
@@ -1198,7 +1208,7 @@ var Bottombar = class {
         minute: "2-digit",
         second: "2-digit",
         hour12: false,
-        timeZone: this.timezone
+        timeZone: this.displayZone
       }).format(/* @__PURE__ */ new Date());
     } catch {
       this.clockEl.textContent = "";
@@ -3642,7 +3652,12 @@ var TimeframeQuick = class {
       content: (body) => body.append(this.input, this.hint),
       onOpenChange: (open) => opts.onOpenChange?.(open)
     });
-    this.input.addEventListener("input", () => this.renderHint());
+    this.input.addEventListener("input", () => {
+      const { selectionStart, selectionEnd } = this.input;
+      this.input.value = this.input.value.toUpperCase();
+      this.input.setSelectionRange(selectionStart, selectionEnd);
+      this.renderHint();
+    });
     this.input.addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
       const parsed = parseTimeframe(this.input.value);
@@ -3654,7 +3669,7 @@ var TimeframeQuick = class {
   }
   open(seed = "") {
     this.dialog.show();
-    this.input.value = seed;
+    this.input.value = seed.toUpperCase();
     this.renderHint();
     setTimeout(() => {
       this.input.focus();
@@ -3672,7 +3687,7 @@ var TimeframeQuick = class {
       this.open(text);
       return;
     }
-    this.input.value += text;
+    this.input.value += text.toUpperCase();
     this.renderHint();
   }
   close() {
@@ -3685,7 +3700,7 @@ var TimeframeQuick = class {
     const raw = this.input.value.trim();
     const parsed = parseTimeframe(raw);
     if (!raw) {
-      this.hint.textContent = "e.g. 15, 4h, D, 3M";
+      this.hint.textContent = "e.g. 15, 4H, D, 3M";
       delete this.hint.dataset.invalid;
     } else if (parsed.valid) {
       this.hint.textContent = parsed.label ?? "";
@@ -3788,7 +3803,7 @@ var ShortcutsHelp = class {
     addRow("Delete the drawing under the cursor", ["Middle-click"]);
     const s = doc.createElement("div");
     s.className = "vela-sh-static";
-    s.textContent = "Typing a letter opens the symbol search; typing a digit opens the timeframe entry.";
+    s.textContent = "Typing a letter or 0 opens the symbol search; typing a digit from 1 to 9 opens the timeframe entry.";
     this.list.appendChild(s);
   }
 };
@@ -3915,6 +3930,7 @@ function sanitizeCell(raw) {
   if (typeof c.bars === "number" && Number.isFinite(c.bars) && c.bars > 0) out.bars = c.bars;
   if (c.session === "regular" || c.session === "extended") out.session = c.session;
   if (typeof c.watermark === "boolean") out.watermark = c.watermark;
+  if (typeof c.replayWatermark === "boolean") out.replayWatermark = c.replayWatermark;
   if (typeof c.indicatorTitles === "boolean") out.indicatorTitles = c.indicatorTitles;
   if (typeof c.indicatorValues === "boolean") out.indicatorValues = c.indicatorValues;
   if (c.rendererConfig != null && typeof c.rendererConfig === "object") out.rendererConfig = c.rendererConfig;
@@ -4198,9 +4214,15 @@ var CSS10 = `
 }
 .vela-statusline .vela-sl-symbol { font-weight: 600; font-size: var(--vela-font-size-lg); }
 .vela-statusline .vela-sl-meta { color: var(--vela-fg-muted); font-size: var(--vela-font-size-md); font-weight: 600; }
+/* The meta opens with "\xB7 " \u2014 sit its dot one space-width after the ticker, as far as the
+ * venue sits after it, not a full row gap away. */
+.vela-statusline .vela-sl-symbol + .vela-sl-meta { margin-left: calc(var(--vela-space-1) - var(--vela-space-2)); }
 /* Market status badge \u2014 a kit callout bubble (icon-only 16px circle, label on hover
- * via the kit tooltip); the session tint is applied per status in setMarketStatus. */
-.vela-statusline .vela-sl-market { align-self: center; }
+ * via the kit tooltip); the session tint is applied per status in setMarketStatus. While
+ * the chart replays past bars it wears the replay badge instead (the inverse chip). */
+.vela-statusline .vela-sl-market { align-self: center; display: inline-flex; }
+.vela-statusline .vela-sl-market > [hidden] { display: none !important; }
+.vela-statusline .vela-sl-replay-badge, .vela-statusline .vela-sl-replay-badge svg { display: block; width: 16px; height: 16px; }
 .vela-statusline .vela-sl-ohlc { display: flex; gap: var(--vela-space-1); color: var(--vela-fg-muted); }
 .vela-statusline .vela-sl-ohlc b { color: var(--vela-fg); font-weight: 500; }
 /* The change value wears the SAME ink as the OHLC values (set inline per render) \u2014
@@ -4253,6 +4275,8 @@ var MARKET_LABELS = {
   closed: "Market Closed",
   holiday: "Market Holiday"
 };
+var REPLAY_LABEL = "Replay Mode";
+var REPLAY_BADGE_SVG = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="8" style="fill: var(--vela-selected-bg)"/><path d="M11.7 4.75v6.5L7.2 8zM7.2 4.75v6.5L2.7 8z" style="fill: var(--vela-selected-fg); stroke: var(--vela-selected-fg); stroke-width: 0.8; stroke-linejoin: round"/></svg>';
 var MARKET_INKS = {
   open: "var(--vela-up)",
   pre: SESSION_PRE,
@@ -4291,6 +4315,9 @@ var Statusline = class {
     this.host = host;
     this.iconFor = iconFor;
     this.parts = { logo: true, name: true, market: true, ohlc: true, change: true };
+    this.marketStatus = "open";
+    /** The chart replays past bars — the badge shows the replay mode (see {@link setReplaying}). */
+    this.replaying = false;
     /** The right-click action menu — present once a host wires it via {@link attachMenu}. */
     this.menu = null;
     this.menuHooks = null;
@@ -4342,8 +4369,13 @@ var Statusline = class {
       label: MARKET_LABELS.open,
       host
     });
-    this.marketEl = this.marketBubble.el;
-    this.marketEl.classList.add("vela-sl-market");
+    this.replayBadge = doc.createElement("span");
+    this.replayBadge.className = "vela-sl-replay-badge";
+    this.replayBadge.innerHTML = REPLAY_BADGE_SVG;
+    this.replayBadge.hidden = true;
+    this.marketEl = doc.createElement("span");
+    this.marketEl.className = "vela-sl-market";
+    this.marketEl.append(this.marketBubble.el, this.replayBadge);
     this.ohlcEl = doc.createElement("span");
     this.ohlcEl.className = "vela-sl-ohlc";
     this.changeEl = doc.createElement("span");
@@ -4465,6 +4497,25 @@ var Statusline = class {
   /** Dress the market badge for a session state: its icon, tinted circle, and the
    *  hover label. Callers with no session model leave the constructor's 'open'. */
   setMarketStatus(status) {
+    this.marketStatus = status;
+    this.dressBadge();
+  }
+  /** The chart entered or left a bar replay: the badge shows the replay mode meanwhile
+   *  (the session state of a past bar says nothing about the market now). */
+  setReplaying(replaying) {
+    if (replaying === this.replaying) return;
+    this.replaying = replaying;
+    this.dressBadge();
+  }
+  dressBadge() {
+    this.marketBubble.el.hidden = this.replaying;
+    this.replayBadge.hidden = !this.replaying;
+    if (this.replaying) {
+      this.marketEl.dataset.status = "replay";
+      this.marketTip.setContent(REPLAY_LABEL);
+      return;
+    }
+    const status = this.marketStatus;
     this.marketEl.dataset.status = status;
     const ink = MARKET_INKS[status];
     this.marketBubble.set({
@@ -4537,11 +4588,23 @@ var Statusline = class {
         this.lastBar = b;
         if (!this.hoverBar) this.render();
       }),
+      // A replay cut or restore replaces the newest bar without a `bar` event.
+      chart.on("replay:start", () => {
+        this.lastBar = null;
+        this.setReplaying(true);
+        this.render();
+      }),
+      chart.on("replay:end", () => {
+        this.lastBar = null;
+        this.setReplaying(false);
+        this.render();
+      }),
       chart.renderer.onCrosshairMove((e) => {
         this.hoverBar = e.ohlc;
         this.render();
       })
     );
+    this.setReplaying(chart.replay.state.active);
     this.render();
   }
   destroy() {
@@ -4610,6 +4673,7 @@ var CSS11 = `
     left: var(--vela-toolbar-gutter, 0px);
     right: var(--vela-scale-gutter, 0px);
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     overflow: hidden;
@@ -4623,6 +4687,14 @@ var CSS11 = `
     user-select: none;
     white-space: nowrap;
 }
+.vela-watermark-replay {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25em;
+    margin-top: 0.1em;
+    font-size: 0.8em;
+}
+.vela-watermark [hidden] { display: none !important; }
 `;
 function watermarkFontPx(availPx, textPxAtMax) {
   if (textPxAtMax <= 0) return MAX_FONT_PX;
@@ -4633,6 +4705,10 @@ var Watermark = class {
     this.resizeObserver = null;
     /** The host's visibility preference (the persisted watermark toggle). */
     this.shown = true;
+    /** The host's preference for the replay line (its own persisted toggle). */
+    this.replayShown = true;
+    /** The chart is replaying past bars. */
+    this.replaying = false;
     /** A bar load is in flight with nothing painted — the loading affordance owns the
      *  canvas, so the mark stays out of its way. Starts true: the FIRST `load:start`
      *  fires during chart construction, before any subscriber can see it. */
@@ -4642,7 +4718,10 @@ var Watermark = class {
     this.el.className = "vela-watermark";
     this.el.dataset.velaScreenshot = "under";
     this.text = host.ownerDocument.createElement("span");
-    this.el.appendChild(this.text);
+    this.replayLine = host.ownerDocument.createElement("span");
+    this.replayLine.className = "vela-watermark-replay";
+    this.replayLine.append(iconEl("replay", host.ownerDocument), host.ownerDocument.createTextNode("Replay"));
+    this.el.append(this.text, this.replayLine);
     host.appendChild(this.el);
     if (typeof ResizeObserver !== "undefined") {
       this.resizeObserver = new ResizeObserver(() => this.fit());
@@ -4655,13 +4734,26 @@ var Watermark = class {
     this.shown = visible;
     this.sync();
   }
+  /** Show/hide the replay line (the host's toggle); it only ever shows while replaying. */
+  setReplayVisible(visible) {
+    this.replayShown = visible;
+    this.sync();
+  }
+  /** The chart entered or left a bar replay. */
+  setReplaying(replaying) {
+    this.replaying = replaying;
+    this.sync();
+  }
   /** Loading and the watermark never share the canvas — hidden while a load is up. */
   setLoading(loading) {
     this.loading = loading;
     this.sync();
   }
   sync() {
-    this.el.style.display = this.shown && !this.loading ? "" : "none";
+    const replay = this.replayShown && this.replaying;
+    this.text.hidden = !this.shown;
+    this.replayLine.hidden = !replay;
+    this.el.style.display = (this.shown || replay) && !this.loading ? "" : "none";
   }
   update(symbol, timeframe) {
     this.text.textContent = symbol ? `${parseSymbol(symbol).ticker} \xB7 ${timeframeLabel(timeframe)}` : "";
@@ -4756,12 +4848,11 @@ function priceAxisItems(s) {
   ];
 }
 function timeAxisItems(timezone) {
-  const active = timezone === "UTC" ? "Etc/UTC" : timezone;
   return [
     {
       id: "timezone",
       label: "Time zone",
-      submenu: TIMEZONES.map((t) => ({ id: `tz:${t.value}`, label: tzMenuLabel(t.value, t.label), checked: t.value === active }))
+      submenu: timezoneMenuRows(timezone).map((r) => ({ id: `tz:${r.value}`, label: r.label, checked: r.checked }))
     },
     settingsItem("time-axis", "More settings\u2026")
   ];
@@ -4882,7 +4973,7 @@ var ChartContextMenu = class {
     } else if (id.startsWith("tz:")) {
       const zone = id.slice("tz:".length);
       if (this.cbs.setTimezone) this.cbs.setTimezone(zone);
-      else chart.renderer.set("timezone", zone);
+      else chart.renderer.set("timezone", resolveTimezone(zone, void 0));
     } else if (id === "auto") {
       chart.renderer.set("autoScale", chart.renderer.get("autoScale") === false);
     } else if (id === "invert") {
@@ -5560,6 +5651,8 @@ var ChartCell = class {
     this.activeRangeId = null;
     /** Latched verdict of {@link sessionAvailable} (async metadata, sticky per symbol). */
     this.sessionAvailableFlag = false;
+    /** The symbol of the most recent metadata probe — an older one landing late is dropped. */
+    this.metadataProbeSymbol = null;
     /** Latched: the symbol's extended tape wraps midnight (an overnight roll market) —
      *  one extended-hours shading phase instead of the pre/post split. */
     this.sessionOvernightFlag = false;
@@ -5628,7 +5721,11 @@ var ChartCell = class {
         nativeBackend: deps.nativeBackend,
         // The user's drawings option minus its toolbar: one SHARED bar serves
         // the whole workspace (per-cell bars would cost a 44px gutter each).
-        drawings: cellDrawings(deps.chartDefaults.drawings)
+        drawings: cellDrawings(deps.chartDefaults.drawings),
+        // The renderer's own Time zone row edits a resolved IANA zone; the cell
+        // contributes the workspace picker instead (`time-zone`, with the
+        // exchange rule — see pushSettingsSections).
+        settings: { ...deps.chartDefaults.settings, hidden: [...deps.chartDefaults.settings?.hidden ?? [], "symbol.timezone"] }
       },
       { dataFeed: deps.feed }
     );
@@ -5641,8 +5738,13 @@ var ChartCell = class {
     this.history.onChart(this.inner);
     this.inner.renderer.onConfigChanged(() => {
       const zone = this.inner?.renderer.get("timezone");
-      if (typeof zone === "string" && normalizeTimezone(zone) !== normalizeTimezone(this.deps.timezone())) {
+      if (typeof zone === "string" && normalizeTimezone(zone) !== normalizeTimezone(this.displayTimezone)) {
         this.deps.setTimezone(normalizeTimezone(zone));
+      }
+      const style = this.priceStyle;
+      if (style !== (this.state.priceStyle ?? "candles")) {
+        this.state.priceStyle = style;
+        this.deps.onPriceStyleChanged(this.id);
       }
       this.syncStatuslineColors();
       this.syncPlotOverlayTokens();
@@ -5672,21 +5774,27 @@ var ChartCell = class {
       const list = providers.length > 0 ? providers.join(", ") : "none";
       this.deps.toast(`No registered provider serves "${symbol2}" (registered: ${list})`, "error", 6e3);
     });
-    this.inner.on("load:start", () => this.watermark?.setLoading(true));
+    this.inner.on("load:start", ({ symbol: symbol2 }) => {
+      this.watermark?.setLoading(true);
+      this.refreshSymbolMetadata(symbol2);
+    });
     this.inner.on("load:end", () => {
       this.watermark?.setLoading(false);
       this.refreshSessionShading();
     });
     this.inner.on("viewport:changed", (range) => this.sessionShading.updateRange(range));
-    const tz = deps.timezone();
-    if (tz !== "Etc/UTC") this.inner.renderer.set("timezone", tz);
+    this.applyTimezone();
     this.indicatorTitlesOn = seed.indicatorTitles ?? true;
     if (!this.indicatorTitlesOn) this.inner.renderer.set("indicatorTitles", false);
     this.indicatorValuesOn = seed.indicatorValues ?? true;
     if (!this.indicatorValuesOn) this.inner.renderer.set("indicatorValues", false);
     this.watermarkOn = seed.watermark ?? deps.watermark;
+    this.replayWatermarkOn = seed.replayWatermark ?? true;
     this.watermark = deps.watermark ? new Watermark(this.host, symbol ?? "", seed.timeframe ?? "60") : null;
     if (!this.watermarkOn) this.watermark?.setVisible(false);
+    if (!this.replayWatermarkOn) this.watermark?.setReplayVisible(false);
+    this.inner.on("replay:start", () => this.watermark?.setReplaying(true));
+    this.inner.on("replay:end", () => this.watermark?.setReplaying(false));
     this.statusline = deps.statusline ? new Statusline(this.host, symbol ?? "", (sym) => this.inner?.data.symbolIcon(sym)) : null;
     this.statusline?.setMeta(seed.timeframe ?? "60", this.state.provider ?? "");
     this.statusline?.onChart(this.inner);
@@ -5701,7 +5809,7 @@ var ChartCell = class {
         this.statusline?.setSymbol(this.state.symbol);
         this.statusline?.setMeta(this.state.timeframe ?? "60", this.inner.data.displayPrefix(this.state.symbol) ?? this.state.provider ?? "");
       }
-      this.refreshSessionAvailable();
+      this.refreshSymbolMetadata();
       if (this.inner && this.state.symbol) this.marketStatus?.track(this.inner.data, this.state.symbol);
     });
     this.syncStatuslineColors();
@@ -5775,7 +5883,7 @@ var ChartCell = class {
     this.offMarket = this.inner.on("market:changed", ({ symbol: symbol2, timeframe }) => {
       this.projectMarket(symbol2, timeframe);
       this.refreshNativeCatalog();
-      this.refreshSessionAvailable();
+      this.refreshSymbolMetadata();
       if (this.inner) this.marketStatus?.track(this.inner.data, symbol2);
       this.deps.onMarketChanged(this.id);
     });
@@ -5816,15 +5924,56 @@ var ChartCell = class {
     this.deps.onStateDirty();
     void this.inner?.setMarket({ session });
   }
-  refreshSessionAvailable() {
+  /**
+   * The symbol's own trading zone, once its metadata has landed — what the exchange
+   * rule resolves to on this cell (the workspace labels the shared bottom bar with the
+   * ACTIVE cell's). Undefined = unknown or undeclared (the rule then renders UTC).
+   */
+  get exchangeTimezone() {
+    return this.exchangeZone;
+  }
+  /** The IANA zone this cell's axis renders in: the workspace choice, resolved. */
+  get displayTimezone() {
+    return resolveTimezone(this.deps.timezone(), this.exchangeZone);
+  }
+  /**
+   * Push the resolved zone to the renderer — on the workspace choice changing, and on
+   * this cell's market zone changing under the exchange rule. Skips the write when the
+   * renderer already holds it (its config default is the bare `'UTC'` alias).
+   */
+  applyTimezone() {
     const chart = this.inner;
-    const symbol = this.state.symbol;
+    if (!chart) return;
+    const zone = this.displayTimezone;
+    const current = chart.renderer.get("timezone");
+    const held = typeof current === "string" && current ? current : "UTC";
+    if (normalizeTimezone(held) === normalizeTimezone(zone)) return;
+    chart.renderer.set("timezone", zone);
+  }
+  /** Re-read the symbol's metadata: session posture (RTH/ETH toggle, shading) and its
+   *  trading zone (the exchange rule). Async — the workspace re-projects when a verdict lands. */
+  refreshSymbolMetadata(symbol = this.state.symbol, retry = true) {
+    const chart = this.inner;
     if (!chart || !symbol) return;
+    this.metadataProbeSymbol = symbol;
     void chart.data.symbolInfo(symbol).then((si) => {
-      if (this.inner !== chart) return;
+      if (this.inner !== chart || this.metadataProbeSymbol !== symbol) return;
+      if (si === void 0 && retry) {
+        void chart.data.ready().then(() => {
+          if (this.inner === chart && this.metadataProbeSymbol === symbol) this.refreshSymbolMetadata(symbol, false);
+        });
+        return;
+      }
+      if (this.state.symbol !== symbol) return;
       const available = typeof si?.session === "string" && si.session !== "" && si.session !== "24x7";
       const overnight = parseSessionSpec(si)?.overnight === true;
-      if (available !== this.sessionAvailableFlag || overnight !== this.sessionOvernightFlag) {
+      const zone = typeof si?.timezone === "string" && si.timezone !== "" ? si.timezone : void 0;
+      const zoneChanged = zone !== this.exchangeZone;
+      if (zoneChanged) {
+        this.exchangeZone = zone;
+        this.applyTimezone();
+      }
+      if (available !== this.sessionAvailableFlag || overnight !== this.sessionOvernightFlag || zoneChanged) {
         this.sessionAvailableFlag = available;
         this.sessionOvernightFlag = overnight;
         this.deps.onMarketChanged(this.id);
@@ -5930,6 +6079,24 @@ var ChartCell = class {
         }
       ]
     };
+    const timezoneSection = {
+      title: "Time zone",
+      id: "time-zone",
+      placement: "symbol",
+      rows: [
+        {
+          kind: "select",
+          label: "Time zone",
+          id: "zone",
+          options: timezoneMenuRows(this.deps.timezone()).map((r) => [r.value, r.label]),
+          get: () => {
+            const choice = this.deps.timezone();
+            return isExchangeTimezone(choice) ? choice : normalizeTimezone(choice);
+          },
+          set: (v) => this.deps.setTimezone(v)
+        }
+      ]
+    };
     const watermarkSection = {
       title: "Watermark",
       id: "watermark",
@@ -5941,6 +6108,13 @@ var ChartCell = class {
           id: "visible",
           get: () => this.watermarkOn,
           set: (v) => this.setWatermarkVisible(v)
+        },
+        {
+          kind: "toggle",
+          label: "Replay watermark",
+          id: "replay",
+          get: () => this.replayWatermarkOn,
+          set: (v) => this.setReplayWatermarkVisible(v)
         }
       ]
     };
@@ -5998,7 +6172,7 @@ var ChartCell = class {
         ]
       });
     }
-    sections.push(advanced);
+    sections.push(advanced, timezoneSection);
     if (this.sessionAvailableFlag) sections.push(sessionSection);
     sections.push(watermarkSection);
     chart.renderer.setSettingsSections(sections);
@@ -6007,6 +6181,12 @@ var ChartCell = class {
   setWatermarkVisible(visible) {
     this.watermarkOn = visible;
     this.watermark?.setVisible(visible);
+    this.deps.onStateDirty();
+  }
+  /** Show/hide the "Replay" line under this cell's watermark while it replays (persisted per cell). */
+  setReplayWatermarkVisible(visible) {
+    this.replayWatermarkOn = visible;
+    this.watermark?.setReplayVisible(visible);
     this.deps.onStateDirty();
   }
   /** Show/hide this cell's indicator titles — the in-chart legend rows (persisted per cell). */
@@ -6249,7 +6429,7 @@ var ChartCell = class {
    *  then the manifest in the host's own order. */
   libraryRows() {
     return [
-      ...this.supportedNatives().map((n) => ({ name: n.title, category: "Vela", native: true, nativeType: n.type, beta: n.beta })),
+      ...this.supportedNatives().map((n) => ({ name: n.title, category: "Built-in", native: true, nativeType: n.type, beta: n.beta })),
       ...this.manifest.map((e) => ({ name: e.name, language: e.language, category: e.category }))
     ];
   }
@@ -6283,16 +6463,19 @@ var ChartCell = class {
    * a persistence handler's `restore` runs silently, a user-driven call records.
    */
   addExternalIndicator(entry) {
+    const { id, inputs, props, hidden, ...script } = entry;
     this.addManifestInstance(
-      { ...entry, enabled: true },
-      { external: true, ...entry.inputs ? { inputs: entry.inputs } : {}, ...entry.props ? { props: entry.props } : {}, ...entry.hidden ? { hidden: true } : {} }
+      { ...script, enabled: true },
+      { external: true, ...id !== void 0 ? { id } : {}, ...inputs ? { inputs } : {}, ...props ? { props } : {}, ...hidden ? { hidden: true } : {} }
     );
   }
   /** Add ONE instance of a manifest entry (repeatable — duplicates are legitimate). */
   addManifestInstance(entry, opts = {}) {
     if (this.destroyed) return;
     const values = opts.inputs || opts.props ? { inputs: opts.inputs, props: opts.props } : void 0;
-    const it = { entry, handle: this.addToChart(entry, values), ...opts.external ? { external: true } : {}, ...values ? { values } : {} };
+    const handle = this.addToChart(entry, values, opts.id);
+    if (!handle) return;
+    const it = { entry, handle, id: handle.id, ...opts.external ? { external: true } : {}, ...values ? { values } : {} };
     if (opts.hidden) it.handle?.setVisible(false);
     this.instances.push(it);
     this.deps.onIndicatorsChanged(this.id);
@@ -6301,7 +6484,7 @@ var ChartCell = class {
     this.history.push({
       undo: () => this.dropInstance(snapshot),
       redo: () => {
-        snapshot.handle = this.addToChart(snapshot.entry, snapshot.values);
+        snapshot.handle = this.addToChart(snapshot.entry, snapshot.values, snapshot.id);
         this.instances.push(snapshot);
         this.deps.onIndicatorsChanged(this.id);
       }
@@ -6314,7 +6497,7 @@ var ChartCell = class {
     const snapshot = it;
     this.history.push({
       undo: () => {
-        snapshot.handle = this.addToChart(snapshot.entry, snapshot.values);
+        snapshot.handle = this.addToChart(snapshot.entry, snapshot.values, snapshot.id);
         this.instances.push(snapshot);
         this.deps.onIndicatorsChanged(this.id);
       },
@@ -6404,9 +6587,10 @@ var ChartCell = class {
       this.deps.onIndicatorsChanged(this.id);
     });
   }
-  addToChart(entry, values) {
+  addToChart(entry, values, id) {
     try {
       return this.inner?.addIndicator(entry.script, {
+        ...id !== void 0 ? { id } : {},
         ...entry.language !== void 0 ? { language: entry.language } : {},
         ...values?.inputs ? { inputs: values.inputs } : {},
         ...values?.props ? { props: values.props } : {}
@@ -6478,6 +6662,7 @@ var ChartCell = class {
     if (!this.inner || this.destroyed) return;
     if (cs.priceStyle && cs.priceStyle !== this.priceStyle) this.setPriceStyle(cs.priceStyle);
     if (cs.watermark !== void 0 && cs.watermark !== this.watermarkOn) this.setWatermarkVisible(cs.watermark);
+    if (cs.replayWatermark !== void 0 && cs.replayWatermark !== this.replayWatermarkOn) this.setReplayWatermarkVisible(cs.replayWatermark);
     if (cs.indicatorTitles !== void 0 && cs.indicatorTitles !== this.indicatorTitlesOn) this.setIndicatorTitlesVisible(cs.indicatorTitles);
     if (cs.indicatorValues !== void 0 && cs.indicatorValues !== this.indicatorValuesOn) this.setIndicatorValuesVisible(cs.indicatorValues);
     if (cs.rendererConfig != null) this.inner.renderer.applyConfig(cs.rendererConfig);
@@ -6512,6 +6697,7 @@ var ChartCell = class {
       ...live ? { symbol: live.symbol, provider: live.provider, timeframe: live.timeframe } : {},
       priceStyle: this.priceStyle,
       watermark: this.watermarkOn,
+      replayWatermark: this.replayWatermarkOn,
       indicatorTitles: this.indicatorTitlesOn,
       indicatorValues: this.indicatorValuesOn,
       rendererConfig: this.inner?.renderer.getConfig() ?? void 0,
@@ -6553,6 +6739,298 @@ var ChartCell = class {
     this.host.remove();
   }
 };
+
+// src/workspace/WorkspaceReplay.ts
+var MAX_BARS_PER_STEP = 1e5;
+var WorkspaceReplay = class {
+  constructor(host) {
+    this.host = host;
+    this.bus = new TypedEventBus();
+    /** The running session: the shared replay time (every chart shows the bars closed by it). */
+    this.session = null;
+    this.playing = false;
+    this.intervalMs = 1e3;
+    this.timer = null;
+    /** Cells whose replay a symbol switch ended — restarted at the shared time once their bars land. */
+    this.rejoining = /* @__PURE__ */ new Set();
+    this.cellSubs = /* @__PURE__ */ new Map();
+    /** Inside a group step: chart events are the controller's own doing. */
+    this.stepping = false;
+    /** Inside `finish`: the charts' `replay:end` events are the controller's own doing. */
+    this.stopping = false;
+    /** Driving a chart's own timer: its play/pause events are not the user's. */
+    this.muted = 0;
+    /** A chart finished during a group step — the session ends right after it. */
+    this.finishedDuringStep = false;
+    for (const cell of host.cells()) this.watch(cell);
+    this.offHost = host.onCells((e) => {
+      if (e.kind === "created") this.onCellCreated(e.id);
+      else if (e.kind === "destroyed") this.onCellDestroyed(e.id);
+    });
+  }
+  /**
+   * Enter replay on every cell (or seek, when already replaying) — paused. Resolves once
+   * every chart shows its rewound history (a chart whose history does not reach that far
+   * loads older bars first). A chart with nothing to replay after the shared time stays
+   * as it is.
+   */
+  async start(opts) {
+    const cells = this.host.cells();
+    const ref = cells.find((c) => c.id === (opts.cell ?? this.host.activeId())) ?? cells[0];
+    if (!ref) return;
+    if (this.playing) this.pause();
+    this.rejoining.clear();
+    await ref.chart.replay.start({ from: opts.from });
+    const cursor = ref.chart.replay.state.cursorTime;
+    if (cursor == null) return;
+    const session = { clock: barClose(cursor, ref.chart.market.timeframe) };
+    this.session = session;
+    await Promise.all(this.host.cells().filter((c) => c.id !== ref.id).map((c) => this.startCell(c, session.clock)));
+    if (this.session !== session) return;
+    this.syncPlayback();
+    const s = this.activeChart()?.replay.state;
+    this.bus.emit("replay:start", { cursorTime: s?.cursorTime ?? cursor, remaining: s?.remaining ?? 0 });
+  }
+  /** Reveal the next bar(s): the clock moves to the next bar close on any chart. Returns false when nothing is left. */
+  step() {
+    const solo = this.solo();
+    return solo ? solo.replay.step() : this.stepGroup();
+  }
+  /** Reveal the next update — in a single-chart layout, the chart's `stepUpdate()` (tick replay); otherwise {@link step}. */
+  stepUpdate() {
+    const solo = this.solo();
+    return solo ? solo.replay.stepUpdate() : this.stepGroup();
+  }
+  /** Advance one update every `intervalMs` (default: the last pace, initially 1000). Calling it again while playing changes the pace. */
+  play(intervalMs) {
+    if (!this.session) return this;
+    if (intervalMs !== void 0) {
+      if (!(Number.isFinite(intervalMs) && intervalMs > 0)) {
+        console.warn(`[vela] workspace.replay.play(${intervalMs}) ignored \u2014 the interval must be a positive number of ms`);
+        return this;
+      }
+      this.intervalMs = intervalMs;
+    }
+    this.playing = true;
+    this.clearTimer();
+    this.syncPlayback();
+    this.bus.emit("replay:play", { intervalMs: this.intervalMs });
+    return this;
+  }
+  pause() {
+    if (!this.playing) return this;
+    this.playing = false;
+    this.syncPlayback();
+    this.bus.emit("replay:pause", void 0);
+    return this;
+  }
+  /** Leave replay on every chart: full history back, live updates resumed. */
+  stop() {
+    this.finish("stopped");
+    return this;
+  }
+  /** `active`/`playing`/`intervalMs` for the whole workspace; the cursor fields read the ACTIVE cell's chart. */
+  get state() {
+    const s = this.session ? this.activeChart()?.replay.state : void 0;
+    return {
+      active: this.session !== null,
+      playing: this.playing,
+      cursorTime: s?.cursorTime ?? null,
+      remaining: s?.remaining ?? 0,
+      nextTime: s?.nextTime ?? null,
+      intervalMs: this.intervalMs
+    };
+  }
+  /** The active cell's replayable history (`chart.replay.bounds`). */
+  get bounds() {
+    return this.activeChart()?.replay.bounds ?? null;
+  }
+  on(event, handler) {
+    return this.bus.on(event, handler);
+  }
+  destroy() {
+    this.session = null;
+    this.playing = false;
+    this.clearTimer();
+    this.offHost();
+    for (const off of this.cellSubs.values()) off();
+    this.cellSubs.clear();
+    this.bus.clear();
+  }
+  // ── internals ──
+  /** The one chart of a single-chart layout — it replays on its own, tick replay included. */
+  solo() {
+    const cells = this.host.cells();
+    return cells.length === 1 ? cells[0].chart : null;
+  }
+  activeChart() {
+    const cells = this.host.cells();
+    return (cells.find((c) => c.id === this.host.activeId()) ?? cells[0])?.chart ?? null;
+  }
+  /** Rewind one chart to the shared time: every bar that closed by `clock`, none after. */
+  async startCell(cell, clock) {
+    const replay = cell.chart.replay;
+    const from = lastOpenClosedBy(clock, cell.chart.market.timeframe);
+    const bounds = replay.bounds;
+    if (!bounds || bounds.last <= from) return;
+    await replay.start({ from });
+  }
+  /** Move the clock to the next bar close on any chart; each chart reveals what closed by then. */
+  stepGroup() {
+    const session = this.session;
+    if (!session) return false;
+    const cells = this.host.cells();
+    let next = Infinity;
+    for (const c of cells) {
+      const t = c.chart.replay.state.nextTime;
+      if (t != null) next = Math.min(next, barClose(t, c.chart.market.timeframe));
+    }
+    if (!Number.isFinite(next)) return false;
+    this.stepping = true;
+    try {
+      for (const c of cells) {
+        const tf = c.chart.market.timeframe;
+        for (let n = 0; n < MAX_BARS_PER_STEP; n += 1) {
+          const t = c.chart.replay.state.nextTime;
+          if (t == null || barClose(t, tf) > next) break;
+          if (!c.chart.replay.step()) break;
+        }
+      }
+    } finally {
+      this.stepping = false;
+    }
+    session.clock = next;
+    if (this.finishedDuringStep) {
+      this.finishedDuringStep = false;
+      this.finish("finished");
+      return true;
+    }
+    const s = this.activeChart()?.replay.state;
+    if (s?.cursorTime != null) this.bus.emit("replay:step", { cursorTime: s.cursorTime, remaining: s.remaining });
+    return true;
+  }
+  /** Put the timers in the state `playing` asks for: a single chart runs its own (it paces
+   *  ticks), several run on the controller's clock. */
+  syncPlayback() {
+    const solo = this.solo();
+    const run = this.playing && this.session !== null;
+    this.muted += 1;
+    try {
+      for (const c of this.host.cells()) {
+        if (c.chart === solo && run) {
+          if (!c.chart.replay.state.playing || c.chart.replay.state.intervalMs !== this.intervalMs) c.chart.replay.play(this.intervalMs);
+        } else if (c.chart.replay.state.playing) {
+          c.chart.replay.pause();
+        }
+      }
+    } finally {
+      this.muted -= 1;
+    }
+    if (!run || solo) this.clearTimer();
+    else if (this.timer == null) this.schedule();
+  }
+  schedule() {
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      if (!this.playing || !this.session || this.solo()) return;
+      if (this.stepGroup() || this.rejoining.size > 0) {
+        if (this.playing && this.session && this.timer == null) this.schedule();
+      } else {
+        this.pause();
+      }
+    }, this.intervalMs);
+  }
+  clearTimer() {
+    if (this.timer != null) clearTimeout(this.timer);
+    this.timer = null;
+  }
+  /** End the session on every chart (idempotent). */
+  finish(reason) {
+    const had = this.session !== null;
+    this.session = null;
+    this.playing = false;
+    this.clearTimer();
+    this.rejoining.clear();
+    this.stopping = true;
+    try {
+      for (const c of this.host.cells()) c.chart.replay.stop();
+    } finally {
+      this.stopping = false;
+    }
+    if (had) this.bus.emit("replay:end", { reason });
+  }
+  watch(cell) {
+    const { id, chart } = cell;
+    const isActive = () => (this.host.activeId() ?? this.host.cells()[0]?.id) === id;
+    const offs = [
+      chart.on("replay:end", ({ reason }) => {
+        if (!this.session || this.stopping) return;
+        if (reason === "market") this.rejoining.add(id);
+        else if (this.stepping) this.finishedDuringStep || (this.finishedDuringStep = reason === "finished");
+        else this.finish(reason);
+      }),
+      chart.on("market:changed", () => {
+        if (!this.rejoining.delete(id) || !this.session) return;
+        void this.startCell(cell, this.session.clock).then(() => this.syncPlayback());
+      }),
+      chart.on("replay:step", (e) => {
+        if (this.session && !this.stepping && isActive()) this.bus.emit("replay:step", e);
+      }),
+      chart.on("replay:tick", (e) => {
+        if (this.session && isActive()) this.bus.emit("replay:tick", e);
+      }),
+      // A single chart runs its own timer: a pause it takes on its own (a seek) is the session's.
+      chart.on("replay:pause", () => {
+        if (!this.session || this.muted > 0 || !this.playing || chart !== this.solo()) return;
+        this.playing = false;
+        this.bus.emit("replay:pause", void 0);
+      })
+    ];
+    this.cellSubs.set(id, () => {
+      for (const off of offs) off();
+    });
+  }
+  onCellCreated(id) {
+    const cell = this.host.cells().find((c) => c.id === id);
+    if (!cell) return;
+    this.watch(cell);
+    const session = this.session;
+    if (!session) return;
+    this.rejoining.add(id);
+    void cell.chart.ready().then(async () => {
+      if (this.session !== session || !this.rejoining.delete(id)) return;
+      await this.startCell(cell, session.clock);
+      this.syncPlayback();
+    });
+    this.syncPlayback();
+  }
+  onCellDestroyed(id) {
+    this.cellSubs.get(id)?.();
+    this.cellSubs.delete(id);
+    this.rejoining.delete(id);
+    this.syncPlayback();
+  }
+};
+function barClose(open, timeframe) {
+  const months = monthSpan(timeframe);
+  if (months > 0) {
+    const d = new Date(open);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes());
+  }
+  return open + timeframeToMs(timeframe ?? "60");
+}
+function lastOpenClosedBy(time, timeframe) {
+  const months = monthSpan(timeframe);
+  if (months > 0) {
+    const d = new Date(time);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - months, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes());
+  }
+  return time - timeframeToMs(timeframe ?? "60");
+}
+function monthSpan(timeframe) {
+  const m = /^(\d*)M$/.exec((timeframe ?? "").trim());
+  return m ? Number(m[1] || 1) : 0;
+}
 
 // src/workspace/layouts.ts
 var registry = /* @__PURE__ */ new Map();
@@ -7010,16 +7488,16 @@ var MobileBar = class {
     host.appendChild(this.el);
     this.renderActions();
   }
-  /** Re-project the left-aligned contributed actions as icon-only stops in the
-   *  indicators slot (call after registrations change). Right-aligned actions stay
-   *  in the three-dots drawer — a primary stop is what `align: 'left'` opts into. */
+  /** Re-project the contributed actions placed on the bar (left-aligned by default —
+   *  see `mobilePlacement`) as icon-only stops in the indicators slot (call after
+   *  registrations change). The rest are three-dots drawer rows. */
   renderActions() {
     const ctx = this.opts.getContext?.();
     if (!ctx) return;
     const doc = this.el.ownerDocument;
     this.actionsHost.replaceChildren();
     const builtin = new Set(TOPBAR_BUILTIN_IDS);
-    for (const action of widgetActions("topbar", ctx).filter((a) => a.align === "left" && !builtin.has(a.id))) {
+    for (const action of widgetActions("topbar", ctx).filter((a) => mobilePlacement(a) === "bar" && !builtin.has(a.id))) {
       const b = doc.createElement("button");
       b.className = "vela-mb-item";
       b.setAttribute("aria-label", action.label);
@@ -7575,6 +8053,7 @@ var MoreDrawer = class {
       const value = shape ? `${shape.cols} \xD7 ${shape.rows}` : this.opts.layout.presets().find((p) => p.checked)?.label;
       list.appendChild(this.row(doc, "Layout", { icon: "layout", value, chevron: true, onClick: () => this.show("layout") }));
     }
+    for (const act of this.opts.primaryActions?.() ?? []) list.appendChild(this.actionRow(doc, act));
     for (const panel of this.opts.panels()) {
       list.appendChild(
         this.row(doc, panel.title, {
@@ -7590,18 +8069,18 @@ var MoreDrawer = class {
       const alertCount = this.opts.alerts().length;
       list.appendChild(this.row(doc, "Alerts", { icon: "bell", value: alertCount > 0 ? String(alertCount) : void 0, chevron: true, onClick: () => this.show("alerts") }));
     }
-    for (const act of this.opts.actions()) {
-      list.appendChild(
-        this.row(doc, act.label, {
-          icon: act.icon,
-          onClick: () => {
-            act.run();
-            this.drawer.hide();
-          }
-        })
-      );
-    }
+    for (const act of this.opts.actions()) list.appendChild(this.actionRow(doc, act));
     this.drawer.body.appendChild(list);
+  }
+  /** A contributed action's row: runs it and closes the drawer. */
+  actionRow(doc, act) {
+    return this.row(doc, act.label, {
+      icon: act.icon,
+      onClick: () => {
+        act.run();
+        this.drawer.hide();
+      }
+    });
   }
   renderStyle(doc) {
     const list = doc.createElement("div");
@@ -7726,15 +8205,14 @@ var TimezoneDrawer = class {
     this.drawer.body.replaceChildren();
     const list = doc.createElement("div");
     list.className = "vela-tzd-list";
-    const current = normalizeTimezone(this.opts.timezone());
-    for (const tz of TIMEZONES) {
+    for (const tz of timezoneMenuRows(this.opts.timezone())) {
       const row = doc.createElement("div");
       row.className = "vela-tzd-row";
       const label = doc.createElement("span");
       label.className = "vela-tzd-row-label";
-      label.textContent = tzMenuLabel(tz.value, tz.label);
+      label.textContent = tz.label;
       row.appendChild(label);
-      if (tz.value === current) row.appendChild(iconEl("check", doc));
+      if (tz.checked) row.appendChild(iconEl("check", doc));
       row.addEventListener("click", () => {
         this.opts.onTimezone(tz.value);
         this.drawer.hide();
@@ -8067,6 +8545,7 @@ function buildContext(host) {
     setPriceStyle: (style) => host.active()?.setPriceStyle(style),
     openSymbolSearch: (query) => host.openSymbolSearch(query),
     togglePanel: (id, open) => host.togglePanel(id, open),
+    dockStrip: (el) => host.dockStrip(el),
     host: host.root,
     toast: (message, kind) => host.toast(message, kind),
     addIndicator: (entry) => host.active()?.addExternalIndicator(entry),
@@ -8078,7 +8557,8 @@ function buildContext(host) {
     get activeCellId() {
       return host.active()?.id ?? "";
     },
-    setActiveCell: (id) => host.setActiveCell(id)
+    setActiveCell: (id) => host.setActiveCell(id),
+    replay: host.replay
   };
 }
 
@@ -8141,6 +8621,8 @@ var CSS21 = `
 .vela-workspace { position: relative; width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--vela-bg); }
 .vela-ws-main { position: relative; display: flex; flex-direction: row; flex: 1 1 auto; min-height: 0; }
 .vela-ws-toolbar { position: relative; flex: none; }
+.vela-ws-strips { position: relative; flex: none; display: flex; flex-direction: column; min-width: 0; }
+.vela-ws-strips:empty { display: none; }
 .vela-ws-grid { position: relative; flex: 1 1 auto; min-width: 0; display: grid; gap: ${GAP_PX}px; background: var(--vela-border-soft); }
 .vela-cell { background: var(--vela-bg); position: relative; }
 /* Active-cell highlight: an overlay ring ABOVE the chart's own canvas stack (a plain
@@ -8199,11 +8681,11 @@ function resolveTyping(key, open) {
   if (open.dialogs > 0) {
     if (key.length !== 1) return null;
     if (open.symbolSearch) return { target: "symbol", text: key.toUpperCase() };
-    if (open.timeframeEntry) return { target: "timeframe", text: key };
+    if (open.timeframeEntry) return { target: "timeframe", text: key.toUpperCase() };
     return null;
   }
-  if (/^[a-zA-Z]$/.test(key)) return { target: "symbol", text: key.toUpperCase() };
-  if (/^[0-9]$/.test(key)) return { target: "timeframe", text: key };
+  if (/^[a-zA-Z0]$/.test(key)) return { target: "symbol", text: key.toUpperCase() };
+  if (/^[1-9]$/.test(key)) return { target: "timeframe", text: key };
   return null;
 }
 var VelaWorkspace = class {
@@ -8312,6 +8794,20 @@ var VelaWorkspace = class {
     const hostEl = typeof container === "string" ? document.querySelector(container) : container;
     if (!hostEl) throw new Error(`VelaWorkspace: container not found: ${String(container)}`);
     this.opts = opts;
+    this.replay = new WorkspaceReplay({
+      cells: () => this.cells(),
+      activeId: () => this.activeId,
+      onCells: (handler) => {
+        const offs = [
+          this.events.on("cell:created", ({ id }) => handler({ kind: "created", id })),
+          this.events.on("cell:destroyed", ({ id }) => handler({ kind: "destroyed", id })),
+          this.events.on("cell:active", ({ id }) => handler({ kind: "active", id }))
+        ];
+        return () => {
+          for (const off of offs) off();
+        };
+      }
+    });
     this.persistKey = opts.persist === void 0 || opts.persist === false ? null : opts.persist === true ? "vela-workspace" : opts.persist;
     this.storage = opts.storage ?? localStorageAdapter();
     let boot = null;
@@ -8449,6 +8945,9 @@ var VelaWorkspace = class {
     this.dock.refresh();
     if (boot?.panels) this.dock.applyState(boot.panels);
     this.root.appendChild(main);
+    this.stripsEl = doc.createElement("div");
+    this.stripsEl.className = "vela-ws-strips";
+    this.root.appendChild(this.stripsEl);
     this.toastHost = new Toast(this.gridEl);
     const attribution = rendererDefaults().attribution;
     if (attribution !== false) {
@@ -8683,9 +9182,16 @@ var VelaWorkspace = class {
       setActiveCell: (id) => this.setActiveCell(id),
       openSymbolSearch: (query) => this.symbolPicker.open(query ?? ""),
       togglePanel: (id, open) => this.dock.toggle(id, open),
+      dockStrip: (el) => {
+        this.stripsEl.appendChild(el);
+        return () => {
+          if (el.parentElement === this.stripsEl) el.remove();
+        };
+      },
       root: this.root,
       toast: (message, kind) => this.toastHost.show(message, kind),
-      stateDirty: () => this.markStateDirty()
+      stateDirty: () => this.markStateDirty(),
+      replay: this.replay
     });
   }
   /** Re-project contributed topbar actions + side panels, and mount late-registered attachments. */
@@ -8842,12 +9348,22 @@ var VelaWorkspace = class {
       }
     }
   }
-  /** Set the workspace-global display timezone — applied to EVERY cell. */
+  /**
+   * Set the workspace-global display timezone — applied to EVERY cell. An IANA zone,
+   * or `'exchange'` (the exchange rule): each cell then renders in its OWN market's
+   * zone (Chicago for a CME future, New York for a US equity, UTC for crypto), and the
+   * bottom bar follows the active cell's.
+   */
   setTimezone(zone) {
     this.timezone = zone;
-    this.bottombar?.setTimezone(zone);
-    for (const cell of this.cellsById.values()) cell.chart.renderer.set("timezone", zone);
+    this.projectTimezone();
+    for (const cell of this.cellsById.values()) cell.applyTimezone();
     this.markStateDirty();
+  }
+  /** Bottom bar ⇐ the stored choice + the ACTIVE cell's market zone (labels the exchange row). */
+  projectTimezone() {
+    const active = this.activeId ? this.cellsById.get(this.activeId) : void 0;
+    this.bottombar?.setTimezone(this.timezone, active?.exchangeTimezone);
   }
   /**
    * Swap the workspace theme at runtime — `'dark'`, `'light'`, or a full custom theme,
@@ -8983,6 +9499,7 @@ var VelaWorkspace = class {
     if (this.destroyed) return;
     this.flushPendingState();
     this.destroyed = true;
+    this.replay.destroy();
     if (this.persistKey !== null && typeof window !== "undefined") window.removeEventListener("beforeunload", this.onUnload);
     this.resizeObserver?.disconnect();
     this.splitters.destroy();
@@ -9053,6 +9570,7 @@ var VelaWorkspace = class {
     this.dock.onChart(cell.chart);
     this.bottombar?.setActiveRange(cell.activeRangeId);
     this.bottombar?.setSession({ session: cell.session, enabled: cell.sessionAvailable });
+    this.projectTimezone();
     this.indicatorPicker?.sync();
     this.glider.stop();
     const d = cell.chart.drawings;
@@ -9637,6 +10155,7 @@ var VelaWorkspace = class {
     this.mobileBar?.setTimeframe(cell.timeframe);
     this.objectTree.setSymbol(cell.symbol);
     this.bottombar?.setSession({ session: cell.session, enabled: cell.sessionAvailable });
+    this.projectTimezone();
     this.bottombar?.setActiveRange(cell.activeRangeId);
   }
   /** Trigger ② — a cell's price style changed: the topbar button/menu only if active.
@@ -9747,14 +10266,13 @@ var VelaWorkspace = class {
       panels: () => has("panels") ? [...this.dock.list()] : [],
       onTogglePanel: (id) => this.dock.toggle(id),
       ...has("alerts") ? { alerts: () => this.alerts.map((a) => ({ title: `${a.source} \xB7 ${a.title}`, message: a.message, time: a.time })) } : {},
-      // Left-aligned actions have their own bottom-bar stop — only the rest
-      // lands in the drawer, or every left action would appear twice. Built-in-id
-      // actions are slot OVERRIDES: they reach the drawer through the slot's own
-      // routed button (screenshot) or stop (indicators), never as an extra row.
-      actions: () => {
-        const builtin = new Set(TOPBAR_BUILTIN_IDS);
-        return widgetActions("topbar", this.context()).filter((a) => a.align !== "left" && !builtin.has(a.id)).map((a) => ({ label: a.label, icon: a.icon, run: () => a.run(this.context()) }));
-      },
+      // Actions placed on the bottom bar (left-aligned by default) have their stop
+      // there — only the menu-placed ones land in the drawer, or they would appear
+      // twice: left (primary) ones with the primary rows, right ones at the end.
+      // Built-in-id actions are slot OVERRIDES: they reach the drawer through the
+      // slot's own routed button (screenshot) or stop (indicators), never as a row.
+      primaryActions: () => this.drawerActions("left"),
+      actions: () => this.drawerActions("right"),
       // The desktop layout dropdown's whole surface — the grid canvas, the
       // non-canvas presets and the sync switches — relocated into the kebab
       // drawer (the topbar is hidden on mobile). Same reads as the topbar block;
@@ -9778,6 +10296,11 @@ var VelaWorkspace = class {
       onOpenChange: (open) => this.trackDialog(open)
     }));
     this.moreDrawer.open();
+  }
+  /** The contributed topbar actions the mobile menu lists, from one cluster. */
+  drawerActions(cluster) {
+    const builtin = new Set(TOPBAR_BUILTIN_IDS);
+    return widgetActions("topbar", this.context()).filter((a) => mobilePlacement(a) === "menu" && a.align === "left" === (cluster === "left") && !builtin.has(a.id)).map((a) => ({ label: a.label, icon: a.icon, run: () => a.run(this.context()) }));
   }
   openTimezoneDrawer() {
     this.timezoneDrawer ?? (this.timezoneDrawer = new TimezoneDrawer({
@@ -9900,7 +10423,7 @@ var VelaWorkspace = class {
       }
     });
   }
-  /** Bare-typing router: letters → symbol search (seeded), digits → timeframe entry. */
+  /** Bare-typing router: letters and `0` → symbol search (seeded), digits 1–9 → timeframe entry. */
   routeTyping(ev) {
     if (this.destroyed) return;
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
@@ -9942,4 +10465,4 @@ var VelaWorkspace = class {
   }
 };
 
-export { Bottombar, ChartCell, ChartContextMenu, DataWindow, GRID_PICKER_MAX, IndicatorPicker, ObjectTree, PanelDock, RANGE_PRESETS, ShortcutsHelp, Statusline, SymbolPicker, TimeframeQuick, Topbar, VelaWorkspace, Watermark, activeAfterLayout, dataWindowSections, decimalsFor, decodeState, encodeState, ensureLayout, evenTracks, filterSymbols, fmtChange, fmtPrice, gridStyles, layoutDefinition, layoutForGrid, layoutShape, layouts, localStorageAdapter, memoryStorageAdapter, parseTimeframe, priceStyleLabel, rangesWithin, registerBuiltinLayouts, registerLayout, resizeTracks, resolveIndicators, sanitizeState, syncTargets, timeframeLabel, timeframeMs, trackOffsets, unregisterLayout };
+export { Bottombar, ChartCell, ChartContextMenu, DataWindow, GRID_PICKER_MAX, IndicatorPicker, ObjectTree, PanelDock, RANGE_PRESETS, ShortcutsHelp, Statusline, SymbolPicker, TimeframeQuick, Topbar, VelaWorkspace, Watermark, WorkspaceReplay, activeAfterLayout, barClose, dataWindowSections, decimalsFor, decodeState, encodeState, ensureLayout, evenTracks, filterSymbols, fmtChange, fmtPrice, gridStyles, lastOpenClosedBy, layoutDefinition, layoutForGrid, layoutShape, layouts, localStorageAdapter, memoryStorageAdapter, parseTimeframe, priceStyleLabel, rangesWithin, registerBuiltinLayouts, registerLayout, resizeTracks, resolveIndicators, sanitizeState, syncTargets, timeframeLabel, timeframeMs, trackOffsets, unregisterLayout };

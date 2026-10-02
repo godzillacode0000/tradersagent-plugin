@@ -108,7 +108,7 @@ draw it — the levels get on the chart either way, and the answer says which ro
 
 ## The workspace grid (multi-pane) — measured
 
-`@luxalgo/vela@0.7.3` ships a real chart grid; this console had it switched off. Everything below was
+`@luxalgo/vela@0.8.1` ships a real chart grid; this console had it switched off. Everything below was
 measured from the running page, not read off the docs.
 
 | Where | Result |

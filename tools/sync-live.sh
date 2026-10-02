@@ -21,11 +21,18 @@ fi
 
 cp "$HERE"/console/frontend/*.js "$HERE"/console/frontend/*.css "$HERE"/console/frontend/index.html \
   "$LIVE/frontend/"
-# The vendored pinets engine travels with the repo (see THIRD-PARTY.md / vendor/pinets/PROVENANCE.md):
-# the import map serves it from ./vendor/pinets/, so a sync that skips it 404s the engine and every
-# script on the chart stops evaluating. The *.js glob above does not descend, hence this line.
-mkdir -p "$LIVE/frontend/vendor/pinets"
-cp "$HERE"/console/frontend/vendor/pinets/* "$LIVE/frontend/vendor/pinets/"
+# The vendored browser families travel with the repo (see THIRD-PARTY.md / vendor/VENDORING.md, and
+# vendor/pinets/PROVENANCE.md): the import map and the script tags serve them from ./vendor/, so a
+# sync that skips one 404s it and the page dies at boot ("Failed to fetch dynamically imported
+# module"). Mirrored (rm -rf + cp -r), not merged: releases rename their content-hashed chunk-*.js
+# files — the vela 0.7.3 -> 0.8.1 move renamed six — and a stale chunk left behind is exactly the
+# kind of half-upgraded tree this tree used to suffer. The *.js glob above does not descend, hence
+# this line.
+for fam in pinets vela vela-pinets zag; do
+  rm -rf "$LIVE/frontend/vendor/$fam"
+  mkdir -p "$LIVE/frontend/vendor/$fam"
+  cp -r "$HERE/console/frontend/vendor/$fam/." "$LIVE/frontend/vendor/$fam/"
+done
 cp "$HERE"/console/backend/{server.py,chart_bridge.py,chart_stream.py,agents_store.py,chat.py,backtest_service.py,library_thumbs.py} \
   "$LIVE/backend/"
 cp "$HERE"/console/bin/trader-chart "$LIVE/bin/trader-chart"

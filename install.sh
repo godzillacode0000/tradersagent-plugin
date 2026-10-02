@@ -84,9 +84,9 @@ if [[ "${1:-}" == "--vendor" ]]; then
   V="$HERE/console/frontend/vendor"
   mkdir -p "$V/vela/dist" "$V/vela-pinets/dist"
   curl -fsSL -o "$V/vela/dist/vela.global.min.js" \
-    https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.7.3/dist/vela.global.min.js
+    https://cdn.jsdelivr.net/npm/@luxalgo/vela@0.8.1/dist/vela.global.min.js
   curl -fsSL -o "$V/vela-pinets/dist/vela-pinets.global.min.js" \
-    https://cdn.jsdelivr.net/npm/@luxalgo/vela-pinets@0.2.12/dist/vela-pinets.global.min.js
+    https://cdn.jsdelivr.net/npm/@luxalgo/vela-pinets@0.2.15/dist/vela-pinets.global.min.js
   echo "refreshed the committed vendored builds (console/frontend/vendor/{vela,vela-pinets}/dist/)"
 fi
 

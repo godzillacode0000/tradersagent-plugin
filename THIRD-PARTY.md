@@ -9,7 +9,7 @@ stated.
 ## Vela — the chart engine
 
 - **Licence:** Apache-2.0 — <https://github.com/LuxAlgo/Vela>
-- **How it is used:** **vendored** at `console/frontend/vendor/vela/dist/` (unmodified, `@luxalgo/vela@0.7.3`) and served from disk — the same files `index.html`'s import map and script tags load. `./install.sh --vendor` refreshes exactly those paths.
+- **How it is used:** **vendored** at `console/frontend/vendor/vela/dist/` (unmodified, `@luxalgo/vela@0.8.1`) and served from disk — the same files `index.html`'s import map and script tags load. `./install.sh --vendor` refreshes exactly those paths.
 - **Attribution requirement (Vela `NOTICE`, Apache-2.0 §4(d)):** *"Any product, website, or
   application that displays charts rendered by this software must show a visible attribution to the
   Vela project on every page or screen where such a chart is displayed."* The library satisfies this
@@ -26,42 +26,41 @@ stated.
   obligations for closed-source and hosted use). This project takes the AGPL path deliberately (free
   distribution, no monetisation); the commercial option is recorded here so a later decision to
   close or charge has a known door. — <https://github.com/LuxAlgo/Vela-pinets> · <https://github.com/LuxAlgo/PineTS>
-- **How it is used:** `@luxalgo/vela-pinets@0.2.12` is **vendored unmodified** at
+- **How it is used:** `@luxalgo/vela-pinets@0.2.15` is **vendored unmodified** at
   `console/frontend/vendor/vela-pinets/dist/` and served from there. Its `PineEngine` imports `pinets`
   as an external module, which the page's import map resolves to the patched build below — so
   "Add to chart" runs the fork's engine. Its `PineWorkerEngine` is the exception: that class's worker
-  is an engine copy **inlined into vela-pinets' dist** (unpatched) — and it is PineTS **0.9.32**, i.e.
-  OLDER than the 0.10.0 floor this file reasons about below (upstream vela-pinets 0.2.14 was the first
-  release built against 0.10.0; read from the v0.2.12 tag's lockfile, audited 2 Oct 2026). So the
-  worker path is not merely "without the eight patches" — it predates the ternary-guard fix that is
-  the reason for the floor. The console does not register it
+  is an engine copy **inlined into vela-pinets' dist** (unpatched by this project). As of vela-pinets
+  **0.2.15** that inlined copy is PineTS **0.11.0** (upstream's changelog: "Built against pinets
+  0.11.0"), i.e. at or above the 0.10.0 floor this file reasons about below; the earlier vendored
+  build (0.2.12, read from the v0.2.12 tag's lockfile, audited 2 Oct 2026) inlined 0.9.32, below the
+  floor. Either way the worker path is "without this project's patches". The console does not register it
   by default; `?engine=worker` on the console URL (or localStorage `luxalgo-web:pine-engine` = `worker`)
   opts into it, trading the patches for an off-thread run. `workerUrl`/`createWorker` exist but the
   worker also carries the model builder, which is not
   exported for reuse.
   The **`pinets` engine is redistributed in this repository** at
-  `console/frontend/vendor/pinets/pinets.min.browser.es.js` (659 KB, browser-ES build) and is what the
+  `console/frontend/vendor/pinets/pinets.min.browser.es.js` (690 KB / 690,220 bytes, browser-ES build) and is what the
   import map serves; the AGPL text travels with it as `vendor/pinets/LICENSE`.
-  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `ba5aa4c`
-    (= upstream `0.10.0` plus EIGHT patches — UDT field history reads, `<drawing>.all` as a Pine array,
-    a scoped comparison operand chain, a UDT whose name a variable shares, a member chain's base
-    inside implicit returns, the two operand classes (an index that is a read, a call's arguments in a
-    member chain), a declaration reached by a walker keeping its scope and store, and a split element
-    identified by the node the split built rather than by its name; the details, the
+  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `f5ec571`
+    (branch `fix/p1-p8-on-0.11`; = upstream `v0.11.0` plus THREE patches — UDT field history reads, a
+    declaration reached by a walker keeping its scope and store, and a split element identified by the
+    node the split built rather than by its name; the five other classes the previous build patched
+    (`.all` arrays, comparison operand chains, UDT name shadows, implicit-return bases, operand
+    lowering) were fixed by upstream 0.11.0 itself. The details, the
     test files and the sha256 are in `console/frontend/vendor/pinets/PROVENANCE.md`). Everything before
     those commits was upstream as-is.
   - Because this repository now redistributes AGPL code, the combined distribution is under the AGPL:
     anyone who receives it can ask for the complete corresponding source, and the fork above is that
     source for the engine. Bundling was a deliberate decision (free distribution, no monetisation) —
     the earlier policy was CDN-only, precisely to keep the combined work out of the AGPL.
-  - The engine now CARRIES eight patches (1 Oct), all PUBLISHED on the fork's branch
-    `fix/scope-collision` (<https://github.com/godzillacode0000/PineTS/tree/fix/scope-collision>):
-    UDT field history reads (`30a75fd`), `<drawing>.all` as a Pine array (`493a8ea`), a scoped
-    comparison operand chain (`94d13ec`), a UDT whose name a variable shares (`3c35b0f`), a member
-    chain's base inside implicit returns (`222c278`) with its regression guard (`922eb5b`), the two
-    operand classes (`e9671d0`), a declaration reached by a walker (`eb5162e`) with its regression
-    guards (`073fbaa`, `b001bed`), and a split element identified by node rather than name (`ba5aa4c`,
-    the same name-collision class the audit flagged as its #26). The
+  - The engine CARRIES three patches (2 Oct), all PUBLISHED on the fork's branch
+    `fix/p1-p8-on-0.11` (<https://github.com/godzillacode0000/PineTS/tree/fix/p1-p8-on-0.11>):
+    UDT field history reads (`56f6d3a`), a walker-reached declaration (`2b5ff18`), a split element
+    identified by node rather than name (`e705e12`) — the same name-collision class the audit flagged
+    as its #26; the earlier eight-patch build's other five classes went upstream as part of 0.11.0.
+    The fixes with upstream interest were also submitted as PRs to LuxAlgo/PineTS (`#387`, `#386`,
+    open on 2 Oct). The
     AGPL's "make the changes visible" condition is met by that public branch — push any future patch
     BEFORE shipping a bundle that carries it.
 - **Why the `pinets` pin is a floor, not a preference (27 Sep):** `pinets@0.10.0` is the floor: 0.9.33 evaluates *both* sides of a
@@ -148,14 +147,14 @@ The pane's chart surface is not fetched from a CDN — the page has to boot iden
 CDN failure used to look exactly like a broken chart. The vendor directory therefore carries the
 third-party browser builds, each beside its licence:
 
-- **`vela/` — `@luxalgo/vela` 0.7.3** (chart, workspace, plugin SDK, Binance provider).
+- **`vela/` — `@luxalgo/vela` 0.8.1** (chart, workspace, plugin SDK, Binance provider).
   **Licence: Apache-2.0** — commercial use included, attribution kept (`vela/LICENSE`,
-  `vela/NOTICE`); LuxAlgo's Vela page states the invitation in its own words ("Ship it in an
+  `vela/NOTICE`; 0.8.1 moves the NOTICE's attribution URL `luxalgo.com/vela` → `velacharts.dev`); LuxAlgo's Vela page states the invitation in its own words ("Ship it in an
   afternoon"; "Free, open source" — luxalgo.com/vela, read 2 Oct 2026). *(A "Fork it, vendor it,
   ship it." quote this file used to carry could not be located on that page or in any of the four
   repos on 2 Oct, and was removed — per the upstream audit, an unattributable quote is worse than
   none.)*
-- **`vela-pinets/` — `@luxalgo/vela-pinets` 0.2.12** (the chart's own Pine engine: `PineEngine` /
+- **`vela-pinets/` — `@luxalgo/vela-pinets` 0.2.15** (the chart's own Pine engine: `PineEngine` /
   `PineWorkerEngine`). **Licence: AGPL-3.0-only**, stock build — obligations met the same way as for
   `pinets` above (public fork for anything we change and ship).
 - **`zag/`** — the module closure Vela's ES modules import by name: `@zag-js/*` 1.44.0,

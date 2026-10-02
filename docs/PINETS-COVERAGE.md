@@ -1,7 +1,8 @@
 # PineTS coverage — every LuxAlgo Library indicator, run for real
 
 All 797 indicators whose source the LuxAlgo MCP serves were executed through the engine this
-chart ships (pinets 0.10.0, 500 synthetic bars, 12–20 s per script). Verdicts come from a RUN; a
+chart ships (pinets 0.10.0 when these runs were taken; the vendored engine is now the 0.11.0
+fork — 500 synthetic bars, 12–20 s per script). Verdicts come from a RUN; a
 regex over the source cannot tell you whether a script works, and this file exists because one did
 not: `pinets-runner.js` refused every source containing `while` or `for … in` for months while the
 engine ran both, which hid 450 indicators behind a guard that had stopped being true.

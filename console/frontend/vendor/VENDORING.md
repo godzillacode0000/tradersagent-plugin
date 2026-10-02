@@ -17,8 +17,8 @@ so the page boots the same way offline as online.
 | `zag/` | the module closure Vela's ES modules import: `@zag-js/*` 1.44.0 (18 packages), `@floating-ui/{core,dom}` 1.8.0, `@floating-ui/utils` 0.2.12, `proxy-compare` 3.0.1 | all MIT |
 | `pinets/pinets.min.browser.es.js` | **our patch of LuxAlgo's PineTS** (Library path) — not a stock build; see `pinets/PROVENANCE.md` and `THIRD-PARTY.md` | AGPL-3.0-only |
 
-Versions are pinned: **vela 0.7.3, vela-pinets 0.2.12** (whose inlined worker engine is PineTS
-**0.9.32** — older than the 0.10.0 floor `THIRD-PARTY.md` names; see that file). The `zag/` closure is not optional — the
+Versions are pinned: **vela 0.8.1, vela-pinets 0.2.15** (whose inlined worker engine is PineTS
+**0.11.0**; see `THIRD-PARTY.md`). The `zag/` closure is not optional — the
 browser cannot resolve a bare specifier on its own and Vela's ES modules import these by name; the
 import map in `index.html` carries one entry per specifier (`@floating-ui/utils/dom` is a subpath
 entry, not a typo).
@@ -27,8 +27,8 @@ entry, not a typo).
 
 ```bash
 # the two LuxAlgo packages: registry tarballs, dist/ + licences only
-curl -sL https://registry.npmjs.org/@luxalgo/vela/-/vela-0.7.3.tgz        | tar xz -C vela
-curl -sL https://registry.npmjs.org/@luxalgo/vela-pinets/-/vela-pinets-0.2.12.tgz | tar xz -C vela-pinets
+curl -sL https://registry.npmjs.org/@luxalgo/vela/-/vela-0.8.1.tgz        | tar xz -C vela
+curl -sL https://registry.npmjs.org/@luxalgo/vela-pinets/-/vela-pinets-0.2.15.tgz | tar xz -C vela-pinets
 # the module closure: install the four entry packages, then vendor every package npm pulled in
 npm install --no-audit --no-fund @zag-js/vanilla @zag-js/dialog @zag-js/menu @zag-js/tooltip
 ```
@@ -46,7 +46,9 @@ Two gotchas, both learned the hard way:
 
 ## Updating to a new upstream version
 
-1. Re-run the two `curl`s with the new versions; replace `vela/` and `vela-pinets/`.
+1. Re-run the two `curl`s with the new versions; replace `vela/` and `vela-pinets/`. (The
+   `chunk-*.js` names are content hashes and change between releases — replace the whole `dist/`
+   file set, not single files.)
 2. `npm install @zag-js/... @zag-js/...` again (same four entry packages) and re-vendor `zag/`.
 3. Update the import map in `index.html` if any specifier or path changed, and this table.
 4. Reload the pane and confirm: `/api/chart/state` reports a symbol + 500 bars, and

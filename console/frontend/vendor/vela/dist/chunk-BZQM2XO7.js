@@ -120,6 +120,7 @@ registerIcon("chevron-down", S('<path d="M3.5 6 8 10.5 12.5 6"/>'));
 registerIcon("chevron-up", S('<path d="M3.5 10 8 5.5 12.5 10"/>'));
 registerIcon("chevrons-right", S('<path d="m4 3.5 4.5 4.5L4 12.5"/><path d="m8.5 3.5 4.5 4.5-4.5 4.5"/>'));
 registerIcon("chevrons-left", S('<path d="M12 3.5 7.5 8l4.5 4.5"/><path d="M7.5 3.5 3 8l4.5 4.5"/>'));
+registerIcon("replay", S('<path d="M14 4.2v7.6L8.6 8z"/><path d="M7.4 4.2v7.6L2 8z"/>'));
 registerIcon("check", S('<path d="m2.8 8.4 3.4 3.4 7-7.6"/>'));
 registerIcon("close", S('<path d="m3.8 3.8 8.4 8.4M12.2 3.8l-8.4 8.4"/>'));
 registerIcon("pin", S('<path d="M5.6 2.5h4.8M6.4 2.5v3.6L4.4 8.4v.9h7.2v-.9L9.6 6.1V2.5M8 9.3v4.2"/>'));
