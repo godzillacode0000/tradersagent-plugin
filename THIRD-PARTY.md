@@ -21,12 +21,20 @@ stated.
 
 ## vela-pinets + pinets — the Pine (PineTS) runtimes
 
-- **Licence:** **AGPL-3.0-only** — <https://github.com/LuxAlgo/Vela-pinets> · <https://github.com/LuxAlgo/PineTS>
+- **Licence:** `vela-pinets` is **AGPL-3.0-only**; **PineTS is dual-licensed — AGPL-3.0-only OR
+  commercial** (`LICENSE-COMMERCIAL.md` upstream: the commercial option removes the copyleft
+  obligations for closed-source and hosted use). This project takes the AGPL path deliberately (free
+  distribution, no monetisation); the commercial option is recorded here so a later decision to
+  close or charge has a known door. — <https://github.com/LuxAlgo/Vela-pinets> · <https://github.com/LuxAlgo/PineTS>
 - **How it is used:** `@luxalgo/vela-pinets@0.2.12` is **vendored unmodified** at
   `console/frontend/vendor/vela-pinets/dist/` and served from there. Its `PineEngine` imports `pinets`
   as an external module, which the page's import map resolves to the patched build below — so
   "Add to chart" runs the fork's engine. Its `PineWorkerEngine` is the exception: that class's worker
-  is an engine copy **inlined into vela-pinets' dist** (unpatched), so the console does not register it
+  is an engine copy **inlined into vela-pinets' dist** (unpatched) — and it is PineTS **0.9.32**, i.e.
+  OLDER than the 0.10.0 floor this file reasons about below (upstream vela-pinets 0.2.14 was the first
+  release built against 0.10.0; read from the v0.2.12 tag's lockfile, audited 2 Oct 2026). So the
+  worker path is not merely "without the eight patches" — it predates the ternary-guard fix that is
+  the reason for the floor. The console does not register it
   by default; `?engine=worker` on the console URL (or localStorage `luxalgo-web:pine-engine` = `worker`)
   opts into it, trading the patches for an off-thread run. `workerUrl`/`createWorker` exist but the
   worker also carries the model builder, which is not
@@ -141,9 +149,12 @@ CDN failure used to look exactly like a broken chart. The vendor directory there
 third-party browser builds, each beside its licence:
 
 - **`vela/` — `@luxalgo/vela` 0.7.3** (chart, workspace, plugin SDK, Binance provider).
-  **Licence: Apache-2.0** — free forever, commercial use included, attribution kept
-  (`vela/LICENSE`, `vela/NOTICE`). LuxAlgo's own page invites this: *"Fork it, vendor it, ship it.
-  Contains no Pine code, so its license stays clean."*
+  **Licence: Apache-2.0** — commercial use included, attribution kept (`vela/LICENSE`,
+  `vela/NOTICE`); LuxAlgo's Vela page states the invitation in its own words ("Ship it in an
+  afternoon"; "Free, open source" — luxalgo.com/vela, read 2 Oct 2026). *(A "Fork it, vendor it,
+  ship it." quote this file used to carry could not be located on that page or in any of the four
+  repos on 2 Oct, and was removed — per the upstream audit, an unattributable quote is worse than
+  none.)*
 - **`vela-pinets/` — `@luxalgo/vela-pinets` 0.2.12** (the chart's own Pine engine: `PineEngine` /
   `PineWorkerEngine`). **Licence: AGPL-3.0-only**, stock build — obligations met the same way as for
   `pinets` above (public fork for anything we change and ship).

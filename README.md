@@ -354,7 +354,9 @@ frame remounted (switch session and back).
 
 ## Licence & credits
 
-This project's code is **MIT** — see [`LICENSE`](LICENSE). It builds on LuxAlgo's work: **Vela**
+This project's own code is **MIT** (that is what the licence badge means — the combined
+distribution is AGPL where it redistributes PineTS; see [`THIRD-PARTY.md`](THIRD-PARTY.md)) — see
+[`LICENSE`](LICENSE). It builds on LuxAlgo's work: **Vela**
 (Apache-2.0, with its own attribution requirement — the `▲` mark on the chart stays), **vela-pinets**
 and **pinets** (AGPL-3.0; pinets is vendored here as a patched build whose patches are published on
 the fork, and `vela-pinets` is vendored unmodified), the **LuxAlgo MCP server** (MIT,
