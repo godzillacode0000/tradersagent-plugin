@@ -115,6 +115,22 @@ class BridgeTest(unittest.TestCase):
         self.assertEqual(got["series"], 3)
         self.assertEqual(got["detail"], "ran in 61 ms")
 
+    def test_a_run_result_keeps_the_kind_of_success(self):
+        # Round 5: `apply` marks a strategy()-only run `result: 'metrics'` (its metrics ran, there is
+        # nothing to draw). The page sent it and this store flattened it away, so the mark never
+        # reached the agent while the page and the CLI disagreed about what "ran" meant. Carried now.
+        cmd = cb.enqueue(self.root, {"action": "apply", "pine": "strategy('m')"})
+        cb.record_result(self.root, {"id": cmd["id"], "ok": False, "ran": True, "result": "metrics",
+                                     "detail": "\u25c6 ran, metrics only", "ctor": "worker",
+                                     "painted": {"ok": False, "native": False, "overlay": False},
+                                     "strategy": {"net": 0}})
+        got = cb.get_result(self.root, cmd["id"])
+        self.assertEqual(got["result"], "metrics")
+        self.assertTrue(got["ran"])
+        self.assertFalse(got["painted"]["overlay"])
+        self.assertEqual(got["ctor"], "worker")
+        self.assertEqual(got["strategy"]["net"], 0)
+
     def test_a_market_result_keeps_last_price_and_bars(self):
         cmd = cb.enqueue(self.root, {"action": "market", "symbol": "BTCUSDT", "timeframe": "1h"})
         cb.record_result(self.root, {"id": cmd["id"], "ok": True,

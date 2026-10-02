@@ -1,25 +1,30 @@
-// Loader hook used only by tools/verify-plugin.mjs. Registered via `module.register()` so Node's OWN
-// parser decides what counts as an import — no regex can see every spacing/quoting/line-wrap shape a
-// JS import can take, and round 4 of the audit proved it (four crafted copies evaded the regex; a
-// fifth was a false positive on a comment). `resolve` sees exactly what the ESM loader resolves,
-// whatever the source formatting, including every multi-line and differently-quoted static import.
+// Loader hook used only by tools/verify-plugin.mjs, registered via `module.register()` so Node's OWN
+// resolver decides what the plugin imports — no regex guesses at JS syntax.
 //
-// What this hook CANNOT see: a dynamic `import(expr)` whose argument is not a string literal, and any
-// import on a code path the render never executes. Those stay out of scope for a static check; the
-// harness's render pass (loading the module and calling register()) covers what actually runs.
-let allowed = [];
+// Rule (round 5, issue 2): decide by the IMPORTER. Whatever the plugin entry imports must be one of
+// the three stub URLs the harness rewrote its allowed specifiers to; a bare specifier, an absolute
+// path, a `file:` URL or a relative path that is anything else is refused. Imports made by the stubs
+// themselves are not the plugin's own and pass through.
+//
+// What this hook CANNOT see: an import on a code path the render never executes. The harness's
+// source scan (literal AND non-literal `import()`, comments blanked) covers that.
+let entryUrl = ''
+let stubUrls = []
+let allowed = []
+
+const bare = (u) => String(u).split('?')[0].split('#')[0]
 
 export function initialize(data) {
-  allowed = (data && data.allowed) || [];
+  entryUrl = bare((data && data.entryUrl) || '')
+  stubUrls = ((data && data.stubUrls) || []).map(bare)
+  allowed = (data && data.allowed) || []
 }
 
 export async function resolve(specifier, context, nextResolve) {
-  // Skip Node's own loader bookkeeping and relative specifiers resolved from the allowed stubs
-  // (react.mjs's own internal resolution, if any) — only bare package specifiers are the plugin's
-  // own declared imports.
-  const isBare = !specifier.startsWith('.') && !specifier.startsWith('/') && !specifier.startsWith('file:');
-  if (isBare && !allowed.includes(specifier)) {
-    throw new Error(`imports outside the allowed three: ${specifier}`);
+  if (context.parentURL && bare(context.parentURL) === entryUrl) {
+    if (!stubUrls.includes(bare(specifier))) {
+      throw new Error(`imports outside the allowed three (${allowed.join(', ')}): ${specifier}`)
+    }
   }
-  return nextResolve(specifier, context);
+  return nextResolve(specifier, context)
 }

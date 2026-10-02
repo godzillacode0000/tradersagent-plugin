@@ -134,6 +134,19 @@ class TestTheDoorIsInThePath(unittest.TestCase):
         self.assertIn("CONSOLE_TOKEN", block)
 
 
+    def test_one_host_parser_is_shared_by_the_gate_and_cors(self):
+        # Round 5, issue 4: the gate and the CORS grant each carried their own copy of the IPv6
+        # bracket parsing. They agreed, but an edit to one could silently desync them — the gate
+        # would refuse a Host the grant still reflects (or worse). `_parse_host` is now the one copy.
+        self.assertIn("def _parse_host(host: str) -> str:", self.src)
+        host_ok = self.src[self.src.index("def _host_ok"):]
+        host_ok = host_ok[:host_ok.index("def _origin_ok")]
+        self.assertIn("_parse_host(host)", host_ok)
+        self.assertNotIn('host.find("]")', host_ok)          # the inline copy is gone
+        cors = self.src[self.src.index("def cors_origin"):][:1200]
+        self.assertIn("_parse_host(host)", cors)
+
+
 class TestTheStateKeepsWhatThePageReports(unittest.TestCase):
     def test_save_state_passes_diag_through(self):
         """`diag` carries `engine` (which Pine engine a page registered) — the field the reply told
@@ -172,6 +185,14 @@ class TestTheFrontendReportsWhatLanded(unittest.TestCase):
         self.assertIn("out.ok = paintedAnything(r)", self.src)                # draw + script
         self.assertNotIn("out.ok = paintedOverlay || paintedNative", self.src)  # the old duplicate
         self.assertNotIn("out.ok = Boolean(r.ok)", self.src)                   # the old "it ran" rule
+
+    def test_metrics_only_is_the_same_rule_on_all_three_doors(self):
+        # Round 5, issue 5: `result: 'metrics'` existed only on `apply`, so a strategy()-only script
+        # sent through `draw` or `script` still read as "ran, but nothing landed". One helper, called
+        # by all three run commands, and each marks the result.
+        self.assertIn("const metricsOnly = (r) => !paintedDetail(r).ok && !!r.strategy", self.src)
+        self.assertEqual(3, self.src.count("out.result = 'metrics'"))   # apply, draw, script
+        self.assertNotIn("if (!pd.ok && r.strategy)", self.src)         # the apply-only form is gone
 
 
 class TestOverARealSocket(unittest.TestCase):
@@ -255,6 +276,15 @@ class TestOverARealSocket(unittest.TestCase):
                                "X-Trader-Token": self.token, "Content-Length": "-1"})
         self.assertEqual(code, 413)
         self.assertIn(b"body_too_large", body)
+
+    def test_a_non_numeric_content_length_is_400_not_500(self):
+        # `int("abc")` raised ValueError and the generic handler answered 500 internal_error
+        # (round 5, issue 6) — a malformed header is the client's fault, not the server's.
+        code, body = self.raw("POST /api/chart/state HTTP/1.1",
+                              {"Host": f"127.0.0.1:{self.port}", "content-type": "application/json",
+                               "X-Trader-Token": self.token, "Content-Length": "abc"})
+        self.assertEqual(code, 400)
+        self.assertIn(b"bad_content_length", body)
 
     def test_null_origin_is_403(self):
         code, body = self.request("/api/chart/state", "POST",

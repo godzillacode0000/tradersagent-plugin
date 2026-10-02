@@ -37,11 +37,7 @@ if (!pluginPath) {
 const source = fs.readFileSync(pluginPath, 'utf8')
 const failures = []
 
-// Register the resolve-hook loader BEFORE anything imports the plugin, so it intercepts every
-// static and dynamic import the plugin module graph makes — see verify-plugin-hook.mjs.
 const ALLOWED = ['@hermes/plugin-sdk', 'react', 'react/jsx-runtime']
-register(pathToFileURL(path.join(path.dirname(new URL(import.meta.url).pathname), 'verify-plugin-hook.mjs')).href,
-  { parentURL: import.meta.url, data: { allowed: ALLOWED } })
 
 // ── only the three allowed specifiers resolve ────────────────────────────────
 // Node's OWN ESM loader decides this now (module.register, below, just before the plugin loads) —
@@ -52,9 +48,48 @@ register(pathToFileURL(path.join(path.dirname(new URL(import.meta.url).pathname)
 // The loader hook sees exactly what Node resolves. What it cannot see: a dynamic `import(expr)` whose
 // argument is not a string literal, and any import on a code path the render never executes — this
 // supplementary scan catches the first of those two blind spots.
-const dynamicNonLiteral = [...source.matchAll(/\bimport\s*\(\s*([^'")\s][^)]*)\)/g)]
-if (dynamicNonLiteral.length) {
-  failures.push(`dynamic import() with a non-literal argument — cannot verify its target: ${dynamicNonLiteral[0][1].slice(0, 60)}`)
+// Strip comments for the scan below — round 5, issues 1 and 3. A small state machine, not a regex:
+// it blanks `//…` and `/*…*/` (a comment saying "see import(docs)" is prose, not an import — the old
+// regex read it as one) and marks which positions sit inside '…', "…" or `…" so the scan can skip
+// prose that happens to look like a call. String literals are also an import() argument, so their
+// CONTENTS stay readable — only the positions are masked.
+function blankComments(src) {
+  const code = new Array(src.length)
+  const inString = new Array(src.length).fill(false)
+  let i = 0, q = null
+  while (i < src.length) {
+    const c = src[i], n = src[i + 1]
+    if (q) {
+      code[i] = c
+      if (c === '\\') { code[i + 1] = n ?? ''; i += 2; continue }
+      if (c === q) { q = null; i += 1; continue }
+      inString[i] = true
+      i += 1; continue
+    }
+    if (c === '/' && n === '/') { let j = i; while (j < src.length && src[j] !== '\n') { code[j] = ' '; j += 1 } i = j; continue }
+    if (c === '/' && n === '*') {
+      let j = i
+      while (j < src.length && !(src[j] === '*' && src[j + 1] === '/')) { code[j] = src[j] === '\n' ? '\n' : ' '; j += 1 }
+      code[j] = ' '; code[j + 1] = ' '; i = j + 2; continue
+    }
+    if (c === '"' || c === "'" || c === '`') { q = c; code[i] = c; i += 1; continue }
+    code[i] = c; i += 1
+  }
+  return { code: code.join(''), inString }
+}
+
+// Dynamic import() on a path the render never runs (a handler, an effect, a callback) is invisible to
+// the resolve hook, so scan the blanked source: a literal target must be on the allowlist, a
+// non-literal one cannot be verified and fails too. Skipped: prose inside strings, and `obj.import(`
+// which is a method call, not a dynamic import.
+const { code, inString } = blankComments(source)
+for (const m of code.matchAll(/\bimport\s*\(\s*([\s\S]*?)\s*\)/g)) {
+  if (inString[m.index]) continue
+  if (m.index > 0 && code[m.index - 1] === '.') continue
+  const arg = m[1].trim()
+  const lit = arg.match(/^(['"`])([^'"`$\\]*)\1$/)
+  if (!lit) failures.push(`dynamic import() with a non-literal argument — cannot verify its target: ${arg.slice(0, 60)}`)
+  else if (!ALLOWED.includes(lit[2])) failures.push(`dynamic import() of '${lit[2]}' — outside the allowed three`)
 }
 
 const colour = source.match(/#[0-9a-fA-F]{3,8}\b/)
@@ -150,6 +185,10 @@ const ctx = {
   onDispose: () => {},
   llm: { complete: async () => '' },
 }
+
+register(pathToFileURL(path.join(path.dirname(new URL(import.meta.url).pathname), 'verify-plugin-hook.mjs')).href,
+  { parentURL: import.meta.url, data: { allowed: ALLOWED, entryUrl: pathToFileURL(entry).href,
+    stubUrls: [url('jsx-runtime.mjs'), url('react.mjs'), url('sdk.mjs')] } })
 
 let plugin
 try {

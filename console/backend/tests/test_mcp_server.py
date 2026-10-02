@@ -167,6 +167,19 @@ class MCPToolsTest(unittest.TestCase):
         self.assertIn("38 ms on the wire", out)
         self.assertIn("pine", _Stub.posts[-1])
 
+    def test_a_metrics_only_run_is_marked_not_shown_as_a_failure(self):
+        # Round 5: `result: 'metrics'` is a different kind of success — a strategy()'s metrics ran and
+        # there is nothing to draw. With the mark, the agent sees ◆ instead of a bare ✗ beside the
+        # same words. Found while verifying the field was reaching this layer at all.
+        _Stub.routes = {"/api/chart/command": {"ok": True, "data": {
+            "pushed": 1, "command": {"id": 12},
+            "result": {"id": 12, "ok": False, "result": "metrics",
+                       "detail": "\u25c6 ran, metrics only (no plot/overlay)"}}}}
+        out = self.mcp.chart_apply_pine("//@version=6\nstrategy('m')\n")
+        self.assertTrue(out.startswith("\u25c6"), out)
+        self.assertIn("metrics only", out)
+        self.assertNotIn("\u2717", out)
+
     def test_a_slow_view_is_reported_not_waited_on_forever(self):
         _Stub.routes = {"/api/chart/command": {"ok": True, "data":
                         {"pushed": 1, "command": {"id": 11}, "result": None}}}

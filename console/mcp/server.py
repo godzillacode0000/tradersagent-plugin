@@ -193,8 +193,18 @@ def _command(action: str, timeout: float = INLINE_WAIT + 8.0, **fields) -> str:
                 f"answered within {INLINE_WAIT:.0f}s. Check the chart, or call chart_state.")
     stamp = result.get("stream_ms")
     ms = f" · {stamp:.0f} ms on the wire" if isinstance(stamp, (int, float)) else ""
-    mark = "✓" if result.get("ok") else "✗"
-    line = f"{mark} {result.get('detail') or 'no detail'}{ms}"
+    detail = result.get("detail") or "no detail"
+    if result.get("ok"):
+        mark = "✓"
+    elif result.get("result") == "metrics":
+        # A strategy()-only run: its metrics ran, there is nothing to draw (round 5). A bare ✗ beside
+        # "ran, metrics only" read as a failure; ◆ keeps the distinction the page now reports.
+        mark = "◆"
+        if detail.startswith("◆ "):
+            detail = detail[2:]
+    else:
+        mark = "✗"
+    line = f"{mark} {detail}{ms}"
     err = result.get("error")
     if isinstance(err, dict) and err.get("code"):
         # The page's structured failure (see console/frontend/pinets-runner.js): keep the code and the

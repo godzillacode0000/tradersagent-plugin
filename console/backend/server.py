@@ -1545,10 +1545,7 @@ class Handler(BaseHTTPRequestHandler):
         host = (self.headers.get("Host") or "").strip()
         if not host:
             return False                              # no Host at all is not this machine's
-        if host.startswith("["):                      # IPv6: `[::1]:8787` — the brackets are not part
-            host = host[1:host.find("]")] if "]" in host else host[1:]
-        else:
-            host = host.split(":")[0]
+        host = _parse_host(host)                      # the ONE parser, shared with cors_origin
         return bool(host) and host in LOCAL_HOSTS
 
     def _origin_ok(self) -> bool:
@@ -1703,7 +1700,12 @@ class Handler(BaseHTTPRequestHandler):
                     "no_token",
                 )
                 return
-            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                self.close_connection = True
+                self._fail("Content-Length is not a number", HTTPStatus.BAD_REQUEST, "bad_content_length")
+                return
             if length < 0 or length > MAX_BODY_BYTES:
                 self.close_connection = True
                 self._fail(f"bad body size ({length} bytes; the cap is {MAX_BODY_BYTES})",

@@ -191,6 +191,15 @@ def record_result(root: str | Path, payload: dict) -> dict:
         "series": payload.get("series"),
         "added": payload.get("added"),
         "ms": payload.get("ms"),
+        # A run's own after-state, found missing by running one (round 5): `apply` reports `ran`,
+        # the read-back breakdown in `painted`, and for a strategy()-only run `result: 'metrics'`.
+        # The page set them; this whitelist dropped them; so the field the round-4 contract
+        # introduced (`result`) never reached the agent. Same lesson as `onCanvas` above.
+        "ran": payload.get("ran"),
+        "painted": payload.get("painted"),
+        "result": payload.get("result"),
+        "strategy": payload.get("strategy"),
+        "ctor": payload.get("ctor"),
         # The page's evidence for a mutation: the stable failure code + hint (pinets-runner.js) and
         # what the surface looked like AFTER the call. Dropping these here is invisible in the page
         # and reads as "the tool reported nothing" to the agent, so they are carried through as-is.

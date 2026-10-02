@@ -300,7 +300,10 @@
     detail.ok = detail.overlay || detail.native;
     return detail;
   }
-  const paintedAnything = (r) => paintedDetail(r).ok;
+  const paintedAnything = (r) => paintedDetail(r).ok
+  /* A strategy() script with nothing to draw is a different kind of success (metrics ran). One rule,
+     shared by apply, draw and script, so the same script reads the same through every door. */
+  const metricsOnly = (r) => !paintedDetail(r).ok && !!r.strategy;
 
   /** One command from the agent. Every outcome is reported, including "I did not do that". */
   async function run(command) {
@@ -352,7 +355,7 @@
           out.strategy = r.strategy || null;          // a strategy() script's own metrics
           out.ctor = r.ctor || null;                  // which PineTS constructor ran (context matters)
           out.onCanvas = r.verified || null;
-          if (!pd.ok && r.strategy) {
+          if (metricsOnly(r)) {
             out.result = 'metrics';
             out.detail = '◆ ran, metrics only (no plot/overlay) · ' + window.TraderRun.summarize(r);
           } else {
@@ -415,7 +418,10 @@
           out.series = r.series.length;
           out.added = r.paint && r.paint.added ? r.paint.added.title : null;
           out.onCanvas = v || null;
-          out.detail = window.TraderRun.summarize(r);
+          if (metricsOnly(r)) {
+            out.result = 'metrics';
+            out.detail = '◆ ran, metrics only (no plot/overlay) · ' + window.TraderRun.summarize(r);
+          } else out.detail = window.TraderRun.summarize(r);
           break;
         }
         case 'clear': {
@@ -1240,8 +1246,11 @@
           out.ms = r.ms || null;
           out.series = r.ok ? r.series.length : 0;
           out.onCanvas = r.ok ? (r.verified || null) : null;
+          if (r.ok && metricsOnly(r)) out.result = 'metrics';
           out.detail = r.ok
-            ? (out.ok ? window.TraderRun.summarize(r) : 'ran, but nothing landed on the chart · ' + window.TraderRun.summarize(r))
+            ? (out.ok ? window.TraderRun.summarize(r)
+              : metricsOnly(r) ? '◆ ran, metrics only (no plot/overlay) · ' + window.TraderRun.summarize(r)
+              : 'ran, but nothing landed on the chart · ' + window.TraderRun.summarize(r))
             : r.reason;
           if (!r.ok) out.error = r.error || null;
           break;
