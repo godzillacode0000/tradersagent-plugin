@@ -19,6 +19,14 @@
 window.TraderRun = (function () {
   /* Names whose overlay output landed this session — feeds the badge and the chart legend. */
   const applied = [];
+  /* The overlay holds ONE script at a time (ChartOverlay.apply clears the canvas), so the last run
+     that LANDED is the whole overlay. Kept so a reload / app restart / next morning paints it again. */
+  const RUN_KEY = 'luxalgo-web:last-run';
+  function remember(pine, name, opts) {
+    try {
+      localStorage.setItem(RUN_KEY, JSON.stringify({ pine: String(pine), name, opts: opts || null, at: Date.now() }));
+    } catch (err) { /* private mode / quota: the run still stands, it just will not come back */ }
+  }
 
   /* A drawing declared with `xloc = xloc.bar_time` carries ms timestamps, not bar indices — the
      overlay paints in bar-index space, so those rows were dropped outright and a whole indicator's
@@ -263,6 +271,7 @@ window.TraderRun = (function () {
           };
           verified = window.ChartOverlay.state ? window.ChartOverlay.state() : null;
           record(label, drew);
+          if (!(opts && opts.restoring)) remember(pine, name, opts);
         } else {
           drawFail = (spec && spec.reason) || 'overlay refused';
         }
@@ -370,9 +379,26 @@ window.TraderRun = (function () {
   /* chart_clear clears the overlay — the legend and the badge must forget with it. */
   function reset() {
     applied.length = 0;
+    try { localStorage.removeItem(RUN_KEY); } catch (err) { /* nothing stored */ }
     const legend = document.getElementById('script-legend');
     if (legend) { legend.hidden = true; legend.textContent = ''; legend.title = ''; }
   }
 
-  return { run, summarize, flatten, reset, list: () => applied.slice() };
+  /* Re-paint yesterday's run. Waits for bars (the chart fetches history after boot), runs once, and
+     never re-saves itself. A stored run that no longer lands is dropped so it cannot fail every boot. */
+  async function restore() {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(RUN_KEY) || 'null'); } catch (err) { saved = null; }
+    if (!saved || !saved.pine) return { ok: false, reason: 'nothing to restore' };
+    for (let i = 0; i < 40; i++) {
+      const bars = (typeof window.chartBars === 'function') ? await window.chartBars() : [];
+      if (bars && bars.length >= 30) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    const r = await run(saved.pine, saved.name, Object.assign({}, saved.opts || {}, { restoring: true }));
+    if (!r.ok) { try { localStorage.removeItem(RUN_KEY); } catch (err) { /* ignore */ } }
+    return r;
+  }
+
+  return { run, summarize, flatten, reset, restore, list: () => applied.slice() };
 })();

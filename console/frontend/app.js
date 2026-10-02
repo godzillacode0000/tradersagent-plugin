@@ -2283,6 +2283,12 @@ async function main() {
       return line;
     };
   }
+  /* Bring back the script that was on the chart last session (Vela restores its own natives). */
+  if (window.TraderRun && typeof window.TraderRun.restore === 'function') {
+    window.TraderRun.restore().then((r) => {
+      if (r && r.ok) noteActivity('restored from last session · ' + window.TraderRun.summarize(r), 'restore');
+    }).catch((err) => console.warn('[restore]', err));
+  }
 
 
   if (new URLSearchParams(location.search).get('q')) {
