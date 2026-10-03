@@ -1,7 +1,7 @@
 # HANDOFF — Trader's Agent (Hermes Desktop plugin + local Vela console)
 
 **Written for:** an outside agent/model picking this up cold (no access to the chat that built it).
-**Written by:** the previous agent session, 20 Sep 2026, repo `godzillacode0000/tradersagent-plugin` @ `369a949` (this file lives at `docs/HANDOFF.md`; bump the SHA when you ship).
+**Written by:** the previous agent session, 20 Sep 2026; **updated 4 Oct 2026**, repo `godzillacode0000/tradersagent-plugin` @ `568ea9f` (this file lives at `docs/HANDOFF.md`; bump the SHA when you ship).
 **Operator:** one user, Malay/English speaker, runs a single laptop (Omarchy/Arch, 8 GB RAM), drives it
 mostly from his phone over Telegram, wants short answers with commands explained plainly.
 
@@ -44,10 +44,14 @@ native tools.
 | Plugin id / pane id | `traders-desk` / `traders-desk:chart` |
 | Credentials (LuxAlgo MCP URL + tokens, GitHub) | `~/.hermes/config.yaml` — **never** commit, never print |
 
-Versions at handoff: Hermes Desktop 0.21.3, console `SERVER_VERSION = 1.0.0`. CI was red from
-28 Sep (`1f9d340`) to 2 Oct (`8df6e2e` — a stale MCP test only CI could see); green again from `ab3708b`.
-~350 backend tests,
-7 plugin contributions across 5 areas.
+Versions: Hermes Desktop 0.21.5, console `SERVER_VERSION = 1.0.0`. CI was red from
+28 Sep (`1f9d340`) to 2 Oct (`8df6e2e` — a stale MCP test only CI could see); green since `ab3708b`, and
+green on every ship below. **546 backend tests** (+43 skipped), 8 plugin contributions across 5 areas.
+Shipped since this file was written: the paper broker (Phase 5), replay (6/6b), the top-bar one-door
+consolidation, the drawer as the single Library surface, and Phase 7 — three agent doors into Vela
+(`chart_drawing` 76 types / `chart_view` settings / `chart_marks`), 45 MCP tools. 4 Oct: the top row
+now rebuilds only when a visible label changes (a replay tick used to rebuild it ~8×/s, which strobed
+the row and ate clicks mid-press — measured 46→1 rebuilds, one-click drawer opens 4/6→6/6).
 
 ---
 
@@ -77,7 +81,7 @@ flowchart TB
   subgraph AGENTS["Agent side"]
     ME["Hermes agent"]
     CLI["CLI · bin/trader-chart<br/>state · shot · apply · add · remove<br/>market · draw · reload · caps"]
-    MCP["MCP · traders-chart<br/>41 chart tools"]
+    MCP["MCP · traders-chart<br/>45 chart tools"]
     LUX["LuxAlgo MCP<br/>library · edge · prop-firm"]
   end
 
@@ -200,13 +204,14 @@ short note with the way out instead of failing silently.
 | `pinets-runner.js`, `pinets-layer.js` | PineTS execution + the native paint layer |
 | `styles.css` | console chrome, responsive top row (clip-proof from ~500 px to 1280 px pane width) |
 
-**MCP server (`console/mcp/server.py`)** — 41 tools (`chart_views`, `chart_caps`, `chart_state`,
+**MCP server (`console/mcp/server.py`)** — 45 tools (`chart_views`, `chart_caps`, `chart_state`,
 `chart_shot`, `chart_apply_pine`, `chart_draw`, `chart_clear`, `chart_add_indicator`,
-`chart_remove_indicator`, `chart_set_market`, `chart_reload`, `chart_palette`, `library_search`,
+`chart_remove_indicator`, `chart_set_market`, `chart_reload`, `chart_palette`, `chart_replay`,
+`chart_drawing`, `chart_view`, `chart_marks`, `library_search`,
 `library_indicator` among them). Thin wrapper over the HTTP API. **Tools load at session start: after adding a
 tool, the running session will not see it — start a new session or `/reload-mcp`.**
 
-**CLI (`console/bin/trader-chart`)** — 21 subcommands; also `console/bin/library-indicator` (fetch one
+**CLI (`console/bin/trader-chart`)** — 25 subcommands (`drawing` / `view` / `marks` added 3-4 Oct); also `console/bin/library-indicator` (fetch one
 Library indicator) and `console/bin/all-library-context-dependency.py` (Library analysis helper).
 
 ---
@@ -249,19 +254,20 @@ Working, with evidence:
 - Chart beside the chat; the operator's 3-zone layout is the app's **active** preset
   (`layoutPreset.active = user-trader-s-agent-plugin`; tree = `sessions` │ `workspace`+terminal │
   `traders-desk:chart`+review+files).
-- All 14 MCP tools answer (`chart_reload` / `chart_palette` / `chart_remove_indicator` included).
-  `chart_state` returns live data plus `build`/`viewer` when the page publishes them.
+- All MCP tools answer; the Phase 7 doors verified live 4 Oct (`drawing add/list/remove/clear`,
+  `view` set+read-back, `marks add/list/clear`), and `chart_state` returns live data plus `build`/`viewer`
+  when the page publishes them.
 - `add ema` → `remove --all` → `chart now carries: nothing` (the new removal path, end to end).
 - PDH/PDL drawn on demand: previous UTC day's high/low from Binance daily klines → `draw` →
   `2 line(s), 2 label(s)`, verified on screen.
 - Latency: symbol switch **686–698 ms** end to end, screenshot **35 ms**, `clear` **7 ms**, SSE push
   single-digit ms (transport is not the bottleneck; the chart engine fetch+render is).
 - Console health: `/api/health` ok, LuxAlgo MCP connected, 19 endpoints.
-- ~350 backend tests, plugin harness OK (7 contributions / 5 areas), CI green since `ab3708b`
+- 546 backend tests (43 skipped), plugin harness OK (8 contributions / 5 areas), CI green since `ab3708b`
   (see the correction above — earlier runs were red for a week and nobody looked).
 
-Current live state (transient): chart on **SOLUSDT**, console theme **light** (so the chart matches it),
-a hand-made palette parked; the docked pane may be hidden — check the heartbeat, not the screen.
+Current live state (transient): chart on **BTCUSDT 1m** (dark), the Breakout Detector overlay restored
+from the last session, replay off; the docked pane may be hidden — check the heartbeat, not the screen.
 
 ---
 
@@ -357,7 +363,8 @@ page's action list in the backend; assume a clean API return means the chart cha
 - **Console** — the local page + server at `127.0.0.1:8787` that hosts the chart.
 - **Pane** — the app's dockable surface; the chart lives in `traders-desk:chart`.
 - **Bridge action** — one command the console page knows how to execute (`add`, `remove`, `apply`, `draw`,
-  `clear`, `market`, `shot`, `reload`, `mode`, `script`, `palette`, `probe`, `replay`).
+  `clear`, `market`, `shot`, `reload`, `mode`, `script`, `palette`, `probe`, `replay`, `drawing`, `view`,
+  `marks`).
 - **Claim** — the server-side decision of which console view executes a command (one executor; or one per
   view for `once_per_view` commands).
 - **Ledger** — `chart.indicators()`: the list of studies actually mounted, the only reliable source for
