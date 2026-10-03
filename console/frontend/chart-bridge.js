@@ -46,7 +46,8 @@
                    'studies',
                    'indicators',
                    'fullscreen',
-                   'theme',];
+                   'theme',
+                   'overlay',];
 
   /* The console mints a token and requires it on POSTs. This page usually lives in an IFRAME on
      another origin, where the SameSite cookie the server also sets is dropped by third-party-cookie
@@ -640,6 +641,20 @@
           out.symbol = m.symbol || null;
           out.timeframe = m.timeframe || null;
           out.detail = `read ${bars.length} bars off the chart`;
+          break;
+        }
+
+        /* What OUR layer holds right now. A pan cannot be judged by eye — two readings of the same
+           screenshot disagreed by 35 px (3 Oct) — so the follow loop counts its own repaints and this
+           read-only door hands the count back: read it, drag the chart, read it again. */
+        case 'overlay': {
+          const st = (window.ChartOverlay && window.ChartOverlay.state) ? window.ChartOverlay.state() : null;
+          out.ok = !!st;
+          out.overlay = st;
+          out.detail = st
+            ? ('overlay: ' + st.boxes + ' box / ' + st.lines + ' line / ' + st.labels + ' label · repaints ' +
+               st.repaints + ' · ink ' + st.ink + ' · has ' + st.has)
+            : 'no ChartOverlay on this page';
           break;
         }
 

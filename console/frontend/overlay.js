@@ -337,12 +337,29 @@
     } catch (err) { return null; }
   }
 
+  /* The bars behind every drawing. `window.chartBars()` can fall back to an HTTP fetch of
+     /api/bars when the renderer will not hand its series over, and the follow loop re-maps on
+     every frame that a pan or zoom changes — measured live 3 Oct: 56 /api/bars in 10 s with one
+     overlay on, against a 6-per-10-s idle baseline. A pointless request storm on a laptop this
+     small, so one fetch serves a whole burst: the list is held for BARS_TTL_MS. The bars only
+     supply bar-index -> time; prices come from the script itself, so a few seconds of staleness
+     at the live edge cannot move a drawing. */
+  const BARS_TTL_MS = 5000;
+  let barsCache = { at: 0, bars: [] };
+  async function barsNow() {
+    const now = Date.now();
+    if (barsCache.bars.length && (now - barsCache.at) < BARS_TTL_MS) return barsCache.bars;
+    const fetched = (typeof window.chartBars === 'function') ? await window.chartBars() : [];
+    if (Array.isArray(fetched) && fetched.length) barsCache = { at: now, bars: fetched };
+    return barsCache.bars;
+  }
+
   async function nativeMapping() {
     const rd = velaRenderer();
     if (!rd) return null;
     const pane = pricePane(rd);
     const rect = plotRect();
-    const bars = (typeof window.chartBars === 'function') ? await window.chartBars() : [];
+    const bars = await barsNow();
     if (!pane || !pane.scale || !pane.bounds || !rect || !bars.length) return null;
     const co = rd.coords;
     if (typeof co.timeToX !== 'function' || typeof co.priceToY !== 'function' || !co.width) return null;
@@ -379,7 +396,7 @@
 
   async function guessedMapping(opts) {
     const O = Object.assign({}, DEFAULTS, opts || {});
-    const bars = (typeof window.chartBars === 'function') ? await window.chartBars() : [];
+    const bars = await barsNow();
     const range = (window.__consoleChart && window.__consoleChart.getVisibleRange)
       ? window.__consoleChart.getVisibleRange() : null;
     const rect = plotRect();
@@ -416,21 +433,51 @@
     };
   }
 
-  /* Follow the chart. Each frame reads a handful of numbers (viewport, scale, bar count); only a
-     changed signature repaints, so an idle chart costs nothing and a pan/zoom/new bar repaints in
-     the same frame the candles move. rAF stops by itself when the pane is hidden. */
+  /* The cheap signature the follow loop reads each frame: straight off the renderer, synchronous,
+     no bars and no fetch. It must move whenever the candles move — a pan shifts where a fixed bar
+     time sits (the two timeToX anchors), a zoom changes pxPerBar, autoscale or a new bar moves the
+     price scale or the plot bounds, a pane resize moves rect. A drawing is re-mapped only when this
+     signature actually changed. */
+  function cheapSig() {
+    const rd = velaRenderer();
+    if (!rd) return null;
+    const pane = pricePane(rd);
+    const co = rd.coords;
+    if (!pane || !pane.scale || !pane.bounds || !co || typeof co.timeToX !== 'function') return null;
+    const rect = plotRect();
+    if (!rect) return null;
+    const b = pane.bounds;
+    const ref = barsCache.bars;
+    const timeAt = (i) => (ref[i] ? (ref[i].openTime || ref[i].time) : null);
+    const anchorL = ref.length ? co.timeToX(timeAt(0)) : -1;
+    const anchorR = ref.length ? co.timeToX(timeAt(ref.length - 1)) : -1;
+    return [co.width, co.rightEdgeLogical, co.pxPerBar ? co.pxPerBar() : 0,
+            pane.scale.min, pane.scale.max, b.top, b.height,
+            rect.x, rect.y, rect.w, ref.length, anchorL, anchorR].join('|');
+  }
+
+  /* Follow the chart. Only a changed cheap signature re-maps and repaints, so an idle chart costs
+     nothing while a pan, zoom, autoscale or new bar repaints in the same frame the candles move.
+     rAF stops by itself when the pane is hidden. */
   let following = false;
   let repainting = false;
+  let lastCheap = null;
+  let repaints = 0;            // a pan must be provable from the door: state() carries this count
   function follow() {
     if (following) return;
     following = true;
+    lastCheap = cheapSig();
     const tick = async () => {
       if (!lastSpec) { following = false; return; }
       if (!repainting) {
-        const m = await nativeMapping();
-        if (m && lastSpec && m.sig !== lastSpec.sig) {
+        const cheap = cheapSig();
+        if (cheap && cheap !== lastCheap) {
+          lastCheap = cheap;
           repainting = true;
-          try { await apply(lastSpec.spec, lastSpec.opts); } finally { repainting = false; }
+          try {
+            await apply(lastSpec.spec, lastSpec.opts);
+            repaints += 1;                 // counted after the paint landed, never before
+          } finally { repainting = false; }
         }
       }
       requestAnimationFrame(tick);
@@ -618,6 +665,7 @@
       tablesHost.style.pointerEvents = prev;
     }
     return { boxes: d.boxes, lines: d.lines, labels: d.labels, tables, ink,
+             repaints,
              tablesInPane: place.inPane, tablesRect: place.rect, tablesCells: place.cells,
              tablesText: place.text, paneRect: place.paneRect, tablesVisible,
              viewport: window.innerWidth + 'x' + window.innerHeight,

@@ -16,6 +16,10 @@ live chart with a box drawn exactly on the 100-bar high/low:
   canvas's ``rect.w``. A ``rect.w / coords.width`` ratio stretched x by 8% and pushed every right
   edge (and every ``extend.right`` line) over the axis labels;
 * a drawing must be clipped to the price pane, or a long line paints across the axis anyway.
+
+And a third lesson from the live chart (3 Oct): the follow loop used to re-fetch the bar series on
+every frame it re-mapped — 56 /api/bars in 10 s with one overlay on (an idle chart at 6). The loop
+now reads a cheap SYNCHRONOUS signature off the renderer and asks for bars at most once per burst.
 """
 
 import os
@@ -38,6 +42,21 @@ def native_block() -> str:
     src = read(OVERLAY)
     block = src.split("async function nativeMapping()", 1)[1].split("async function guessedMapping", 1)[0]
     return re.sub(r"/\*.*?\*/", "", block, flags=re.S)
+
+
+def follow_block() -> str:
+    """The body of follow() with comments stripped — the comment above it may describe the loop
+    without the pin matching prose."""
+    src = read(OVERLAY)
+    body = src.split("function follow()", 1)[1].split("function clear()", 1)[0]
+    return re.sub(r"/\*.*?\*/", "", body, flags=re.S)
+
+
+def cheap_block() -> str:
+    """The body of cheapSig() with comments stripped."""
+    src = read(OVERLAY)
+    body = src.split("function cheapSig()", 1)[1].split("function follow()", 1)[0]
+    return re.sub(r"/\*.*?\*/", "", body, flags=re.S)
 
 
 class ItAsksVelaWhereThingsAre(unittest.TestCase):
@@ -79,18 +98,62 @@ class TheEdgesOfThePlotAreTheEdgesOfThePlot(unittest.TestCase):
 
 
 class ItFollowsTheChart(unittest.TestCase):
-    def test_it_repaints_when_the_viewport_scale_or_bars_change(self):
-        src = read(OVERLAY)
-        self.assertTrue("function follow()" in src)
-        body = src.split("function follow()", 1)[1].split("function clear()", 1)[0]
+    def test_only_a_changed_signature_repaints(self):
+        body = follow_block()
         self.assertTrue("requestAnimationFrame" in body)
-        self.assertTrue("m.sig !== lastSpec.sig" in body, "only a changed signature repaints")
+        self.assertTrue("cheap !== lastCheap" in body, "only a changed signature repaints")
 
-    def test_the_signature_covers_what_moves_the_candles(self):
-        block = native_block()
-        sig = block.split("const sig = [", 1)[1].split("].join", 1)[0]
-        for part in ("co.width", "co.rightEdgeLogical", "pane.scale.min", "pane.scale.max", "bars.length"):
-            self.assertTrue(part in sig, part + " moves the candles, so it belongs in the signature")
+    def test_the_per_frame_read_is_synchronous_and_free(self):
+        body = follow_block()
+        self.assertFalse("chartBars" in body, "the frame path must not ask for the bar series")
+        self.assertFalse("await nativeMapping" in body, "the frame path must not re-map")
+
+    def test_the_cheap_signature_covers_what_moves_the_candles(self):
+        block = cheap_block()
+        for part in ("co.width", "co.rightEdgeLogical", "pane.scale.min", "pane.scale.max", "b.top", "b.height"):
+            self.assertTrue(part in block, part + " moves the candles, so it belongs in the signature")
+        self.assertGreaterEqual(block.count("co.timeToX("), 2,
+                                "a pan shifts where a fixed bar time sits; anchor both ends")
+
+
+class TheBarsAreFetchedOncePerBurst(unittest.TestCase):
+    """One overlay used to fire ~5.6 /api/bars a second (56 in 10 s, measured live 3 Oct) because the
+    follow loop re-fetched the series on every frame it re-mapped. The memo holds the list for a
+    short TTL and both mappings read it."""
+
+    def test_both_mappings_read_the_memo(self):
+        nat = native_block()
+        self.assertFalse("await window.chartBars()" in nat, "nativeMapping must read the memo")
+        self.assertTrue("barsNow()" in nat)
+        guess = read(OVERLAY).split("async function guessedMapping", 1)[1]
+        self.assertFalse("await window.chartBars()" in guess, "guessedMapping must read the memo too")
+
+    def test_the_memo_holds_the_bars_for_a_ttl(self):
+        src = read(OVERLAY)
+        block = src.split("async function barsNow()", 1)[1].split("async function nativeMapping", 1)[0]
+        self.assertTrue("BARS_TTL_MS" in block)
+        self.assertTrue("Date.now()" in block)
+        self.assertTrue("barsCache" in block)
+
+
+class ARepaintCanBeProvenFromTheDoor(unittest.TestCase):
+    """The pan test, from 3 Oct: a drag cannot be judged by eye (two readings of the same screenshot
+    disagreed by 35 px), so the follow loop counts its own repaints and the bridge hands the count
+    back through a read-only `overlay` door. Read it before and after a drag — it must rise."""
+
+    def test_the_follow_loop_counts_its_repaints(self):
+        body = follow_block()
+        self.assertTrue("repaints += 1" in body, "no counter, no proof")
+
+    def test_state_reports_the_count(self):
+        block = read(OVERLAY).split("function state() {", 1)[1]
+        self.assertTrue("repaints" in block, "state() must carry the count for the door to read")
+
+    def test_the_bridge_exposes_the_layer(self):
+        src = read(os.path.join(ROOT, "console", "frontend", "chart-bridge.js"))
+        self.assertTrue("case 'overlay':" in src, "no read-only door for the layer")
+        self.assertTrue("'overlay',]" in src, "the action list must publish it, or the server refuses the call")
+        self.assertTrue("st.repaints" in src, "the point of the door is the repaint count")
 
 
 if __name__ == "__main__":
