@@ -37,6 +37,7 @@ capabilities:
     - chart_studies
     - chart_indicators
     - chart_reload
+    - chart_replay
     - chart_palette
     - chart_browse
     - broker_state

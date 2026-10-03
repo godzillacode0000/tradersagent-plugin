@@ -159,12 +159,23 @@ state.ready = (async () => {
   /* The `⋯` menu (3 Oct). Vela's row needed 884-888 px in an 809-868 px pane, so Alerts, Data window,
      Object tree and Screenshot fell outside it. They are rare, so they live here — each item calls the
      same Vela method its own button called, nothing is re-implemented. */
+  /* Replay (Phase 6): the menu starts it, the strip (replay.js) does the rest. The label follows the
+     engine's own state, so "Replay" never lies while it is already on. */
+  const replayOn = () => {
+    try { const r = state.ws && state.ws.replay; return !!(r && r.state && r.state.active); } catch (err) { return false; }
+  };
+
   function openMoreMenu(anchor) {
     const ws = state.ws;
     if (!ws) return;
     const old = document.querySelector('.ta-more');
     if (old) { old.remove(); return; }
     const items = [
+      [replayOn() ? 'Exit replay' : 'Replay', () => {
+        if (!window.taReplay) return;
+        const p = replayOn() ? window.taReplay.stop() : window.taReplay.start();
+        if (p && p.catch) p.catch((err) => { if (window.taToast) window.taToast(String(err.message || err), true); });
+      }],
       ['Alerts', () => ws.openAlertsMenu(anchor)],
       ['Paper account', () => { if (window.taBroker) window.taBroker.open(); }],
       ['Data window', () => ws.dock.toggle('dataWindow')],

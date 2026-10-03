@@ -523,6 +523,28 @@ def cmd_theme(args) -> int:
     return ok_code(result)
 
 
+def cmd_replay(args) -> int:
+    """Drive Vela's own replay engine — the operator's replay button, from the CLI.
+
+    `op` is start / step / play / pause / stop / state. `--bars N` rewinds N bars (default 100),
+    `--from MS` an exact epoch-ms start, `--ms` the pace between bars while playing. While replay
+    is on, a paper fill uses the replay cursor price — the strip in the chart keeps it in step.
+    """
+    payload = {"action": "replay", "op": args.op}
+    if args.bars is not None:
+        payload["bars"] = args.bars
+    if args.from_ms:
+        payload["from"] = args.from_ms
+    if args.ms:
+        payload["intervalMs"] = args.ms
+    result = send(args, payload)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return ok_code(result)
+
+
 def cmd_wait(args) -> int:
     args._payload = {}
     result = wait(args.id, timeout=args.timeout)
@@ -634,6 +656,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("value", nargs="?", choices=["light", "dark"],
                    help="omit to read what the console is wearing now")
     s.set_defaults(func=cmd_theme)
+    s = sub.add_parser("replay", help="drive Vela's replay: start / step / play / pause / stop / state")
+    s.add_argument("op", nargs="?", default="state",
+                   choices=["start", "step", "play", "pause", "stop", "state"])
+    s.add_argument("--bars", type=int, default=None, help="how many bars back `start` rewinds (default 100)")
+    s.add_argument("--from", dest="from_ms", type=int, default=0, help="exact epoch-ms start instead of --bars")
+    s.add_argument("--ms", type=int, default=0, help="pace between bars while playing (default: last pace)")
+    s.set_defaults(func=cmd_replay)
+
     s = sub.add_parser("wait", help="wait for an earlier command's outcome")
     s.add_argument("id", type=int)
     s.add_argument("--timeout", type=float, default=TIMEOUT)

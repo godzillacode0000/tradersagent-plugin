@@ -1,4 +1,4 @@
-# Trader's Agent — MCP tools (41)
+# Trader's Agent — MCP tools (42)
 
 The `traders-chart` MCP server exposes the live LuxAlgo **Vela** chart as native tools.
 Every tool talks to the local console (`http://127.0.0.1:8787`) over its push channel (SSE), so a
@@ -24,7 +24,7 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | `chart_palette` | `try_apply: bool = false` | What colours the chart is actually wearing (background, candles, console theme). `try_apply=true` asserts the console's palette and reports what landed 300 ms later. |
 | `chart_browse` | `family: str = ""`, `show: bool = true` | Open the Library's concept-family list in the pane, optionally narrowed to one family slug. Family bubbles expose Library **concepts** (not indicator scripts); the empty family opens all concepts. Answers with the rows actually painted. The catalogue itself is `library_list`; this one is the *surface*. |
 | `broker_state` | — | The **paper** (simulated Binance spot) account: cash, equity, positions with live P&L, and the orders waiting for the operator. Read-only. |
-| `broker_propose` | `symbol: str`, `side: str` (`buy`/`sell`), `qty: float`, `note: str = ""` | Propose a paper order. It does **not** trade: it puts an Approve/Reject card on the chart and waits. There is deliberately **no approve tool** — only the operator, on the card. Fills at the live price at approval. |
+| `broker_propose` | `symbol: str`, `side: str` (`buy`/`sell`), `qty: float`, `note: str = ""` | Propose a paper order. It does **not** trade: it puts an Approve/Reject card on the chart and waits. There is deliberately **no approve tool** — only the operator, on the card. Fills at the live price at approval — or the replay cursor price while replay is on (see `chart_replay`). |
 | `library_search` | `query: str`, `kind: str = ""` (`concept`/`indicator`), `limit: int = 8` | Search the LuxAlgo Library (concepts + indicators). See the Library section below for the other nine. |
 | `library_indicator` | `query: str` | One indicator by name or slug: summary, licence, and its full Pine source. |
 
@@ -37,6 +37,7 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | `chart_indicators` | `section: str = ""`, `q: str = ""`, `family: str = ""`, `star: str = ""`, `unstar: str = ""`, `mount: str = ""`, `show: bool = True` | The console's **Indicators** surface — the **drawer** (the ⌗ modal was deleted on the operator's call, 3 Oct). `section` is `favorites`/`builtins`/`library`; `family` narrows the catalogue to one family (`trend`, `smc-ict`, `wyckoff`, …; `all` clears it); `star`/`unstar` take `KIND:ID` (`library:order-blocks`) and write the same favourites the operator's ☆ does; `mount` mounts a built-in through the surface (`supertrend`, or `native:supertrend`); `show=False` closes it. The answer carries the rows the list **holds** (each with its family, its write-up as `reading`, and whether a preview exists), the counts, and whether the drawer is open — a drawer that opened empty cannot read as a filled one. |
 | `chart_fullscreen` | `on: bool = True` | Give the chart the whole pane — and the whole screen, where the host allows it. The console's chrome, panels and statusbar step aside so the chart owns the page, and the page asks for fullscreen so it can take the display. `on=False` (or Esc, or the floating ✕) brings everything back. The answer carries `{fullscreen, native, page}` — `native` says whether the display was taken or only the page. |
 | `chart_theme` | `theme: str = ""` | Read or set the console theme: `light`, `dark`, or empty to report what is worn now. The same switch the operator's ◐ button runs, so the console palette, Vela's chrome and the chart's own colours move together; the choice is stored and survives a reload. |
+| `chart_replay` | `op: str = "state"`, `bars: int = 100`, `from_ms: int = 0`, `interval_ms: int = 0` | Drive Vela's own **replay**: `start` rewinds (`bars` back from the end of the loaded history, or an exact `from_ms`), `step` reveals the next bar, `play`/`pause` advance automatically (`interval_ms` between bars), `stop` leaves replay and live resumes, `state` reads. While replay is on, a **paper fill uses the replay cursor price**, not the live one — the control strip in the chart keeps the server's price in step. |
 | `chart_add_indicator` | `native: str` | Add a Vela native (`ema`, `macd`, `supertrend`, `donchian-channels`, …). |
 | `chart_remove_indicator` | `native: str = ""`, `all: bool = false` | Take studies **off** the chart — one by name, or every study with `all=true`. Reports `removed X · chart now carries: Y`. |
 | `chart_apply_pine` | `pine: str` | Run Pine over the chart's live bars and paint what it makes: geometry (boxes/lines/labels/tables) on the console's overlay, plot series as a **matching Vela native** — the same landasan as `chart_draw`, the script pane and the Library. PineTS is a measured subset: `import` is refused outright, while `while`, `for … in`, `request.security`, tuple returns, `box/line/label/table` and `strategy()` all run. |
@@ -95,7 +96,7 @@ When no view is attached the command tools answer `✗ no chart view is attached
 
 `state` · `shot` · `apply` · `add` · `remove` · `market` · `draw` · `clear` · `script` · `browse` ·
 `open` · `mode` · `reload` · `caps` · `layout` · `studies` · `natives` · `indicators` ·
-`fullscreen` · `theme` · `wait`
+`fullscreen` · `theme` · `replay` · `wait`
 
 ## Notes
 

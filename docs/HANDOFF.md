@@ -357,7 +357,7 @@ page's action list in the backend; assume a clean API return means the chart cha
 - **Console** — the local page + server at `127.0.0.1:8787` that hosts the chart.
 - **Pane** — the app's dockable surface; the chart lives in `traders-desk:chart`.
 - **Bridge action** — one command the console page knows how to execute (`add`, `remove`, `apply`, `draw`,
-  `clear`, `market`, `shot`, `reload`, `mode`, `script`, `palette`, `probe`).
+  `clear`, `market`, `shot`, `reload`, `mode`, `script`, `palette`, `probe`, `replay`).
 - **Claim** — the server-side decision of which console view executes a command (one executor; or one per
   view for `once_per_view` commands).
 - **Ledger** — `chart.indicators()`: the list of studies actually mounted, the only reliable source for

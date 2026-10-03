@@ -255,6 +255,24 @@ class MCPToolsTest(unittest.TestCase):
         self.assertEqual(_Stub.posts[-1]["symbol"], "BTCUSDT")
         self.assertEqual(_Stub.posts[-1]["timeframe"], "15m")
 
+    def test_chart_replay_drives_the_engine(self):
+        _Stub.routes = {"/api/chart/command": {"ok": True, "data": {
+            "pushed": 1, "command": {"id": 21},
+            "result": {"id": 21, "ok": True, "detail": "replay ON · paused · 100 bar(s) left"}}}}
+        out = self.mcp.chart_replay("start", bars=100)
+        self.assertTrue(out.startswith("✓"))
+        self.assertIn("replay ON", out)
+        self.assertEqual(_Stub.posts[-1]["action"], "replay")
+        self.assertEqual(_Stub.posts[-1]["op"], "start")
+        self.assertEqual(_Stub.posts[-1]["bars"], 100)
+
+    def test_chart_replay_from_ms_wins_over_bars(self):
+        _Stub.routes = {"/api/chart/command": {"ok": True, "data": {
+            "pushed": 1, "command": {"id": 22}, "result": {"id": 22, "ok": True, "detail": "replay ON"}}}}
+        self.mcp.chart_replay("start", from_ms=1790934300000, bars=100)
+        self.assertEqual(_Stub.posts[-1]["from"], 1790934300000)
+        self.assertNotIn("bars", _Stub.posts[-1])
+
     def test_reload_is_once_per_view(self):
         _Stub.routes = {"/api/chart/command": {"ok": True, "data": {
             "pushed": 1, "command": {"id": 20},

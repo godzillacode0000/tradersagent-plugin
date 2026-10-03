@@ -47,6 +47,7 @@
                    'indicators',
                    'fullscreen',
                    'theme',
+                   'replay',
                    'overlay',];
 
   /* The console mints a token and requires it on POSTs. This page usually lives in an IFRAME on
@@ -1399,6 +1400,41 @@
           out.drawer = ds;
           break;
         }
+        case 'replay': {
+          /* Vela's own replay engine (WorkspaceReplay), behind one door (Phase 6, 3 Oct). `op` is
+             start / step / play / pause / stop / state. `start` rewinds: `from` is an exact epoch-ms
+             start, else `bars` back from the end of the loaded history (default 100) — the engine
+             deepens the history itself when the start is older than what it has. The engine starts
+             PAUSED; `play(intervalMs)` paces it (default: the last pace, 1000 ms per bar first time). */
+          const ws = (window.__wsApp || {}).ws;
+          const r = ws && ws.replay;
+          if (!r || typeof r.start !== 'function') throw new Error('this page has no replay engine');
+          const op = String(command.op || 'state');
+          if (op === 'start') {
+            let from = Number(command.from) || 0;
+            if (!from) {
+              const b = r.bounds;
+              if (!b) throw new Error('no bars loaded yet — nothing to replay');
+              const bars = Math.max(1, Number(command.bars) || 100);
+              const tf = (() => { try { const m = window.chartMarket ? window.chartMarket() : null; return (m && m.interval) || ''; } catch (err) { return ''; } })();
+              const mm = /^(\d+(?:\.\d+)?)([mhdwM]?)$/.exec(tf);
+              const mins = mm ? (mm[2].toLowerCase() === 'h' ? +mm[1] * 60 : mm[2].toLowerCase() === 'd' ? +mm[1] * 1440 : mm[2].toLowerCase() === 'w' ? +mm[1] * 10080 : mm[2] === 'M' ? +mm[1] * 43200 : +mm[1]) : 15;
+              from = Math.max(b.first, b.last - bars * Math.max(1, mins) * 60000);
+            }
+            await r.start({ from });
+          } else if (op === 'step') { r.step(); }
+          else if (op === 'play') { r.play(Number(command.intervalMs) || undefined); }
+          else if (op === 'pause') { r.pause(); }
+          else if (op === 'stop') { r.stop(); }
+          else if (op !== 'state') { throw new Error('unknown replay op: ' + op); }
+          const s = r.state || {};
+          out.ok = true;
+          out.replay = s;
+          out.detail = 'replay ' + (s.active ? 'ON' : 'off') + ' · ' + (s.playing ? 'playing' : 'paused') +
+            (s.active ? ' · ' + s.remaining + ' bar(s) left' : '');
+          try { window.dispatchEvent(new CustomEvent('ta-replay', { detail: { event: 'command', state: s } })); } catch (err) { /* no DOM events */ }
+          break;
+        }
         case 'mode': {
           out.ok = true;
           out.detail = 'the console is chart-first: Vela\'s own Indicators button opens the drawer ' +
@@ -1507,6 +1543,24 @@
   }
   setTimeout(tick, POLL_FAST);
   connectStream();
+
+  /* Replay (Phase 6): Vela's replay controller emits its own events (replay:start/play/pause/step/
+     tick/end) — re-dispatch them as `ta-replay` so the strip and any other surface hear one voice.
+     Bound lazily: the workspace module may still be loading when this script runs. */
+  function bindReplay() {
+    const ws = (window.__wsApp || {}).ws;
+    const r = ws && ws.replay;
+    if (!r || typeof r.on !== 'function') return false;
+    for (const ev of ['replay:start', 'replay:play', 'replay:pause', 'replay:step', 'replay:tick', 'replay:end']) {
+      try {
+        r.on(ev, () => {
+          try { window.dispatchEvent(new CustomEvent('ta-replay', { detail: { event: ev, state: r.state } })); } catch (err) { /* no DOM events */ }
+        });
+      } catch (err) { /* an older engine: the strip still syncs after its own actions */ }
+    }
+    return true;
+  }
+  if (!bindReplay()) window.addEventListener('ws-ready', bindReplay, { once: true });
   window.ChartBridge = {
     run, capture, heartbeat, poll,
     /* Phase 1.3 — the two counts the stale-legend banner compares. `series` is what the chart says

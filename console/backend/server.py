@@ -1069,7 +1069,7 @@ def ep_agents(params: dict) -> dict:
 # already — "overlay" sat here with no matching case in frontend/chart-bridge.js, so the command
 # passed this check, got an HTTP 200, and the page replied "unknown action" with nothing done.
 CHART_ACTIONS_FALLBACK = {"apply", "add", "market", "shot", "draw", "clear", "probe", "reload",
-                         "mode", "script", "rect"}
+                         "mode", "script", "rect", "replay"}
 
 
 def chart_actions() -> set:
@@ -1288,7 +1288,11 @@ _BROKER = None
 _BROKER_LOCK = threading.Lock()
 _BROKER_HTTP = {"unknown_order": 404, "not_pending": 409, "insufficient_cash": 409,
                 "insufficient_position": 409, "no_price": 503, "too_many_pending": 429}
-_BROKER_NEEDS_PAGE = ("approve", "reject", "reset")
+_BROKER_NEEDS_PAGE = ("approve", "reject", "reset", "replay")
+# While the operator replays, a paper fill uses the REPLAY cursor's price — the strip in the chart
+# pushes it here (page-only, like approve). `broker_price` below is what makes approve() and the
+# marks read it; nothing else may.
+_REPLAY = {"active": False, "price": None, "time": None}
 
 
 def _http_json(url: str):
@@ -1311,26 +1315,57 @@ def binance_price(symbol: str) -> float:
     return px
 
 
+def broker_price(symbol: str) -> float:
+    """The price a paper fill (and a position's mark) uses: the REPLAY cursor price while the operator
+    is replaying — pushed by the page, see _REPLAY — else Binance's public ticker."""
+    if _REPLAY.get("active") and _REPLAY.get("price"):
+        return float(_REPLAY["price"])
+    return binance_price(symbol)
+
+
 def get_broker() -> PaperBroker:
     global _BROKER
     with _BROKER_LOCK:
         if _BROKER is None:
             path = os.environ.get("TRADER_PAPER_FILE") or str(
                 Path(os.path.expanduser("~")) / ".local/state/traders-agent/paper.json")
-            _BROKER = PaperBroker(path, binance_price)
+            _BROKER = PaperBroker(path, broker_price)
         return _BROKER
+
+
+def _set_replay(body: dict) -> dict:
+    """The page's replay push: {active, price, time}. Turning replay on without the cursor price is
+    refused — an override with no price would silently fill at the live one, which is the one thing
+    this must never do."""
+    active = bool(body.get("active"))
+    price, when = body.get("price"), body.get("time")
+    if active:
+        try:
+            price = float(price)
+        except (TypeError, ValueError):
+            raise ApiError("replay pricing needs the cursor price — the strip sends it with the state",
+                           400, "replay_needs_price")
+        if not (price > 0):
+            raise ApiError("the replay cursor price must be positive", 400, "replay_needs_price")
+    _REPLAY.update(active=active, price=(price if active else None), time=(when if active else None))
+    STREAM.publish({"type": "broker", "event": "replay", "replay": dict(_REPLAY)})
+    return {"replay": dict(_REPLAY)}
 
 
 def broker_action(action: str, body: dict, from_page: bool) -> dict:
     if action not in ("state", "propose") + _BROKER_NEEDS_PAGE:
         raise ApiError(f"unknown broker action: {action}", 404, "unknown_endpoint")
     if action in _BROKER_NEEDS_PAGE and not from_page:
-        raise ApiError("approving, rejecting and resetting are done on the chart card by the operator — "
-                       "the agent can only propose", 403, "approval_needs_the_page")
+        raise ApiError("approving, rejecting, resetting and replay pricing are done on the chart "
+                       "page by the operator — the agent can only propose", 403, "approval_needs_the_page")
+    if action == "replay":
+        return _set_replay(body)
     b = get_broker()
     try:
         if action == "state":
-            return b.state()
+            st = b.state()
+            st["replay"] = dict(_REPLAY)
+            return st
         if action == "propose":
             o = b.propose(body.get("symbol"), body.get("side"), body.get("qty"), body.get("note", ""))
             STREAM.publish({"type": "broker", "event": "proposed", "order": o})

@@ -1112,3 +1112,32 @@ pre {
 .ta-acct .is-down { color: var(--lx-loss); }
 @keyframes ta-order-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .ta-order, .ta-acct { animation: none; } .ta-order__btn { transition: none; } }
+
+/* ── Replay (Phase 6, 3 Oct): the control strip behind the ⋯ menu ─────────────────────────────────
+   The operator's call: the strip lives IN the chart ("jalur kawalan dalam chart"), bottom-centre —
+   above the date axis, clear of the order card and the account popover (both in the top band) and
+   of the price axis (right). Nothing is on screen until replay is on, so the chart stays whole.
+   Motion is opacity + transform only (a 2016 Pavilion renders those on the GPU). */
+.ta-replay {
+  position: fixed; bottom: 56px; left: 50%; transform: translateX(-50%);
+  z-index: 55; display: flex; align-items: center; gap: var(--lx-space-2);
+  padding: 5px 8px 5px 12px; border-radius: var(--lx-radius-pill);
+  background: var(--lx-surface-2); border: 1px solid var(--lx-border-strong);
+  box-shadow: var(--lx-shadow-3); color: var(--lx-fg); font-size: var(--lx-fs-sm);
+  animation: ta-replay-in var(--lx-dur-fast) var(--lx-ease) both;
+}
+.ta-replay[hidden] { display: none; }
+.ta-replay__tag {
+  font-size: 10px; letter-spacing: .08em; padding: 1px 6px; border-radius: var(--lx-radius-pill);
+  background: var(--lx-warn-soft); color: var(--lx-warn);
+}
+.ta-replay__label { font-family: var(--lx-font-mono); color: var(--lx-fg-muted); white-space: nowrap; }
+.ta-replay__btn {
+  all: unset; box-sizing: border-box; cursor: pointer; min-width: 26px; text-align: center;
+  padding: 2px 6px; border-radius: var(--lx-radius-md); color: var(--lx-fg);
+  transition: background var(--lx-dur-fast) var(--lx-ease);
+}
+.ta-replay__btn:hover, .ta-replay__btn:focus-visible { background: var(--lx-accent-soft); }
+.ta-replay__btn--x { color: var(--lx-fg-muted); }
+@keyframes ta-replay-in { from { opacity: 0; transform: translateX(-50%) translateY(6px); } to { opacity: 1; transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .ta-replay { animation: none; } .ta-replay__btn { transition: none; } }

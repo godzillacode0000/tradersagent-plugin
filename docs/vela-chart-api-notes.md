@@ -136,3 +136,25 @@ trader-chart shot --out …    → two panes: SOLUSDT 4h (left) and SOLUSDT 1D (
 
 Cells inherit the active cell's symbol when the grid grows — a new pane is the same market on another
 timeframe until something else is asked for.
+
+## Replay — Vela's own engine, verified live (3 Oct)
+
+`ws.replay` (WorkspaceReplay) is a full replay controller, and the console exposes it three ways: the
+`replay` bridge action, the `chart_replay` MCP tool / `trader-chart replay` CLI, and the control strip
+(`console/frontend/replay.js`) started from the ⋯ menu. While replay is on, the strip pushes the
+cursor price to `/api/broker/replay` (page-only) and the paper broker fills at it — a manual backtest
+with the real order gate.
+
+| Call | Verified result (BTCUSDT 15m, live pane) |
+| --- | --- |
+| `ws.replay.bounds` | `{first, last}` epoch-ms of the loaded history (hidden bars included while replaying) |
+| `ws.replay.start({from})` | rewinds; resolves once the chart shows the rewound history; starts **paused** |
+| `ws.replay.step()` | reveals the next bar; `state.remaining` drops by one (100 → 98 measured) |
+| `ws.replay.play(ms)` / `pause()` | advances at `ms` per bar (300 ms measured); pause holds the cursor |
+| `ws.replay.stop()` | leaves replay; live updates resume; `state.active` false |
+| `state` | `{active, playing, cursorTime, remaining, nextTime, intervalMs}` |
+| events | `replay:start/play/pause/step/tick/end` on `ws.replay.on(...)`; chart-bridge re-dispatches them as `ta-replay` |
+
+The strip reads the fill price from the bars themselves: the close of the last bar with
+`time <= cursorTime` (`chartBars()` carries the loaded history, hidden bars included — never simply
+the last row of the array).

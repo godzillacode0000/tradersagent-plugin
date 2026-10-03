@@ -80,7 +80,7 @@ class ToolAnnotationsTest(unittest.TestCase):
         self.assertGreaterEqual(len(self.tools), 10, sorted(self.tools))
         for name in ("chart_state", "chart_shot", "chart_apply_pine", "chart_add_indicator",
                      "chart_set_market", "chart_draw", "chart_clear", "chart_views",
-                     "chart_remove_indicator", "chart_reload", "chart_palette"):
+                     "chart_remove_indicator", "chart_reload", "chart_palette", "chart_replay"):
             self.assertIn(name, self.tools)
 
     def test_every_tool_has_a_title_and_an_explicit_read_only_flag(self):
@@ -101,6 +101,9 @@ class ToolAnnotationsTest(unittest.TestCase):
             self.assertFalse(hint(annotations, "read_only_hint"), f"{name} changes the chart")
             self.assertTrue(hint(annotations, "destructive_hint"),
                             f"{name} should declare destructiveHint")
+
+    def test_replay_is_a_chart_mutation(self):
+        self.assertFalse(hint(self.ann("chart_replay"), "read_only_hint"))
 
     def test_network_tools_are_marked_open_world(self):
         for name in ("library_search", "library_indicator"):

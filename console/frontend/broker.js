@@ -64,16 +64,19 @@
     return stack;
   }
 
+  const replayOn = () => !!(state.account && state.account.replay && state.account.replay.active);
+
   function cardHtml(o) {
     const busy = state.busy.has(o.id);
-    return `<article class="ta-order ta-order--${o.side}" data-id="${o.id}">
+    const rep = replayOn();
+    return `<article class="ta-order ta-order--${o.side}" data-id="${o.id}" data-rep="${rep ? '1' : '0'}">
       <header class="ta-order__head">
-        <span class="ta-order__tag">PAPER</span>
+        <span class="ta-order__tag">${rep ? 'PAPER · REPLAY' : 'PAPER'}</span>
         <span class="ta-order__side">${esc(o.side)}</span>
         <strong class="ta-order__qty">${esc(qty(o.qty))} ${esc(o.symbol)}</strong>
       </header>
       ${o.note ? `<p class="ta-order__note">${esc(o.note)}</p>` : ''}
-      <p class="ta-order__hint">Fills at the live price when you approve. Nothing has traded yet.</p>
+      <p class="ta-order__hint">${rep ? 'Fills at the replay cursor price when you approve. Nothing has traded yet.' : 'Fills at the live price when you approve. Nothing has traded yet.'}</p>
       <p class="ta-order__err" role="alert" hidden></p>
       <footer class="ta-order__actions">
         <button type="button" class="ta-order__btn ta-order__btn--no" data-reject ${busy ? 'disabled' : ''}>Reject</button>
@@ -90,10 +93,12 @@
     state.pending.forEach((o) => {
       const html = cardHtml(o);
       const node = have.get(o.id);
-      if (!node) {
+      const rep = replayOn() ? '1' : '0';
+      if (!node || node.dataset.rep !== rep) {           // create — or repaint when replay toggled
         const t = document.createElement('div');
         t.innerHTML = html;
-        s.appendChild(t.firstElementChild);
+        const fresh = t.firstElementChild;
+        if (node) node.replaceWith(fresh); else s.appendChild(fresh);
       } else {                                           // keep the card (and its error) — only the buttons change
         node.querySelectorAll('button').forEach((b) => { b.disabled = state.busy.has(o.id); });
       }
@@ -143,7 +148,7 @@
       : '<li class="ta-acct__none">No open positions</li>';
     const hist = a.history.slice(0, 6).map((o) => `<li><span>${esc(o.side)} ${esc(qty(o.qty))} ${esc(o.symbol)}</span>
           <small>${o.status === 'filled' ? 'at ' + money(o.price) : esc(o.status)}</small></li>`).join('');
-    return `<header class="ta-acct__head"><strong>Paper account</strong><span class="ta-order__tag">PAPER</span></header>
+    return `<header class="ta-acct__head"><strong>Paper account</strong><span class="ta-order__tag">${a.replay && a.replay.active ? 'PAPER · REPLAY' : 'PAPER'}</span></header>
       <dl class="ta-acct__nums">
         <div><dt>Cash</dt><dd>${money(a.cash)}</dd></div>
         <div><dt>Equity</dt><dd>${money(a.equity)}</dd></div>
@@ -152,7 +157,7 @@
       <h4>Positions</h4><ul class="ta-acct__list">${pos}</ul>
       ${hist ? `<h4>Recent</h4><ul class="ta-acct__list">${hist}</ul>` : ''}
       <footer class="ta-acct__foot">
-        <small>Simulated Binance spot · 0.1% fee · start ${money(a.start_cash)}</small>
+        <small>Simulated Binance spot · 0.1% fee · start ${money(a.start_cash)}${a.replay && a.replay.active ? ' · replay pricing' : ''}</small>
         <button type="button" class="ta-order__btn ta-order__btn--no" data-reset>Reset</button>
       </footer>`;
   }

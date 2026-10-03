@@ -313,6 +313,9 @@ def broker_state() -> str:
     except RuntimeError as exc:
         return f"✗ {exc}"
     lines = [f"PAPER · cash {d['cash']:,.2f} · equity {d['equity']:,.2f} · realised {d['realized']:+,.2f}"]
+    rp = d.get("replay") or {}
+    if rp.get("active"):
+        lines.append(f"  ⏪ replay pricing ON — fills use the replay cursor price ({float(rp['price']):,.2f})")
     for p in d["positions"]:
         lines.append(f"  {p['symbol']} {p['qty']:g} @ {p['avg']:,.2f} → {p['mark']:,.2f} ({p['unrealized']:+,.2f})")
     for o in d["pending"]:
@@ -324,7 +327,8 @@ def broker_state() -> str:
 def broker_propose(symbol: str, side: str, qty: float, note: str = "") -> str:
     """Propose a PAPER order (Binance spot, simulated). It does NOT trade: it puts an Approve/Reject card on
     the chart and waits. Only the operator can approve it, on the card — there is deliberately no tool for
-    that. It fills at the live price at the moment the operator approves, not at today's price.
+    that. It fills at the live price at the moment the operator approves — or the replay cursor price
+    while the operator is replaying — not at today's price.
     `side` is buy or sell; spot has no shorting. `note` is the reason shown on the card — say why."""
     try:
         d = _call("/api/broker/propose", {"symbol": symbol, "side": side, "qty": qty, "note": note}, timeout=10.0)
@@ -603,6 +607,26 @@ def chart_fullscreen(on: bool = True) -> str:
     when the operator wants a big, uncluttered capture.
     """
     return _command("fullscreen", on=bool(on))
+
+
+@mcp.tool(annotations=_ann("Replay the chart", read_only=False))
+def chart_replay(op: str = "state", bars: int = 100, from_ms: int = 0, interval_ms: int = 0) -> str:
+    """Drive Vela's own replay engine — the operator's replay button, from the agent's side.
+
+    `op` is one of: start (rewind — `bars` back from the end of the loaded history, default 100, or
+    an exact `from_ms` epoch-ms start), step (reveal the next bar), play (advance on its own;
+    `interval_ms` per bar), pause, stop (leave replay; live resumes), state (read only).
+    While replay is on, a paper fill uses the REPLAY cursor price instead of the live one — the
+    strip in the chart keeps the server's price in step.
+    """
+    fields: dict = {"op": op}
+    if from_ms:
+        fields["from"] = int(from_ms)
+    elif op == "start" and bars:
+        fields["bars"] = int(bars)
+    if interval_ms:
+        fields["intervalMs"] = int(interval_ms)
+    return _command("replay", **fields)
 
 
 @mcp.tool(annotations=_ann("Console theme (light / dark)", read_only=False))
