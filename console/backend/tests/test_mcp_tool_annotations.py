@@ -105,6 +105,11 @@ class ToolAnnotationsTest(unittest.TestCase):
     def test_replay_is_a_chart_mutation(self):
         self.assertFalse(hint(self.ann("chart_replay"), "read_only_hint"))
 
+    def test_the_vela_doors_are_registered_and_mutate_the_chart(self):
+        for name in ("chart_drawing", "chart_view", "chart_marks"):
+            self.assertIn(name, self.tools)
+            self.assertFalse(hint(self.ann(name), "read_only_hint"), f"{name} changes the chart")
+
     def test_network_tools_are_marked_open_world(self):
         for name in ("library_search", "library_indicator"):
             self.assertTrue(hint(self.ann(name), "open_world_hint"), f"{name} leaves this machine")

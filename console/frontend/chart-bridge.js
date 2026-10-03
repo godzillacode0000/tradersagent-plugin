@@ -48,6 +48,9 @@
                    'fullscreen',
                    'theme',
                    'replay',
+                   'drawing',
+                   'view',
+                   'marks',
                    'overlay',];
 
   /* The console mints a token and requires it on POSTs. This page usually lives in an IFRAME on
@@ -1433,6 +1436,23 @@
           out.detail = 'replay ' + (s.active ? 'ON' : 'off') + ' · ' + (s.playing ? 'playing' : 'paused') +
             (s.active ? ' · ' + s.remaining + ' bar(s) left' : '');
           try { window.dispatchEvent(new CustomEvent('ta-replay', { detail: { event: 'command', state: s } })); } catch (err) { /* no DOM events */ }
+          break;
+        }
+        /* Phase 7 (3 Oct): Vela's drawings, view settings and event marks. The logic is in
+           vela-doors.js (window.TaVela) so this bridge stays small; each case only hands over. */
+        case 'drawing': {
+          if (!window.TaVela) throw new Error('this page has no vela-doors module (older frontend) — reload the chart');
+          Object.assign(out, await window.TaVela.drawing(command));
+          break;
+        }
+        case 'view': {
+          if (!window.TaVela) throw new Error('this page has no vela-doors module (older frontend) — reload the chart');
+          Object.assign(out, await window.TaVela.view(command));
+          break;
+        }
+        case 'marks': {
+          if (!window.TaVela) throw new Error('this page has no vela-doors module (older frontend) — reload the chart');
+          Object.assign(out, await window.TaVela.marks(command));
           break;
         }
         case 'mode': {

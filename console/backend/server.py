@@ -1069,7 +1069,7 @@ def ep_agents(params: dict) -> dict:
 # already — "overlay" sat here with no matching case in frontend/chart-bridge.js, so the command
 # passed this check, got an HTTP 200, and the page replied "unknown action" with nothing done.
 CHART_ACTIONS_FALLBACK = {"apply", "add", "market", "shot", "draw", "clear", "probe", "reload",
-                         "mode", "script", "rect", "replay"}
+                         "mode", "script", "rect", "replay", "drawing", "view", "marks"}
 
 
 def chart_actions() -> set:

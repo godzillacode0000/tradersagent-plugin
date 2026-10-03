@@ -178,6 +178,9 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_palette` | what colours the chart is wearing (`try_apply` asserts the console theme) |
 | `chart_theme` | read or set the console theme — `light` / `dark` (no argument reports what is worn); the console palette, Vela's chrome and the chart's own colours move together, and the choice survives a reload |
 | `chart_replay` | drive Vela's **replay** — rewind to older bars and walk forward (`op` = start/step/play/pause/stop/state; `bars` back, or an exact `from_ms`); while replay is on, a paper fill uses the replay cursor price, not the live one |
+| `chart_drawing` | draw with Vela's own **drawing tools** — 76 types (trend line, channel, fib, Gann, Elliott, XABCD …), placed by `bars_ago` + price, real objects the operator can drag; a wrong anchor count is refused before drawing |
+| `chart_view` | read or set a **view setting** — chart type, log / invert / percent scale, countdown, time zone, session, watermark, status line, grid sync, the `?` shortcuts panel; every write is read back. Vela cannot *create* a price alert, so `alerts` only reads / clears the indicator-alert inbox |
+| `chart_marks` | event **marks** on the time axis, in one "Trader's Agent" group (`clear` only touches its own) |
 | `chart_browse` | open the Library concept list in the pane (optional `family`) |
 | `broker_state` | the paper (simulated Binance) account: cash, equity, positions, orders waiting for you |
 | `broker_propose` | propose a paper order — it only puts an Approve/Reject card on the chart; the agent cannot approve it |

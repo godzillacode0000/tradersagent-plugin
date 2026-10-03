@@ -545,6 +545,77 @@ def cmd_replay(args) -> int:
     return ok_code(result)
 
 
+def _anchor(text: str) -> dict:
+    """`bars_ago:price` (e.g. 20:84500) or `time:price` (epoch ms/s or ISO) → one anchor dict."""
+    left, sep, price = text.rpartition(":")
+    if not sep or not left:
+        raise SystemExit(f"anchor {text!r}: write it as BARS_AGO:PRICE (20:84500) or TIME:PRICE (1759000000:84500)")
+    try:
+        number = float(price)
+    except ValueError:
+        raise SystemExit(f"anchor {text!r}: the price after the last ':' must be a number")
+    if left.isdigit() and int(left) < 100000:
+        return {"bars_ago": int(left), "price": number}
+    return {"time": int(left) if left.isdigit() else left, "price": number}
+
+
+def cmd_drawing(args) -> int:
+    """Draw with Vela's own tools: add / list / update / remove / clear / types.
+
+    `add trendline 20:84000 0:86500` = a trend line from 20 bars ago at 84000 to the latest bar at
+    86500. An anchor is BARS_AGO:PRICE or TIME:PRICE. The count must match the type (op `types`).
+    """
+    payload = {"action": "drawing", "op": args.op}
+    if args.type:
+        payload["type"] = args.type
+    if args.anchors:
+        payload["anchors"] = [_anchor(a) for a in args.anchors]
+    if args.id:
+        payload["drawing_id"] = args.id    # `id` is reserved by the command queue
+    if args.text:
+        payload["text"] = args.text
+    if args.all:
+        payload["all"] = True
+    result = send(args, payload)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return ok_code(result)
+
+
+def cmd_view(args) -> int:
+    """Read or set one view setting; no setting = read them all. `view chart_type heikinashi`."""
+    payload = {"action": "view", "setting": args.setting or "state"}
+    if args.value is not None:
+        payload["value"] = args.value
+    result = send(args, payload)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return ok_code(result)
+
+
+def cmd_marks(args) -> int:
+    """Event marks on the time axis: add / list / remove / clear. `marks add --bars-ago 5 --title FOMC`."""
+    payload = {"action": "marks", "op": args.op}
+    if args.bars_ago is not None:
+        payload["bars_ago"] = args.bars_ago
+    for name in ("time", "title", "content", "color", "shape", "letter"):
+        val = getattr(args, name)
+        if val:
+            payload[name] = val
+    if args.id:
+        payload["mark_id"] = args.id       # `id` is reserved by the command queue
+    result = send(args, payload)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return ok_code(result)
+
+
 def cmd_wait(args) -> int:
     args._payload = {}
     result = wait(args.id, timeout=args.timeout)
@@ -663,6 +734,33 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--from", dest="from_ms", type=int, default=0, help="exact epoch-ms start instead of --bars")
     s.add_argument("--ms", type=int, default=0, help="pace between bars while playing (default: last pace)")
     s.set_defaults(func=cmd_replay)
+
+    s = sub.add_parser("drawing", help="draw with Vela's tools: add / list / update / remove / clear / types")
+    s.add_argument("op", nargs="?", default="list",
+                   choices=["add", "list", "update", "remove", "clear", "types"])
+    s.add_argument("type", nargs="?", default="", help="(add) a Vela type or plain word: trendline, fib, channel …")
+    s.add_argument("anchors", nargs="*", help="(add) BARS_AGO:PRICE or TIME:PRICE, one per anchor")
+    s.add_argument("--id", default="", help="(update / remove) which drawing — `list` shows the ids")
+    s.add_argument("--text", default="", help="(add / update) the drawing's text")
+    s.add_argument("--all", action="store_true", help="(clear) confirm removing EVERY drawing, hand-drawn too")
+    s.set_defaults(func=cmd_drawing)
+
+    s = sub.add_parser("view", help="read or set a view setting (chart_type, timezone, log, watermark …)")
+    s.add_argument("setting", nargs="?", default="", help="omit to read everything")
+    s.add_argument("value", nargs="?", default=None, help="omit to read just this one")
+    s.set_defaults(func=cmd_view)
+
+    s = sub.add_parser("marks", help="event marks on the time axis: add / list / remove / clear")
+    s.add_argument("op", nargs="?", default="list", choices=["add", "list", "remove", "clear"])
+    s.add_argument("--bars-ago", dest="bars_ago", type=int, default=None, help="0 = the latest bar")
+    s.add_argument("--time", default="", help="exact epoch ms / seconds / ISO instead of --bars-ago")
+    s.add_argument("--title", default="")
+    s.add_argument("--content", default="", help="the text shown on hover")
+    s.add_argument("--color", default="", help="hex like #f5a623")
+    s.add_argument("--shape", default="", choices=["", "circle", "square", "diamond", "pin"])
+    s.add_argument("--letter", default="", help="up to 2 characters on the glyph")
+    s.add_argument("--id", default="", help="(remove) which mark")
+    s.set_defaults(func=cmd_marks)
 
     s = sub.add_parser("wait", help="wait for an earlier command's outcome")
     s.add_argument("id", type=int)

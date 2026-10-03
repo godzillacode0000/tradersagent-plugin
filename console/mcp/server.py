@@ -629,6 +629,95 @@ def chart_replay(op: str = "state", bars: int = 100, from_ms: int = 0, interval_
     return _command("replay", **fields)
 
 
+@mcp.tool(annotations=_ann("Draw on the chart with Vela's drawing tools", read_only=False))
+def chart_drawing(op: str = "list", type: str = "", anchors: list[dict] | None = None, id: str = "",
+                  ids: list[str] | None = None, style: dict | None = None, text: str = "",
+                  props: dict | None = None, locked: bool | None = None, visible: bool | None = None,
+                  all: bool = False) -> str:
+    """Draw with Vela's own drawing tools — real objects the operator can drag and edit afterwards.
+
+    `op`: add | list | update | remove | clear | types (types lists all 76 with their anchor counts).
+    `type` (add): a Vela type — trendline, hline, vline, ray, parallelchannel, fibretracement, fibextension,
+    gannfan, pitchfork, xabcd, elliottimpulse, headshoulders, box, text, position, datepricerange … — or a
+    plain word (fib, support, channel, rectangle, measure). A wrong name answers with the nearest types.
+    `anchors` (add / update): one dict per anchor, each `{"bars_ago": 0, "price": 84500}` (0 = the latest
+    bar) or `{"time": <epoch ms | seconds | ISO>, "price": …}`. The count must match the type — a trend
+    line takes exactly 2, a parallel channel 3, XABCD 5 — and a wrong count is refused BEFORE drawing,
+    because Vela would otherwise accept it and paint nothing.
+    `style` / `text` / `props` / `locked` / `visible` shape the drawing; `id` or `ids` pick one to
+    update or remove. `clear` removes EVERY drawing, the operator's hand-drawn ones too, so it needs
+    `all=true`; one undo brings them back.
+    """
+    fields: dict = {"op": op}
+    if type:
+        fields["type"] = type
+    if anchors:
+        fields["anchors"] = anchors
+    if id:
+        fields["drawing_id"] = id      # `id` is reserved by the command queue (it stamps its own number)
+    if ids:
+        fields["ids"] = ids
+    if style:
+        fields["style"] = style
+    if text:
+        fields["text"] = text
+    if props:
+        fields["props"] = props
+    if locked is not None:
+        fields["locked"] = bool(locked)
+    if visible is not None:
+        fields["visible"] = bool(visible)
+    if all:
+        fields["all"] = True
+    return _command("drawing", **fields)
+
+
+@mcp.tool(annotations=_ann("Chart view settings (type, scale, time zone, status line …)", read_only=False))
+def chart_view(setting: str = "state", value: str = "") -> str:
+    """Read or set one chart view setting — the things the operator would click in Vela's menus.
+
+    `setting` with no `value` reads it; `state` (the default) reads them all. Settings:
+    chart_type (candles | bars | line | area | baseline | heikinashi) · log, invert, auto_scale,
+    countdown (on/off) · scale_mode (price | percent | indexed) · timezone (utc, exchange, kuala lumpur,
+    new york, london, tokyo … or an IANA name) · session (regular | extended — only where the symbol
+    has one; crypto does not) · watermark, indicator_titles, indicator_values (on/off) ·
+    statusline_logo, statusline_name, statusline_market, statusline_ohlc, statusline_change (on/off) ·
+    sync_symbol, sync_timeframe, sync_crosshair, sync_style (on/off — grid sync between chart cells) ·
+    shortcuts (on/off — the ? help panel) · alerts (read | clear).
+    Every write is read back from the chart: ✓ only when the chart reports the new value.
+    `alerts` is the inbox of alerts an indicator raised with alertcondition(). Vela cannot create a price
+    alert, so there is no way to add one from here — the answer says so.
+    """
+    fields: dict = {"setting": setting}
+    if value != "":
+        fields["value"] = value
+    return _command("view", **fields)
+
+
+@mcp.tool(annotations=_ann("Event marks on the chart's time axis", read_only=False))
+def chart_marks(op: str = "list", time: str = "", bars_ago: int = -1, title: str = "", content: str = "",
+                color: str = "", shape: str = "", letter: str = "", id: str = "") -> str:
+    """Place small event marks on the chart's time axis (news, a trade idea, "I entered here").
+
+    `op`: add | list | remove | clear. `add` needs a place — `bars_ago` (0 = the latest bar) or an exact
+    `time` (epoch ms / seconds / ISO) — plus a `title`; `content` is the text shown when hovered,
+    `color` a hex like #f5a623, `shape` circle | square | diamond | pin, `letter` up to 2 characters
+    on the glyph (defaults to the title's first letter). All marks sit in one group named
+    "Trader's Agent", so `clear` only removes the agent's own. Marks are data, not drawings: they
+    clear when the symbol or timeframe changes.
+    """
+    fields: dict = {"op": op}
+    if time:
+        fields["time"] = time
+    if bars_ago >= 0:
+        fields["bars_ago"] = int(bars_ago)
+    for name, val in (("title", title), ("content", content), ("color", color), ("shape", shape),
+                      ("letter", letter), ("mark_id", id)):    # `id` is reserved by the command queue
+        if val:
+            fields[name] = val
+    return _command("marks", **fields)
+
+
 @mcp.tool(annotations=_ann("Console theme (light / dark)", read_only=False))
 def chart_theme(theme: str = "") -> str:
     """Read or set the console's theme: 'light', 'dark', or '' to report what is worn now.
