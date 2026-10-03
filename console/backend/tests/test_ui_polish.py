@@ -326,8 +326,9 @@ class TheOverlayPanelKeepsTheTopbarReachable(unittest.TestCase):
         self.assertIn('const DOCK_MIN = 760', read(APP))
         self.assertIn("window.innerWidth >= DOCK_MIN", read(APP))
 
-    def test_the_topbar_toggle_still_exists(self):
-        self.assertIn('id="detail-open"', read(HTML))
+    def test_the_detail_column_opens_from_a_picked_row_not_a_topbar_button(self):
+        self.assertNotIn('id="detail-open"', read(HTML))
+        self.assertIn("setPanel('detail'", read(APP))
 
 
     def test_the_welcome_blurb_hides_while_the_catalogue_is_open(self):
@@ -519,11 +520,11 @@ class TheDockedDoorsAreOneControlShape(unittest.TestCase):
         css = self._read("styles.css")
         self.assertNotIn("width: 32px; height: 30px", css,
                          "a fixed 32px docked box clips `Script` again")
-        self.assertIn(".vela-topbar-right #lib-open", css, "the catalogue door needs the dock shape")
+        self.assertNotIn("#lib-open", css, "the catalogue button is gone; its dock rule goes with it")
         self.assertIn("white-space: nowrap", css)
 
     def test_the_count_left_the_chrome(self):
         app = self._read("app.js")
         self.assertNotIn("label.textContent = ` ${data.total}`", app,
                          "the door label was overwritten with the count again")
-        self.assertIn("el.libOpen.setAttribute('data-tip'", app)
+        self.assertNotIn("el.libOpen", app, "the door the count used to ride on is gone")

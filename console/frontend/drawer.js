@@ -23,13 +23,13 @@
   const $id = (id) => document.getElementById(id);
   const drawer = $id('lib-drawer');
   const scrim = $id('drawer-scrim');
-  const door = $id('drawer-open');
+  const fallback = $id('drawer-fallback');   /* bare-chart only; Vela's own Indicators button is the door */
   const box = $id('drawer-q');
   const fams = $id('drawer-fams');
   const list = $id('drawer-list');
   const now = $id('drawer-now');
   const count = $id('drawer-count');
-  if (!drawer || !door) return;
+  if (!drawer) return;
 
   /* Name hits first: "order block" must lead with the scripts CALLED that, not the ones whose
      write-up merely mentions it. */
@@ -47,9 +47,21 @@
       + (r.description || '')).toLowerCase().includes(q);
   }
 
+  /* BUILT-INS: Vela's own studies for this market, read from the frame. Shaped like a catalogue row so
+     one list paints both halves; `__native` marks the ones that mount through mountNative(). */
+  function nativeRows() {
+    return (indState.natives || []).map((n) => ({
+      slug: n.type, name: n.title, family: '__builtin', cluster: n.supported === false ? 'not supported here' : (n.present ? 'on chart' : ''),
+      __native: true, present: n.present, supported: n.supported !== false,
+    }));
+  }
+
   function rows() {
-    const all = (indState.cat.rows || []);
     const q = st.q.trim().toLowerCase();
+    if (st.family === '__builtin') {
+      return nativeRows().filter((r) => !q || (r.name + ' ' + r.slug).toLowerCase().includes(q));
+    }
+    const all = (indState.cat.rows || []);
     return all.filter((r) => {
       if (st.family === '__fav') { if (!isFavourite('library', r.slug)) return false; }
       else if (st.family && (r.family || 'unfiled') !== st.family) return false;
@@ -73,6 +85,7 @@
         data-fam="${esc(key)}" aria-pressed="${st.family === key}">${esc(label)}<span>${n}</span></button>`;
     /* Counts follow the search; a family with no hit steps aside unless it is the one picked. */
     fams.innerHTML = chip('', 'All', hits.length)
+      + chip('__builtin', 'Built-ins', (indState.natives || []).length)
       + chip('__fav', '★ Favourites', favN)
       + groups.filter((g) => !q || n(g.key) > 0 || st.family === g.key)
         .map((g) => chip(g.key, g.name, q ? n(g.key) : g.count)).join('');
@@ -88,21 +101,23 @@
   }
 
   function rowHtml(r, i) {
-    const starred = isFavourite('library', r.slug);
+    const starred = !r.__native && isFavourite('library', r.slug);
     const res = st.result[r.slug];
     const running = st.busy === r.slug;
-    const meta = [famLabel(r.family || 'unfiled'), r.cluster].filter(Boolean).join(' · ');
+    const meta = r.__native ? ['built-in', r.cluster].filter(Boolean).join(' · ')
+      : [famLabel(r.family || 'unfiled'), r.cluster].filter(Boolean).join(' · ');
     return `<li class="drow${running ? ' is-busy' : ''}" style="--i:${Math.min(i, 18)}" data-slug="${esc(r.slug)}">
-      <img class="drow__shot" src="${esc(thumbUrl(r.slug, r.image_url, 160))}" loading="lazy" decoding="async" alt="">
-      <button type="button" class="drow__main" data-open="1" title="Open the source and write-up">
+      ${r.__native ? '<span class="drow__shot drow__shot--native" aria-hidden="true">ƒ</span>'
+        : `<img class="drow__shot" src="${esc(thumbUrl(r.slug, r.image_url, 160))}" loading="lazy" decoding="async" alt="">`}
+      <button type="button" class="drow__main" ${r.__native ? 'data-native="1" title="Add to the chart"' : 'data-open="1" title="Open the source and write-up"'}>
         <span class="drow__name">${esc((r.name || r.slug).trim())}</span>
         <span class="drow__meta">${esc(meta)}</span>
         ${res ? `<span class="drow__res ${res.ok ? 'is-ok' : 'is-bad'}">${esc(res.text)}</span>` : ''}
       </button>
-      <button type="button" class="drow__star${starred ? ' is-starred' : ''}" data-star="1"
-              aria-pressed="${starred}" aria-label="Favourite">${starred ? '★' : '☆'}</button>
-      <button type="button" class="drow__run" data-run="1" ${running ? 'disabled' : ''}
-              aria-label="Run on the chart">${running ? '<span class="spin" aria-hidden="true"></span>' : '▶'}<span>Run</span></button>
+      ${r.__native ? '' : `<button type="button" class="drow__star${starred ? ' is-starred' : ''}" data-star="1"
+              aria-pressed="${starred}" aria-label="Favourite">${starred ? '★' : '☆'}</button>`}
+      <button type="button" class="drow__run" data-run="1" ${running || (r.__native && !r.supported) ? 'disabled' : ''}
+              aria-label="${r.__native ? 'Add to the chart' : 'Run on the chart'}">${running ? '<span class="spin" aria-hidden="true"></span>' : '▶'}<span>Run</span></button>
     </li>`;
   }
 
@@ -133,21 +148,27 @@
     drawer.classList.toggle('is-open', st.open);
     scrim.classList.toggle('is-open', st.open);
     drawer.setAttribute('aria-hidden', String(!st.open));
-    door.setAttribute('aria-expanded', String(st.open));
-    door.classList.toggle('is-on', st.open);
+    if (fallback) { fallback.setAttribute('aria-expanded', String(st.open)); fallback.classList.toggle('is-on', st.open); }
     if (st.open) {
       if (indState.cat.state === 'idle' || indState.cat.state === 'error') {
         loadCatalogue().then(paint);
       }
+      if (indState.natives === null) loadNatives().then(paint);
       paint();
       setTimeout(() => box.focus({ preventScroll: true }), 180);
     } else if (drawer.contains(document.activeElement)) {
-      door.focus({ preventScroll: true });
+      (document.querySelector('.vela-widget-indicators, .vela-widget-action') || fallback || document.body).focus?.({ preventScroll: true });
     }
   }
 
   async function run(slug) {
     if (st.busy) return;
+    const nat = (indState.natives || []).find((n) => n.type === slug);
+    if (st.family === '__builtin' && nat) {
+      mountNative(nat.type, nat.title);        /* toasts + counts itself; asks the chart, so re-read below */
+      loadNatives().then(paint);
+      return;
+    }
     const row = (indState.cat.rows || []).find((r) => r.slug === slug) || { slug, name: slug };
     const label = (row.name || slug).trim();
     st.busy = slug;
@@ -188,7 +209,7 @@
     }
   }
 
-  door.addEventListener('click', () => setOpen(!st.open));
+  if (fallback) fallback.addEventListener('click', () => setOpen(!st.open));
   scrim.addEventListener('click', () => setOpen(false));
   $id('drawer-close').addEventListener('click', () => setOpen(false));
 
@@ -229,6 +250,7 @@
     const li = ev.target.closest('.drow');
     if (!li || !li.dataset.slug) return;
     const slug = li.dataset.slug;
+    if (ev.target.closest('[data-native]')) { run(slug); return; }
     const row = (indState.cat.rows || []).find((r) => r.slug === slug) || { slug, name: slug };
     if (ev.target.closest('[data-run]')) { run(slug); return; }
     if (ev.target.closest('[data-star]')) {
@@ -249,10 +271,20 @@
     return true;
   };
   /* Read-back for the agent and for scripted checks: what the drawer actually PAINTED. */
+  /* Normally Vela's own Indicators button is the door (workspace.js). With no workspace row — the bare
+     chart, or a build that refused the override — a plain button stands in so the drawer is never
+     unreachable. */
+  function showFallbackIfNeeded() {
+    if (fallback && !document.querySelector('.vela-widget-topbar')) fallback.hidden = false;
+  }
+  window.addEventListener('ws-failed', showFallbackIfNeeded);
+  setTimeout(showFallbackIfNeeded, 8000);
+
   window.libDrawer = {
-    open: setOpen, run,
+    open: setOpen, toggle: () => setOpen(!st.open), run,
     state: () => ({ open: st.open, q: st.q, family: st.family, busy: st.busy,
                     rows: list.querySelectorAll('.drow[data-slug]').length,
-                    total: (indState.cat.rows || []).length, catalogue: indState.cat.state }),
+                    total: (indState.cat.rows || []).length, catalogue: indState.cat.state,
+                    builtins: (indState.natives || []).length }),
   };
 })();

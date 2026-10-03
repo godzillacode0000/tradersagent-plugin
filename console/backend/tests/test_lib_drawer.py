@@ -30,9 +30,12 @@ def rule(css, selector):
 
 
 class Drawer(unittest.TestCase):
-    def test_hamburger_is_the_first_thing_in_the_topbar(self):
-        top = HTML.split('<header class="topbar">', 1)[1]
-        self.assertLess(top.index('id="drawer-open"'), top.index('class="brand"'))
+    def test_the_door_is_velas_indicators_button_not_a_console_hamburger(self):
+        self.assertNotIn('id="drawer-open"', HTML)
+        self.assertNotIn("hamburger", HTML)
+        ws = open(os.path.join(os.path.dirname(os.path.join(ROOT, "console", "frontend", "index.html")),
+                               "workspace.js"), encoding="utf-8").read()
+        self.assertIn("window.libDrawer.toggle()", ws)
 
     def test_loaded_after_app(self):
         self.assertLess(HTML.index('src="./app.js"'), HTML.index('src="./drawer.js"'))

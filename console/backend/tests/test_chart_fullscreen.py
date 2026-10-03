@@ -42,11 +42,13 @@ def read(path: str) -> str:
 
 
 class TheButtonIsThere(unittest.TestCase):
-    def test_the_topbar_carries_it(self):
-        html = read(HTML)
-        self.assertIn('id="full-open"', html)
-        self.assertIn('aria-pressed="false"', html, "a toggle has to say whether it is on")
-        self.assertIn('id="chart-focus-exit"', html, "in full screen there is no topbar left to click")
+    def test_the_control_is_a_vela_widget_action_now(self):
+        """3 Oct: ⛶ is registered through Vela's widget-action API (workspace.js) instead of sitting
+        in our own topbar — one row, Vela's, with no DOM docking to maintain."""
+        ws = read(os.path.join(FRONTEND, "workspace.js"))
+        self.assertIn("id: 'ta-fullscreen'", ws)
+        self.assertIn("window.setChartFullscreen", ws)
+        self.assertIn('id="chart-focus-exit"', read(HTML), "in full screen there is no topbar left to click")
 
     def test_the_agent_has_the_same_button(self):
         bridge = read(BRIDGE)

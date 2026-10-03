@@ -40,7 +40,7 @@ def read(path: str) -> str:
 class TheSurfaceExists(unittest.TestCase):
     def test_the_modal_and_its_door_are_in_the_page(self):
         html = read(HTML)
-        for anchor in ("id=\"ind-modal\"", "id=\"ind-open\"", "id=\"ind-q\"", "id=\"ind-grid\"",
+        for anchor in ("id=\"ind-modal\"", "id=\"ind-q\"", "id=\"ind-grid\"",
                        "id=\"ind-nav\"", 'data-section="favorites"'):
             self.assertIn(anchor, html, f"the Indicators surface needs {anchor}")
 

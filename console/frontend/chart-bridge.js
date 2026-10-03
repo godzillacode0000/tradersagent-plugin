@@ -999,19 +999,18 @@
              ask, 26 Sep, after watching the original LuxAlgo app). The door opens it and reports the
              rows the grid actually painted: a panel that opened is not a panel that filled. */
           const modal = document.getElementById('ind-modal');
-          const openBtn = document.getElementById('ind-open');
-          if (!modal || !openBtn) {
+          if (!modal || typeof window.openIndicators !== 'function') {
             out.detail = 'this page has no Indicators surface — reload the console to pick up the ' +
               'newer frontend files';
             break;
           }
           if (command.show === false) {
-            if (!modal.classList.contains('view--hidden')) openBtn.click();
+            window.openIndicators(false);
             out.ok = true;
             out.detail = 'Indicators surface closed';
             break;
           }
-          if (modal.classList.contains('view--hidden')) openBtn.click();
+          window.openIndicators(true);
           const section = String(command.section || '').trim().toLowerCase();
           if (section && typeof window.setIndSection === 'function') window.setIndSection(section);
           if (command.q != null && typeof window.setIndSearch === 'function') window.setIndSearch(command.q);
@@ -1219,20 +1218,24 @@
              The guard reads the COLUMN too, not just the view: a reload can leave the
              rightview pref with view-script visible while data-detail is still off, and a
              view--hidden-only check then skipped the click and reported success anyway. */
-          const openBtn = document.getElementById('script-open');
-          const pane = document.getElementById('view-script');
-          const track = document.querySelector('.main');
-          const colOff = !track || track.dataset.detail !== 'on';
-          const closed = colOff || (pane && pane.classList.contains('view--hidden'));
+          /* The `<>` control is a Vela widget action now (3 Oct): there is no button in the DOM for
+             this door to click, so it goes through the page's own control surface and reports the
+             pane's real state instead of assuming a click landed. */
+          const sp = window.scriptPane;
+          if (!sp || typeof sp.state !== 'function') {
+            out.detail = 'this page has no script pane control — reload the console to pick up the ' +
+              'newer frontend files';
+            break;
+          }
           /* The bridge could open the editor but never close it (23 Sep pane audit). `close: true`
-             makes the door symmetric: the button toggles, so clicking an open pane closes it. */
+             makes the door symmetric: the state says whether the pane is up. */
           if (command.close) {
-            if (openBtn && pane && !closed) openBtn.click();
+            if (sp.state().open) sp.close();
             out.ok = true;
             out.detail = 'script pane closed';
             break;
           }
-          if (openBtn && pane && closed) openBtn.click();
+          if (!sp.state().open) sp.open();
           /* The CLI speaks `source` (bin/trader-chart), the MCP tools speak `pine`: read both, or
              `trader-chart script show --pine FILE` silently opened an empty editor. `mode: show`
              loads the editor and stops there — running is `draw`/`native`/no mode at all. */
@@ -1340,8 +1343,7 @@
             if (!alreadyOpen) chip.click();
           }
           if (command.show) {
-            const openButton = document.getElementById('lib-open');
-            if (openButton) openButton.click();
+            if (typeof window.openLibraryBrowse === 'function') window.openLibraryBrowse();
             else if (typeof toggleBrowse === 'function') toggleBrowse(true);
           }
           const list = conceptMode ? conceptsList : indicatorList;
@@ -1416,9 +1418,10 @@
         }
         case 'mode': {
           out.ok = true;
-          out.detail = 'the console is chart-first: the <> control rides Vela\'s own toolbar ' +
-            '(resting in the topbar on the bare-chart path), the Library and Details open from ' +
-            'the topbar, and every door runs the same landasan (window.TraderRun)';
+          out.detail = 'the console is chart-first: Vela\'s own Indicators button opens the drawer ' +
+            '(the one surface for the catalogue and the built-ins), the <> Script control and full ' +
+            'screen are Vela widget actions (plain fallbacks on the bare-chart path), and every ' +
+            'door runs the same landasan (window.TraderRun)';
           break;
         }
         case 'reload': {

@@ -666,34 +666,6 @@ input[type="text"]:hover { border-color: var(--lx-border-strong); }
 .btn--toggle { height: var(--lx-control-h-sm); padding: 0 var(--lx-space-2); font-size: var(--lx-fs-xs); color: var(--lx-fg-muted); }
 .btn--toggle:hover { color: var(--lx-fg-bright); }
 .btn--toggle[aria-pressed="true"] { color: var(--lx-fg); border-color: var(--lx-border-strong); background: var(--lx-surface-3); }
-/* Docked onto Vela's toolbar row (dockScriptButton moves the node — the operator wants it
-   "sebaris toolbar Vela"): ONE control shape for both doors, the geometry of that row's own icon
-   tools — 30px tall, transparent, the sibling colour read at runtime via --vela-tool-color.
-   26 Sep: the operator circled this row — a fixed 32px box clipped `Script` to `Scri…`, and the
-   catalogue door kept its pill (it had no dock rule at all). Width is now the label's own, with
-   nowrap so it can never be cut; the count it used to wear is in the tooltip.
-   At home in .topbar the normal .btn rules apply again; both contexts stay correct. */
-.vela-topbar-right #script-open,
-.vela-topbar-right #lib-open {
-  width: auto; min-width: 32px; max-width: none;
-  height: 30px; padding: 0 6px;
-  display: inline-flex; align-items: center;
-  white-space: nowrap;
-  border: 0; border-radius: 4px;
-  background: transparent;
-  color: var(--vela-tool-color, #868a96);
-  font-size: 13px;
-}
-.vela-topbar-right #script-open:hover,
-.vela-topbar-right #lib-open:hover { background: var(--lx-bg-hover-strong); }
-/* The label stays visible in Vela's row (F2, 25 Sep): the operator's recording showed a bare `<>`
-   that read as punctuation, so nobody could tell the control opens the Pine editor. */
-.vela-topbar-right #script-open .btn__label,
-.vela-topbar-right #lib-open .btn__label { display: inline; margin-inline-start: 4px; }
-.vela-topbar-right #script-open[aria-pressed="true"],
-.vela-topbar-right #lib-open[aria-pressed="true"] {
-  color: var(--lx-accent-ink); background: var(--lx-surface-3);
-}
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
 
 .chips { display: flex; flex-wrap: wrap; gap: var(--lx-space-1); }
@@ -1447,23 +1419,6 @@ body.has-ind-modal { overflow: hidden; }
 /* ── ☰ The drawer (3 Oct) ─────────────────────────────────────────────────────────────────────
    Slides over the chart from the left. Motion is transform/opacity only, so Vela never resizes, and
    the rows stagger in once on open (Linear/Raycast-style list reveal, ported to tokens). */
-.hamburger {
-  display: inline-grid; place-content: center; gap: 3px;
-  width: 28px; height: 26px; margin-right: 2px; padding: 0;
-  border: 1px solid transparent; border-radius: var(--lx-radius-md);
-  background: transparent; cursor: pointer;
-  transition: background var(--lx-dur-150) var(--lx-ease), border-color var(--lx-dur-150) var(--lx-ease);
-}
-.hamburger span {
-  display: block; width: 14px; height: 1.6px; border-radius: 2px; background: var(--lx-fg);
-  transition: transform 220ms var(--lx-ease), opacity var(--lx-dur-150) var(--lx-ease);
-}
-.hamburger:hover { background: var(--lx-surface-3); border-color: var(--lx-border); }
-.hamburger:focus-visible { outline: 2px solid var(--lx-accent); outline-offset: 1px; }
-.hamburger.is-on span:nth-child(1) { transform: translateY(4.6px) rotate(45deg); }
-.hamburger.is-on span:nth-child(2) { opacity: 0; transform: scaleX(.3); }
-.hamburger.is-on span:nth-child(3) { transform: translateY(-4.6px) rotate(-45deg); }
-
 .drawer-scrim {
   position: fixed; inset: var(--lx-topbar-h) 0 0 0; z-index: calc(var(--lx-z-modal) - 2);
   background: var(--lx-backdrop); opacity: 0; pointer-events: none;
@@ -1585,6 +1540,6 @@ body.has-ind-modal { overflow: hidden; }
   @keyframes lx-row-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
 }
 @media (prefers-reduced-motion: reduce) {
-  .lib-drawer, .lib-drawer.is-open, .drawer-scrim, .hamburger span { transition: none; }
+  .lib-drawer, .lib-drawer.is-open, .drawer-scrim { transition: none; }
   .drawer__dot, .spin, .drow--skel span { animation: none; }
 }

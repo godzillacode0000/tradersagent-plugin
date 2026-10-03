@@ -16,8 +16,7 @@ const el = {
   mcp: $('#mcp-status'), bars: $('#bars-status'), count: $('#indicator-count'),
   chartLog: $('#chart-log'), chartOrigin: $('#chart-origin'), toast: $('#toast'),
   libraryPanel: $('.panel--left'), libraryToggle: $('#library-toggle'),
-  main: $('.main'), libraryOpen: $('#library-open'), detailOpen: $('#detail-open'),
-  libOpen: $('#lib-open'),
+  main: $('.main'),
   browse: $('#browse'), browseToggle: $('#browse-toggle'), browseBody: $('#browse-body'),
   browseList: $('#browse-list'), browseFamilies: $('#browse-families'),
   browseCount: $('#browse-count'), browseMore: $('#browse-more'),
@@ -25,8 +24,8 @@ const el = {
   browseConceptsCount: $('#browse-concepts-count'), browseConceptsList: $('#browse-concepts-list'),
   browseConceptsMore: $('#browse-concepts-more'),
   browseConceptsClose: $('#browse-concepts-close'),
-  scriptOpen: $('#script-open'),
-  fullOpen: $('#full-open'), focusExit: $('#chart-focus-exit'),
+  scriptFallback: $('#script-fallback'),
+  fullFallback: $('#full-fallback'), focusExit: $('#chart-focus-exit'),
   statusbar: $('.statusbar'),
 };
 
@@ -63,8 +62,8 @@ function showRightView(which) {
 
 function syncRightButtons() {
   const col = el.main.dataset.detail === 'on';
-  el.detailOpen.setAttribute('aria-pressed', String(col && rightViewIs('detail')));
-  el.scriptOpen.setAttribute('aria-pressed', String(col && rightViewIs('script')));
+  /* The `<>` toggle is a Vela widget action now; only the bare-chart fallback wears the pressed state. */
+  if (el.scriptFallback) el.scriptFallback.setAttribute('aria-pressed', String(col && rightViewIs('script')));
 }
 
 /* Vela repaints through its own resize observer, but a panel flip (the right column opening or
@@ -117,7 +116,6 @@ function setPanel(name, on) {
     return;
   }
   el.main.dataset[name] = on ? 'on' : 'off';
-  if (el.libraryOpen) el.libraryOpen.setAttribute('aria-pressed', String(Boolean(on)));
   try { localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), [name]: Boolean(on) })); } catch { /* private mode */ }
   nudgeChart();
 }
@@ -144,59 +142,10 @@ const chartReady = new Promise((resolve) => { markChartReady = resolve; });
    not only when this page happens to mount something itself. */
 setInterval(refreshIndicatorCount, 4000);
 
-/* The `<>` control rides VELA's own toolbar (operator, 23 Sep: "sy nak editor script tun ikut
-   sebaris toolbar Vela"). Vela's widget topbar is real DOM — no fork needed for this — so the
-   live NODE moves into its right cluster: same #script-open, so the bridge's click,
-   syncRightButtons' aria state and every test grepping the id keep working from wherever it
-   hangs. It lands before the camera icon like the reference he sent, and takes the sibling
-   tool's colour read at runtime (--vela-tool-color) so dark and light themes both fit with no
-   hardcoded grey. Vela rebuilds that row on its own schedule; a rebuild only DETACHES the node
-   (our reference survives innerHTML wipes), so this runs on a light timer to re-dock — and with
-   no workspace row (bare chart) the control goes back to our topbar where .topbar rules apply. */
-function dockScriptButton() {
-  const btn = el.scriptOpen;
-  if (!btn) return false;
-  const slot = document.querySelector('.vela-widget-topbar .vela-topbar-right');
-  if (!slot) {
-    if (!btn.isConnected) {
-      const home = document.querySelector('.topbar__right');
-      const mcp = document.getElementById('mcp-status');
-      if (home) (mcp ? home.insertBefore(btn, mcp) : home.appendChild(btn));
-      btn.style.removeProperty('--vela-tool-color');
-    }
-    // The catalogue button travels with it: both live on Vela's row when there is one. So does
-    // full screen (27 Sep) — it is a control ON the chart, so it belongs beside the chart's own.
-    const lib = el.libOpen, libHome = document.querySelector('.topbar__right');
-    if (lib && !lib.isConnected && libHome) libHome.insertBefore(lib, btn.nextSibling);
-    if (lib) lib.style.removeProperty('--vela-tool-color');
-    const full = el.fullOpen;
-    if (full && !full.isConnected && libHome) libHome.insertBefore(full, lib && lib.nextSibling ? lib.nextSibling : btn.nextSibling);
-    if (full) full.style.removeProperty('--vela-tool-color');
-    return false;
-  }
-  if (btn.parentElement !== slot) {
-    const cam = slot.querySelector('.vela-widget-screenshot');
-    if (cam) slot.insertBefore(btn, cam); else slot.appendChild(btn);
-  }
-  // Beside `<>`, same slot, same colour read — one dock, two doors.
-  const lib = el.libOpen;
-  if (lib && lib.parentElement !== slot) {
-    slot.insertBefore(lib, btn.nextSibling);
-  }
-  const full = el.fullOpen;
-  if (full && full.parentElement !== slot) {
-    slot.insertBefore(full, lib && lib.nextSibling ? lib.nextSibling : btn.nextSibling);
-  }
-  const sib = slot.querySelector('.vela-widget-tool');
-  if (sib) {
-    const colour = getComputedStyle(sib).color;
-    btn.style.setProperty('--vela-tool-color', colour);
-    if (lib) lib.style.setProperty('--vela-tool-color', colour);
-    if (full) full.style.setProperty('--vela-tool-color', colour);
-  }
-  return true;
-}
-setInterval(dockScriptButton, 4000);
+/* `<>` Script and full screen are real Vela widget actions now (3 Oct, workspace.js registers them):
+   Vela renders and maintains them in its own row, so the hand-docking this file used to do — and its
+   4 s re-dock timer, which is why buttons jumped between rows — is gone. A bare chart (no workspace
+   row) gets plain fallback buttons instead; see showFallbacks() in the boot wiring. */
 
 
 /* ── Full screen for the chart (27 Sep) ───────────────────────────────────────────────────────────
@@ -226,9 +175,9 @@ function syncChartBox() {
 function paintChartFocus(on) {
   document.body.classList.toggle('chart-focus', on);
   if (el.focusExit) el.focusExit.hidden = !on;
-  if (el.fullOpen) {
-    el.fullOpen.setAttribute('aria-pressed', String(on));
-    el.fullOpen.classList.toggle('is-on', on);
+  if (el.fullFallback) {
+    el.fullFallback.setAttribute('aria-pressed', String(on));
+    el.fullFallback.classList.toggle('is-on', on);
   }
   syncChartBox();
 }
@@ -562,7 +511,6 @@ async function bootChart() {
         document.body.classList.add('has-workspace');   // hides our redundant chart header
         log('Workspace active: cell chart adopted. Pine mounting remains experimental.');
         /* The workspace built its toolbar row by now — put the `<>` control on it. */
-        dockScriptButton();
         unblockPineEngine();
         markChartReady(); exposeChart();
         /* The chart's stored palette is not the console's: Vela restores whatever it last saved, and a
@@ -944,11 +892,6 @@ async function loadBrowse(reset = false) {
     // The count is telemetry, not a label (26 Sep — the operator circled `☰ 806` on the chart row:
     // a number in the chrome reads as a foreign element, spec §4). The door says WHAT it opens and
     // the number lives in its tooltip; the label is never overwritten.
-    if (el.libOpen && !el.libOpen.dataset.counted && data.total) {
-      el.libOpen.setAttribute('data-tip',
-        `Catalogue — all ${data.total} LuxAlgo Library indicators, one click from the chart`);
-      el.libOpen.dataset.counted = '1';
-    }
     if (el.browseCount) {
       el.browseCount.textContent = browseState.family
         ? `${browseState.rows.length} of ${total} · ${browseState.family}`
@@ -1163,7 +1106,6 @@ function toggleBrowse(on) {
   document.getElementById('view-library')?.classList.toggle('is-browsing', open);
   el.browseToggle?.classList.toggle('is-on', open);
   el.browseToggle?.setAttribute('aria-expanded', String(open));
-  el.libOpen?.setAttribute('aria-pressed', String(open && (el.main.dataset.library === 'on')));
   try { localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), browse: open })); } catch { /* private mode */ }
   if (open) {
     if (!el.browseFamilies.children.length) loadFamilies();
@@ -1915,9 +1857,7 @@ function openIndicators(on) {
 
 function initIndicators() {
   const modal = document.getElementById('ind-modal');
-  const open = document.getElementById('ind-open');
-  if (!modal || !open) return;
-  open.addEventListener('click', () => openIndicators(modal.classList.contains('view--hidden')));
+  if (!modal) return;
   document.getElementById('ind-close').addEventListener('click', () => openIndicators(false));
   /* A card whose picture the catalogue does not actually carry answers 404. Drop the <img> instead of
      leaving the browser's broken-image glyph in the tile: no picture is a fact, a broken icon looks
@@ -2032,6 +1972,27 @@ async function checkHealth() {
   }
 }
 
+/** Land on the open catalogue list. The agent's `browse --show` calls this — it used to click the
+    ☰ catalogue button, and deleting a button must not silently take the agent's path with it. */
+function openLibraryBrowse() {
+  setPanel('library', true);
+  setLibraryCollapsed(false);
+  toggleBrowse(true);
+  toast('LuxAlgo Library ready');
+  checkHealth();
+}
+window.openLibraryBrowse = openLibraryBrowse;
+
+/* The script pane's control surface (3 Oct): the `<>` toggle is a Vela widget action, so the agent
+   has no button to click — these functions ARE the door, and they answer with the pane's own state
+   (the COLUMN and the view — the 23 Sep lesson) so a report of "open" is never about a shut column. */
+window.scriptPane = {
+  open: () => { setPanel('script', true); return window.scriptPane.state(); },
+  close: () => { setPanel('script', false); return window.scriptPane.state(); },
+  toggle: () => { togglePanel('script'); return window.scriptPane.state(); },
+  state: () => ({ open: el.main.dataset.detail === 'on' && rightViewIs('script') }),
+};
+
 /* F6 (25 Sep): Escape closes whatever this pane opened. Only the family popover listened for
    it, so the script / detail pane — the operator's "I opened PineTS, Escape should hide it" —
    could only be closed with its ✕. Bound BEFORE conceptsKeydown so one Escape closes ONE surface:
@@ -2096,13 +2057,19 @@ async function main() {
   toggleBrowse(panelPrefs.browse === true);
   setPanel('detail', false);   // never restore the column open (his 17 Sep complaint)
   showRightView(panelPrefs.rightview === 'script' ? 'script' : 'detail');
-  el.libraryOpen.addEventListener('click', () => togglePanel('library'));
-  el.detailOpen.addEventListener('click', () => togglePanel('detail'));
-  el.scriptOpen.addEventListener('click', () => togglePanel('script'));
+  /* Bare-chart fallbacks (3 Oct): the drawer door, the script pane and full screen are Vela widget
+     actions now, so with no workspace row there is nothing to press. One check after boot reveals
+     plain buttons for the two here (drawer.js reveals its own), wired to the same functions the
+     widget actions run. */
+  const showFallbacks = () => {
+    if (document.querySelector('.vela-widget-topbar')) return;
+    for (const b of [el.scriptFallback, el.fullFallback]) if (b) b.hidden = false;
+  };
+  window.addEventListener('ws-failed', showFallbacks);
+  setTimeout(showFallbacks, 8000);
+  el.scriptFallback?.addEventListener('click', () => togglePanel('script'));
+  el.fullFallback?.addEventListener('click', () => setChartFullscreen(!isChartFullscreen()));
 
-  // The chart-side catalogue button: it is a door, not a toggle — a click always lands on the
-  // open list (panel out, browse body out, list filled), because "nothing happened" is what the
-  // operator reported the last time a row only revealed a collapsed surface.
   el.browseToggle?.addEventListener('click', () => toggleBrowse());
   el.browseMore?.addEventListener('click', () => loadBrowse(false));
   el.browseConceptsMore?.addEventListener('click', () => loadFamilyConcepts(false));
@@ -2110,13 +2077,6 @@ async function main() {
   document.addEventListener('keydown', escapeKeydown);
   document.addEventListener('keydown', conceptsKeydown);
   document.addEventListener('pointerdown', onDocumentPointerDown, true);
-  el.libOpen?.addEventListener('click', () => {
-    setPanel('library', true);
-    setLibraryCollapsed(false);
-    toggleBrowse(true);
-    toast('LuxAlgo Library ready');
-    checkHealth();
-  });
 
   // Script pane (restored 23 Sep) — Run goes through the one landasan; the draft survives reloads.
   const srcBox = $('#script-src'), outBox = $('#script-out'), nameBox = $('#script-name'), runBtn = $('#script-run');
@@ -2250,9 +2210,6 @@ async function main() {
   /* Full screen (27 Sep). See the CSS header: our chrome goes so the chart owns this page, and the
      page asks for real fullscreen so it can take the whole display. Both are idempotent — the door
      may call this as often as it likes. */
-  if (el.fullOpen) {
-    el.fullOpen.addEventListener('click', () => setChartFullscreen(!isChartFullscreen()));
-  }
   if (el.focusExit) {
     el.focusExit.addEventListener('click', () => setChartFullscreen(false));
   }

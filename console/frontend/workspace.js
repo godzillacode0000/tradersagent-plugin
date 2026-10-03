@@ -156,6 +156,41 @@ state.ready = (async () => {
     console.info('[workspace] chart palette parked — switching the console to light restores it');
   }
 
+  // Vela's own "Indicators" button is the door to the drawer. `registerWidgetAction` is Vela's official
+  // override for exactly two slots ("indicators", "screenshot"), and Vela reads it in the VelaWorkspace
+  // CONSTRUCTOR (`this.indicatorsOverride = topbarActionOverride("indicators")`) — registered later it does
+  // nothing and Vela keeps its own picker. The drawer holds both halves (BUILT-INS and the LuxAlgo
+  // catalogue), so overriding the button costs the operator nothing. A failure here must not cost the chart.
+  try {
+    const { registerWidgetAction } = await import('@luxalgo/vela/plugin');
+    if (typeof registerWidgetAction === 'function') {
+      registerWidgetAction({
+        id: 'indicators', target: 'topbar', label: 'Indicators', icon: 'indicators',
+        run: () => { if (window.libDrawer) window.libDrawer.toggle(); },
+      });
+      /* `<>` Script and full screen ride Vela's own row as REAL widget actions (3 Oct) instead of the
+         old DOM docking: Vela renders, styles and maintains them itself, so there is no re-dock timer
+         and nothing to jump between rows. Both are icon-only (the labels are the tooltips) — the row
+         is 868 px wide, and full labels push Vela's own camera off its edge. */
+      registerWidgetAction({
+        id: 'ta-script', target: 'topbar', icon: 'pen', iconOnly: true, order: 20,
+        label: 'Script — write or paste Pine, then Run it on this chart',
+        run: () => { if (window.scriptPane) window.scriptPane.toggle(); },
+      });
+      registerWidgetAction({
+        id: 'ta-fullscreen', target: 'topbar', icon: 'maximize', iconOnly: true, order: 30,
+        label: 'Full screen — the chart takes the whole pane (Esc comes back)',
+        run: () => {
+          if (window.setChartFullscreen) {
+            window.setChartFullscreen(!(window.isChartFullscreen && window.isChartFullscreen()));
+          }
+        },
+      });
+    }
+  } catch (err) {
+    console.warn('[workspace] could not take over the Indicators button — the fallback button stays visible:', err);
+  }
+
   const ws = new VelaWorkspace('#chart', {
     layout: LAYOUT,                                  // Vela grid preset — see LAYOUT above
     symbol: 'BTCUSDT',

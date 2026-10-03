@@ -89,21 +89,24 @@ class TheListCannotDoubleCount(unittest.TestCase):
         self.assertIn("sawChange", block)
 
 
-class TheChartSideDoorOpensIt(unittest.TestCase):
-    def test_the_button_is_on_the_chartside_bar(self):
-        self.assertIn('id="lib-open"', read(HTML))
+class TheCatalogueHasOneDoorNow(unittest.TestCase):
+    """3 Oct: the ☰ catalogue button (a fourth copy of the list, and it overflowed the 868 px pane) is
+    gone. Its job — "land on the open catalogue list" — is a function the agent calls."""
 
-    def test_it_docks_beside_the_script_button(self):
-        app = read(APP)
-        block = app.split("function dockScriptButton", 1)[1].split("\n}", 1)[0]
-        self.assertIn("libOpen", block, "the catalogue button rides Vela's row with `<>`")
+    def test_the_button_is_gone(self):
+        self.assertNotIn('id="lib-open"', read(HTML))
+        self.assertNotIn("libOpen", read(APP))
 
-    def test_a_click_always_lands_on_the_open_list(self):
+    def test_nothing_docks_anything_any_more(self):
+        self.assertNotIn("dockScriptButton", read(APP),
+                         "the dock is gone: the controls are Vela widget actions now")
+
+    def test_landing_on_the_open_list_is_a_function(self):
         # The operator's earlier complaint was landing on a surface that was present but collapsed.
         app = read(APP)
-        block = app.split("el.libOpen?.addEventListener", 1)[1].split("});", 1)[0]
+        block = app.split("function openLibraryBrowse", 1)[1].split("\n}", 1)[0]
         for call in ("setPanel('library', true)", "setLibraryCollapsed(false)", "toggleBrowse(true)"):
-            self.assertIn(call, block, f"the door must {call}")
+            self.assertIn(call, block, f"opening the browse list must {call}")
 
 
 class ItIsCommandableNotJustClickable(unittest.TestCase):
@@ -132,10 +135,12 @@ class ItIsCommandableNotJustClickable(unittest.TestCase):
 
 
 class TheDocsSayWhatItIsNot(unittest.TestCase):
-    def test_vellas_own_indicators_menu_is_not_claimed_to_hold_them(self):
-        # The whole reason this door exists: Vela's ⊕ lists its own ~76 natives, never the 805.
-        html = read(HTML)
-        self.assertIn("Vela's own \"Indicators\" menu lists only ITS", html)
+    def test_vellas_own_indicators_button_now_opens_the_drawer_that_holds_both_halves(self):
+        # Vela's menu lists only its ~76 natives, never the 805 — so taking the button over is only
+        # honest if the drawer carries the natives too.
+        front = os.path.dirname(HTML)
+        self.assertIn("registerWidgetAction", read(os.path.join(front, "workspace.js")))
+        self.assertIn("__builtin", read(os.path.join(front, "drawer.js")))
 
 
 class FamilyChipsRevealConcepts(unittest.TestCase):

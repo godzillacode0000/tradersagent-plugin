@@ -12,38 +12,16 @@
 <body>
 <div class="app">
   <header class="topbar">
-    <!-- ☰ The drawer door (3 Oct): every LuxAlgo Library script, one click from the chart. -->
-    <button type="button" class="hamburger" id="drawer-open" aria-expanded="false"
-            aria-controls="lib-drawer" aria-label="Open the LuxAlgo script drawer" title="LuxAlgo scripts">
-      <span></span><span></span><span></span>
-    </button>
-    <div class="brand">
+        <div class="brand">
       <span class="brand__mark" title="tools by luxalgo-mcp-server · chart by Vela · Pine engine vela-pinets">▲</span>
       <span class="brand__name">LuxAlgo Library</span>
       <span class="brand__sub">× Vela chart</span>
     </div>
     <div class="topbar__right">
-      <!-- Chart-first (operator's call, 16 Sep): the library and the detail panel are opt-in from
-           these two toggles, so the Vela chart owns the whole pane by default. -->
-      <button type="button" class="btn btn--ghost btn--toggle" id="library-open"
-              aria-pressed="false" aria-label="Show the indicator Library" data-tip="Library — browse the LuxAlgo catalogue">☰ Library</button>
-      <button type="button" class="btn btn--ghost btn--toggle" id="detail-open"
-              aria-pressed="false" aria-label="Show the Pine source / write-up panel" data-tip="Details — the Pine source / write-up for the open row">▤ Details</button>
-      <!-- Restored 23 Sep (operator's call): the LuxAlgo-style "paste and Run" pane, back as a
-           view of the right-hand track. It runs through the same landasan as chat and Library. -->
-      <button type="button" class="btn btn--ghost btn--toggle" id="script-open"
-              aria-pressed="false" aria-label="Write and run Pine on this chart" data-tip="Script — write or paste Pine, then Run it on this chart">&lt;&gt;<span class="btn__label"> Script</span></button>
-      <!-- The catalogue, one click from the chart. Rides Vela's own toolbar row beside `<>`
-           (same dock, same self-heal) — Vela's own "Indicators" menu lists only ITS ~76 natives,
-           so the catalogue from the LuxAlgo Library needs its own door. -->
-      <button type="button" class="btn btn--ghost btn--toggle" id="lib-open"
-              aria-pressed="false" aria-label="Browse the LuxAlgo Library indicator catalogue" data-tip="Catalogue — every LuxAlgo Library indicator, one click from the chart">☰<span class="btn__label"> catalogue</span></button>
-      <!-- One surface for both halves (26 Sep, after the operator watched the original LuxAlgo
-           app): BUILT-INS are Vela's own natives for this market, LIBRARY is the LuxAlgo catalogue,
-           and ☆ keeps what he actually reaches for. Vela's own menu knows only the first half and
-           this console's Library panel only the second — neither remembers anything. -->
-      <button type="button" class="btn btn--ghost btn--toggle" id="ind-open"
-              aria-pressed="false" aria-label="Open the Indicators surface" data-tip="Indicators — Vela's built-ins and the Library catalogue behind one search, with favourites">⌗<span class="btn__label"> Indicators</span></button>
+                                    <!-- Only the bare-chart fallback shows this: normally the door is Vela's own Indicators button. -->
+      <button type="button" class="btn btn--ghost" id="drawer-fallback" hidden>Scripts</button>
+      <button type="button" class="btn btn--ghost" id="script-fallback" hidden>&lt;&gt; Script</button>
+      <button type="button" class="btn btn--ghost" id="full-fallback" hidden>⛶ Full screen</button>
       <span class="chart-legend" id="lib-legend" hidden></span>
       <!-- Names whose overlay geometry is on screen — set by the unified landasan. Lives HERE,
            not in .chart-head: workspace mode hides that row (body.has-workspace .chart-head). -->
@@ -51,15 +29,7 @@
       <span id="mcp-status" class="pill pill--wait" title="LuxAlgo MCP backend">MCP: checking…</span>
       <span id="bars-status" class="pill pill--wait" title="Where the candles come from">bars: loading…</span>
       <span id="indicator-count" class="pill" title="Indicators that actually executed on the chart — a mount that silently did nothing is never counted">0 indicators</span>
-      <!-- Full screen (27 Sep). The operator, looking at this pane: "sy nak ada button capability
-           untuk boleh kasi fullscreen ni chart,,, sekarang mcm takde". One press hides the console's
-           own chrome so the chart owns the page, and asks for real fullscreen too — the plugin's
-           pane iframe carries `allowfullscreen`, so the console can take the whole display. Esc, the
-           button again, or the floating ✕ comes back. -->
-      <button type="button" class="btn btn--ghost" id="full-open" aria-pressed="false"
-              title="Full screen — the chart takes the whole pane (Esc comes back)"
-              aria-label="Full screen chart">⛶<span class="btn__label"> Full screen</span></button>
-      <button type="button" class="btn btn--ghost" id="theme-toggle" title="Switch light / dark" aria-label="Switch theme">◐</button>
+            <button type="button" class="btn btn--ghost" id="theme-toggle" title="Switch light / dark" aria-label="Switch theme">◐</button>
     </div>
   </header>
 
@@ -183,8 +153,9 @@
     <!-- The Pine editor that used to sit between the Library and the chart (removed 17 Sep,
          git history b30222c) is BACK — the operator asked for the LuxAlgo-style paste-and-Run
          pane on 23 Sep. It lives as a view of the right-hand track, next to the picked result,
-         and the `<>` control opens it — docked onto Vela's own toolbar row (same day: "ikut
-         sebaris toolbar Vela"), resting in this topbar only on the bare-chart path. -->
+         and the `<>` control opens it — a Vela widget action in its own toolbar row (3 Oct; it used
+         to be hand-docked onto that row, which is why buttons jumped), with a plain fallback button
+         on the bare-chart path. -->
 
     <!-- CENTER: the chart -->
     <section class="panel panel--chart">

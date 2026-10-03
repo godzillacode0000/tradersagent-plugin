@@ -77,7 +77,6 @@ class TheScriptPaneIsBack(unittest.TestCase):
 
     def test_topbar_button_and_markup_exist(self):
         for needle in (
-            'id="script-open"',
             'id="view-script"',
             'id="script-run"',
             'id="script-close"',
@@ -129,39 +128,36 @@ class TheScriptPaneIsBack(unittest.TestCase):
         self.assertNotIn("display", legend)   # [hidden] must be able to hide it
 
 
-class TheScriptControlRidesVelaToolbar(unittest.TestCase):
-    """Operator, 23 Sep: "sy nak editor script tun ikut sebaris toolbar Vela". Vela's widget
-    topbar is plain DOM, so the fix is a MOVE of the live node — not a fork, not a copy — with a
-    light-timer re-dock, because Vela re-renders that row on its own schedule."""
+class TheScriptControlIsAVelaWidgetAction(unittest.TestCase):
+    """Operator, 23 Sep: "sy nak editor script tun ikut sebaris toolbar Vela". Since 3 Oct that is
+    served by Vela's own widget-action API: Vela renders `<>` and full screen in its row itself, so
+    the old DOM docking — and its 4 s re-dock timer, the reason buttons jumped between rows — is
+    gone. The bridge calls functions now, not a button."""
 
-    def test_dock_moves_the_live_node_into_velas_right_cluster(self):
-        i = APP.index("function dockScriptButton")
-        body = APP[i:i + 1700]
-        self.assertIn(".vela-topbar-right", body)        # Vela's own right cluster
-        self.assertIn("el.scriptOpen", body)             # the live node — id stays unique
-        self.assertNotIn("cloneNode", body)
-        self.assertIn(".vela-widget-screenshot", body)    # before the camera icon (his reference)
-        self.assertIn(".topbar__right", body)            # bare-chart fallback returns it home
+    def test_vela_renders_it_in_its_own_row(self):
+        ws = read("console/frontend/workspace.js")
+        self.assertIn("registerWidgetAction({", ws)
+        self.assertIn("id: 'ta-script'", ws)
+        self.assertIn("id: 'ta-fullscreen'", ws)
+        self.assertIn("iconOnly: true", ws)
 
-    def test_dock_runs_on_boot_and_on_the_light_timer(self):
-        self.assertIn("setInterval(dockScriptButton, 4000)", APP)
-        j = APP.index("function bootChart")
-        self.assertIn("dockScriptButton()", APP[j:j + 3500])
+    def test_no_dock_and_no_timer_any_more(self):
+        self.assertNotIn("dockScriptButton", APP)
+        self.assertNotIn(".vela-topbar-right #script-open", CSS)
 
-    def test_docked_control_is_styled_as_a_vela_tool_and_drops_its_label(self):
-        self.assertIn(".vela-topbar-right #script-open", CSS)
-        self.assertIn(".btn__label", CSS)   # hidden while docked, shown back in the topbar
-        self.assertIn("--vela-tool-color", CSS)
-
-    def test_script_open_guard_reads_the_column_not_only_the_view(self):
-        """id428 reported "script pane opened" with the column shut: rightview pref left the
-        view visible, so the view--hidden-only guard skipped the click. The guard must see
-        data-detail as well."""
+    def test_the_bridge_goes_through_the_function_not_a_click(self):
         i = BRIDGE.index("case 'script'")
         body = BRIDGE[i:i + 900]
+        self.assertIn("window.scriptPane", body)
+        self.assertNotIn("getElementById('script-open')", body)
+
+    def test_the_control_surface_reads_the_column_not_only_the_view(self):
+        """id428 reported "script pane opened" with the column shut: rightview pref left the view
+        visible, so a view--hidden-only guard skipped the click. The state must see data-detail."""
+        i = APP.index("window.scriptPane")
+        body = APP[i:i + 700]
         self.assertIn("dataset.detail", body)
-        self.assertIn("view--hidden", body)
-        self.assertIn("colOff", body)
+        self.assertIn("rightViewIs('script')", body)
 
     def test_mcp_pill_follows_the_calls_it_reports(self):
         """The Library panel proved the connection live (health: connected true, calls
@@ -170,9 +166,9 @@ class TheScriptControlRidesVelaToolbar(unittest.TestCase):
         self.assertGreaterEqual(APP.count("checkHealth()"), 4)   # boot + search + 2 details
 
     def test_where_the_control_lives_is_stated_honestly(self):
-        self.assertIn("rides Vela", BRIDGE)              # mode() no longer claims topbar-only
+        self.assertIn("Indicators button opens the drawer", BRIDGE)   # mode() tells the one-door story
         self.assertNotIn("the <> Script pane, the Library and Details", BRIDGE)
-        self.assertIn("docked onto Vela", HTML)
+        self.assertIn("a Vela widget action", HTML)
 
 
 class TheChartBarsFallbackIsNotSilentlyBroken(unittest.TestCase):
