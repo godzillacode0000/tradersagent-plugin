@@ -126,5 +126,50 @@ class TheDotRidesTheRow(unittest.TestCase):
         self.assertIn("el.dot", APP.split("const showFallbacks", 1)[1][:900])
 
 
+class TheRowFitsTheNarrowPane(unittest.TestCase):
+    """Measured 3 Oct: Vela's row needed 884-888 px in an 809-868 px pane, so Alerts / Data window /
+    Object tree / Screenshot fell outside it and could not be clicked. Those four are rare; they move
+    behind ONE `⋯` button, using Vela's own `topbar` composition option (not CSS hiding)."""
+
+    def test_the_composition_drops_the_rare_buttons(self):
+        block = WS.split("new VelaWorkspace(", 1)[1].split("});", 1)[0]
+        self.assertIn("topbar:", block)
+        right = block.split("right:", 1)[1].split("]", 1)[0]
+        self.assertIn("'actions'", right, "our own actions (script, dot, full screen, ⋯) ride 'actions'")
+        for gone in ("alerts", "panels", "screenshot"):
+            self.assertNotIn(gone, right)
+
+    def test_the_default_left_is_kept(self):
+        block = WS.split("new VelaWorkspace(", 1)[1].split("});", 1)[0]
+        left = block.split("left:", 1)[1].split("]", 1)[0]
+        for keep in ("symbol", "timeframes", "style", "layout", "indicators", "actions", "undo-redo"):
+            self.assertIn(keep, left)
+
+    def test_one_more_button_is_registered_before_the_workspace(self):
+        self.assertIn("id: 'ta-more'", WS)
+        self.assertLess(WS.index("id: 'ta-more'"), WS.index("new VelaWorkspace("))
+
+    def test_the_menu_reaches_all_four_through_vela(self):
+        body = WS.split("function openMoreMenu", 1)[1][:2600]
+        self.assertIn("openAlertsMenu", body)
+        self.assertIn("dock.toggle('dataWindow'", body)
+        self.assertIn("dock.toggle('objects'", body)
+        self.assertIn("downloadScreenshot", body)
+
+    def test_the_menu_closes_itself_and_obeys_escape(self):
+        body = WS.split("function openMoreMenu", 1)[1][:2600]
+        self.assertIn("Escape", body)
+        self.assertIn("pointerdown", body)
+        self.assertIn("role", body)
+
+    def test_the_more_button_has_a_glyph(self):
+        self.assertIn("registerIcon('ta-more'", WS, "Vela ships no 'more' icon, so the button would be blank")
+        self.assertIn("icon: 'ta-more'", WS)
+
+    def test_the_menu_is_styled_with_tokens(self):
+        self.assertIn(".ta-more", CSS)
+        self.assertIn("var(--lx-", CSS.split(".ta-more", 1)[1][:900])
+
+
 if __name__ == "__main__":
     unittest.main()

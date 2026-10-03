@@ -1037,3 +1037,19 @@ pre {
   .lib-drawer, .lib-drawer.is-open, .drawer-scrim { transition: none; }
   .drawer__dot, .spin, .drow--skel span { animation: none; }
 }
+
+/* The `⋯` menu (3 Oct): four rare Vela tools behind one button, so the row fits a narrow pane. */
+.ta-more {
+  position: fixed; z-index: 60; min-width: 168px; padding: var(--lx-space-1);
+  background: var(--lx-surface-2); border: 1px solid var(--lx-border-strong);
+  border-radius: var(--lx-radius-md); box-shadow: var(--lx-shadow-3);
+  display: flex; flex-direction: column;
+  animation: ta-more-in var(--lx-dur-fast) var(--lx-ease) both;
+}
+.ta-more__item {
+  all: unset; box-sizing: border-box; cursor: pointer; padding: var(--lx-space-2) var(--lx-space-3);
+  border-radius: var(--lx-radius-md); color: var(--lx-fg); font-size: var(--lx-fs-sm);
+}
+.ta-more__item:hover, .ta-more__item:focus-visible { background: var(--lx-accent-soft); }
+@keyframes ta-more-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ta-more { animation: none; } }

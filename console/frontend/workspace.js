@@ -156,6 +156,52 @@ state.ready = (async () => {
     console.info('[workspace] chart palette parked — switching the console to light restores it');
   }
 
+  /* The `⋯` menu (3 Oct). Vela's row needed 884-888 px in an 809-868 px pane, so Alerts, Data window,
+     Object tree and Screenshot fell outside it. They are rare, so they live here — each item calls the
+     same Vela method its own button called, nothing is re-implemented. */
+  function openMoreMenu(anchor) {
+    const ws = state.ws;
+    if (!ws) return;
+    const old = document.querySelector('.ta-more');
+    if (old) { old.remove(); return; }
+    const items = [
+      ['Alerts', () => ws.openAlertsMenu(anchor)],
+      ['Data window', () => ws.dock.toggle('dataWindow')],
+      ['Object tree', () => ws.dock.toggle('objects')],
+      ['Download screenshot', () => ws.downloadScreenshot()],
+    ];
+    const menu = document.createElement('div');
+    menu.className = 'ta-more';
+    menu.setAttribute('role', 'menu');
+    const close = () => {
+      menu.remove();
+      document.removeEventListener('pointerdown', away, true);
+      document.removeEventListener('keydown', key, true);
+    };
+    const away = (ev) => { if (!menu.contains(ev.target) && !(anchor && anchor.contains(ev.target))) close(); };
+    const key = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); close(); } };
+    for (const [label, go] of items) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ta-more__item';
+      b.setAttribute('role', 'menuitem');
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        close();
+        try { go(); } catch (err) { console.warn('[workspace] menu item failed:', label, err); }
+      });
+      menu.appendChild(b);
+    }
+    document.body.appendChild(menu);
+    const r = anchor ? anchor.getBoundingClientRect() : { right: innerWidth - 8, bottom: 40 };
+    menu.style.top = Math.round(r.bottom + 6) + 'px';
+    menu.style.right = Math.max(8, Math.round(innerWidth - r.right)) + 'px';
+    document.addEventListener('pointerdown', away, true);
+    document.addEventListener('keydown', key, true);
+    const first = menu.querySelector('button');
+    if (first) first.focus();
+  }
+
   // Vela's own "Indicators" button is the door to the drawer. `registerWidgetAction` is Vela's official
   // override for exactly two slots ("indicators", "screenshot"), and Vela reads it in the VelaWorkspace
   // CONSTRUCTOR (`this.indicatorsOverride = topbarActionOverride("indicators")`) — registered later it does
@@ -212,6 +258,8 @@ state.ready = (async () => {
         registerIcon('ta-dot-ok', dot('#0ca30c'));
         registerIcon('ta-dot-wait', dot('#e0b400'));
         registerIcon('ta-dot-bad', dot('#e44f4f'));
+        /* Vela ships no "more" glyph (checked 3 Oct), so the ⋯ is ours. */
+        registerIcon('ta-more', '<svg viewBox="0 0 16 16" width="1em" height="1em" fill="currentColor"><circle cx="3.5" cy="8" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="12.5" cy="8" r="1.4"/></svg>');
       }
       const status = {
         id: 'ta-status', target: 'topbar', order: 25,
@@ -245,6 +293,11 @@ state.ready = (async () => {
       window.addEventListener('ws-ready', rerender);
 
       registerWidgetAction({
+        id: 'ta-more', target: 'topbar', icon: 'ta-more', iconOnly: true, order: 40,
+        label: 'More — alerts, data window, object tree, screenshot',
+        run: () => openMoreMenu(document.querySelector('.vela-topbar-right button[aria-label^="More"]')),
+      });
+      registerWidgetAction({
         id: 'ta-fullscreen', target: 'topbar', icon: 'maximize', iconOnly: true, order: 30,
         label: 'Full screen — the chart takes the whole pane (Esc comes back)',
         run: () => {
@@ -265,6 +318,12 @@ state.ready = (async () => {
     providers: { binance: () => new BinanceProvider() },
     engines: Engine ? { pine: () => new Engine() } : undefined,
     live: true,
+    /* Vela's own composition option: the rare four (alerts / panels / screenshot) leave the row and
+       live behind `⋯`. `actions` carries our own buttons (script, dot, full screen, ⋯). */
+    topbar: {
+      left: ['symbol', 'timeframes', 'style', 'layout', 'indicators', 'actions', 'undo-redo'],
+      right: ['actions'],
+    },
     theme: readTheme(),
     persist: true,                                   // restore drawings/indicators from localStorage
     drawings: true,
