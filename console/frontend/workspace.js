@@ -280,6 +280,21 @@ state.ready = (async () => {
       };
       registerWidgetAction(status);
 
+      /* The replay button (3 Oct, the operator's ask). Vela ships the replay ENGINE and a 'replay'
+         icon (the ◀◀ rewind glyph it paints in its own watermark and statusline badge) but no button
+         of its own, so this is the door: one small icon in the row, tooltip-first, and it toggles.
+         The strip (replay.js) only appears while replay is on, so the chart stays whole otherwise. */
+      const replayAction = {
+        id: 'ta-replay', target: 'topbar', icon: 'replay', iconOnly: true, order: 35,
+        label: 'Replay — practice on older bars',
+        run: () => {
+          if (!window.taReplay) return;
+          const p = replayOn() ? window.taReplay.stop() : window.taReplay.start();
+          if (p && p.catch) p.catch((err) => { if (window.taToast) window.taToast(String(err.message || err), true); });
+        },
+      };
+      registerWidgetAction(replayAction);
+
       let pending = false;
       const rerender = () => {
         if (pending) return;
@@ -290,6 +305,7 @@ state.ready = (async () => {
           pending = false;
           const names = onNames();
           chip.label = names.length ? '● ' + names[names.length - 1] : 'No indicator';
+          replayAction.label = replayOn() ? 'Exit replay' : 'Replay — practice on older bars';
           const s = window.taStatus || { state: 'wait', title: '' };
           const bad = s.state === 'bad';
           status.icon = 'ta-dot-' + (bad ? 'bad' : s.state === 'ok' ? 'ok' : 'wait');
@@ -302,6 +318,7 @@ state.ready = (async () => {
       };
       window.addEventListener('ta-onchart', rerender);
       window.addEventListener('ta-status', rerender);
+      window.addEventListener('ta-replay', rerender);
       window.addEventListener('ws-ready', rerender);
 
       registerWidgetAction({

@@ -1,7 +1,9 @@
 /* Replay — Vela's own replay engine behind one control strip (Phase 6, 3 Oct).
 
    The operator's calls: the strip lives IN the chart ("jalur kawalan dalam chart") and is started
-   from the ⋯ menu; the chart stays whole otherwise — nothing is on screen until replay is on.
+   from the replay button in Vela's own row (◀◀ — the icon Vela paints in its replay watermark; the
+   ⋯ menu keeps a fallback row); the chart stays whole otherwise — nothing is on screen until replay
+   is on.
    While replay is on, every paper fill uses the REPLAY cursor price: this file pushes it to the
    server (/api/broker/replay — page-only, the agent cannot set it) and the broker reads it back at
    approval. That is what makes replay practice an honest manual backtest.

@@ -141,9 +141,10 @@ timeframe until something else is asked for.
 
 `ws.replay` (WorkspaceReplay) is a full replay controller, and the console exposes it three ways: the
 `replay` bridge action, the `chart_replay` MCP tool / `trader-chart replay` CLI, and the control strip
-(`console/frontend/replay.js`) started from the ⋯ menu. While replay is on, the strip pushes the
-cursor price to `/api/broker/replay` (page-only) and the paper broker fills at it — a manual backtest
-with the real order gate.
+(`console/frontend/replay.js`) started from the replay button in Vela's row (◀◀ — Vela's own `replay`
+icon, registered in its icon registry; the ⋯ menu keeps a fallback row). While replay is on, the strip
+pushes the cursor price to `/api/broker/replay` (page-only) and the paper broker fills at it — a manual
+backtest with the real order gate.
 
 | Call | Verified result (BTCUSDT 15m, live pane) |
 | --- | --- |

@@ -159,6 +159,12 @@ class TheControlStrip(unittest.TestCase):
         self.assertIn("taReplay", self.ws)
         self.assertIn("'Replay'", self.ws)
 
+    def test_the_topbar_carries_a_replay_button_with_velas_own_glyph(self):
+        self.assertIn("id: 'ta-replay'", self.ws)
+        self.assertIn("icon: 'replay'", self.ws)          # Vela's own rewind glyph, from its registry
+        self.assertIn("window.addEventListener('ta-replay', rerender)", self.ws)
+        self.assertIn("replayAction.label", self.ws)      # the tooltip follows the engine's state
+
     def test_the_strip_sits_above_the_bottom_axis_and_clears_the_cards(self):
         rule = re.search(r"\.ta-replay \{(.*?)\}", self.css, re.S).group(1)
         self.assertRegex(rule, r"position:\s*fixed")
