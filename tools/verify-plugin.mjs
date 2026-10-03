@@ -197,6 +197,14 @@ try {
   process.exit(1)
 }
 
+/* The context is LIVE, and the app's registry accepts a contribution registered after register()
+   returns — PluginContext documents exactly that for subscriptions, and a plugin whose pane mounts
+   from a `ctx.storage.get` read registers it on a microtask. Judging synchronously reported a
+   healthy plugin as pane-less (CI, 3 Oct: "expected area panes was not registered" on a plugin
+   whose pane registers the moment its stored state resolves). One macrotask tick lets the deferred
+   registrations land before anything is recorded or rendered. */
+await new Promise((resolve) => setTimeout(resolve, 0))
+
 if (!registrations.length) failures.push('register()/registerMany() contributed nothing')
 
 // ── render each contribution the way React does ──────────────────────────────
