@@ -156,12 +156,14 @@ class TheAgentStillHasItsPaths(unittest.TestCase):
         for gone in ("'lib-open'", "'ind-open'", "'library-open'", "'detail-open'"):
             self.assertNotIn(f"getElementById({gone})", BRIDGE, f"the bridge still clicks {gone}")
 
-    def test_browse_goes_through_a_function(self):
-        self.assertIn("window.openLibraryBrowse", BRIDGE)
-        self.assertRegex(APP, r"window\.openLibraryBrowse\s*=")
-        body = APP.split("function openLibraryBrowse", 1)[1].split("\n}", 1)[0]
-        for call in ("setPanel('library', true)", "setLibraryCollapsed(false)", "toggleBrowse(true)"):
-            self.assertIn(call, body, f"opening the browse list must {call}")
+    def test_browse_goes_through_the_drawers_api(self):
+        bridge = BRIDGE
+        self.assertIn("case 'browse': {", bridge)
+        body = bridge.split("case 'browse': {", 1)[1].split("case 'open': {", 1)[0]
+        self.assertIn("window.libDrawer", body)
+        self.assertIn("ld.open(true)", body)
+        self.assertNotIn("openLibraryBrowse", bridge,
+                         "the Library's browse view is deleted; the door is the drawer's own API")
 
     def test_the_indicators_door_goes_through_a_function(self):
         self.assertIn("window.libDrawer", BRIDGE,

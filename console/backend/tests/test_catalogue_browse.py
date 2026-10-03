@@ -1,30 +1,28 @@
-"""Pins for the browsable catalogue — the 805 library indicators as clickable rows.
+"""Pins for the catalogue's ONE door and its agent paths.
 
-The operator's ask: "letak clickable option list indicators direct dari LuxAlgo MCP library". The
-catalogue was already searchable, but search needs a name to start from; nothing listed it. Three
-things must stay true for the list to be a real door rather than decoration:
+The operator's doc §1/§2 (3 Oct): the Library's search/browse view is deleted — "its job moves into
+the drawer" — and the agent's commands must keep working: "chart-bridge 'browse' and 'open' commands
+target the drawer's list/detail ids and keep their reply shape (out.browse, out.opened)".
 
-1. It is FILLED from the catalogue, not from a hardcoded sample — and paged, because 805 rows in one
-   paint is not a list anybody can use.
-2. A pick goes through the SAME door a search result uses (`openResult`), so there is one executor
-   and one run landasan. A second paint path would be a second way to lie about what ran.
-3. It is reachable as a COMMAND as well as a click (`browse` in the page's action list, a CLI
-   subcommand, an MCP tool) — a surface the agent can only reach by clicking is one it cannot verify.
+The lessons that cost real time stay pinned:
 
-Plus the honest label: Vela's own "Indicators" menu holds ITS ~76 natives and will never hold these,
-so the catalogue needs its own door and the docs must not claim otherwise.
+  * the list cannot double-count: the old paged loader could append one family twice (59 measured as
+    118) and needed a queue-and-drain to join overlapping asks. The drawer has no loads to race —
+    the catalogue is in memory and the filter is a function of state;
+  * landing on the open list is a FUNCTION, not a click: `chart browse --show` used to click the
+    ☰ catalogue button, and deleting that button must not take the agent's path with it.
 """
 
 import os
-import re
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-HTML = os.path.join(ROOT, "console", "frontend", "index.html")
 APP = os.path.join(ROOT, "console", "frontend", "app.js")
-CSS = os.path.join(ROOT, "console", "frontend", "styles.css")
+HTML = os.path.join(ROOT, "console", "frontend", "index.html")
+DRAWER = os.path.join(ROOT, "console", "frontend", "drawer.js")
 BRIDGE = os.path.join(ROOT, "console", "frontend", "chart-bridge.js")
+WORKSPACE = os.path.join(ROOT, "console", "frontend", "workspace.js")
 CLI = os.path.join(ROOT, "console", "bin", "trader-chart")
 MCP = os.path.join(ROOT, "console", "mcp", "server.py")
 
@@ -34,146 +32,118 @@ def read(path: str) -> str:
         return fh.read()
 
 
-class TheListIsReal(unittest.TestCase):
-    def test_the_surface_exists(self):
+class TheListIsTheDrawer(unittest.TestCase):
+    def test_the_panel_view_is_gone(self):
         html = read(HTML)
-        for needle in ('id="browse"', 'id="browse-list"', 'id="browse-families"', 'id="browse-more"'):
-            self.assertIn(needle, html, f"{needle} is the browsable list")
-
-    def test_indicator_scripts_and_family_concepts_use_distinct_endpoints(self):
+        for gone in ('id="view-library"', 'id="browse-list"', 'id="browse-concepts-list"',
+                     'id="browse-body"', 'id="browse-families"', 'id="results"', 'id="search-form"',
+                     'id="browse-toggle"', 'id="library-toggle"'):
+            self.assertNotIn(gone, html, f"the Library's search/browse view is deleted; {gone} must be gone")
         app = read(APP)
-        self.assertIn("/api/indicators", app)
-        self.assertIn("page_size: BROWSE_PAGE", app)
-        self.assertIn("browseState.family", app, "indicator browsing keeps its own state")
-        self.assertIn("api('/api/concepts'", app, "family bubbles must fetch their concept taxonomy")
+        for gone in ("function toggleBrowse", "function loadBrowse", "function browseRow",
+                     "function loadFamilies", "function runSearch", "function renderResults",
+                     "function loadFamilyConcepts", "browseState", "familyConceptState"):
+            self.assertNotIn(gone, app, f"{gone} belonged to the deleted view")
 
-    def test_the_family_row_comes_from_the_catalogue(self):
-        # Hand-typed family lists drift from upstream keys; a stale chip silently opens no concepts.
-        app = read(APP)
-        self.assertIn("/api/families", app)
+    def test_the_drawer_holds_the_list(self):
+        self.assertIn('id="drawer-list"', read(HTML))
+        drawer = read(DRAWER)
+        self.assertIn("function rows()", drawer)
+        self.assertIn("drow", drawer)
 
     def test_a_pick_uses_the_one_door(self):
-        app = read(APP)
-        block = app.split("function browseRow", 1)[1].split("\n}", 1)[0]
+        drawer = read(DRAWER)
+        block = drawer.split("if (ev.target.closest('[data-open]'))", 1)[1][:200]
         self.assertIn("openResult(", block,
-                      "a catalogue pick must go through the same door a search hit uses")
+                      "picking a row must run the same openResult a search hit always ran")
 
 
 class TheListCannotDoubleCount(unittest.TestCase):
-    """Two overlapping loads appended into one list: a 59-indicator family measured 118 rows.
+    def test_the_filter_is_a_function_of_state(self):
+        """The old loader could append a family twice (59 measured as 118) and needed a queue to join
+        overlapping asks. The drawer filters the loaded catalogue in memory: nothing to race."""
+        drawer = read(DRAWER)
+        self.assertIn("function rows()", drawer)
+        self.assertIn("function matches(r, q)", drawer)
+        self.assertNotIn("queued", drawer)
+        self.assertNotIn("loadLibrary", read(APP))
 
-    The window between a click and its fetch is where this bug lives, so it is pinned in source
-    shape rather than by racing the app.
-    """
-
-    def test_overlapping_loads_join_instead_of_racing(self):
-        # A "newest wins" token cancelled the winning paint (two triggers on one open left the list
-        # blank); a join-and-queue keeps the list filled and still prevents double-appending.
-        app = read(APP)
-        block = app.split("async function loadBrowse", 1)[1].split("\n\n/* Run whatever", 1)[0]
-        self.assertIn("browseState.loading", block)
-        self.assertIn("drainBrowse", app)
-        self.assertIn("browseState.queued", app)
-        self.assertNotIn("browseToken", app, "the cancelling token is gone — do not bring it back")
-
-    def test_a_reset_clears_before_it_fills(self):
-        app = read(APP)
-        block = app.split("async function loadBrowse", 1)[1].split("\n}", 1)[0]
-        self.assertIn("browseState.rows = []", block)
-
-    def test_the_bridge_waits_for_the_reset_before_counting(self):
-        # "same count twice" fired while the list was cleared-but-not-yet-refilled, reporting 0 rows
-        # for a family that has 55. The settle must notice a change happened first.
-        bridge = read(BRIDGE)
-        block = bridge.split("case 'browse'", 1)[1].split("case 'mode'", 1)[0]
-        self.assertIn("sawChange", block)
+    def test_the_bridge_waits_for_a_loading_catalogue(self):
+        body = read(BRIDGE).split("case 'browse': {", 1)[1].split("case 'open': {", 1)[0]
+        self.assertIn("catalogue === 'loading'", body,
+                      "a cold page must not report 0 rows while the walk runs")
+        self.assertIn("45000", body, "the first walk on a machine is ~25 s")
 
 
 class TheCatalogueHasOneDoorNow(unittest.TestCase):
-    """3 Oct: the ☰ catalogue button (a fourth copy of the list, and it overflowed the 868 px pane) is
-    gone. Its job — "land on the open catalogue list" — is a function the agent calls."""
-
     def test_the_button_is_gone(self):
-        self.assertNotIn('id="lib-open"', read(HTML))
-        self.assertNotIn("libOpen", read(APP))
+        html = read(HTML)
+        for gone in ('id="lib-open"', 'id="library-open"', 'id="ind-open"', 'id="detail-open"'):
+            self.assertNotIn(gone, html)
 
     def test_nothing_docks_anything_any_more(self):
-        self.assertNotIn("dockScriptButton", read(APP),
-                         "the dock is gone: the controls are Vela widget actions now")
+        app = read(APP)
+        self.assertNotIn("dockScriptButton", app)
+        self.assertNotIn("setInterval(() => dockScriptButton", app)
 
     def test_landing_on_the_open_list_is_a_function(self):
-        # The operator's earlier complaint was landing on a surface that was present but collapsed.
-        app = read(APP)
-        block = app.split("function openLibraryBrowse", 1)[1].split("\n}", 1)[0]
-        for call in ("setPanel('library', true)", "setLibraryCollapsed(false)", "toggleBrowse(true)"):
-            self.assertIn(call, block, f"opening the browse list must {call}")
+        """`chart browse --show` used to click the ☰ catalogue button; the door is the drawer's own
+        API now, so nothing in the pane has to exist for it."""
+        bridge = read(BRIDGE)
+        body = bridge.split("case 'browse': {", 1)[1].split("case 'open': {", 1)[0]
+        self.assertIn("window.libDrawer", body)
+        self.assertIn("ld.open(true)", body)
+        self.assertNotIn("openLibraryBrowse", bridge)
+        self.assertNotIn("toggleBrowse", bridge)
 
 
 class ItIsCommandableNotJustClickable(unittest.TestCase):
-    def test_the_page_publishes_the_action(self):
-        self.assertIn("'browse'", read(BRIDGE))
-
-    def test_the_bridge_reports_the_visible_concept_list(self):
+    def test_the_page_publishes_the_actions(self):
         bridge = read(BRIDGE)
-        self.assertIn("out.browse", bridge)
-        self.assertIn("browse-concepts-list", bridge)
-        self.assertIn("concept(s) on screen", bridge)
-        self.assertIn("kind: conceptMode ? 'concepts' : 'indicators'", bridge)
+        self.assertIn("'browse',", bridge)
+        self.assertIn("'open',", bridge)
+
+    def test_the_bridge_reports_what_the_list_holds(self):
+        bridge = read(BRIDGE)
+        browse_body = bridge.split("case 'browse': {", 1)[1].split("case 'open': {", 1)[0]
+        self.assertIn("out.browse", browse_body)
+        self.assertIn("kind: 'indicators'", browse_body)
+        open_body = bridge.split("case 'open': {", 1)[1].split("case 'mode'", 1)[0]
+        self.assertIn("out.opened", open_body)
+        self.assertIn("#drawer-list .drow[data-slug]", open_body,
+                      "the row must be found in the drawer's list")
+
+    def test_the_open_waits_work_for_every_branch(self):
+        """`pause` was first written inside the indicator branch while the concept branch and the
+        shared title-wait used it — `open <concept>` died with "pause is not defined" (measured
+        live, 3 Oct). The helper must exist before any branch that uses it."""
+        body = read(BRIDGE).split("case 'open': {", 1)[1].split("case 'mode'", 1)[0]
+        self.assertLess(body.index("const pause ="), body.index("if (kind === 'concept')"))
 
     def test_the_cli_has_a_subcommand(self):
         cli = read(CLI)
-        self.assertIn('"browse"', cli)
-        self.assertIn("def cmd_browse", cli)
+        self.assertIn('add_parser("browse"', cli)
+        self.assertIn('add_parser("open"', cli)
 
     def test_the_mcp_tool_exists(self):
-        self.assertIn("def chart_browse", read(MCP))
+        mcp = read(MCP)
+        self.assertIn("def chart_browse(", mcp, "the catalogue's agent door")
+        self.assertIn('_command("browse"', mcp)
 
     def test_an_omitted_family_means_all_families(self):
-        # Leaving the filter alone made "browse" report a stale family's rows to a caller who never
-        # asked for one — the read said trend while the request said nothing.
-        self.assertIn('payload["family"] = args.family or ""', read(CLI))
+        cli = read(CLI)
+        self.assertIn('payload["family"] = args.family or ""', cli,
+                      "an omitted --family means the whole catalogue: a stale filter must not survive")
 
 
 class TheDocsSayWhatItIsNot(unittest.TestCase):
-    def test_vellas_own_indicators_button_now_opens_the_drawer_that_holds_both_halves(self):
-        # Vela's menu lists only its ~76 natives, never the 805 — so taking the button over is only
-        # honest if the drawer carries the natives too.
-        front = os.path.dirname(HTML)
-        self.assertIn("registerWidgetAction", read(os.path.join(front, "workspace.js")))
-        self.assertIn("__builtin", read(os.path.join(front, "drawer.js")))
-
-
-class FamilyChipsRevealConcepts(unittest.TestCase):
-    def test_family_chips_disclose_the_matching_concept_list(self):
-        html = read(HTML)
-        self.assertIn('id="browse-concepts"', html)
-        self.assertIn('id="browse-concepts-list"', html)
-        self.assertIn('id="browse-concepts-count"', html)
-
-        app = read(APP)
-        self.assertIn("async function loadFamilyConcepts", app)
-        self.assertIn("api('/api/concepts'", app,
-                      "family chips count concepts, not indicator scripts")
-        family = app.split("function pickFamily", 1)[1].split("\n}\n\nfunction toggleBrowse", 1)[0]
-        self.assertIn("familyConceptState.open", family,
-                      "clicking the expanded family again must collapse its list")
-        self.assertIn("loadFamilyConcepts", family)
-        self.assertNotIn("loadBrowse", family,
-                         "a concept-family click must not filter the indicator-script list")
-        family_buttons = app.split("async function loadFamilies", 1)[1].split("\n}\n\nfunction pickFamily", 1)[0]
-        self.assertIn("aria-controls", family_buttons)
-        self.assertIn("aria-expanded", family_buttons)
-        self.assertIn("aria-controls", app)
-        self.assertIn("aria-expanded", app)
-
-        bridge = read(BRIDGE).split("case 'browse':", 1)[1].split("case 'mode':", 1)[0]
-        self.assertIn("browse-concepts-list", bridge)
-        self.assertIn("state.loading || state.queued", bridge)
-
-        row = app.split("function browseConceptRow", 1)[1].split("\n}", 1)[0]
-        self.assertIn("kind: 'concept'", row)
-        self.assertIn("openResult(", row,
-                      "concepts use the existing Library details path")
+    def test_vellas_own_indicators_button_opens_the_drawer_that_holds_all_three_halves(self):
+        ws = read(WORKSPACE)
+        self.assertIn("registerWidgetAction", ws)
+        self.assertIn("'indicators'", ws)
+        drawer = read(DRAWER)
+        for half in ('__builtin', '__fav', 'Built-ins'):
+            self.assertIn(half, drawer)
 
 
 if __name__ == "__main__":

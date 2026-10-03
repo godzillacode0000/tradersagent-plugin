@@ -311,7 +311,7 @@ input:focus-visible, textarea:focus-visible {
 
 ::selection { background: var(--lx-accent-soft); }
 
-.results, pre, .detail { overscroll-behavior: contain; }
+pre, .detail { overscroll-behavior: contain; }
 
 @media (pointer: coarse) {
   input, select, textarea { font-size: max(16px, 1em); }
@@ -357,7 +357,6 @@ input:focus-visible, textarea:focus-visible {
   gap: 1px;
   background: var(--lx-border-soft);
 }
-.main[data-library="on"] { grid-template-columns: 300px minmax(0, 1fr); }
 /* The right column never takes grid space (operator's recording, 25 Sep): when it did, the chart
    shrank and Vela's canvas came back blank — the run's paint landed on a white area, so nobody
    could see that PineTS had drawn anything. As an overlay it costs the chart nothing, at any
@@ -367,7 +366,6 @@ input:focus-visible, textarea:focus-visible {
    the panel stretched edge to edge and the chart dropped underneath it (the operator's "cacat"
    still, 25 Sep). Only the Library-CLOSED state collapses to a single column. */
 .main[data-detail="on"]:not([data-library="on"]) { grid-template-columns: minmax(0, 1fr); }
-.main[data-library="on"][data-detail="on"] { grid-template-columns: 300px minmax(0, 1fr); }
 .panel--right {
   position: fixed; inset-block: 0 var(--lx-statusbar-h); inset-inline-end: 0;
   width: min(420px, 46vw);
@@ -399,48 +397,16 @@ input:focus-visible, textarea:focus-visible {
   border-left: 1px solid var(--lx-border);
 }
 
-@media (max-width: 1439px) {
-  .main[data-library="on"] { grid-template-columns: 280px minmax(0, 1fr); }
-  .main[data-library="on"] { grid-template-columns: 280px minmax(0, 1fr); }
-}
-@media (max-width: 1239px) {
-  .main[data-library="on"] { grid-template-columns: 260px minmax(0, 1fr); }
-  /* The detail panel overlays here, so it costs the chart nothing. */
-  /* The overlay must not swallow the pane's own top: Vela's toolbar row lives there, and a
-     covered toggle leaves no visible way to close this panel (operator's stills, 25 Sep: "≡ Libr"
-     clipped mid-word). It starts under the bar instead — see the global .panel--right rule above. */
-}
 @media (max-width: 1099px) {
   /* The chart keeps the height (operator's call, 15 Sep): the app stays viewport-tall and the
-     stacked main grid hands the chart every row that is left, instead of sizing to content. */
+     stacked main grid hands the chart every row that is left, instead of sizing to content. The
+     Library's sheet is gone (3 Oct) — its view is the drawer's now. */
   .app { grid-template-rows: minmax(0, 1fr) auto; height: 100dvh; }
   .main,
-  .main[data-library="on"],
-  .main[data-detail="on"],
-  .main[data-library="on"][data-detail="on"] { grid-template-columns: minmax(0, 1fr); }
-  /* The Library is a SHEET OVER the chart (operator's ask, 2 Oct: "Make the Velachart full screen
-     or utilising 80% of the view"). Stacked in the grid it took ~45% of the pane and shrank the
-     chart to about half; as a fixed sheet it costs the chart nothing — same pattern the Details
-     pane has used since 25 Sep — so the chart owns the whole pane at rest, and the sheet closes
-     from the agent's browse action or Escape. It starts at the pane top like the
-     Details sheet, so the toggles that open it stay reachable. */
-  .panel--left {
-    position: fixed; inset-inline: 0;
-    inset-block-start: var(--lx-pane-top, 44px);
-    /* A plain vh cap: the first cut used `min(60dvh, 540px)` and the pane's engine dropped the
-       declaration — the sheet ran its full content height down the pane (measured live, 2 Oct),
-       while the same sheet capped correctly in a current Chromium. Never rely on the fancy
-       units here; 65vh is the cap that renders everywhere. */
-    max-height: 65vh;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    z-index: var(--lx-z-overlay);
-    box-shadow: var(--lx-shadow-4);
-    border-right: 0;
-    border-bottom: 1px solid var(--lx-border);
-  }
+  .main[data-detail="on"] { grid-template-columns: minmax(0, 1fr); }
   .panel--chart { min-height: 360px; }
   .panel--right { position: static; width: auto; max-height: 40dvh; box-shadow: none; transform: none; }
+}
 }
 
 /* ── Full screen for the chart (27 Sep) ───────────────────────────────────────────────────────────
@@ -503,20 +469,8 @@ body.chart-focus .panel--chart { border: 0; }
 .panel { background: var(--lx-surface-1); min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 /* An unopened panel is not painted at all — cheaper than a zero-width track, and the chart's resize
    observer stays quiet. Declared AFTER `.panel` on purpose: same specificity, later wins. */
-.main:not([data-library="on"]) .panel--left,
 .main:not([data-detail="on"]) .panel--right { display: none; }
-.panel--left { border-right: 1px solid var(--lx-border); }
 
-/* ── Layer 5g — the library folds to one row (operator's call, 15 Sep) ────── */
-/* In the stacked layout the search block sat in a 38dvh band above the chart. Folded, it is
-   the input row only; a search expands it again, and the caret toggles it by hand. */
-.panel--left.is-collapsed { max-height: none; }
-.panel--left.is-collapsed .search__label,
-.panel--left.is-collapsed .search__filters,
-.panel--left.is-collapsed .chips,
-.panel--left.is-collapsed .results { display: none; }
-.panel--left.is-collapsed .search { padding: var(--lx-space-2) var(--lx-space-3); }
-#library-toggle { flex: 0 0 auto; width: var(--lx-control-h); padding: 0; font-size: var(--lx-fs-lg); }
 .panel--right { border-left: 1px solid var(--lx-border); background: var(--lx-canvas); }
 
 .tabs {
@@ -540,15 +494,9 @@ body.chart-focus .panel--chart { border: 0; }
    open script editor, overlapping its output line. One state rule, one winner. */
 .view--hidden { display: none !important; }
 
-/* ── Layer 5d — search + results (34px controls, 44px rows) ─────────────── */
-.search { padding: var(--lx-space-3); display: flex; flex-direction: column; gap: var(--lx-space-2); }
-.search__label {
-  font-size: var(--lx-fs-2xs); text-transform: uppercase; letter-spacing: var(--lx-ls-wide);
-  color: var(--lx-fg-muted);
-}
-.search__row { display: flex; gap: var(--lx-space-2); }
-.search__filters { display: flex; gap: var(--lx-space-2); }
-
+/* ── Form controls (the search field, selects and the button family) ──────────────────────────
+   Shared by every surface: the drawer's search, the script pane's name field, the Details
+   view's Run / Add to chart buttons. */
 input[type="search"], select {
   width: 100%; height: var(--lx-control-h);
   padding: 0 var(--lx-space-25);
@@ -608,92 +556,6 @@ input[type="text"]:hover { border-color: var(--lx-border-strong); }
 .btn--toggle[aria-pressed="true"] { color: var(--lx-fg); border-color: var(--lx-border-strong); background: var(--lx-surface-3); }
 .btn[disabled] { opacity: .5; cursor: not-allowed; }
 
-.chips { display: flex; flex-wrap: wrap; gap: var(--lx-space-1); }
-.chip {
-  padding: 3px var(--lx-space-2); font: inherit; font-size: var(--lx-fs-xs); cursor: pointer;
-  color: var(--lx-fg-muted); background: var(--lx-surface-3);
-  border: 1px solid var(--lx-border); border-radius: var(--lx-radius-pill);
-  transition: color var(--lx-dur-90) var(--lx-ease), border-color var(--lx-dur-90) var(--lx-ease);
-}
-.chip:hover { color: var(--lx-fg-bright); border-color: var(--lx-border-strong); }
-.chip--ok { color: var(--lx-profit); border-color: rgba(12, 163, 12, .45); }
-.chip--bad { color: var(--lx-loss); border-color: rgba(208, 59, 59, .45); }
-
-.results { flex: 1; min-height: 0; overflow: auto; padding: var(--lx-space-2); }
-.results__head {
-  padding: var(--lx-space-1) var(--lx-space-2) var(--lx-space-2);
-  font-size: var(--lx-fs-2xs); text-transform: uppercase; letter-spacing: var(--lx-ls-wide);
-  color: var(--lx-fg-muted);
-}
-
-.row {
-  display: flex; flex-direction: column; align-items: stretch; justify-content: center;
-  gap: 4px;
-  width: 100%; min-height: var(--lx-row-h); padding: 9px 10px;
-  text-align: left; font: inherit; cursor: pointer;
-  color: var(--lx-fg); background: transparent;
-  border: 1px solid transparent; border-left: 2px solid transparent;
-  border-radius: var(--lx-radius-lg);
-  transition: background var(--lx-dur-fast) var(--lx-ease),
-              border-color var(--lx-dur-fast) var(--lx-ease),
-              transform var(--lx-dur-fast) var(--lx-ease);
-}
-.row + .row { margin-top: 2px; }   /* the rows are cards, not one grey paragraph */
-.row:hover { background: var(--lx-bg-hover); border-color: var(--lx-border); }
-.row:active { transform: translateY(1px); }
-/* selection = accent tint + 2px bar, a NON-colour cue, not Vela's filled chip */
-.row--active { background: var(--lx-accent-soft); border-left-color: var(--lx-accent-line); }
-/* The two-line anatomy every row in this app renders: name + kind on line 1, description and meta
-   below. app.js has emitted these classes since the catalogue shipped; they had no rules, so the
-   rows read as flat text and their lines sat side by side. */
-/* The one-letter mark: a small rounded tile whose colour is the row's kind (amber = concept,
-   blue = indicator). It is what gives the list a column to scan down. */
-.row__glyph {
-  flex: 0 0 auto; width: 20px; height: 20px; border-radius: 6px;
-  display: grid; place-items: center;
-  font-size: 10px; font-weight: var(--lx-fw-semibold);
-  color: var(--lx-fg-muted); background: var(--lx-surface-3);
-  border: 1px solid var(--lx-border);
-}
-.row[data-kind="concept"] .row__glyph {
-  color: var(--lx-warn); background: rgba(224, 180, 0, .12); border-color: rgba(224, 180, 0, .28);
-}
-.row[data-kind="indicator"] .row__glyph {
-  color: var(--lx-accent-ink); background: var(--lx-accent-soft); border-color: rgba(17, 151, 226, .32);
-}
-.row__top {
-  display: flex; align-items: center;
-  gap: 6px; min-width: 0;
-}
-/* Line 1 is the name, so it gets the full width; line 2 carries the meta text and the kind pill. */
-.row__top .row__name { flex: 1 1 auto; min-width: 0; }
-.row__sub {
-  display: flex; align-items: center; gap: var(--lx-space-2); min-width: 0;
-}
-.row__sub .row__meta { flex: 1 1 auto; min-width: 0; }
-/* The date is the part worth keeping whole, so the family name yields to it. */
-.row__meta { display: flex; align-items: baseline; gap: 4px; }
-.row__meta-fam { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.row__meta-date { flex: 0 0 auto; }
-.row__desc {
-  font-size: var(--lx-fs-sm); color: var(--lx-fg-muted); line-height: 1.45;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.row__kind--concept { color: var(--lx-warn); border-color: rgba(224, 180, 0, .40); }
-.row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.row__name { font-size: var(--lx-fs-md); font-weight: var(--lx-fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row__meta { font-size: var(--lx-fs-xs); color: var(--lx-fg-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row__kind {
-  flex: 0 0 auto; padding: 2px 7px; border-radius: 999px;
-  border: 1px solid var(--lx-border-strong); color: var(--lx-fg-muted);
-  background: var(--lx-surface-2);
-  font-size: var(--lx-fs-2xs); text-transform: uppercase; letter-spacing: var(--lx-ls-wide);
-}
-.row__kind--indicator { color: var(--lx-accent-ink); border-color: rgba(17, 151, 226, .45); }
-
-.empty, .error { padding: var(--lx-space-4); color: var(--lx-fg-muted); font-size: var(--lx-fs-sm); }
-.empty strong, .error strong { color: var(--lx-fg); font-size: var(--lx-fs-lg); }
-.error strong { color: var(--lx-loss); }
 .muted { color: var(--lx-fg-muted); }
 
 .skeleton {
@@ -701,9 +563,6 @@ input[type="text"]:hover { border-color: var(--lx-border-strong); }
   background: linear-gradient(90deg, var(--lx-surface-3) 0%, var(--lx-bg-hover) 50%, var(--lx-surface-3) 100%);
   animation: shimmer 1.4s var(--lx-ease) infinite;
 }
-/* The two-line row is ~52px; a placeholder of the same height means the list does not jump when
-   the real rows land. */
-.skeleton--row { height: 52px; border-radius: var(--lx-radius-lg); }
 @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
 
 /* ── Layer 5e — chart region ─────────────────────────────────────────────── */
@@ -827,147 +686,6 @@ pre {
 .vela-mark-note { font-size: var(--lx-fs-2xs); color: var(--lx-fg-faint); }
 
 
-/* ── Browse: the whole catalogue as clickable rows ────────────────────────────────────────────
-   Search answers "I know the name"; this answers "what is there". Families are a row of chips
-   (the endpoint validates slug keys, not display names), the list pages 100 at a time, and a
-   pick hands off to the SAME openResult() path a search hit uses — one run landasan, no second
-   executor. Rows reuse .row so a catalogue pick looks like a search result, which it is. */
-.browse { border-bottom: 1px solid var(--lx-border); }
-.browse__bar { display: flex; align-items: center; gap: var(--lx-space-2); padding: var(--lx-space-2) var(--lx-space-3); }
-.browse__tab { flex: 0 0 auto; }
-.browse__tab.is-on { color: var(--lx-fg-bright); border-color: var(--lx-border-strong); background: var(--lx-bg-hover); }
-.browse__count { font-size: var(--lx-fs-xs); margin-left: auto; }
-/* The family chips are disclosure triggers, not indicator filters: their counts come from the
-   concept taxonomy. A bounded popover keeps the chart in place while the selected family's
-   concept rows scroll inside it. The trigger/content state follows ObsidianUI's Collapsible pattern
-   using this app's existing vanilla-DOM stack and tokens. */
-/* The body is toggled by .view--hidden (display:none !important), so no `display` here. */
-.browse__body { display: flex; flex-direction: column; min-height: 0; }
-.browse__taxonomy { position: relative; z-index: var(--lx-z-overlay); }
-.browse__families {
-  display: flex; flex-wrap: nowrap; gap: var(--lx-space-1);
-  padding: var(--lx-space-2) var(--lx-space-3);
-  overflow-x: auto; overscroll-behavior-x: contain;
-  border-bottom: 1px solid var(--lx-border);
-  /* The row scrolls; the fade says so without a scrollbar taking a lane. */
-  mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%);
-  scrollbar-width: none;
-}
-.browse__families::-webkit-scrollbar { display: none; }
-.browse__fam {
-  display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto;
-  font-size: var(--lx-fs-xs); padding: 3px var(--lx-space-2);
-  border: 1px solid var(--lx-border-soft); border-radius: 999px;
-  background: transparent; color: var(--lx-fg-muted); cursor: pointer;
-  transition: color var(--lx-dur-fast) var(--lx-ease),
-              border-color var(--lx-dur-fast) var(--lx-ease),
-              background var(--lx-dur-fast) var(--lx-ease);
-}
-.browse__fam:hover { color: var(--lx-fg-bright); border-color: var(--lx-border-strong); background: var(--lx-bg-hover); }
-.browse__fam.is-on { color: var(--lx-fg-bright); border-color: var(--lx-accent-line); background: var(--lx-accent-soft); }
-.browse__fam-caret { font-size: 9px; opacity: .65; transition: transform var(--lx-dur-fast) var(--lx-ease); }
-.browse__fam[aria-expanded="true"] .browse__fam-caret { transform: rotate(180deg); opacity: 1; }
-.browse__fam-count { color: var(--lx-fg-faint); }
-/* Keyboard focus must be visible on every surface the disclosure touches — the ring is suppressed
-   for mouse users by :focus-visible itself, so this costs the pointer path nothing. */
-.row:focus-visible,
-.browse__fam:focus-visible,
-.browse__concepts-close:focus-visible {
-  outline: 2px solid var(--lx-accent-line); outline-offset: 2px;
-}
-.browse__list { flex: 1; min-height: 0; overflow: auto; padding: var(--lx-space-2); max-height: 46vh; }
-.browse__more { padding: 0 var(--lx-space-3) var(--lx-space-2); }
-.browse__more.is-done { display: none; }
-/* While a family bubble is open, the popover is the surface. Its bottom edge is bounded (46vh), so
-   the script list behind it — and that list's own "Load more" — otherwise leaked out below the
-   popover: two lists and two "Load more" buttons on one screen. */
-.browse__body.is-concepts .browse__list,
-.browse__body.is-concepts .browse__more { display: none; }
-/* ...and the panel's empty-state copy ("Start here…") peeked out under the popover's bottom edge
-   for the same reason. While a family is open, the popover is the only surface. */
-.view.is-concepts .results .empty { display: none; }
-/* …and the same welcome blurb must not sit under the catalogue list either — it belongs to an empty
-   SEARCH, and under the rows it reads like part of the list. */
-.view.is-browsing .results .empty { display: none; }
-.browse__note { padding: var(--lx-space-3); color: var(--lx-fg-muted); font-size: var(--lx-fs-sm); }
-
-.browse__concepts {
-  position: absolute; inset-inline: var(--lx-space-3); top: 100%; z-index: var(--lx-z-overlay);
-  display: flex; flex-direction: column; min-width: 0; max-height: min(46vh, 420px);
-  overflow: hidden; color: var(--lx-fg);
-  background: var(--lx-surface-glass);
-  backdrop-filter: blur(var(--lx-blur-pop)) saturate(140%);
-  border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-pop);
-  box-shadow: var(--lx-shadow-pop);
-  transform-origin: top center;
-  animation: pop-in var(--lx-dur-pop) var(--lx-ease-spring);
-}
-@keyframes pop-in {
-  from { opacity: 0; transform: translateY(-4px) scale(.96); }
-  to   { opacity: 1; transform: none; }
-}
-.browse__concepts.view--hidden { display: none !important; }
-.browse__concepts-head {
-  display: flex; align-items: center; gap: var(--lx-space-2); flex: 0 0 auto;
-  flex-wrap: nowrap;
-  padding: var(--lx-space-2) var(--lx-space-3); border-bottom: 1px solid var(--lx-border);
-  font-size: var(--lx-fs-sm);
-}
-/* Title ellipsizes; the count and the close button keep their space, so the header never wraps
-   into the ragged two-line block it used to. */
-.browse__concepts-head strong {
-  font-weight: var(--lx-fw-semibold);
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.browse__concepts-head .browse__count { flex: 0 0 auto; white-space: nowrap; }
-.browse__concepts-close {
-  margin-left: auto; flex: 0 0 auto;
-  width: 24px; height: 24px; display: grid; place-items: center;
-  border: 0; border-radius: var(--lx-radius-sm);
-  background: transparent; color: var(--lx-fg-muted); cursor: pointer;
-  font: inherit; font-size: var(--lx-fs-md); line-height: 1;
-  transition: color var(--lx-dur-fast) var(--lx-ease),
-              background var(--lx-dur-fast) var(--lx-ease);
-}
-.browse__concepts-close:hover { color: var(--lx-fg-bright); background: var(--lx-bg-hover); }
-.browse__concepts-hint {
-  flex: 0 0 auto; margin: 0; padding: var(--lx-space-1) var(--lx-space-3) 0;
-  font-size: var(--lx-fs-xs); color: var(--lx-fg-faint);
-}
-.browse__concepts-list {
-  flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain;
-  padding: var(--lx-space-2);
-  /* The local/scroll gradient pair is the classic "there is more above/below" cue: the top pair
-     scrolls with the content, the bottom pair is pinned to the viewport of the list, so the shadows
-     appear only while the list actually overflows. The cover stops use the popover's own glass
-     colour, or the gradients would sit on the glass as visible bands. */
-  background-image:
-    linear-gradient(var(--lx-surface-glass) 30%, rgba(19, 19, 23, 0)),
-    linear-gradient(rgba(19, 19, 23, 0), var(--lx-surface-glass) 70%),
-    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, .45), rgba(0, 0, 0, 0)),
-    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, .45), rgba(0, 0, 0, 0));
-  background-position: top, bottom, top, bottom;
-  background-size: 100% 18px, 100% 18px, 100% 8px, 100% 8px;
-  background-repeat: no-repeat;
-  background-attachment: local, local, scroll, scroll;
-}
-.browse__concepts-list .row { width: 100%; text-align: left; }
-.browse__group {
-  /* Sticky: in a 100-row list the heading is the only thing that says where you are. */
-  position: sticky; top: 0; z-index: 1;
-  padding: var(--lx-space-2) var(--lx-space-2) var(--lx-space-1);
-  font-size: var(--lx-fs-xs); text-transform: uppercase; letter-spacing: .06em;
-  color: var(--lx-fg-faint);
-  background: var(--lx-surface-glass);
-  backdrop-filter: blur(6px);
-}
-.browse__concepts-list .browse__group:first-child { padding-top: 0; }
-.browse__concepts-more { flex: 0 0 auto; padding: var(--lx-space-2); border-top: 1px solid var(--lx-border); }
-.browse__concepts-more.is-done { display: none; }
-@media (max-width: 640px) {
-  .browse__concepts { inset-inline: var(--lx-space-2); max-height: 50vh; }
-}
-
 /* ── Script surface (removed on the operator's call, 17 Sep) ─────────────────────────────────
    The Pine editor that used to live here (and the Chart | Script mode switch) is gone: the
    console is the chart, the Library and the detail panel. Scripts still run — the detail
@@ -1049,16 +767,6 @@ pre {
   color: var(--lx-accent-ink); font-size: 11px;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
-/* The top row must never pay for the legend with the indicator count — that pill IS the
-   trust signal ("1 indicator" while SMC draws), so the verbose bars pill yields instead. */
-#bars-status { max-width: 78px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-
-/* The open family bubble is scrolled into the row's view (setFamilyDisclosure). Smooth only when
-   the operator allows motion — declared after the component rules so it never shadows them. */
-@media (prefers-reduced-motion: no-preference) {
-  .browse__families { scroll-behavior: smooth; }
-}
-
 /* Hover labels for the docked controls (F2, 25 Sep: "can they understand what to see or click or
    hover?"). CSS only — no dependency, no layout shift, and it never swallows a click. */
 .btn--toggle[data-tip] { position: relative; }
@@ -1104,7 +812,6 @@ pre {
    they change and line up column-wise. No font swap — the list design language stays as validated. */
 .row__meta-date,
 .row__sub .pill,
-.browse__concepts-head strong,
 .chart-legend,
 .statusbar,
 .toast {

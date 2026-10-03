@@ -317,8 +317,9 @@ def cmd_open(args) -> int:
     the operator sees. Concepts live in the family bubble list; indicator scripts in "Browse all".
     """
     payload = {"action": "open", "slug": args.slug, "kind": args.kind}
-    if args.kind == "concept":
-        payload["family"] = args.family or ""
+    # Always send the family: an omitted --family means "all families", and a filter left over from
+    # an earlier call must not silently hide the row this one asked for.
+    payload["family"] = args.family or ""
     result = send(args, payload)
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))

@@ -46,37 +46,8 @@ class EscapeClosesThePane(unittest.TestCase):
         self.assertIn("setPanel('detail', false)", body[:800],
                       "Escape does not close the pane")
 
-    def test_escape_is_bound_before_the_popover_handler_so_only_one_surface_closes(self):
-        app = read(APP)
-        esc = app.find("addEventListener('keydown', escapeKeydown)")
-        pop = app.find("addEventListener('keydown', conceptsKeydown)")
-        self.assertNotEqual(esc, -1, "escapeKeydown is never bound")
-        self.assertNotEqual(pop, -1, "conceptsKeydown is never bound")
-        self.assertLess(esc, pop,
-                        "bound after the popover handler — Escape would close the popover AND the pane")
-        # the popover keeps ownership while it is open
-        i = app.find("function escapeKeydown")
-        self.assertIn("familyConceptState.open", app[i:i + 800],
-                      "the handler does not stand down while the family popover is open")
-
-    def test_script_and_library_have_a_way_out_from_the_keyboard_too(self):
-        app = read(APP)
-        body = app.split("function escapeKeydown", 1)[1]
-        self.assertIn("setPanel('library', false)", body[:1200],
-                      "Escape never closes the Library panel")
-
 
 class OpeningThePaneKeepsTheLayout(unittest.TestCase):
-    def test_library_and_detail_do_not_collapse_to_one_column(self):
-        css = read(CSS)
-        block = rule(css, '.main[data-library="on"][data-detail="on"]')
-        if not block:
-            # the two selectors may be listed together on one rule
-            block = rule(css, '.main[data-detail="on"]:not([data-library="on"])')
-        self.assertIn("grid-template-columns", block, "no rule owns that state")
-        self.assertIn("300px", block,
-                      "opening the detail pane hands the Library's column away: " + block.strip())
-
     def test_detail_without_library_is_still_one_full_width_column(self):
         css = read(CSS)
         block = rule(css, '.main[data-detail="on"]:not([data-library="on"])')
@@ -112,25 +83,3 @@ class TheLibraryIsASheetAtPaneWidths(unittest.TestCase):
     chart owns every row that is left, and the sheet closes from the same toggle that opened it
     (☰ Library, or Escape)."""
 
-    def test_the_pane_width_library_is_an_overlay_not_a_stacked_row(self):
-        css = read(CSS)
-        i = css.find("@media (max-width: 1099px)")
-        self.assertGreater(i, -1, "the pane-width media block is gone")
-        depth, j = 0, i
-        for j in range(i, len(css)):
-            if css[j] == "{":
-                depth += 1
-            elif css[j] == "}":
-                depth -= 1
-                if depth == 0:
-                    break
-        block = css[i:j]
-        self.assertIn("position: fixed", block,
-                      "the Library stacks in the grid again — the chart loses ~half the pane")
-        self.assertIn("--lx-pane-top", block,
-                      "the sheet must start under the topbar (it may not swallow its own toggles)")
-        self.assertNotIn("max-height: 38dvh", block, "the old stacked cap is back")
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -12,18 +12,10 @@
 
 const $ = (sel) => document.querySelector(sel);
 const el = {
-  q: $('#q'), form: $('#search-form'), results: $('#results'), detail: $('#detail'),
+  detail: $('#detail'),
   dot: $('#status-dot'),
   chartLog: $('#chart-log'), chartOrigin: $('#chart-origin'), toast: $('#toast'),
-  libraryPanel: $('.panel--left'), libraryToggle: $('#library-toggle'),
   main: $('.main'),
-  browse: $('#browse'), browseToggle: $('#browse-toggle'), browseBody: $('#browse-body'),
-  browseList: $('#browse-list'), browseFamilies: $('#browse-families'),
-  browseCount: $('#browse-count'), browseMore: $('#browse-more'),
-  browseConcepts: $('#browse-concepts'), browseConceptsTitle: $('#browse-concepts-title'),
-  browseConceptsCount: $('#browse-concepts-count'), browseConceptsList: $('#browse-concepts-list'),
-  browseConceptsMore: $('#browse-concepts-more'),
-  browseConceptsClose: $('#browse-concepts-close'),
   scriptFallback: $('#script-fallback'),
   fullFallback: $('#full-fallback'), focusExit: $('#chart-focus-exit'),
   statusbar: $('.statusbar'),
@@ -746,410 +738,6 @@ async function queueMount(source, name) {
   return mountIndicator(source, name);
 }
 
-/* ---------------------------------------------------------------- browse all */
-/* The catalogue as clickable rows. Search needs a name to start from; this needs nothing — open
-   it, pick a family, read down the list. Paging is server-side (page_size caps at 100), and the
-   families come from /api/families so the chip row cannot drift from the catalogue's own keys. */
-const BROWSE_PAGE = 100;
-/* `loading` guards the fetch, `queued` remembers what arrived while it ran. */
-let browseState = { page: 0, family: '', rows: [], loading: false, queued: null };
-/* The family chips describe concept taxonomy, not indicator-script families. Keep their disclosure
-   and paging separate from the indicator list behind "Browse all". */
-let familyConceptState = {
-  page: 0, family: '', label: 'All library concepts', rows: [], total: 0,
-  loading: false, queued: null, open: false,
-  clusters: new Set(),   // cluster names already headed in the popover (pages must not repeat them)
-};
-
-/* The one-letter mark at the head of every row. It gives the list a column the eye can run down
-   (a wall of same-shaped text is what "flat" meant), and it carries the kind in its colour:
-   amber for a concept, blue for an indicator script. */
-function glyphFor(row) {
-  const name = String(row.name || row.slug || '?').trim();
-  return name ? name[0].toUpperCase() : '?';
-}
-
-function browseRow(row) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'row';
-  button.dataset.slug = row.slug;
-  button.dataset.kind = 'indicator';       // a catalogue entry is always an indicator
-  button.title = row.name || row.slug;     // the name ellipsizes; the tooltip keeps it readable
-  button.innerHTML = `
-    <div class="row__top">
-      <span class="row__glyph" aria-hidden="true">${esc(glyphFor(row))}</span>
-      <span class="row__name">${esc(row.name || row.slug)}</span>
-    </div>
-    <div class="row__sub">
-      <span class="row__meta">
-        <span class="row__meta-fam">${esc(row.family || 'unclassified')}</span>
-        ${row.date_displayed ? `<span class="row__meta-date">· ${esc(row.date_displayed)}</span>` : ''}
-      </span>
-      <span class="row__kind row__kind--indicator">indicator</span>
-    </div>
-    ${row.description ? `<div class="row__desc">${esc(row.description)}</div>` : ''}`;
-  // The same door a search hit uses — one landasan, one executor.
-  button.addEventListener('click', () => openResult({ ...row, kind: 'indicator' }, button));
-  return button;
-}
-
-function browseConceptRow(row) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'row';
-  button.dataset.slug = row.slug;
-  button.dataset.kind = 'concept';
-  button.title = row.name || row.slug;
-  const aliases = Array.isArray(row.aliases) ? row.aliases.filter(Boolean).slice(0, 3) : [];
-  const aliasText = aliases.length
-    ? `<div class="row__desc">Also: ${esc(aliases.join(' · '))}${row.aliases.length > aliases.length ? ' · …' : ''}</div>`
-    : '';
-  const meta = [row.family || familyConceptState.label, row.cluster].filter(Boolean).join(' · ');
-  button.innerHTML = `
-    <div class="row__top">
-      <span class="row__glyph" aria-hidden="true">${esc(glyphFor(row))}</span>
-      <span class="row__name">${esc(row.name || row.slug)}</span>
-    </div>
-    <div class="row__sub">
-      ${meta ? `<span class="row__meta">${esc(meta)}</span>` : '<span class="row__meta"></span>'}
-    </div>
-    ${aliasText}`;
-  button.addEventListener('click', () => openResult({ ...row, kind: 'concept' }, button));
-  return button;
-}
-
-async function loadBrowse(reset = false) {
-  if (!el.browseList) return;
-  // One load at a time. Two overlapping calls appended into one list (a 59-indicator family
-  // measured 118 rows), and guarding that with a "newest wins" token cancelled the winning paint
-  // instead — two triggers on one open left the list blank. So join instead of race: while a load
-  // is in flight the same request reuses it, and a genuine change (family/append) queues behind it.
-  if (browseState.loading) {
-    browseState.queued = reset ? 'reset' : 'more';
-    return;
-  }
-  browseState.loading = true;
-  browseState.queued = null;
-  const resetting = reset;
-  if (resetting) {
-    browseState.page = 0;
-    browseState.rows = [];
-    el.browseList.innerHTML = skeletonRows(5);
-  }
-  el.browseMore?.classList.remove('is-done');
-  const wantedFamily = browseState.family;
-  try {
-    const data = await api('/api/indicators', {
-      page: browseState.page, page_size: BROWSE_PAGE,
-      ...(wantedFamily ? { family: wantedFamily } : {}),
-    });
-    const rows = data.indicators || [];
-    // The family moved while this was in flight — drop it; the queued load has the right filter.
-    if (wantedFamily !== browseState.family) { browseState.loading = false; return drainBrowse(); }
-    if (resetting) el.browseList.innerHTML = '';
-    if (!rows.length && !browseState.rows.length) {
-      el.browseList.innerHTML = '<div class="browse__note">Nothing in this family.</div>';
-      el.browseMore?.classList.add('is-done');
-      browseState.loading = false;
-      drainBrowse();
-      return;
-    }
-    browseState.rows.push(...rows);
-    rows.forEach((row) => el.browseList.appendChild(browseRow(row)));
-    browseState.page += 1;
-    const total = data.total ?? browseState.rows.length;
-    // The count is telemetry, not a label (26 Sep — the operator circled `☰ 806` on the chart row:
-    // a number in the chrome reads as a foreign element, spec §4). The door says WHAT it opens and
-    // the number lives in its tooltip; the label is never overwritten.
-    if (el.browseCount) {
-      el.browseCount.textContent = browseState.family
-        ? `${browseState.rows.length} of ${total} · ${browseState.family}`
-        : `${browseState.rows.length} of ${total}`;
-    }
-    // The endpoint reports the page count; when it does not, a short page is the last page.
-    const more = data.pages ? browseState.page < data.pages : rows.length === BROWSE_PAGE;
-    if (!more) el.browseMore?.classList.add('is-done');
-    checkHealth();   // this read moved the backend's MCP counter
-  } catch (err) {
-    browseState.loading = false;
-    el.browseList.innerHTML = `<div class="browse__note">Catalogue unavailable: ${esc(err.message)}<br>
-      Is the console backend running? <code>./console/start.sh</code> (or the luxalgo-web user unit)</div>`;
-    return;
-  }
-  browseState.loading = false;
-  drainBrowse();
-}
-
-/* Run whatever arrived while a load was in flight — a family change wins over a plain append. */
-function drainBrowse() {
-  const q = browseState.queued;
-  browseState.queued = null;
-  if (q === 'reset') loadBrowse(true);
-  else if (q === 'more') loadBrowse(false);
-}
-
-function setFamilyDisclosure(activeButton = null, open = false) {
-  document.querySelectorAll('.browse__fam').forEach((button) => {
-    const expanded = open && button === activeButton;
-    button.classList.toggle('is-on', expanded);
-    button.setAttribute('aria-expanded', String(expanded));
-  });
-  /* While a family is disclosed the popover IS the surface. Its bottom edge is bounded (46vh), so
-     without this the script list behind it — and that list's own "Load more" — showed through under
-     the popover: two lists and two "Load more" buttons on one screen. */
-  el.browseBody?.classList.toggle('is-concepts', open);
-  // The panel's own empty-state copy sits under the browse block and peeked out below the popover's
-  // bounded bottom edge — same leak, different element. The whole view carries the flag.
-  el.browseBody?.closest('.view')?.classList.toggle('is-concepts', open);
-  /* Bring the open bubble into the row's view. The row scrolls sideways, so a family past the fold
-     (Wyckoff, Validation) left the operator looking at unselected chips with no sign of which one
-     was on. Nearest, not center: the row should move as little as it takes. */
-  if (open && activeButton) activeButton.scrollIntoView({ inline: 'nearest', block: 'nearest' });
-}
-
-function closeFamilyConcepts() {
-  familyConceptState.open = false;
-  el.browseConcepts?.classList.add('view--hidden');
-  setFamilyDisclosure();
-}
-
-/* Concepts arrive family-filtered but not grouped, and the popover is long: cluster headings break
-   the wall of names into runs you can skim. Headings are decorative (aria-hidden) so the list's own
-   roles stay simple, and a cluster that continues onto the next page keeps the heading it got. */
-function appendConceptRows(rows) {
-  rows.forEach((row) => {
-    const cluster = row.cluster || '';
-    if (cluster && !familyConceptState.clusters.has(cluster)) {
-      familyConceptState.clusters.add(cluster);
-      const head = document.createElement('div');
-      head.className = 'browse__group';
-      head.setAttribute('aria-hidden', 'true');
-      head.textContent = cluster;
-      el.browseConceptsList.appendChild(head);
-    }
-    el.browseConceptsList.appendChild(browseConceptRow(row));
-  });
-}
-
-async function loadFamilyConcepts(reset = false) {
-  const state = familyConceptState;
-  if (!el.browseConceptsList || (!reset && !state.open)) return;
-  if (state.loading) {
-    state.queued = reset ? 'reset' : 'more';
-    return;
-  }
-  state.loading = true;
-  state.queued = null;
-  const resetting = reset;
-  if (resetting) {
-    state.page = 0;
-    state.rows = [];
-    state.total = 0;
-    state.clusters.clear();
-    el.browseConceptsList.innerHTML = skeletonRows(4);
-  }
-  const moreWrap = el.browseConceptsMore?.parentElement;
-  moreWrap?.classList.remove('is-done');
-  if (el.browseConceptsMore) el.browseConceptsMore.disabled = true;
-  const wantedFamily = state.family;
-  const wantedLabel = state.label;
-  try {
-    const data = await api('/api/concepts', {
-      page: state.page, page_size: BROWSE_PAGE,
-      ...(wantedFamily ? { family: wantedFamily } : {}),
-    });
-    const rows = data.concepts || [];
-    if (wantedFamily !== state.family) { state.loading = false; return drainFamilyConcepts(); }
-    if (resetting) el.browseConceptsList.innerHTML = '';
-    const total = Number(data.total ?? (state.rows.length + rows.length));
-    if (!rows.length && !state.rows.length) {
-      state.total = total;
-      el.browseConceptsList.innerHTML = `<div class="browse__note">No concepts found for ${esc(wantedLabel)}.</div>`;
-      if (el.browseConceptsCount) el.browseConceptsCount.textContent = `0 of ${total}`;
-      moreWrap?.classList.add('is-done');
-      state.queued = null;
-      state.loading = false;
-      drainFamilyConcepts();
-      return;
-    }
-    state.rows.push(...rows);
-    appendConceptRows(rows);
-    state.page += 1;
-    state.total = total;
-    if (el.browseConceptsCount) {
-      // The title above already names the family; only the all-families case needs the scope.
-      const scope = wantedFamily ? '' : ' · all families';
-      el.browseConceptsCount.textContent = `${state.rows.length} of ${state.total}${scope}`;
-    }
-    const more = rows.length > 0 && state.rows.length < state.total;
-    moreWrap?.classList.toggle('is-done', !more);
-    if (el.browseConceptsMore) el.browseConceptsMore.disabled = !more;
-    checkHealth();
-  } catch (err) {
-    state.loading = false;
-    if (wantedFamily !== state.family) return drainFamilyConcepts();
-    state.queued = null;
-    el.browseConceptsList.innerHTML = `<div class="browse__note">Concept list unavailable: ${esc(err.message)}</div>`;
-    if (el.browseConceptsCount) el.browseConceptsCount.textContent = 'Concepts unavailable';
-    moreWrap?.classList.add('is-done');
-    return;
-  }
-  state.loading = false;
-  drainFamilyConcepts();
-}
-
-function drainFamilyConcepts() {
-  const queued = familyConceptState.queued;
-  familyConceptState.queued = null;
-  if (queued === 'reset') loadFamilyConcepts(true);
-  else if (queued === 'more') loadFamilyConcepts(false);
-}
-
-async function loadFamilies() {
-  if (!el.browseFamilies) return;
-  try {
-    const data = await api('/api/families', {});
-    const fams = data.families || [];
-    // The family counts are concepts; the ALL chip needs the catalogue's own total, which no
-    // family carries. One 1-row read answers it exactly (and never drifts like a baked number).
-    let conceptTotal = 0;
-    try { conceptTotal = Number((await api('/api/concepts', { page_size: 1 })).total || 0); }
-    catch { /* the chip falls back to a bare label — never a wrong number */ }
-    el.browseFamilies.innerHTML = '';
-    const all = document.createElement('button');
-    all.type = 'button'; all.className = 'browse__fam'; all.dataset.family = '';
-    all.dataset.label = 'All library concepts';
-    all.setAttribute('aria-controls', 'browse-concepts');
-    all.setAttribute('aria-expanded', 'false');
-    all.innerHTML = `<span class="browse__fam-label">All concepts</span>`
-      + (conceptTotal ? `<span class="browse__fam-count">${esc(String(conceptTotal))}</span>` : '')
-      + `<span class="browse__fam-caret" aria-hidden="true">▾</span>`;
-    all.title = 'Show all library concepts';
-    all.addEventListener('click', () => pickFamily('', all));
-    el.browseFamilies.appendChild(all);
-    fams.forEach((f) => {
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'browse__fam'; b.dataset.family = f.key;
-      b.dataset.label = f.name;
-      b.setAttribute('aria-controls', 'browse-concepts');
-      b.setAttribute('aria-expanded', 'false');
-      // Concept counts, not indicator counts — say which, or the numbers read as a partition.
-      b.innerHTML = `<span class="browse__fam-label">${esc(f.name)}</span>`
-        + (f.concept_count ? `<span class="browse__fam-count">${esc(String(f.concept_count))}</span>` : '')
-        + `<span class="browse__fam-caret" aria-hidden="true">▾</span>`;
-      b.title = `${f.name} — ${f.concept_count || 0} library concepts, upstream`;
-      b.addEventListener('click', () => pickFamily(f.key, b));
-      el.browseFamilies.appendChild(b);
-    });
-  } catch (err) {
-    el.browseFamilies.innerHTML = `<span class="browse__note">Families unavailable: ${esc(err.message)}</span>`;
-  }
-}
-
-function pickFamily(key, button) {
-  const family = key || '';
-  if (familyConceptState.open && familyConceptState.family === family) {
-    closeFamilyConcepts();
-    return;
-  }
-  familyConceptState.family = family;
-  familyConceptState.label = button?.dataset.label || (family || 'All library concepts');
-  familyConceptState.open = true;
-  familyConceptState.page = 0;
-  familyConceptState.rows = [];
-  familyConceptState.total = 0;
-  if (el.browseConceptsTitle) el.browseConceptsTitle.textContent = familyConceptState.label;
-  if (el.browseConceptsCount) el.browseConceptsCount.textContent = `Loading ${familyConceptState.label}…`;
-  el.browseConcepts?.classList.remove('view--hidden');
-  setFamilyDisclosure(button, true);
-  loadFamilyConcepts(true);
-  checkHealth();
-}
-
-function toggleBrowse(on) {
-  const open = typeof on === 'boolean' ? on : el.browseBody.classList.contains('view--hidden');
-  if (!open) closeFamilyConcepts();
-  el.browseBody.classList.toggle('view--hidden', !open);
-  // The search empty state is a welcome, not part of the catalogue: with the catalogue open it read
-  // as a stray paragraph under the list (operator's still, 25 Sep).
-  document.getElementById('view-library')?.classList.toggle('is-browsing', open);
-  el.browseToggle?.classList.toggle('is-on', open);
-  el.browseToggle?.setAttribute('aria-expanded', String(open));
-  try { localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), browse: open })); } catch { /* private mode */ }
-  if (open) {
-    if (!el.browseFamilies.children.length) loadFamilies();
-    // The indicator catalogue loads independently; family bubbles fetch concepts into their own
-    // disclosure list and never filter or clear these indicator rows.
-    if (!browseState.rows.length && !browseState.loading) loadBrowse(true);
-  }
-}
-
-/* ---------------------------------------------------------------- library UI */
-function skeletons(n = 4) {
-  el.results.innerHTML = Array.from({ length: n }, () => '<div class="skeleton"></div>').join('');
-}
-
-/* Row-shaped placeholders for any list that is about to be replaced. The old text note ("Loading
-   the catalogue…") told the eye nothing about what was coming; a skeleton of the same height keeps
-   the list from jumping when the rows land. */
-function skeletonRows(n = 5) {
-  return Array.from({ length: n }, () => '<div class="skeleton skeleton--row"></div>').join('');
-}
-
-function renderResults(rows) {
-  if (!rows.length) {
-    el.results.innerHTML = '<div class="empty"><p>No matches.</p><p class="muted">Try a broader term, or set type to “all”.</p></div>';
-    return;
-  }
-  el.results.innerHTML = '';
-  rows.forEach((row) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'row';
-    button.dataset.slug = row.slug;
-    button.dataset.kind = row.kind;
-    button.title = row.name || row.slug;
-    button.innerHTML = `
-      <div class="row__top">
-        <span class="row__glyph" aria-hidden="true">${esc(glyphFor(row))}</span>
-        <span class="row__name">${esc(row.name || row.slug)}</span>
-      </div>
-      <div class="row__sub">
-        <span class="row__meta">${esc(row.family || '')}${row.family ? ' · ' : ''}${esc(row.slug)}</span>
-        <span class="row__kind row__kind--${esc(row.kind)}">${esc(row.kind)}</span>
-      </div>
-      ${row.description ? `<div class="row__desc">${esc(row.description)}</div>` : ''}`;
-    button.addEventListener('click', () => openResult(row, button));
-    el.results.appendChild(button);
-  });
-}
-
-async function runSearch(event) {
-  event?.preventDefault();
-  const term = el.q.value.trim();
-  if (!term) return;
-  setLibraryCollapsed(false);           // a search always brings the results back into view
-  setPanel('library', true);            // …and the panel it lives in, if it was hidden
-  skeletons();
-  toast('Searching the Library…');
-  try {
-    const data = await api('/api/search', {
-      q: term, type: $('#type').value, family: $('#family').value, limit: 12,
-    });
-    const rows = data.results || [];
-    renderResults(rows);
-    toast(`${rows.length} result${rows.length === 1 ? '' : 's'} for “${term}”`);
-    checkHealth();   // this search just moved the backend's MCP counter — the pill must follow
-  } catch (err) {
-    el.results.innerHTML = `<div class="empty"><p>Search failed.</p><p class="muted">${esc(err.message)}</p>
-      <p class="muted">Is the backend running? <code>./console/start.sh</code> (or the luxalgo-web user unit)</p></div>`;
-    toast('Search failed: ' + err.message, true);
-  }
-}
-
-/* One place that puts a button into a running state: the label stays, a spinner is added and the
-   button is disabled, so a second click can never double-run a script. */
 function setActionState(button, state, label) {
   if (!button) return;
   button.classList.toggle('is-busy', state === 'busy');
@@ -1311,21 +899,6 @@ async function openResult(row, button) {
   }
 }
 
-/* --------------------------------------------------------------------- tabs */
-/**
- * The library folds to its search row so the chart keeps the height (operator's call, 15 Sep).
- * Folded, the filters, shortcuts, onboarding text and results are hidden; a search always
- * unfolds it, and the caret in the search row toggles it by hand.
- */
-function setLibraryCollapsed(on) {
-  if (!el.libraryPanel) return;
-  el.libraryPanel.classList.toggle('is-collapsed', on);
-  if (el.libraryToggle) {
-    el.libraryToggle.textContent = on ? '⌄' : '⌃';
-    el.libraryToggle.setAttribute('aria-expanded', String(!on));
-    el.libraryToggle.title = on ? 'Show filters, shortcuts and results' : 'Fold the library away';
-  }
-}
 
 function showView(name) {
   document.querySelectorAll('.tab').forEach((tab) => {
@@ -1477,10 +1050,13 @@ function mountNative(type, title) {
 
 
 
-/* The drawer exposes its own API to the bridge (window.libDrawer, drawer.js); this helper is exposed
+/* The drawer exposes its own API to the bridge (window.libDrawer, drawer.js); these two are exposed
    here for the same reason — the bridge must not assume a classic script's globals, so a future
-   bundling step cannot quietly break the agent's door. */
+   bundling step cannot quietly break the agent's doors. `openResult` is the one way a picked row
+   reaches the Details view, and the agent's `open` action uses it for concepts (which have no row of
+   their own). */
 window.mountNative = mountNative;
+window.openResult = openResult;
 
 
 
@@ -1517,16 +1093,6 @@ async function checkHealth() {
   }
 }
 
-/** Land on the open catalogue list. The agent's `browse --show` calls this — it used to click the
-    ☰ catalogue button, and deleting a button must not silently take the agent's path with it. */
-function openLibraryBrowse() {
-  setPanel('library', true);
-  setLibraryCollapsed(false);
-  toggleBrowse(true);
-  toast('LuxAlgo Library ready');
-  checkHealth();
-}
-window.openLibraryBrowse = openLibraryBrowse;
 
 /* The script pane's control surface (3 Oct): the `<>` toggle is a Vela widget action, so the agent
    has no button to click — these functions ARE the door, and they answer with the pane's own state
@@ -1538,68 +1104,23 @@ window.scriptPane = {
   state: () => ({ open: el.main.dataset.detail === 'on' && rightViewIs('script') }),
 };
 
-/* F6 (25 Sep): Escape closes whatever this pane opened. Only the family popover listened for
-   it, so the script / detail pane — the operator's "I opened PineTS, Escape should hide it" —
-   could only be closed with its ✕. Bound BEFORE conceptsKeydown so one Escape closes ONE surface:
-   the popover stands down here while it is open, the pane goes next, the Library last. */
+/* F6 (25 Sep): Escape closes whatever this pane opened. Only the family popover listened for it,
+   so the script pane — the operator's "I opened PineTS, Escape should hide it" — could only be
+   closed with its ✕. The drawer answers first (window.closeDrawerIfOpen, bound in main), then this
+   hides the script pane. */
 function escapeKeydown(e) {
   if (e.key !== 'Escape') return;
-  if (familyConceptState.open) return;
   if (el.main && el.main.dataset.detail === 'on') {
     e.preventDefault();
     setPanel('detail', false);
-    return;
   }
-  if (el.main && el.main.dataset.library === 'on') {
-    e.preventDefault();
-    setPanel('library', false);
-  }
-}
-
-/* Keyboard rules for the disclosure, in one place. Escape closes and hands focus back to the chip
-   that opened it; arrows walk whichever surface has focus (the chip row, or the concept list). No
-   roving tabindex: the popover is short and the arrows are a convenience, not the only way in. */
-function conceptsKeydown(e) {
-  if (e.key === 'Escape' && familyConceptState.open) {
-    e.preventDefault();
-    closeFamilyConcepts();
-    el.browseFamilies?.querySelector('.browse__fam.is-on')?.focus();
-    return;
-  }
-  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
-  const inPopover = familyConceptState.open && el.browseConcepts?.contains(e.target);
-  const onChip = e.target instanceof Element && !!e.target.closest('.browse__fam');
-  const scope = inPopover ? el.browseConceptsList : (onChip ? el.browseFamilies : null);
-  if (!scope) return;
-  const items = Array.from(scope.querySelectorAll(inPopover ? '.row' : '.browse__fam'));
-  if (!items.length) return;
-  const index = items.indexOf(document.activeElement);
-  let next;
-  if (e.key === 'Home') next = 0;
-  else if (e.key === 'End') next = items.length - 1;
-  else if (e.key === 'ArrowDown') next = index < 0 ? 0 : Math.min(items.length - 1, index + 1);
-  else next = index < 0 ? items.length - 1 : Math.max(0, index - 1);
-  e.preventDefault();
-  items[next].focus();
-}
-
-/* Click-away, bound in the capture phase so a click that lands on the chart or the chat still
-   closes the disclosure before anything else reacts to it. The chip itself is exempt: it toggles. */
-function onDocumentPointerDown(e) {
-  if (!familyConceptState.open) return;
-  if (el.browseConcepts?.contains(e.target)) return;
-  if (e.target instanceof Element && e.target.closest('.browse__fam')) return;
-  closeFamilyConcepts();
 }
 
 async function main() {
-  /* Chart-first: the LIBRARY starts where he left it. The DETAIL panel deliberately never restores
-     open: nothing is selected at load time, so it would paint an empty "Nothing selected" column
-     over the chart — the operator's complaint of 17 Sep. It opens when a result is picked, or from
-     the toggle if he asks for it. (setPanel persists, so a stale `detail: true` is cleaned up here.) */
-  const panelPrefs = readPanelPrefs();
-  setPanel('library', panelPrefs.library === true);
-  toggleBrowse(panelPrefs.browse === true);
+  /* Chart-first (16 Sep): the chart owns the pane, and the script pane deliberately never restores
+     open — nothing is being edited at load time, so it would paint an empty column over the chart.
+     (setPanel persists, so a stale `detail: true` is cleaned up here.) The picked result lives in
+     the drawer now (3 Oct), not in a column. */
   setPanel('detail', false);   // never restore the column open (his 17 Sep complaint)
   showRightView('script');   /* the column keeps ONE view now (3 Oct) — the editor; the detail is the drawer's */
   /* Bare-chart fallbacks (3 Oct): the drawer door, the script pane and full screen are Vela widget
@@ -1620,13 +1141,7 @@ async function main() {
   el.scriptFallback?.addEventListener('click', () => togglePanel('script'));
   el.fullFallback?.addEventListener('click', () => setChartFullscreen(!isChartFullscreen()));
 
-  el.browseToggle?.addEventListener('click', () => toggleBrowse());
-  el.browseMore?.addEventListener('click', () => loadBrowse(false));
-  el.browseConceptsMore?.addEventListener('click', () => loadFamilyConcepts(false));
-  el.browseConceptsClose?.addEventListener('click', () => closeFamilyConcepts());
   document.addEventListener('keydown', escapeKeydown);
-  document.addEventListener('keydown', conceptsKeydown);
-  document.addEventListener('pointerdown', onDocumentPointerDown, true);
 
   // Script pane (restored 23 Sep) — Run goes through the one landasan; the draft survives reloads.
   const srcBox = $('#script-src'), outBox = $('#script-out'), nameBox = $('#script-name'), runBtn = $('#script-run');
@@ -1730,22 +1245,6 @@ async function main() {
     } finally { runBtn.disabled = false; }
   });
 
-  el.form.addEventListener('submit', runSearch);
-  $('#chips').addEventListener('click', (ev) => {
-    const chip = ev.target.closest('.chip');
-    if (!chip) return;
-    el.q.value = chip.dataset.q;
-    runSearch();
-  });
-
-
-  // The library folds away so the chart keeps the height; the caret toggles it.
-  if (el.libraryToggle && el.libraryPanel) {
-    el.libraryToggle.addEventListener('click', () =>
-      setLibraryCollapsed(!el.libraryPanel.classList.contains('is-collapsed')));
-    setLibraryCollapsed(el.libraryPanel.classList.contains('is-collapsed'));
-  }
-
   // Theme: one button, two systems (our palette + the chart's own theme)
   $('#theme-toggle').addEventListener('click', () => {
     applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
@@ -1798,14 +1297,9 @@ async function main() {
   }
 
 
-  if (new URLSearchParams(location.search).get('q')) {
-    el.q.value = new URLSearchParams(location.search).get('q');
-    runSearch();
-  }
-
   // Exposed for scripted checks (browser automation, console experiments).
   window.__app = {
-    get chart() { return chart; }, mountIndicator, queueMount, runSearch, api,
+    get chart() { return chart; }, mountIndicator, queueMount, api,
     /* The bridge's `palette` op needs the SAME action the ◐ toggle runs (our palette + Vela's
        chrome + the chart's parked colours). Exposing it keeps one implementation. */
     applyTheme,

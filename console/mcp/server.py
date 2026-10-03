@@ -613,15 +613,15 @@ def chart_palette(try_apply: bool = False) -> str:
     return _command("palette", **fields)
 
 
-@mcp.tool(annotations=_ann("Open a Library concept-family list"))
+@mcp.tool(annotations=_ann("Open the script catalogue in the drawer"))
 def chart_browse(family: str = "", show: bool = True) -> str:
-    """Open the Library's concept dropdown in the chart pane, optionally on one family.
+    """Open the catalogue in the drawer — the one surface (the Library panel is deleted, 3 Oct).
 
-    The family bubbles are concept taxonomy (for example, Wyckoff's count is concepts), not an
-    indicator-script filter. Empty `family` opens all concepts; a slug (trend, smc-ict, momentum, …)
-    opens that family's concepts. For indicator scripts and server-side filtering, use
-    `library_list`. This command reports the rows actually painted and never applies an indicator.
-    Pass show=False to read without opening a collapsed Library pane.
+    `family` narrows the catalogue to one family of the taxonomy ('trend', 'smc-ict', 'momentum', …);
+    an empty `family` shows every row. The answer reports the rows the list actually holds, its
+    family filter and whether the drawer is open; it never applies an indicator. Pass show=False to
+    read without opening anything. To read one row's write-up, open its Details view with
+    `trader-chart open <slug>` (CLI) — the write-up itself is in the row's `reading` field.
     """
     fields = {"show": bool(show)}
     # An explicit family narrows; an omitted one means "all families", not "leave the last filter".

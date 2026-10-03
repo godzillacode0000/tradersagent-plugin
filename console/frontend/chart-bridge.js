@@ -1013,6 +1013,7 @@
             break;
           }
           ld.open(true);
+          ld.detail(false);          /* the surface's job here is the LIST, not a row's details */
           /* The old section names keep working: favourites/builtins narrow the list to that half,
              anything else shows the whole catalogue. They are the drawer's chips. */
           const section = String(command.section || '').trim().toLowerCase();
@@ -1292,109 +1293,93 @@
           break;
         }
         case 'browse': {
-          /* Family bubbles disclose concept lists; the separate "Browse all" button holds indicator
-             scripts. Empty `family` means the all-concepts bubble. Keep the agent readout aligned with
-             the exact list visible in the pane rather than counting the hidden indicator list. */
-          const body = document.getElementById('browse-body');
-          const indicatorList = document.getElementById('browse-list');
-          const conceptsList = document.getElementById('browse-concepts-list');
-          if (!body || !indicatorList || !conceptsList) {
-            out.detail = 'this build has no catalogue list — the Library search is the door';
+          /* The catalogue lives in ONE surface now (3 Oct, the operator's doc §1): the drawer. The
+             Library panel's search/browse view is deleted, so this drives the drawer's own API and
+             reports what its list holds. The reply keeps its shape (`out.browse`) for the CLI and
+             the MCP tools; `family` narrows to one family of the catalogue ('' or 'all' = every row). */
+          const ld = window.libDrawer;
+          if (!ld || typeof ld.open !== 'function') {
+            out.detail = 'this page has no drawer — reload the console to pick up the newer frontend files';
             break;
           }
-          const conceptMode = command.family !== undefined;
-          const want = String(command.family || '');
-          if (conceptMode) {
-            // Family bubbles are built from /api/families on first open; wait for that fetch before
-            // looking up the requested key so a first-use browse cannot silently select nothing.
-            if (typeof toggleBrowse === 'function' && !document.querySelector('.browse__fam')) {
-              toggleBrowse(true);
-              for (let i = 0; i < 20 && !document.querySelector('.browse__fam'); i++) {
-                await new Promise((rr) => setTimeout(rr, 150));
-              }
-            }
-            const chip = Array.from(document.querySelectorAll('.browse__fam'))
-              .find((button) => button.dataset.family === want);
-            if (!chip) {
-              out.detail = 'no Library family bubble for "' + want + '"';
-              break;
-            }
-            const alreadyOpen = typeof familyConceptState !== 'undefined' &&
-              familyConceptState.open && familyConceptState.family === want;
-            if (!alreadyOpen) chip.click();
-          }
-          if (command.show) {
-            if (typeof window.openLibraryBrowse === 'function') window.openLibraryBrowse();
-            else if (typeof toggleBrowse === 'function') toggleBrowse(true);
-          }
-          const list = conceptMode ? conceptsList : indicatorList;
-          const state = conceptMode ? familyConceptState : browseState;
-          // Paging is a door too: page the same list the operator can see, never its hidden sibling.
-          if (command.more) {
-            const more = document.getElementById(conceptMode ? 'browse-concepts-more' : 'browse-more');
-            if (more && !more.disabled && !more.parentElement.classList.contains('is-done')) more.click();
-            else out.noMore = true;
-          }
-          const count = () => list.querySelectorAll('.row').length;
-          let last = count();
-          let sawChange = false;
-          for (let i = 0; i < 40; i++) {
-            await new Promise((r) => setTimeout(r, 150));
-            const now = count();
-            if (now !== last) { sawChange = true; last = now; continue; }
-            if (state.loading || state.queued) continue;
-            if (now > 0) break;
-            if (sawChange || i >= 12) break;
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+          ld.open(true);
+          ld.detail(false);          /* browsing is the LIST; `open` is what shows the Details view */
+          if (command.family !== undefined) ld.family(String(command.family || ''));
+          if (command.q != null) ld.search(command.q);
+          let seen = ld.state();
+          const deadline = Date.now() + (seen.catalogue === 'loading' ? 45000 : 6000);
+          while (seen.catalogue === 'loading' && Date.now() < deadline) {
+            await pause(150);
+            seen = ld.state();
           }
           out.ok = true;
-          const family = conceptMode ? familyConceptState.family : browseState.family;
-          const open = !body.classList.contains('view--hidden') &&
-            (!conceptMode || familyConceptState.open);
-          out.detail = (conceptMode ? 'library concepts: ' : 'indicator catalogue: ') + count() +
-            (conceptMode ? ' concept(s) on screen' : ' indicator(s) on screen') +
-            (family ? ' · family ' + family : ' · all families') + (open ? ' · open' : ' · closed');
+          out.detail = 'indicator catalogue: ' + seen.rows + ' indicator(s) on screen' +
+            (seen.family ? ' · family ' + seen.family : ' · all families') +
+            (seen.open ? ' · open' : ' · closed');
           out.browse = {
-            kind: conceptMode ? 'concepts' : 'indicators', rows: count(), family: family || '', open,
+            kind: 'indicators', rows: seen.rows, total: ld.rows().length,
+            family: seen.family || '', open: seen.open,
           };
           break;
         }
         case 'open': {
-          /* Open one Library row's detail pane — the agent's version of clicking a result. Reading
-             only: nothing is run, mounted or ordered, and the pane's action buttons stay untouched. */
+          /* Open one catalogue row's Details view — the agent's version of clicking a row. Reading
+             only: nothing is run, mounted or ordered, and the view's action buttons stay untouched.
+             The list is the DRAWER's now (3 Oct); a concept has no row of its own, so it opens the
+             Details view directly. */
           const kind = command.kind === 'indicator' ? 'indicator' : 'concept';
-          if (typeof toggleBrowse === 'function') toggleBrowse(true);
+          const slug = String(command.slug || '').trim();
+          if (!slug) { out.detail = 'no slug given'; break; }
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
           if (kind === 'concept') {
-            for (let i = 0; i < 20 && !document.querySelector('.browse__fam'); i++) {
-              await new Promise((r) => setTimeout(r, 150));
+            if (typeof window.openResult !== 'function') {
+              out.detail = 'this build cannot open a concept (older frontend)';
+              break;
             }
-            const want = String(command.family || '');
-            const chip = Array.from(document.querySelectorAll('.browse__fam'))
-              .find((button) => button.dataset.family === want);
-            const alreadyOpen = typeof familyConceptState !== 'undefined' &&
-              familyConceptState.open && familyConceptState.family === want;
-            if (chip && !alreadyOpen) chip.click();
+            window.openResult({ slug, kind: 'concept' }, null);
+          } else {
+            const ld = window.libDrawer;
+            if (!ld || typeof ld.open !== 'function') {
+              out.detail = 'this page has no drawer — reload the console to pick up the newer frontend files';
+              break;
+            }
+            ld.open(true);
+            /* An omitted family means ALL families — a filter left over from an earlier call must
+               not silently hide the row this one asked for (the same lesson `--family` carries). */
+            ld.family(command.family != null ? String(command.family || '') : '');
+            const findRow = () => Array.from(document.querySelectorAll('#drawer-list .drow[data-slug]'))
+              .find((li) => li.dataset.slug === slug);
+            let row = null;
+            for (let i = 0; i < 12 && !row; i++) {
+              await pause(150);
+              row = findRow();
+            }
+            if (!row) {
+              /* Beyond the painted slice: the row's own search is the honest way in. */
+              ld.search(slug);
+              for (let i = 0; i < 12 && !row; i++) {
+                await pause(150);
+                row = findRow();
+              }
+            }
+            if (!row) {
+              out.detail = 'no indicator row for "' + slug + '" is on screen';
+              break;
+            }
+            const door = row.querySelector('[data-open]');
+            if (!door) { out.detail = 'that row has no Details door'; break; }
+            door.click();
           }
-          const scope = kind === 'concept' ? '#browse-concepts-list' : '#browse-list';
-          let row = null;
-          for (let i = 0; i < 40 && !row; i++) {
-            await new Promise((r) => setTimeout(r, 150));
-            row = Array.from(document.querySelectorAll(scope + ' .row'))
-              .find((button) => button.dataset.slug === command.slug);
-          }
-          if (!row) {
-            out.detail = 'no ' + kind + ' row for "' + command.slug + '" is on screen';
-            break;
-          }
-          row.click();
           const detail = document.getElementById('detail');
           const titleOf = () => ((detail && detail.querySelector('.detail__title')) || {}).textContent || '';
           for (let i = 0; i < 40; i++) {
-            await new Promise((r) => setTimeout(r, 150));
+            await pause(150);
             if (titleOf() && !/Loading…/.test(titleOf())) break;
           }
           out.ok = true;
-          out.detail = 'opened ' + kind + ' “' + titleOf() + '” in the detail pane';
-          out.opened = { slug: command.slug, kind, title: titleOf() };
+          out.detail = 'opened ' + kind + ' “' + titleOf() + '” in the Details view';
+          out.opened = { slug, kind, title: titleOf() };
           break;
         }
         case 'drawer': {
