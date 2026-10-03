@@ -296,6 +296,7 @@ state.ready = (async () => {
       registerWidgetAction(replayAction);
 
       let pending = false;
+      let lastPaint = '';
       const rerender = () => {
         if (pending) return;
         pending = true;
@@ -304,14 +305,29 @@ state.ready = (async () => {
         setTimeout(() => {
           pending = false;
           const names = onNames();
-          chip.label = names.length ? '● ' + names[names.length - 1] : 'No indicator';
-          replayAction.label = replayOn() ? 'Exit replay' : 'Replay — practice on older bars';
+          const chipLabel = names.length ? '● ' + names[names.length - 1] : 'No indicator';
+          const replayLabel = replayOn() ? 'Exit replay' : 'Replay — practice on older bars';
           const s = window.taStatus || { state: 'wait', title: '' };
           const bad = s.state === 'bad';
-          status.icon = 'ta-dot-' + (bad ? 'bad' : s.state === 'ok' ? 'ok' : 'wait');
+          const statusIcon = 'ta-dot-' + (bad ? 'bad' : s.state === 'ok' ? 'ok' : 'wait');
           /* Fine = a bare dot with a tooltip; wrong = the words, because that is when they matter. */
-          status.iconOnly = !bad;
-          status.label = bad ? (s.text || 'something is wrong') : (s.title || 'Agent and bars');
+          const statusIconOnly = !bad;
+          const statusLabel = bad ? (s.text || 'something is wrong') : (s.title || 'Agent and bars');
+          /* ONLY a change the operator can SEE earns a rebuild. Vela's renderActions()
+             replaceChildren()s the row — every call destroys and rebuilds each button — and a click
+             whose mousedown→mouseup straddles one never fires `click` at all. A replay tick used to
+             rebuild on every event: measured live 4 Oct, 46 rebuilds / 460 node swaps in 6 s of
+             playback at 250 ms/bar (up to ~10 events/s at 100 ms/bar) — the strobe the operator
+             filmed as "kelip2", and one-click drawer opens fell from 6/6 quiet to 4/6 during
+             playback. The labels below ARE the row's visible state, so comparing them is the guard. */
+          const sig = [chipLabel, replayLabel, statusIcon, statusIconOnly, statusLabel].join('|');
+          if (sig === lastPaint) return;
+          lastPaint = sig;
+          chip.label = chipLabel;
+          replayAction.label = replayLabel;
+          status.icon = statusIcon;
+          status.iconOnly = statusIconOnly;
+          status.label = statusLabel;
           try { if (state.ws && typeof state.ws.refreshActions === 'function') state.ws.refreshActions(); }
           catch (err) { /* an older Vela: the chip keeps its last label until the next render */ }
         }, 0);

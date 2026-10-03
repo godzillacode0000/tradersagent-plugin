@@ -189,5 +189,40 @@ class TheDrawerHoldsBothHalves(unittest.TestCase):
         self.assertNotIn("$id('drawer-open')", DRAWER)
 
 
+class TheRowRebuildsOnlyWhenSomethingVisibleChanged(unittest.TestCase):
+    """4 Oct, from the operator's own recording: during replay playback the topbar row was rebuilt on
+    EVERY replay event — `rerender()` called `refreshActions()` unconditionally, and Vela's
+    renderActions() replaceChildren()s the whole row. Measured live: 46 rebuilds / 460 node swaps in
+    6 s of playback at 250 ms/bar (up to ~10 events/s at 100 ms/bar), the strobe the operator filmed
+    as \"kelip2\", and a click whose mousedown→mouseup straddled a rebuild never fired `click` at all
+    (one-click drawer opens: 6/6 quiet vs 4/6 during playback). The guard: only a change the operator
+    can SEE earns a rebuild."""
+
+    def _rerender_body(self):
+        return WORKSPACE.split("const rerender = () => {", 1)[1] \
+                        .split("window.addEventListener('ta-onchart'", 1)[0]
+
+    def test_the_comparison_comes_before_the_rebuild(self):
+        body = self._rerender_body()
+        self.assertIn("lastPaint", body, "the guard needs to remember what was painted last")
+        self.assertLess(body.index("sig === lastPaint"), body.index("refreshActions"),
+                        "the comparison must come BEFORE the rebuild")
+
+    def test_every_visible_label_feeds_the_signature(self):
+        sig = self._rerender_body().split("const sig = ", 1)[1].split(";", 1)[0]
+        for part in ("chipLabel", "replayLabel", "statusIcon", "statusIconOnly", "statusLabel"):
+            self.assertIn(part, sig, f"{part} is visible on the row — it must be in the signature")
+
+    def test_the_labels_are_written_from_the_computed_values(self):
+        body = self._rerender_body()
+        for line in ("chip.label = chipLabel", "replayAction.label = replayLabel",
+                     "status.icon = statusIcon", "status.label = statusLabel"):
+            self.assertIn(line, body)
+
+    def test_refresh_actions_has_one_guarded_call_site(self):
+        self.assertEqual(len(re.findall(r"state\.ws\.refreshActions\(\)", WORKSPACE)), 1,
+                         "one call site, and it sits behind the guard")
+
+
 if __name__ == "__main__":
     unittest.main()
