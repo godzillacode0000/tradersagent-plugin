@@ -164,7 +164,8 @@ class TheAgentStillHasItsPaths(unittest.TestCase):
             self.assertIn(call, body, f"opening the browse list must {call}")
 
     def test_the_indicators_door_goes_through_a_function(self):
-        self.assertIn("window.openIndicators", BRIDGE)
+        self.assertIn("window.libDrawer", BRIDGE,
+                      "the indicators door drives the drawer now (the ⌗ modal is deleted)")
 
 
 class TheDrawerHoldsBothHalves(unittest.TestCase):

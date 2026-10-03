@@ -995,58 +995,43 @@
           break;
         }
         case 'indicators': {
-          /* The Indicators surface — BUILT-INS + LIBRARY + favourites in one modal (the operator's
-             ask, 26 Sep, after watching the original LuxAlgo app). The door opens it and reports the
-             rows the grid actually painted: a panel that opened is not a panel that filled. */
-          const modal = document.getElementById('ind-modal');
-          if (!modal || typeof window.openIndicators !== 'function') {
-            out.detail = 'this page has no Indicators surface — reload the console to pick up the ' +
-              'newer frontend files';
+          /* The Indicators surface — ONE surface now (3 Oct, the operator's doc §1): the drawer holds
+             ★ favourites, Built-ins 76 and the Library 807, and Vela's own button is the door. The ⌗
+             modal is deleted, so this action drives the DRAWER through its own API (window.libDrawer)
+             and reports what the list actually holds — a drawer that opened is not a drawer that
+             filled. */
+          const ld = window.libDrawer;
+          if (!ld || typeof ld.open !== 'function') {
+            out.detail = 'this page has no drawer — reload the console to pick up the newer frontend files';
             break;
           }
+          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
           if (command.show === false) {
-            window.openIndicators(false);
+            ld.open(false);
             out.ok = true;
             out.detail = 'Indicators surface closed';
             break;
           }
-          window.openIndicators(true);
+          ld.open(true);
+          /* The old section names keep working: favourites/builtins narrow the list to that half,
+             anything else shows the whole catalogue. They are the drawer's chips. */
           const section = String(command.section || '').trim().toLowerCase();
-          if (section && typeof window.setIndSection === 'function') window.setIndSection(section);
-          if (command.q != null && typeof window.setIndSearch === 'function') window.setIndSearch(command.q);
-          /* The family rail: `family: "smc-ict"` narrows the LIBRARY to one family of the catalogue,
-             `family: ""` (or "all") shows every row again. */
-          if (command.family != null && typeof window.setIndFamily === 'function') {
-            window.setIndFamily(command.family);
-          }
-          /* One card's reading, opened from this side: `reading: "mlma"` unfolds that card's write-up
-             so its text is on screen (and in `rows[].reading`) without a click. */
-          let reading = null;
-          if (command.reading != null && typeof window.setIndReading === 'function') {
-            reading = window.setIndReading(command.reading, command.readingOn !== false) || null;
-          }
-          /* Fold one group away, or open it again: `fold: "trend"`, `fold: "trend/Other"`. */
-          let folded = null;
-          if (command.fold != null && typeof window.setIndFold === 'function') {
-            folded = window.setIndFold(command.fold, command.foldOn !== false) || null;
-          }
-          /* Star / unstar from this side too: `star: "native:supertrend"` (or "library:slug"). The
-             operator's ☆ and this are the same list, so what the agent keeps is what the panel shows. */
+          if (section === 'favorites' || section === 'favourites') ld.family('__fav');
+          else if (section === 'builtins' || section === 'built-ins') ld.family('__builtin');
+          else if (section) ld.family('');
+          if (command.q != null) ld.search(command.q);
+          /* `family: "smc-ict"` narrows to one family of the catalogue; `""` (or "all") shows every
+             row again. */
+          if (command.family != null) ld.family(command.family);
+          /* Star / unstar from this side: `star: "library:slug"`. The operator's ☆ and this are one
+             list, so what the agent keeps is what the drawer shows. */
           let starred = null;
           const starSpec = String(command.star || command.unstar || '').trim();
-          if (starSpec && typeof window.setIndFavourite === 'function') {
-            const cut = starSpec.indexOf(':');
-            if (cut > 0) {
-              const kind = starSpec.slice(0, cut).toLowerCase();
-              const id = starSpec.slice(cut + 1);
-              starred = window.setIndFavourite(kind, id, !command.unstar);
-            }
-          }
-          const pause = (ms) => new Promise((r) => setTimeout(r, ms));
-          /* Mount straight from the surface when asked: this is the SAME function a click on a
-             built-in card runs (`window.mountNative`), so the door cannot pass while the click
-             path is broken. Library rows are not mounted this way — they keep the Details pane
-             with its Run PineTS / Add to chart buttons. */
+          if (starSpec) starred = ld.star(starSpec, !command.unstar) || null;
+          /* Mount a built-in straight from the surface when asked: `mount: "native:supertrend"` is
+             the SAME mountNative a click on its row runs, so the door cannot pass while the click
+             path is broken. Library rows are not mounted this way — they keep the Details view with
+             its Run PineTS / Add to chart buttons. */
           let mounted = null;
           const mountSpec = String(command.mount || '').trim();
           if (mountSpec) {
@@ -1054,7 +1039,7 @@
             const kind = cut > 0 ? mountSpec.slice(0, cut).toLowerCase() : 'native';
             const id = cut > 0 ? mountSpec.slice(cut + 1) : mountSpec;
             if (kind === 'library') {
-              out.detail = 'library rows mount through the Details pane (open "' + id + '"), not ' +
+              out.detail = 'library rows mount through the Details view (open "' + id + '"), not ' +
                 'through this door — they carry Pine that PineTS must run';
               break;
             }
@@ -1062,59 +1047,55 @@
               out.detail = 'this build cannot mount from the surface (older frontend)';
               break;
             }
-            mounted = window.mountNative(id, id);
+            const row = ld.rows().find((r) => r.slug === id);
+            mounted = window.mountNative(id, (row && row.name) || id);
             out.added = mounted ? id : null;
           }
-          /* The catalogue walk is a real network wait the first time on a machine (nine pages,
-             ~25 s), so the door gives a loading catalogue up to 45 s to answer instead of 6 — the
-             alternative is reporting "0 rows" for a grid that is about to fill. */
-          const firstLook = typeof window.indicatorsSurface === 'function' ? window.indicatorsSurface() : null;
-          const deadline = Date.now() + (firstLook && firstLook.loading ? 45000 : 6000);
-          let seen = null;
-          for (;;) {
+          /* The catalogue walk is a real network wait the first time on a machine (~25 s), so give a
+             loading catalogue up to 45 s to answer instead of 6 — the alternative is reporting
+             "0 rows" for a list that is about to fill. */
+          let seen = ld.state();
+          const deadline = Date.now() + (seen.catalogue === 'loading' ? 45000 : 6000);
+          while (seen.catalogue === 'loading' && Date.now() < deadline) {
             await pause(150);
-            seen = typeof window.indicatorsSurface === 'function' ? window.indicatorsSurface() : null;
-            if (!seen) break;
-            /* A reading cannot be reported open on a card that was never painted. On a cold page the
-               catalogue is not in memory yet when `setIndReading` runs, so the read is retried here
-               until the card exists (measured 27 Sep: the first ask answered `onScreen: false`). */
-            if (reading && reading.onScreen === false && !seen.loading) {
-              reading = window.setIndReading(command.reading, command.readingOn !== false) || reading;
-            }
-            /* Settled = the right section is showing and nothing is in flight. A search that truly
-               matches nothing settles with zero rows — that is an answer, not a reason to spin. */
-            if (!seen.loading && seen.section === (section || seen.section)) break;
-            if (Date.now() > deadline) break;
+            seen = ld.state();
           }
-          if (!seen) { out.detail = 'the surface opened but cannot describe itself (older build)'; break; }
+          const rows = ld.rows();
           out.ok = true;
           out.indicators = {
-            section: seen.section,
-            query: seen.query,
+            open: seen.open,
+            detail: seen.detail,
+            section: section || 'library',
+            query: seen.q,
             family: seen.family || '',
             families: seen.families || 0,
-            groups: (seen.groups || []).slice(0, 24),
-            rows: seen.rows.slice(0, 60),
+            rows: rows.slice(0, 60).map((r) => ({
+              kind: r.__native ? 'native' : 'library',
+              id: r.slug,
+              label: String(r.name || r.slug).trim(),
+              family: r.family || '',
+              /* The reading the ⌗ modal's cards used to unfold — the catalogue's own description. */
+              reading: r.description || '',
+              onChart: Boolean(r.present),
+              starred: Boolean(r.starred),
+              /* The catalogue's own preview URL — the door proves a picture EXISTS for this row
+                 (the ⌗ modal read this off the rendered card; the drawer keeps no <img> for rows it
+                 has not painted, so the data is the honest read here). */
+              shot: Boolean(r.image_url),
+            })),
             builtins: seen.builtins,
-            catalogueTotal: seen.catalogueTotal,
+            catalogueTotal: seen.total,
             favourites: seen.favourites,
             starred: starred,
-            reading: reading,
-            folded: folded,
-            stillLoading: Boolean(seen.loading),
+            mounted: mounted ? { id: mountSpec } : null,
+            stillLoading: seen.catalogue === 'loading',
           };
-          const labels = seen.rows.slice(0, 8).map((r) => r.label).join(' · ');
-          out.detail = 'Indicators · ' + seen.section + ' · ' + seen.rows.length + ' row(s)' +
-            (seen.query ? ' for "' + seen.query + '"' : '') +
-            (seen.family ? ' · family ' + seen.family : '') +
-            (seen.groups && seen.groups.length ? ' · ' + seen.groups.length + ' family group(s)' : '') +
-            ' · built-ins ' + seen.builtins + ' · catalogue ' + seen.catalogueTotal +
+          out.detail = 'Indicators · ' + (seen.detail ? 'detail view' : (section || 'library')) +
+            ' · ' + seen.rows + ' row(s) · built-ins ' + seen.builtins + ' · catalogue ' + seen.total +
             ' · starred ' + seen.favourites +
-            (starred ? ' (' + (starred.starred ? 'starred' : 'unstarred') + ')' : '') +
-            (reading ? ' · reading ' + reading.slug + (reading.open ? ' open' : ' closed') +
-              ' (' + reading.chars + ' chars)' : '') +
-            (mountSpec ? ' · ' + (mounted ? 'mounted ' + mountSpec : 'mount failed: ' + mountSpec) : '') +
-            (labels ? ' ⇒ ' + labels : '');
+            (starred ? ' · ' + (starred.starred ? 'starred ' : 'unstarred ') + starred.slug : '') +
+            (mounted ? ' · mounted ' + mountSpec : '') +
+            ' · ' + (seen.open ? 'open' : 'closed');
           break;
         }
         case 'palette': {

@@ -21,6 +21,8 @@ import unittest
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 APP = os.path.join(ROOT, "console", "frontend", "app.js")
+DRAWER = os.path.join(ROOT, "console", "frontend", "drawer.js")
+BRIDGE = os.path.join(ROOT, "console", "frontend", "chart-bridge.js")
 BRIDGE = os.path.join(ROOT, "console", "frontend", "chart-bridge.js")
 STORE = os.path.join(ROOT, "console", "backend", "chart_bridge.py")
 CLI = os.path.join(ROOT, "console", "bin", "trader-chart")
@@ -94,14 +96,17 @@ class TheDoorsReportFromIt(unittest.TestCase):
 
 
 class ThePreviewPicturesAreUsed(unittest.TestCase):
-    """The catalogue always carried `image_url`; the cards simply did not show it."""
+    """The catalogue always carried `image_url`; the list simply did not show it. The drawer's rows
+    carry a 160 px local thumb, the Details view asks for 960 px, and the agent reads whether a
+    picture exists for a row from the door's own report."""
 
-    def test_the_card_renders_the_catalogue_shot(self):
-        src = read(APP)
-        self.assertIn("ind-card__shot", src, "the LIBRARY card must render the preview")
-        self.assertIn("shot: thumbUrl(r.slug, r.image_url, CARD_SHOT_W)", src,
+    def test_the_row_renders_the_catalogue_shot(self):
+        drawer = read(DRAWER)
+        self.assertIn("drow__shot", drawer, "a row renders the preview")
+        self.assertIn("thumbUrl(r.slug, r.image_url, 160)", drawer,
                       "…through the LOCAL cache (26 Sep latency fix), not straight from S3")
-        self.assertIn("function indicatorShot(", src, "the Details pane resolves it the same way")
+        app = read(APP)
+        self.assertIn("function indicatorShot(", app, "the Details view resolves it the same way")
 
     def test_the_star_remembers_the_picture(self):
         src = read(APP)
@@ -110,16 +115,17 @@ class ThePreviewPicturesAreUsed(unittest.TestCase):
 
     def test_images_are_lazy_off_the_main_thread(self):
         css = read(os.path.join(ROOT, "console", "frontend", "styles.css"))
-        self.assertIn(".ind-card__shot", css)
+        self.assertIn(".drow__shot", css)
         self.assertIn(".detail__shot", css)
-        app = read(APP)
-        self.assertRegex(app, r'loading="lazy"[\s\S]{0,80}decoding="async"',
-                         "60 cards is 60 pictures: load and decode them off the critical path")
+        drawer = read(DRAWER)
+        self.assertIn('loading="lazy"', drawer,
+                      "a list is a list of pictures: load and decode them off the critical path")
+        self.assertIn('decoding="async"', drawer)
 
-    def test_the_door_reports_it_read_off_the_rendered_card(self):
-        app = read(APP)
-        self.assertIn("shot: Boolean(c.querySelector('img.ind-card__shot'))", app,
-                      "the door proves a preview is in the grid, not that the data had a URL")
+    def test_the_door_reports_whether_a_picture_exists(self):
+        bridge = read(BRIDGE)
+        self.assertIn("shot: Boolean(r.image_url)", bridge,
+                      "the door proves a preview exists for the row, not that a URL was guessed")
 
 
 if __name__ == "__main__":

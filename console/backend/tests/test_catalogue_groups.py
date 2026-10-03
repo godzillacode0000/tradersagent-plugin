@@ -1,11 +1,14 @@
-"""Pins for the grouped catalogue: families, group headers, and a reading under every card.
+"""Pins for the catalogue's grouping: families, their counts, and where a row's write-up lives.
 
 The operator's ask, 27 Sep, in two halves:
 
-  * "categorize each in the library into each own respective concept or aspect or group" — the LIBRARY
-    is grouped by the catalogue's own families, with a rail in the nav to jump between them.
-  * "each should have another button like collapsible that shows reading about each indicator" — every
-    card carries its own write-up (`description`), folded by default, opened in place.
+  * "categorize each in the library into each own respective concept or aspect or group" — the
+    catalogue is grouped by its own families. The ⌗ modal's grouped grid is deleted (3 Oct, the
+    operator's doc §1), so the grouping is the DRAWER's chips: All · Built-ins · ★ Favourites · one
+    per family, each with its count, and the search narrows them all together.
+  * "each should have another button like collapsible that shows reading about each indicator" — the
+    write-up is no longer unfolded on a card: a row opens the DETAIL view inside the drawer (source,
+    write-up, licence line), and the agent reads the same text from `rows[].reading`.
 
 Both need the WHOLE catalogue in the browser, which is why the old paged loader is gone: a page of
 sixty cannot count a family it has not paged to, and it could race a section change (26 Sep).
@@ -13,7 +16,6 @@ sixty cannot count a family it has not paged to, and it could race a section cha
 """
 
 import os
-import re
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -23,6 +25,7 @@ SERVER = os.path.join(BACKEND, "server.py")
 APP = os.path.join(ROOT, "console", "frontend", "app.js")
 CSS = os.path.join(ROOT, "console", "frontend", "styles.css")
 HTML = os.path.join(ROOT, "console", "frontend", "index.html")
+DRAWER = os.path.join(ROOT, "console", "frontend", "drawer.js")
 BRIDGE = os.path.join(ROOT, "console", "frontend", "chart-bridge.js")
 CLI = os.path.join(ROOT, "console", "bin", "trader-chart")
 
@@ -61,113 +64,84 @@ class TheCatalogueComesInOnePiece(unittest.TestCase):
         self.assertIn("CATALOGUE_TTL = 12 * 3600", src)
 
     def test_the_page_loads_it_once_and_filters_in_memory(self):
-        app = read(APP)
+        app, drawer = read(APP), read(DRAWER)
         self.assertIn("async function loadCatalogue()", app)
         self.assertIn("await api('/api/catalogue')", app)
-        self.assertIn("function catalogueRows()", app)
+        self.assertIn("function rows()", drawer, "the filter is a function of state, over the loaded rows")
+        self.assertIn("function matches(r, q)", drawer)
 
 
-class TheGroupsAreReal(unittest.TestCase):
-    def test_the_grid_paints_a_header_per_family(self):
-        app = read(APP)
-        body = app.split("perFamily.entries())", 1)[1].split("/* Warm the pictures", 1)[0]
-        self.assertIn("ind-group__head", body)
-        self.assertIn("ind-group__name", body)
-        self.assertIn("ind-group__n", body, "a group says how many it holds")
-        self.assertIn("data-fold", body, "and can be folded away")
-        self.assertIn("Show the other ${rest} in", body,
-                      "a group longer than the slice offers its tail instead of hiding it")
+class TheChipsAreTheGrouping(unittest.TestCase):
+    """The modal's grouped grid is deleted; its grouping is the drawer's chips, with the same counts."""
 
-    def test_the_biggest_group_leads_and_other_trails(self):
-        app = read(APP)
-        self.assertIn("const tail = (k) => (k.split('/').slice(1).join('/') === 'Other' ? 1 : 0);", app,
-                      "\"Other\" (a row's family filed it under no cluster) is a remainder, not a headline")
-        self.assertIn("return b[1].length - a[1].length || a[0].localeCompare(b[0]);", app,
-                      "and the rest go biggest first")
+    def chips_body(self):
+        drawer = read(DRAWER)
+        return drawer.split("function paintFamilies()", 1)[1].split("function paintNow()", 1)[0]
 
-    def test_picking_a_family_groups_by_its_clusters(self):
-        """A family of 108 is still a wall; its clusters ("Moving-average lineage", 17) are the
-        concept-level grouping the operator asked for."""
-        app = read(APP)
-        self.assertIn("const byCluster = Boolean(indState.family);", app)
-        body = app.split("function indGroupKey(r) {", 1)[1].split("}", 1)[0]
-        self.assertIn("indState.family ? family + '/' +", body)
-        self.assertIn("'Other'", body)
-        self.assertIn("function indGroupKey(r)", app)
-        self.assertIn("catalogueRows().filter((r) => indGroupKey(r) === key)", app,
-                      "the \"show the rest\" door must count the SAME groups the grid painted")
+    def test_the_chips_carry_every_family_and_its_count(self):
+        body = self.chips_body()
+        self.assertIn("chip('', 'All', hits.length)", body)
+        self.assertIn("chip('__builtin', 'Built-ins'", body)
+        self.assertIn("chip('__fav', '★ Favourites'", body)
+        for field in ("g.name", "g.count", "g.key"):
+            self.assertIn(field, body, f"the family chips come from the catalogue's own groups ({field})")
+        self.assertIn("data-fam=", body, "a chip is a handle, not a label")
 
-    def test_the_nav_carries_the_family_rail(self):
-        html = read(HTML)
-        self.assertIn('id="ind-fams"', html)
-        app = read(APP)
-        self.assertIn("function renderFamilies()", app)
-        self.assertIn("data-family=", app)
-        self.assertIn("window.setIndFamily = setIndFamily;", app,
-                      "the door needs a handle on the rail, not just a click")
+    def test_the_counts_follow_the_search(self):
+        body = self.chips_body()
+        self.assertIn("hits.filter", body, "a family with no hit steps aside while the search is up")
+        self.assertIn("!q || n(g.key) > 0 || st.family === g.key", body)
 
-    def test_an_empty_family_filter_is_everything(self):
-        app = read(APP)
-        body = app.split("function setIndFamily(key)", 1)[1].split("}", 1)[0]
-        self.assertIn("'all'", body, "`--family all` must clear the filter, not search for a family named all")
+    def test_a_family_chip_narrows_the_list(self):
+        drawer = read(DRAWER)
+        self.assertIn("st.family = b.dataset.fam;", drawer)
+        self.assertIn("else if (st.family && (r.family || 'unfiled') !== st.family) return false;", drawer)
+        self.assertIn("family: (f) =>", drawer, "the agent narrows through the same state the chips write")
         cli = read(CLI)
         self.assertIn('payload["family"] = args.family or ""', cli,
                       "an omitted --family means the whole catalogue: a stale filter must not survive")
 
-    def test_the_group_styling_spans_the_grid(self):
-        css = read(CSS)
-        self.assertIn('.ind-group { grid-column: 1 / -1;', css,
-                      "a header is a row of its own, not a card-shaped cell")
-        self.assertIn(".ind-group__more {", css)
-        self.assertIn(".ind-fam.is-on", css)
+    def test_an_empty_family_filter_is_everything(self):
+        drawer = read(DRAWER)
+        body = drawer.split("family: (f) =>", 1)[1].split("},", 1)[0]
+        self.assertIn("'all'", body, "`--family all` must clear the filter, not search for a family named all")
 
-    def test_hidden_means_hidden(self):
-        """`#ind-more` is a `<button class="btn">`: the author `display` beat the UA `[hidden]`, so the
-        page-wide "Load more" kept painting under a grid with per-group doors (27 Sep screenshot)."""
+    def test_the_chip_styling_exists(self):
+        css = read(CSS)
+        self.assertIn(".dchip", css, "the chips are the drawer's own control")
+        self.assertIn(".dchip.is-on", css)
+
+
+class TheWriteUpLivesInTheDetailView(unittest.TestCase):
+    """§2(c): "Details … inside the drawer, as a second view. It has: Run, source, write-up, licence." """
+
+    def test_the_detail_renders_the_write_up(self):
+        app = read(APP)
+        self.assertIn("await api('/api/concept'", app)
+        self.assertIn("renderMarkdown(body.slice(0, 14000))", app)
+        html = read(HTML)
+        drawer = html.split('id="lib-drawer"', 1)[1].split("</aside>", 1)[0]
+        self.assertIn('id="detail"', drawer, "the write-up renders inside the drawer, not a column")
+
+    def test_a_row_opens_the_detail(self):
+        drawer = read(DRAWER)
+        block = drawer.split("if (ev.target.closest('[data-open]'))", 1)[1][:200]
+        self.assertIn("openResult(", block)
+
+    def test_the_agent_reads_the_same_text(self):
+        bridge = read(BRIDGE)
+        self.assertIn("reading: r.description || ''", bridge,
+                      "the write-up the card used to unfold is reported per row")
+        self.assertNotIn("command.reading", bridge, "the card unfold is gone; the rows carry the text")
+
+
+class HiddenMeansHidden(unittest.TestCase):
+    def test_the_state_rule_beats_author_displays(self):
+        """A `<button class="btn">` or a flex container carries an author `display`, and an author
+        `display` beats the UA sheet's `[hidden]` — both cost a live sighting to learn."""
         css = read(CSS)
         self.assertIn("[hidden] { display: none !important; }", css)
-        app = read(APP)
-        self.assertIn("more.closest('.ind-more')", app)
-
-
-class TheReadingOpensInPlace(unittest.TestCase):
-    def test_the_card_carries_its_own_write_up(self):
-        app = read(APP)
-        self.assertIn("const about = (opts.about || '').trim();", app)
-        self.assertIn('class="ind-card__more" data-about="1"', app)
-        self.assertIn('class="ind-card__about"', app)
-        self.assertIn("about: r.description", app, "the reading is the row's own description")
-
-    def test_it_starts_folded(self):
-        app = read(APP)
-        self.assertIn("indState.expanded = {}" if "indState.expanded = {}" in app else "expanded: {}", app)
-        body = app.split("function indCard(", 1)[1].split("/** The whole catalogue", 1)[0]
-        self.assertIn("const open = Boolean(about && indState.expanded[id]);", body,
-                      "806 cards shouting a paragraph each is a wall, not a catalogue")
-
-    def test_the_click_opens_the_reading_not_the_details_pane(self):
-        app = read(APP)
-        body = app.split("modal.addEventListener('click'", 1)[1].split("modal.addEventListener('keydown'", 1)[0]
-        about_at = body.index("[data-about]")
-        pane_at = body.index("openResult({ ...row")
-        self.assertLess(about_at, pane_at,
-                        "the reading branch must answer before the card's door to the Details pane")
-        self.assertIn("indState.expanded[id] = !indState.expanded[id];", body)
-
-    def test_the_star_and_the_reading_buttons_are_not_the_card(self):
-        """Space on ☆ or ▸ Reading must press that button, not open the Details pane."""
-        app = read(APP)
-        self.assertIn("if (card && !ev.target.closest('[data-star], [data-about]'))", app)
-
-    def test_the_agent_can_open_a_reading_too(self):
-        app = read(APP)
-        self.assertIn("window.setIndReading = (slug, on = true)", app)
-        bridge = read(BRIDGE)
-        self.assertIn("command.reading != null", bridge)
-        self.assertIn("reading: reading,", bridge)
-        cli = read(CLI)
-        self.assertIn('s.add_argument("--reading"', cli)
-        self.assertIn('s.add_argument("--family"', cli)
+        self.assertIn(".drawer__detail[hidden] { display: none; }", css)
 
 
 if __name__ == "__main__":

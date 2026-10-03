@@ -227,6 +227,15 @@
     }
   }
 
+  /* A row whose picture the catalogue does not carry answers 404. Drop the <img> instead of leaving
+     the browser's broken-image glyph in the row: no picture is a fact, a broken icon looks like a bug
+     (the ⌗ modal's lesson, 26 Sep — the drawer inherits the rows). Capture phase: `error` from an
+     <img> does not bubble. */
+  list.addEventListener('error', (ev) => {
+    const img = ev.target;
+    if (img && img.tagName === 'IMG') img.remove();
+  }, true);
+
   if (fallback) fallback.addEventListener('click', () => setOpen(!st.open));
   scrim.addEventListener('click', () => setOpen(false));
   $id('drawer-close').addEventListener('click', () => setOpen(false));
@@ -302,12 +311,51 @@
   window.addEventListener('resize', showFallbackIfNeeded);
   setTimeout(showFallbackIfNeeded, 8000);
 
+  /* The agent's side of the one surface (3 Oct): the bridge's `indicators` door drives THIS — the ⌗
+     modal is deleted and this drawer holds all three halves. Search and family are the same state the
+     box and the chips write, so what the agent asks for is what the operator sees. */
+  function star(spec, on) {
+    const cut = String(spec || '').indexOf(':');
+    const kind = cut > 0 ? spec.slice(0, cut).toLowerCase() : 'library';
+    const id = (cut > 0 ? spec.slice(cut + 1) : String(spec || '')).trim();
+    if (!id || kind !== 'library') return null;   /* built-ins carry no ☆ in this list */
+    const row = (indState.cat.rows || []).find((r) => r.slug === id) || { slug: id, name: id };
+    if (isFavourite('library', id) !== Boolean(on)) {
+      toggleFavourite('library', id, (row.name || id).trim(), row.image_url);
+    }
+    paint();
+    return { slug: id, starred: isFavourite('library', id), favourites: readFavourites().length };
+  }
+
   window.libDrawer = {
-    open: setOpen, toggle: () => setOpen(!st.open), run,
+    open: setOpen, toggle: () => setOpen(!st.open), run, star,
     detail: (on) => { if (on !== false) setOpen(true); showDetail(on !== false); },
+    search: (q) => {
+      st.q = String(q == null ? '' : q).trim();
+      st.shown = SLICE;
+      if (box) box.value = st.q;
+      paint();
+      list.scrollTop = 0;
+      return st.q;
+    },
+    family: (f) => {
+      const want = String(f == null ? '' : f).trim();
+      st.family = (want === 'all' || want === 'everything' || want === 'any') ? '' : want;
+      st.shown = SLICE;
+      paint();
+      list.scrollTop = 0;
+      return st.family;
+    },
+    /* Every row the current search/family matches (not just the painted slice), each carrying the
+       same ☆ the operator sees — the door reports what the LIST holds, `state()` what it painted. */
+    rows: () => rows().map((r) => ({ ...r, starred: r.__native ? false : isFavourite('library', r.slug) })),
+    refresh: () => paint(),
     state: () => ({ open: st.open, detail: st.detail, q: st.q, family: st.family, busy: st.busy,
                     rows: list.querySelectorAll('.drow[data-slug]').length,
-                    total: (indState.cat.rows || []).length, catalogue: indState.cat.state,
-                    builtins: (indState.natives || []).length }),
+                    total: (indState.cat.rows || []).length,
+                    catalogue: indState.cat.state,
+                    builtins: (indState.natives || []).length,
+                    families: (indState.cat.groups || []).length,
+                    favourites: readFavourites().length }),
   };
 })();

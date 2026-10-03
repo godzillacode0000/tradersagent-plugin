@@ -526,22 +526,20 @@ def chart_natives() -> str:
 
 
 @mcp.tool(annotations=_ann("Open the Indicators surface", read_only=False))
-def chart_indicators(section: str = "", q: str = "", family: str = "", reading: str = "",
-                     fold: str = "", fold_on: bool = True, star: str = "", unstar: str = "",
+def chart_indicators(section: str = "", q: str = "", family: str = "",
+                     star: str = "", unstar: str = "",
                      mount: str = "", show: bool = True) -> str:
-    """The console's Indicators surface: BUILT-INS + LIBRARY + favourites behind one search.
+    """The console's Indicators surface: BUILT-INS + LIBRARY + favourites — the DRAWER.
 
-    `section` is 'favorites', 'builtins' or 'library'; `q` fills the search box; `family` narrows the
-    LIBRARY to one group of the catalogue ('trend', 'smc-ict', 'wyckoff'… — 'all' clears it), and
-    once a family is picked the grid groups by that family's own clusters; `reading` unfolds one
-    card's write-up in place ('mlma') and paints the card even when its group was beyond the slice;
-    `fold` folds a group away ('trend', or 'trend/Other' with a family selected) and `fold_on=False`
-    folds that group, `True` opens it; `star`/`unstar` take 'KIND:ID' ('native:supertrend',
-    'library:order-blocks') and use the same favourites the operator's ☆ writes; `mount` mounts a
-    built-in through the surface itself ('supertrend' or 'native:supertrend') — library rows keep the
-    Details pane, since they carry Pine. `show=False` closes it. The answer carries the rows the grid
-    painted, the family groups it drew (name, count, folded) and the reading it left open, so a panel
-    that opened empty cannot read as a filled one.
+    The ⌗ modal is deleted (3 Oct, the operator's doc §1): the drawer holds all three halves and
+    Vela's own Indicators button is the door. `section` is 'favorites', 'builtins' or 'library';
+    `q` fills the search box; `family` narrows the catalogue to one family ('trend', 'smc-ict',
+    'wyckoff'… — 'all' clears it); `star`/`unstar` take 'KIND:ID' ('library:order-blocks') and use
+    the same favourites the operator's ☆ writes; `mount` mounts a built-in through the surface itself
+    ('supertrend' or 'native:supertrend') — library rows keep the Details view, since they carry
+    Pine. `show=False` closes it. The answer carries the rows the list holds (each with its family,
+    its write-up as `reading`, and whether a preview exists) and the counts, so a drawer that opened
+    empty cannot read as a filled one.
     """
     fields = {}
     if section.strip():
@@ -550,11 +548,6 @@ def chart_indicators(section: str = "", q: str = "", family: str = "", reading: 
         fields["q"] = q
     if family.strip():
         fields["family"] = family.strip().lower()
-    if reading.strip():
-        fields["reading"] = reading.strip()
-    if fold.strip():
-        fields["fold"] = fold.strip()
-        fields["foldOn"] = bool(fold_on)
     if star.strip():
         fields["star"] = star.strip()
     if unstar.strip():

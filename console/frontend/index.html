@@ -212,40 +212,9 @@
     </section>
   </main>
 
-  <!-- The Indicators surface: a modal over the chart, not a column — Vela's own chrome already has
-       two columns' worth of opinions, and the chart is the thing being read. Favourites, BUILT-INS
-       and LIBRARY are one search box apart, which is what the original app does. -->
-  <div class="ind-modal view--hidden" id="ind-modal" role="dialog" aria-modal="true"
-       aria-labelledby="ind-title">
-    <div class="ind-modal__panel">
-      <div class="ind-modal__head">
-        <strong id="ind-title">Indicators</strong>
-        <span class="muted" id="ind-count"></span>
-        <button type="button" class="btn btn--ghost" id="ind-close" aria-label="Close the Indicators panel">✕</button>
-      </div>
-      <div class="ind-modal__body">
-        <nav class="ind-nav" id="ind-nav" role="tablist" aria-label="Indicator sources">
-          <button type="button" class="ind-tab is-on" role="tab" aria-selected="true"
-                  data-section="favorites">☆ Favorites<span class="ind-tab__n muted"></span></button>
-          <button type="button" class="ind-tab" role="tab" aria-selected="false"
-                  data-section="builtins">BUILT-INS<span class="ind-tab__n muted"></span></button>
-          <button type="button" class="ind-tab" role="tab" aria-selected="false"
-                  data-section="library">LIBRARY<span class="ind-tab__n muted"></span></button>
-          <!-- The catalogue's own families, filled by renderFamilies() while LIBRARY is showing. -->
-          <div class="ind-fams" id="ind-fams" hidden></div>
-        </nav>
-        <div class="ind-main">
-          <div class="ind-search">
-            <input id="ind-q" type="search" placeholder="Search…" autocomplete="off"
-                   aria-label="Search indicators" />
-          </div>
-          <div class="ind-grid" id="ind-grid" aria-live="polite"></div>
-          <div class="ind-more"><button type="button" class="btn btn--ghost" id="ind-more"
-               hidden>Load more</button></div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- The ⌗ Indicators modal is deleted (3 Oct, the operator's doc §1): its three halves — ★
+       favourites, Built-ins 76, Library 807 — are the drawer's chips now, and the door is Vela's own
+       Indicators button. One surface, over the chart. -->
 
   <!-- In full screen there is no chrome left to click, and a native-fullscreen Esc never reaches our
        keydown — so the way back is a chip of its own, floating over the chart. -->

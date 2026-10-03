@@ -1149,210 +1149,10 @@ pre {
 }
 .statusbar.has-stale { display: flex; }   /* a stale frame is worth showing the bar for */
 
-/* ── The Indicators surface (26 Sep) ─────────────────────────────────────────
-   One modal for both halves of "what can go on this chart": Vela's natives (BUILT-INS) and the
-   LuxAlgo catalogue (LIBRARY), behind one search box, with ☆ favourites kept in this console.
-   It floats over the chart rather than taking a column — the chart is what is being read, and the
-   pane already carries two columns' worth of opinions. */
-.ind-modal {
-  position: fixed; inset: 0; z-index: var(--lx-z-overlay, 40);
-  display: flex; align-items: stretch; justify-content: center;
-  padding: clamp(10px, 3vh, 40px) clamp(10px, 2vw, 40px);
-  background: var(--lx-backdrop);
-  backdrop-filter: blur(2px);
-}
-/* The catalogue is a picture book: the panel takes the screen (27 Sep, the operator's ask — "expand
-   wider and taller so we can see the preview in better penuh view"). It was min(920px,72vh) with
-   96 px banners, which is a list of names with a hint of chart. Now it is the window minus its
-   padding, the grid fits four or five cards across on a 1920 screen, and each preview is a 16:10
-   picture rather than a strip. */
-.ind-modal__panel {
-  display: flex; flex-direction: column; min-height: 0;
-  width: min(1720px, 100%); height: 100%;
-  background: var(--lx-surface-2);
-  border: 1px solid var(--lx-border-strong);
-  border-radius: var(--lx-radius-pop, 12px);
-  box-shadow: var(--lx-shadow-pop, var(--lx-shadow-4));
-  overflow: hidden;
-  animation: ind-pop var(--lx-dur-pop, 160ms) var(--lx-ease-spring, ease-out);
-}
-@keyframes ind-pop { from { opacity: 0; transform: translateY(-6px) scale(.99); } to { opacity: 1; transform: none; } }
-
-.ind-modal__head {
-  display: flex; align-items: center; gap: var(--lx-space-3);
-  padding: var(--lx-space-3) var(--lx-space-4);
-  border-bottom: 1px solid var(--lx-border);
-}
-.ind-modal__head strong { font-size: 14px; letter-spacing: .01em; }
-.ind-modal__head #ind-count { flex: 1 1 auto; font-size: 11px; }
-.ind-modal__body { display: flex; min-height: 0; flex: 1 1 auto; }
-
-.ind-nav {
-  flex: 0 0 176px; display: flex; flex-direction: column; gap: 2px;
-  padding: var(--lx-space-3) var(--lx-space-2);
-  border-right: 1px solid var(--lx-border);
-  background: var(--lx-surface-1);
-  overflow: auto;
-}
-/* The catalogue's families, under the three sources: the "concept / aspect / group" rail (27 Sep).
-   Scrollable on its own so a long catalogue never pushes the sources off the top. */
-.ind-fams {
-  display: flex; flex-direction: column; gap: 1px;
-  margin-top: var(--lx-space-2); padding-top: var(--lx-space-2);
-  border-top: 1px solid var(--lx-border-soft);
-}
-.ind-fam {
-  display: flex; align-items: baseline; justify-content: space-between; gap: var(--lx-space-2);
-  padding: 4px var(--lx-space-2); border: 0; border-radius: var(--lx-radius-sm);
-  background: none; color: var(--lx-fg-faint);
-  font: inherit; font-size: 11px; text-align: start; cursor: pointer;
-}
-.ind-fam:hover { background: var(--lx-bg-hover); color: var(--lx-fg); }
-.ind-fam.is-on { background: var(--lx-bg-active); color: var(--lx-fg-bright); font-weight: 600; }
-.ind-fam__n { font-size: 10px; color: var(--lx-fg-faint); font-variant-numeric: tabular-nums; }
-.ind-tab {
-  display: flex; align-items: baseline; gap: var(--lx-space-1);
-  padding: 6px var(--lx-space-2); border: 0; border-radius: var(--lx-radius-sm);
-  background: none; color: var(--lx-fg-muted);
-  font: inherit; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-  text-align: start; cursor: pointer;
-}
-.ind-tab:hover { background: var(--lx-bg-hover); color: var(--lx-fg); }
-.ind-tab.is-on { background: var(--lx-bg-active); color: var(--lx-fg-bright); font-weight: 600; }
-.ind-tab__n { font-size: 10px; letter-spacing: 0; text-transform: none; }
-
-.ind-main { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.ind-search { padding: var(--lx-space-3) var(--lx-space-4) var(--lx-space-2); }
-.ind-search input {
-  width: 100%; height: 32px; padding: 0 var(--lx-space-2);
-  background: var(--lx-field-bg); color: var(--lx-fg);
-  border: 1px solid var(--lx-border); border-radius: var(--lx-radius-sm);
-  font: inherit; font-size: 12px;
-}
-.ind-search input:focus-visible { outline: 2px solid var(--lx-accent); outline-offset: 1px; }
-
-.ind-grid {
-  flex: 1 1 auto; min-height: 0; overflow: auto;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: var(--lx-space-2);
-  padding: var(--lx-space-1) var(--lx-space-4) var(--lx-space-4);
-  align-content: start;
-}
-/* A list with pictures in it wants wide cards; a list of names (BUILT-INS, a favourites row with no
-   shots) wants many. The page says which it is, per render. */
-.ind-grid.is-pictures { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--lx-space-3); }
-.ind-card {
-  position: relative; display: flex; flex-direction: column; gap: 2px;
-  padding: var(--lx-space-3) var(--lx-space-3) var(--lx-space-2);
-  background: var(--lx-surface-1);
-  border: 1px solid var(--lx-border-soft); border-radius: var(--lx-radius-md);
-  cursor: pointer; text-align: start;
-}
-.ind-card:hover { background: var(--lx-surface-3); border-color: var(--lx-border-strong); }
-.ind-card:focus-visible { outline: 2px solid var(--lx-accent); outline-offset: 1px; }
-.ind-card.is-on { border-color: var(--lx-accent-line); }
-.ind-card.is-on::after {
-  content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: 2px;
-  background: var(--lx-accent); border-start-start-radius: var(--lx-radius-md);
-}
-.ind-card__title { font-size: 12px; color: var(--lx-fg-bright); }
-.ind-card__meta { font-size: 10px; color: var(--lx-fg-faint); }
-.ind-card__on { color: var(--lx-accent-ink); }
-.ind-card__off { color: var(--lx-warn); }
-.ind-card__beta { color: var(--lx-fg-muted); }
-.ind-card__star {
-  position: absolute; inset-block-start: 4px; inset-inline-end: 4px;
-  width: 22px; height: 22px; display: grid; place-items: center;
-  background: none; border: 0; border-radius: var(--lx-radius-sm);
-  color: var(--lx-fg-faint); font-size: 12px; line-height: 1; cursor: pointer;
-}
-.ind-card__star:hover { background: var(--lx-bg-hover-strong); color: var(--lx-fg); }
-.ind-card__star.is-starred { color: var(--lx-warn); }
-.ind-note { grid-column: 1 / -1; margin: 0; padding: var(--lx-space-3); color: var(--lx-fg-muted); font-size: 12px; line-height: 1.5; }
-.ind-more { padding: 0 var(--lx-space-4) var(--lx-space-3); }
-.ind-more .btn { width: 100%; }
-
 /* `hidden` has to mean hidden. A `<button class="btn">` carries an author `display`, and an author
-   `display` beats the UA sheet's `[hidden]` — so the LIBRARY's page-wide "Load more" kept painting
-   under a grid that has its own per-group doors (found in the 27 Sep screenshot, not in the code). */
+   `display` beats the UA sheet's `[hidden]` — so a hidden control kept painting under a list that
+   had its own doors (found in a screenshot, not in the code). */
 [hidden] { display: none !important; }
-
-/* The modal owns the screen while it is up: the chart underneath does not need to scroll away. */
-body.has-ind-modal { overflow: hidden; }
-
-/* ── Indicator previews (26 Sep, made big 27 Sep) ────────────────────────────
-   The catalogue ships a chart shot per indicator (`image_url`, 1600×1000 on LuxAlgo's S3; the console
-   keeps a local 480 px copy). The LIBRARY cards show it as the card's own picture — the operator asked
-   for "how does this look on the chart?" before running anything, the way the Library page answers it.
-   The height follows the card's width (16:10, the source's own shape) so the tier of the card we are
-   showing is what decides how much chart you see. Lazy-loaded and decoded off the main thread: 60
-   cards on a page is 60 pictures, and this box has 8 GB. */
-.ind-card__shot {
-  display: block;
-  width: 100%;
-  height: auto;
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
-  object-position: top left;
-  border-radius: var(--lx-radius-2, 6px);
-  border: 1px solid var(--lx-border);
-  background: var(--lx-field-bg);
-}
-
-/* In the Details pane it is the answer to "how does it look applied?", so it gets the room. */
-.detail__shot {
-  display: block;
-  width: 100%;
-  max-height: 380px;
-  object-fit: cover;
-  object-position: top left;
-  border-radius: var(--lx-radius-3, 10px);
-  border: 1px solid var(--lx-border);
-  background: var(--lx-field-bg);
-  margin-bottom: 10px;
-}
-
-/* ── Groups and readings (27 Sep) ────────────────────────────────────────────
-   Two halves of one ask: "categorize each in the library into each own respective concept or group",
-   and "each should have another button like collapsible that shows reading about each indicator".
-   The group header spans the grid (it is a row of its own), and the reading opens inside its card —
-   never as a door to somewhere else. */
-.ind-group { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--lx-space-2); }
-.ind-group__head {
-  display: flex; align-items: baseline; gap: var(--lx-space-2); flex: 1 1 auto;
-  padding: 6px 2px; border: 0; background: none; color: var(--lx-fg-bright);
-  font: inherit; font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
-  cursor: pointer; text-align: start;
-}
-.ind-group__head:hover .ind-group__name { color: var(--lx-accent-ink); }
-.ind-group__caret { color: var(--lx-fg-faint); font-size: 10px; }
-.ind-group__name { font-weight: 600; }
-.ind-group__n { font-size: 10px; color: var(--lx-fg-faint); text-transform: none; letter-spacing: 0; }
-.ind-group__more {
-  grid-column: 1 / -1; margin: 0 0 var(--lx-space-2);
-  padding: 6px var(--lx-space-3); border: 1px dashed var(--lx-border);
-  border-radius: var(--lx-radius-sm); background: none;
-  color: var(--lx-fg-muted); font: inherit; font-size: 11px; cursor: pointer;
-}
-.ind-group__more:hover { background: var(--lx-bg-hover); color: var(--lx-fg); }
-
-.ind-card__more {
-  align-self: flex-start; margin-top: 2px;
-  padding: 2px 6px; border: 0; border-radius: var(--lx-radius-sm);
-  background: none; color: var(--lx-fg-faint);
-  font: inherit; font-size: 10px; letter-spacing: .03em; cursor: pointer;
-}
-.ind-card__more:hover { background: var(--lx-bg-hover); color: var(--lx-fg-bright); }
-.ind-card__about {
-  margin-top: 4px; padding-top: 6px;
-  border-top: 1px solid var(--lx-border-soft);
-  color: var(--lx-fg-muted); font-size: 11px; line-height: 1.5;
-}
-.ind-card__link { display: inline-block; margin-top: 6px; color: var(--lx-accent-ink); font-size: 10px; }
-
-/* A card with a picture reads as one block: keep the name tight under its shot. */
-.ind-card:has(.ind-card__shot) { gap: 6px; }
-
 
 /* ── ☰ The drawer (3 Oct) ─────────────────────────────────────────────────────────────────────
    Slides over the chart from the left. Motion is transform/opacity only, so Vela never resizes, and
@@ -1426,6 +1226,19 @@ body.has-ind-modal { overflow: hidden; }
 /* An author `display: flex` outranks the UA's `[hidden] { display: none }` — without this line the
    detail sits under the list even when hidden. */
 .drawer__detail[hidden] { display: none; }
+/* The Details view's own picture (moved in with the view, 3 Oct): the catalogue's chart shot, big
+   enough to read at the drawer's width. */
+.detail__shot {
+  display: block;
+  width: 100%;
+  max-height: 380px;
+  object-fit: cover;
+  object-position: top left;
+  border-radius: var(--lx-radius-3, 10px);
+  border: 1px solid var(--lx-border);
+  background: var(--lx-field-bg);
+  margin-bottom: 10px;
+}
 .drawer__back { align-self: flex-start; margin: 0 0 var(--lx-space-2) 0; padding: 0; border: 0;
   background: none; color: inherit; opacity: .8; font: inherit; font-size: var(--lx-fs-xs); cursor: pointer; }
 .drawer__back:hover { opacity: 1; text-decoration: underline; }
