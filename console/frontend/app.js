@@ -454,8 +454,8 @@ let barsLast = null;
    when something is wrong — "it is green almost always, so show text only when something is wrong". */
 const statusState = { mcp: null, bars: null };   // null = not answered yet; { ok, text }
 function paintStatus() {
-  if (!el.dot) return;
   const m = statusState.mcp, b = statusState.bars;
+  if (!el.dot) return;
   const bad = [];
   if (m && m.ok === false) bad.push(m.text || 'agent offline');
   if (b && b.ok === false) bad.push(b.text || 'no bars');
@@ -464,6 +464,12 @@ function paintStatus() {
   el.dot.textContent = bad.length ? '● ' + bad.join(' · ') : '●';
   el.dot.title = [m && m.text, b && b.text].filter(Boolean).join(' · ')
     || 'Agent and bars — the two lights this dot replaced';
+  /* The dot rides Vela's row as a widget action (3 Oct); this statusbar copy is the bare-chart
+     fallback. Publish the state once and let the row re-render itself. */
+  window.taToast = toast;
+  window.taStatus = { state: bad.length ? 'bad' : waiting ? 'wait' : 'ok',
+                      text: bad.join(' · '), title: el.dot.title };
+  window.dispatchEvent(new CustomEvent('ta-status'));
 }
 function setBars(text, detail) {
   barsLast = { text, detail };
@@ -807,6 +813,7 @@ async function openResult(row, button) {
           <div class="detail__actions">
             <button class="btn btn--primary" id="run-pinets">▶ Run PineTS</button>
             <button class="btn btn--ghost" id="mount">＋ Add to chart</button>
+            <button class="btn btn--ghost" id="edit-copy" title="Open this source in the Script pane — your changes never touch the Library">✎ Edit a copy</button>
           </div>
         </div>
         <div class="muted detail__note" id="pine-headline">PineTS executes the script over this chart's bars and
@@ -825,6 +832,19 @@ async function openResult(row, button) {
             <pre>${esc(source.slice(0, 12000))}${source.length > 12000 ? '\n… truncated in preview …' : ''}</pre>
           </div>
         </div>`;
+      /* (c) "Edit a copy" (the doc's §2c): the source goes into the Script pane as a COPY — the
+         editor is the one surface allowed to sit beside the chart, and the Library row is untouched. */
+      $('#edit-copy').addEventListener('click', () => {
+        const box = document.getElementById('script-src');
+        const name = document.getElementById('script-name');
+        if (!box) { toast('No script pane on this page', true); return; }
+        box.value = source;
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+        if (name) name.value = (data.name || row.slug) + ' (copy)';
+        if (window.libDrawer) window.libDrawer.open(false);
+        setPanel('script', true);
+        noteActivity(`copied “${data.name || row.slug}” into the Script pane`, 'edit_copy');
+      });
       $('#mount').addEventListener('click', async () => {
         const label = data.name || row.slug;
         const button = $('#mount');
@@ -1134,6 +1154,8 @@ async function main() {
     const row = document.querySelector('.vela-widget-topbar');
     const usable = !!(row && row.getBoundingClientRect().width > 0);
     for (const b of [el.scriptFallback, el.fullFallback]) if (b) b.hidden = usable;
+    /* The status dot is a widget action in Vela's row; the statusbar copy is the fallback only. */
+    if (el.dot) el.dot.hidden = usable;
   };
   window.addEventListener('ws-failed', showFallbacks);
   window.addEventListener('resize', showFallbacks);

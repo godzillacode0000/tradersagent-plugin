@@ -108,14 +108,13 @@ class TheScriptPaneIsBack(unittest.TestCase):
         drawer = HTML.split('id="lib-drawer"', 1)[1].split('</aside>', 1)[0]
         self.assertIn('id="detail"', drawer)
 
-    def test_the_drawer_strip_names_what_is_on_the_chart(self):
-        """The count pill is gone (3 Oct) — what is on the chart is named by the drawer's own
-        "On chart" strip, which reads the same one landasan list the count used to."""
+    def test_the_drawer_row_names_what_is_on_the_chart(self):
+        """The count pill and then the "On chart" strip are gone (3 Oct): what is on the chart is
+        the row's own marker, read from the same one landasan list."""
         d = read("console/frontend/drawer.js")
-        i = d.index("function paintNow")
-        body = d[i:i + 600]
+        body = d.split("function onNames()", 1)[1][:300]
         self.assertIn("TraderRun.list()", body)
-        self.assertIn("On chart:", body)
+        self.assertIn("on chart", d)
 
     def test_hidden_view_state_beats_subject_display_rules(self):
         """Nothing selected sat under the open script editor: .detail{display:flex} lives

@@ -162,7 +162,7 @@ state.ready = (async () => {
   // nothing and Vela keeps its own picker. The drawer holds both halves (BUILT-INS and the LuxAlgo
   // catalogue), so overriding the button costs the operator nothing. A failure here must not cost the chart.
   try {
-    const { registerWidgetAction } = await import('@luxalgo/vela/plugin');
+    const { registerWidgetAction, registerIcon } = await import('@luxalgo/vela/plugin');
     if (typeof registerWidgetAction === 'function') {
       registerWidgetAction({
         id: 'indicators', target: 'topbar', label: 'Indicators', icon: 'indicators',
@@ -177,6 +177,73 @@ state.ready = (async () => {
         label: 'Script — write or paste Pine, then Run it on this chart',
         run: () => { if (window.scriptPane) window.scriptPane.toggle(); },
       });
+      /* (a) The on-chart CHIP (the doc's §2a): `● Order Block Detector ✕` beside the door, "No
+         indicator" when empty. Vela reads a label when it RENDERS the row, so a change is "update the
+         descriptor, then refreshActions()"; `when(ctx)` runs on every render, so ✕ exists only while
+         something is on. One run at a time, so the chip is the chart's single fact. */
+      const onNames = () => ((window.TraderRun && window.TraderRun.list) ? window.TraderRun.list() : []);
+      const chip = {
+        id: 'ta-onchart', target: 'topbar', align: 'left', order: 5,
+        label: 'No indicator',
+        /* Hidden while empty: the row is 809-868 px wide and the empty chip cost ~100 px of it (measured
+           3 Oct: content 978 px in a 809 px row). The chip is the chart's single FACT, so it exists
+           when there is one; the door beside it already says how to get one. */
+        when: () => onNames().length > 0,
+        run: () => {
+          const names = onNames();
+          if (!window.libDrawer) return;
+          if (names.length) window.libDrawer.reveal(names[names.length - 1]);
+          else window.libDrawer.open(true);
+        },
+      };
+      registerWidgetAction(chip);
+      registerWidgetAction({
+        id: 'ta-onchart-clear', target: 'topbar', align: 'left', order: 6,
+        icon: 'close', iconOnly: true, label: 'Take it off the chart',
+        when: () => onNames().length > 0,
+        run: () => { if (window.libDrawer) window.libDrawer.clear(); },
+      });
+
+      /* #10 The status dot rides Vela's row too. Its colour is its own icon (registerIcon is public),
+         not a style we would have to re-apply: Vela replaceChildren()s the row on every render. Icon
+         only while fine; it grows text only when something is wrong. */
+      const dot = (fill) => `<svg viewBox="0 0 16 16" width="1em" height="1em"><circle cx="8" cy="8" r="4" fill="${fill}"/></svg>`;
+      if (typeof registerIcon === 'function') {
+        registerIcon('ta-dot-ok', dot('#0ca30c'));
+        registerIcon('ta-dot-wait', dot('#e0b400'));
+        registerIcon('ta-dot-bad', dot('#e44f4f'));
+      }
+      const status = {
+        id: 'ta-status', target: 'topbar', order: 25,
+        icon: 'ta-dot-wait', iconOnly: true, label: 'Agent and bars — waiting for both to answer',
+        run: () => { if (window.taToast) window.taToast((window.taStatus && window.taStatus.title) || 'Agent and bars'); },
+      };
+      registerWidgetAction(status);
+
+      let pending = false;
+      const rerender = () => {
+        if (pending) return;
+        pending = true;
+        /* setTimeout, not a frame callback: those never fire while the pane is occluded, and a dot
+           that only updates when someone is looking is how "waiting" outlived "ok" (measured 3 Oct). */
+        setTimeout(() => {
+          pending = false;
+          const names = onNames();
+          chip.label = names.length ? '● ' + names[names.length - 1] : 'No indicator';
+          const s = window.taStatus || { state: 'wait', title: '' };
+          const bad = s.state === 'bad';
+          status.icon = 'ta-dot-' + (bad ? 'bad' : s.state === 'ok' ? 'ok' : 'wait');
+          /* Fine = a bare dot with a tooltip; wrong = the words, because that is when they matter. */
+          status.iconOnly = !bad;
+          status.label = bad ? (s.text || 'something is wrong') : (s.title || 'Agent and bars');
+          try { if (state.ws && typeof state.ws.refreshActions === 'function') state.ws.refreshActions(); }
+          catch (err) { /* an older Vela: the chip keeps its last label until the next render */ }
+        }, 0);
+      };
+      window.addEventListener('ta-onchart', rerender);
+      window.addEventListener('ta-status', rerender);
+      window.addEventListener('ws-ready', rerender);
+
       registerWidgetAction({
         id: 'ta-fullscreen', target: 'topbar', icon: 'maximize', iconOnly: true, order: 30,
         label: 'Full screen — the chart takes the whole pane (Esc comes back)',

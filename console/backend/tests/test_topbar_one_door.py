@@ -57,7 +57,10 @@ class TheDoorIsVelasOwnIndicatorsButton(unittest.TestCase):
 
     def test_a_failed_registration_does_not_cost_the_chart(self):
         i = WORKSPACE.index("registerWidgetAction({")
-        self.assertIn("catch", WORKSPACE[i:i + 2600])
+        j = WORKSPACE.index("new VelaWorkspace(")
+        block = WORKSPACE[i:j]
+        self.assertIn("} catch (err) {", block,
+                      "every registration sits inside ONE try, and its catch comes before the workspace")
 
 
 class TheDuplicateDoorsAreGone(unittest.TestCase):

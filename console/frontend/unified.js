@@ -19,6 +19,12 @@
 window.TraderRun = (function () {
   /* Names whose overlay output landed this session — feeds the badge and the chart legend. */
   const applied = [];
+  /* One event whenever what is on the chart changes (3 Oct): the chip in Vela's row and the drawer's
+     on-chart row both listen, so neither has to poll and neither can drift from the other. */
+  function announce() {
+    try { window.dispatchEvent(new CustomEvent('ta-onchart', { detail: { names: applied.slice() } })); }
+    catch (err) { /* no CustomEvent: the chip just refreshes on its next render */ }
+  }
   /* The overlay holds ONE script at a time (ChartOverlay.apply clears the canvas), so the last run
      that LANDED is the whole overlay. Kept so a reload / app restart / next morning paints it again. */
   const RUN_KEY = 'luxalgo-web:last-run';
@@ -198,6 +204,7 @@ window.TraderRun = (function () {
   function record(name, drew) {
     if (!name || counts(drew) === 0) return;
     if (!applied.includes(name)) applied.push(name);
+    announce();
     const legend = document.getElementById('script-legend');
     if (legend) {
       legend.textContent = applied.map((n) => n + ' · overlay').join('  ·  ');
@@ -379,6 +386,7 @@ window.TraderRun = (function () {
   /* chart_clear clears the overlay — the legend and the badge must forget with it. */
   function reset() {
     applied.length = 0;
+    announce();
     try { localStorage.removeItem(RUN_KEY); } catch (err) { /* nothing stored */ }
     const legend = document.getElementById('script-legend');
     if (legend) { legend.hidden = true; legend.textContent = ''; legend.title = ''; }

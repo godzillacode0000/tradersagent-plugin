@@ -915,17 +915,9 @@ pre {
 .dchip:active { transform: scale(.96); }
 .dchip.is-on { background: var(--lx-accent-soft); border-color: var(--lx-accent); color: var(--lx-accent-ink); }
 
-.drawer__now {
-  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
-  border-radius: var(--lx-radius-lg); background: var(--lx-profit-soft);
-  font-size: 12px; color: var(--lx-fg);
-}
-.drawer__nowname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drawer__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lx-profit);
   box-shadow: 0 0 0 0 var(--lx-profit); animation: lx-dot 2s var(--lx-ease) infinite; }
 @keyframes lx-dot { 0% { box-shadow: 0 0 0 0 rgba(12,163,12,.55); } 70%, 100% { box-shadow: 0 0 0 6px rgba(12,163,12,0); } }
-.drawer__clear { border: 0; background: transparent; color: var(--lx-fg-muted); font-size: 12px; cursor: pointer; }
-.drawer__clear:hover { color: var(--lx-loss); }
 
 /* The drawer's second view (3 Oct): the picked result. The list parts stand down while it shows,
    and the way back sits above the source. */
@@ -951,7 +943,6 @@ pre {
 .drawer__back:hover { opacity: 1; text-decoration: underline; }
 .lib-drawer.is-detail .drawer__search,
 .lib-drawer.is-detail .drawer__fams,
-.lib-drawer.is-detail .drawer__now,
 .lib-drawer.is-detail .drawer__list { display: none; }
 
 .drawer__list { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -4px; padding: 0 4px; list-style: none;
@@ -990,6 +981,16 @@ pre {
 .drow__run:active { transform: scale(.95); }
 .drow__run:disabled { cursor: progress; opacity: 1; }
 .drow.is-busy { background: var(--lx-accent-soft); }
+/* The on-chart chip (3 Oct): a long name must not push Vela's own camera off the row — it ellipsizes. */
+.vela-widget-actions-left .vela-widget-action-left { max-width: 132px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The row that is ON the chart (3 Oct): its own marker and a Remove in place of Run — the strip
+   that used to say "On chart: …" above the list is gone. */
+.drow.is-on { background: var(--lx-profit-soft); }
+.drow.is-on .drow__meta { color: var(--lx-fg-muted); }
+.drow.is-on .drawer__dot { display: inline-block; vertical-align: middle; width: 6px; height: 6px; }
+.drow__run.is-remove { opacity: 1; }
+.drow__run.is-remove:hover { background: var(--lx-loss); border-color: var(--lx-loss); color: var(--lx-fg-on-fill); }
 .spin { width: 11px; height: 11px; border-radius: 50%; border: 1.6px solid currentColor;
   border-right-color: transparent; animation: lx-spin .7s linear infinite; }
 @keyframes lx-spin { to { transform: rotate(360deg); } }

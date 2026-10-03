@@ -28,7 +28,6 @@
   const box = $id('drawer-q');
   const fams = $id('drawer-fams');
   const list = $id('drawer-list');
-  const now = $id('drawer-now');
   const detailBox = $id('drawer-detail');
   const back = $id('drawer-detail-back');
   const count = $id('drawer-count');
@@ -94,39 +93,39 @@
         .map((g) => chip(g.key, g.name, q ? n(g.key) : g.count)).join('');
   }
 
-  function paintNow() {
+  /* What is on the chart, by name — the landasan's own list. The row that matches says so and its
+     button reads Remove (the doc's §2a: "so no separate strip is needed"). */
+  function onNames() {
     const names = (window.TraderRun && window.TraderRun.list) ? window.TraderRun.list() : [];
-    now.hidden = !names.length;
-    now.innerHTML = names.length
-      ? `<span class="drawer__dot" aria-hidden="true"></span><span class="drawer__nowname">On chart: ${esc(names.join(' · '))}</span>
-         <button type="button" class="drawer__clear" data-clear="1">Clear</button>`
-      : '';
+    return names.map((n) => String(n).trim().toLowerCase());
   }
 
-  function rowHtml(r, i) {
+  function rowHtml(r, i, on) {
     const starred = !r.__native && isFavourite('library', r.slug);
     const res = st.result[r.slug];
     const running = st.busy === r.slug;
+    const isOn = !r.__native && on.includes(String(r.name || r.slug).trim().toLowerCase());
     const meta = r.__native ? ['built-in', r.cluster].filter(Boolean).join(' · ')
       : [famLabel(r.family || 'unfiled'), r.cluster].filter(Boolean).join(' · ');
-    return `<li class="drow${running ? ' is-busy' : ''}" style="--i:${Math.min(i, 18)}" data-slug="${esc(r.slug)}">
+    return `<li class="drow${running ? ' is-busy' : ''}${isOn ? ' is-on' : ''}" style="--i:${Math.min(i, 18)}" data-slug="${esc(r.slug)}">
       ${r.__native ? '<span class="drow__shot drow__shot--native" aria-hidden="true">ƒ</span>'
         : `<img class="drow__shot" src="${esc(thumbUrl(r.slug, r.image_url, 160))}" loading="lazy" decoding="async" alt="">`}
       <button type="button" class="drow__main" ${r.__native ? 'data-native="1" title="Add to the chart"' : 'data-open="1" title="Open the source and write-up"'}>
         <span class="drow__name">${esc((r.name || r.slug).trim())}</span>
-        <span class="drow__meta">${esc(meta)}</span>
+        <span class="drow__meta">${isOn ? '<span class="drawer__dot" aria-hidden="true"></span> on chart · ' : ''}${esc(meta)}</span>
         ${res ? `<span class="drow__res ${res.ok ? 'is-ok' : 'is-bad'}">${esc(res.text)}</span>` : ''}
       </button>
       ${r.__native ? '' : `<button type="button" class="drow__star${starred ? ' is-starred' : ''}" data-star="1"
               aria-pressed="${starred}" aria-label="Favourite">${starred ? '★' : '☆'}</button>`}
-      <button type="button" class="drow__run" data-run="1" ${running || (r.__native && !r.supported) ? 'disabled' : ''}
-              aria-label="${r.__native ? 'Add to the chart' : 'Run on the chart'}">${running ? '<span class="spin" aria-hidden="true"></span>' : '▶'}<span>Run</span></button>
+      ${isOn
+        ? `<button type="button" class="drow__run is-remove" data-remove="1" aria-label="Take it off the chart">✕<span>Remove</span></button>`
+        : `<button type="button" class="drow__run" data-run="1" ${running || (r.__native && !r.supported) ? 'disabled' : ''}
+              aria-label="${r.__native ? 'Add to the chart' : 'Run on the chart'}">${running ? '<span class="spin" aria-hidden="true"></span>' : '▶'}<span>Run</span></button>`}
     </li>`;
   }
 
   function paint() {
     if (!st.open) return;
-    paintNow();
     const cat = indState.cat;
     if (cat.state !== 'ready') {
       fams.innerHTML = '';
@@ -140,8 +139,9 @@
     const all = rows();
     count.textContent = all.length + ' script' + (all.length === 1 ? '' : 's');
     const shown = all.slice(0, st.shown);
+    const on = onNames();
     list.innerHTML = shown.length
-      ? shown.map(rowHtml).join('') + (all.length > shown.length
+      ? shown.map((r, i) => rowHtml(r, i, on)).join('') + (all.length > shown.length
         ? `<li class="drawer__more"><button type="button" data-more="1">Show ${Math.min(SLICE, all.length - shown.length)} more</button></li>` : '')
       : `<li class="drawer__empty">${st.family === '__fav' ? 'No favourites yet — tap ☆ on a script.' : 'Nothing matches “' + esc(st.q) + '”.'}</li>`;
   }
@@ -216,7 +216,6 @@
           if (typeof flashChart === 'function') flashChart();
           noteActivity('ran “' + label + '” from the drawer', 'drawer');
         }
-        refreshIndicatorCount();
       }
     } catch (err) {
       st.result[slug] = { ok: false, text: String(err.message || err).slice(0, 90) };
@@ -261,22 +260,40 @@
     list.scrollTop = 0;
   });
 
-  now.addEventListener('click', (ev) => {
-    if (!ev.target.closest('[data-clear]')) return;
+  /* ONE clear for every door (3 Oct): the chip's ✕ in Vela's row and a row's Remove both land here,
+     so taking the indicator off cannot mean two different things. */
+  function clearChart() {
     if (window.ChartOverlay) window.ChartOverlay.clear();
     if (window.PineTSPaint && window.PineTSPaint.clear) window.PineTSPaint.clear();
     if (window.TraderRun && window.TraderRun.reset) window.TraderRun.reset();
     st.result = {};
-    refreshIndicatorCount();
     toast('Chart cleared');
     paint();
-  });
+  }
+
+  /* The chip's name opens the drawer AT its row: the list narrows to that name, so the row (with
+     its ● on chart and Remove) is the first thing on screen. */
+  function reveal(name) {
+    const want = String(name || '').trim();
+    setOpen(true);
+    showDetail(false);
+    st.family = '';
+    st.q = want;
+    st.shown = SLICE;
+    if (box) box.value = want;
+    paint();
+    list.scrollTop = 0;
+  }
+
+  /* What is on changed (a run landed, a clear) — repaint the ● on chart marker while the list is up. */
+  window.addEventListener('ta-onchart', () => paint());
 
   list.addEventListener('click', (ev) => {
     if (ev.target.closest('[data-more]')) { st.shown += SLICE; paint(); return; }
     const li = ev.target.closest('.drow');
     if (!li || !li.dataset.slug) return;
     const slug = li.dataset.slug;
+    if (ev.target.closest('[data-remove]')) { clearChart(); return; }
     if (ev.target.closest('[data-native]')) { run(slug); return; }
     const row = (indState.cat.rows || []).find((r) => r.slug === slug) || { slug, name: slug };
     if (ev.target.closest('[data-run]')) { run(slug); return; }
@@ -328,7 +345,7 @@
   }
 
   window.libDrawer = {
-    open: setOpen, toggle: () => setOpen(!st.open), run, star,
+    open: setOpen, toggle: () => setOpen(!st.open), run, star, reveal, clear: clearChart,
     detail: (on) => { if (on !== false) setOpen(true); showDetail(on !== false); },
     search: (q) => {
       st.q = String(q == null ? '' : q).trim();

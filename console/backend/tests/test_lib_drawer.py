@@ -43,7 +43,7 @@ class Drawer(unittest.TestCase):
 
     def test_markup(self):
         for anchor in ('id="lib-drawer"', 'id="drawer-q"', 'id="drawer-fams"', 'id="drawer-list"',
-                       'id="drawer-scrim"', 'id="drawer-now"'):
+                       'id="drawer-scrim"'):
             self.assertIn(anchor, HTML)
 
     def test_run_goes_through_the_landasan(self):
