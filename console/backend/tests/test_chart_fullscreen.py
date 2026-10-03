@@ -108,14 +108,19 @@ class ThePageCannotBePushedSideways(unittest.TestCase):
         self.assertIn(".app { overflow: hidden; }", css,
                       "everything that scrolls in here is a pane, never the shell")
 
-    def test_the_topbar_may_wrap_and_its_labels_may_go(self):
+    def test_the_console_first_row_is_gone(self):
+        """3 Oct: the console's own bar (brand, pills, toggles) duplicated Vela's row and cost the
+        chart ~34 px. It is deleted — brand and ◐ live in the drawer now, the status is one dot, and
+        the legends ride the statusbar."""
+        html = read(HTML)
+        self.assertNotIn('<header class="topbar">', html)
+        self.assertNotIn('id="mcp-status"', html)
+        self.assertNotIn('id="bars-status"', html)
+        self.assertNotIn('id="indicator-count"', html)
         css = read(CSS)
-        self.assertIn(".topbar { flex-wrap: wrap;", css)
-        self.assertIn(".topbar__right { flex-wrap: wrap;", css)
+        self.assertNotIn("--lx-topbar-h", css, "the row's height variable went with the row")
         self.assertIn(".chart-legend { flex: 0 1 auto; min-width: 0; max-width: 34%; }", css,
                       "a legend chip carrying an indicator's name must be able to shrink")
-        block = css.split("@media (max-width: 1180px) {", 1)[1].split("}", 1)[0]
-        self.assertIn(".topbar .btn__label { display: none;", block)
 
     def test_the_measurement_is_written_down(self):
         """The numbers are the point: 921 > 870 is what "not adaptive" meant, and a future edit that

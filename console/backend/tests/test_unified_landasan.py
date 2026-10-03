@@ -103,11 +103,14 @@ class TheScriptPaneIsBack(unittest.TestCase):
         # both views live in the one right-hand track
         self.assertLess(HTML.index('id="view-script"'), HTML.index('id="detail"'))
 
-    def test_badge_counts_overlay_runs(self):
-        i = APP.index("function refreshIndicatorCount")
-        body = APP[i:i + 700]
+    def test_the_drawer_strip_names_what_is_on_the_chart(self):
+        """The count pill is gone (3 Oct) — what is on the chart is named by the drawer's own
+        "On chart" strip, which reads the same one landasan list the count used to."""
+        d = read("console/frontend/drawer.js")
+        i = d.index("function paintNow")
+        body = d[i:i + 600]
         self.assertIn("TraderRun.list()", body)
-        self.assertIn("overlay", body)
+        self.assertIn("On chart:", body)
 
     def test_hidden_view_state_beats_subject_display_rules(self):
         """Nothing selected sat under the open script editor: .detail{display:flex} lives

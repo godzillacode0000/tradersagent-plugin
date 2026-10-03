@@ -275,9 +275,13 @@
      chart, or a build that refused the override — a plain button stands in so the drawer is never
      unreachable. */
   function showFallbackIfNeeded() {
-    if (fallback && !document.querySelector('.vela-widget-topbar')) fallback.hidden = false;
+    /* A 0-width row is Vela's compact mode — the desktop row is hidden, so the door is gone with it. */
+    const row = document.querySelector('.vela-widget-topbar');
+    const usable = !!(row && row.getBoundingClientRect().width > 0);
+    if (fallback) fallback.hidden = usable;
   }
   window.addEventListener('ws-failed', showFallbackIfNeeded);
+  window.addEventListener('resize', showFallbackIfNeeded);
   setTimeout(showFallbackIfNeeded, 8000);
 
   window.libDrawer = {

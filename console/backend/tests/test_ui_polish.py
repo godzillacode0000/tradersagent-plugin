@@ -279,16 +279,16 @@ class TheAgentCanOpenOneRow(unittest.TestCase):
 
 
 class TheOverlayPanelKeepsTheTopbarReachable(unittest.TestCase):
-    def test_the_fixed_detail_panel_starts_below_the_topbar(self):
-        # The overlay is global now (F1, 25 Sep): it must cost the chart nothing at ANY width, so the
-        # rule lives outside the narrow media query — and it still has to start under the topbar and
-        # stop above the statusbar, or a covered toggle/toast leaves no way out and cuts words.
+    def test_the_fixed_detail_panel_starts_at_the_pane_top(self):
+        # The overlay is global now (F1, 25 Sep): it must cost the chart nothing at ANY width. The
+        # console first row is gone (3 Oct), so it starts at the pane top — Vela's own row is what
+        # the --lx-pane-top guard protects — and stops above the statusbar, or a covered toast
+        # cuts words.
         css = read(CSS)
         block = css.split(".panel--right {", 1)[1].split("}", 1)[0]
         self.assertIn("position: fixed", block, "the right column must be an overlay, not a grid column")
-        self.assertIn("inset-block: var(--lx-topbar-h) var(--lx-statusbar-h)", block,
-                      "a covered Details toggle leaves no way to close the panel, and a covered "
-                      "statusbar cuts the toast mid-word")
+        self.assertIn("inset-block: 0 var(--lx-statusbar-h)", block,
+                      "a covered statusbar cuts the toast mid-word")
         self.assertIn("--lx-statusbar-h", css)
 
     def test_the_right_column_never_takes_grid_space(self):
@@ -444,12 +444,14 @@ class TheChromeShowsVerbsNotTelemetry(unittest.TestCase):
     connection DOT with the numbers in the tooltip; the footer keeps ONE human sentence naming the
     last thing that touched the chart, with the tool name in its title."""
 
-    def test_the_counter_left_the_chrome(self):
+    def test_the_agent_state_is_a_dot_and_a_tooltip(self):
+        # 3 Oct: the ● Agent / ● Agent offline pills became one shared dot (paintStatus); its text
+        # appears only when something is wrong and the numbers stay in the tooltip.
         app = read(APP)
-        self.assertIn("'● Agent'", app)
-        self.assertIn("'● Agent offline'", app)
+        self.assertIn("statusState.mcp", app)
+        self.assertIn("'Agent: ' + label", app)
+        self.assertIn("'Agent: offline'", app)
         self.assertNotIn("`MCP: ${label}`", app)          # the old visible shape
-        self.assertIn("'MCP: ' + label", app)             # telemetry kept, as a tooltip
 
     def test_the_activity_line_is_wired_to_mutations(self):
         index = read(os.path.join(ROOT, "console", "frontend", "index.html"))

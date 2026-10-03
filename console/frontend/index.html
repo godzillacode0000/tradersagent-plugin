@@ -11,27 +11,14 @@
 </head>
 <body>
 <div class="app">
-  <header class="topbar">
-        <div class="brand">
-      <span class="brand__mark" title="tools by luxalgo-mcp-server · chart by Vela · Pine engine vela-pinets">▲</span>
-      <span class="brand__name">LuxAlgo Library</span>
-      <span class="brand__sub">× Vela chart</span>
-    </div>
-    <div class="topbar__right">
-                                    <!-- Only the bare-chart fallback shows this: normally the door is Vela's own Indicators button. -->
-      <button type="button" class="btn btn--ghost" id="drawer-fallback" hidden>Scripts</button>
-      <button type="button" class="btn btn--ghost" id="script-fallback" hidden>&lt;&gt; Script</button>
-      <button type="button" class="btn btn--ghost" id="full-fallback" hidden>⛶ Full screen</button>
-      <span class="chart-legend" id="lib-legend" hidden></span>
-      <!-- Names whose overlay geometry is on screen — set by the unified landasan. Lives HERE,
-           not in .chart-head: workspace mode hides that row (body.has-workspace .chart-head). -->
-      <span class="chart-legend" id="script-legend" hidden></span>
-      <span id="mcp-status" class="pill pill--wait" title="LuxAlgo MCP backend">MCP: checking…</span>
-      <span id="bars-status" class="pill pill--wait" title="Where the candles come from">bars: loading…</span>
-      <span id="indicator-count" class="pill" title="Indicators that actually executed on the chart — a mount that silently did nothing is never counted">0 indicators</span>
-            <button type="button" class="btn btn--ghost" id="theme-toggle" title="Switch light / dark" aria-label="Switch theme">◐</button>
-    </div>
-  </header>
+  <!-- Bare-chart fallbacks (3 Oct): the console's own bar is gone, so with no Vela row — the
+       workspace failed, or a build refused the widget actions — there is nothing to press. These
+       appear over the chart only then; drawer.js / app.js reveal them. -->
+  <div class="fallback-strip" id="fallback-strip">
+    <button type="button" class="btn btn--ghost" id="drawer-fallback" hidden>Scripts</button>
+    <button type="button" class="btn btn--ghost" id="script-fallback" hidden>&lt;&gt; Script</button>
+    <button type="button" class="btn btn--ghost" id="full-fallback" hidden>⛶ Full screen</button>
+  </div>
 
   <!-- The drawer slides over the chart from the left; the scrim catches the click-away. -->
   <div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
@@ -50,11 +37,17 @@
     <div class="drawer__fams" id="drawer-fams" role="toolbar" aria-label="Families"></div>
     <div class="drawer__now" id="drawer-now" hidden></div>
     <ul class="drawer__list" id="drawer-list" aria-live="polite"></ul>
-    <p class="drawer__foot muted">▶ Run paints the script on this chart · one at a time · it stays after a restart</p>
+    <!-- The console's first row is gone (3 Oct): its brand and its ◐ live here now, where they
+         cost the chart nothing. -->
+    <div class="drawer__foot">
+      <span class="drawer__brand" title="tools by luxalgo-mcp-server · chart by Vela · Pine engine vela-pinets">▲ LuxAlgo Library × Vela</span>
+      <button type="button" class="drawer__theme" id="theme-toggle" title="Switch light / dark" aria-label="Switch theme">◐</button>
+    </div>
+    <p class="drawer__note muted">▶ Run paints the script on this chart · one at a time · it stays after a restart</p>
   </aside>
 
   <main class="main">
-    <!-- LEFT: the library — hidden until its topbar toggle asks for it -->
+    <!-- LEFT: the library — the agent's surface (browse / open); it has no button of its own -->
     <section class="panel panel--left">
       <div class="view" id="view-library">
       <form class="search" id="search-form" autocomplete="off">
@@ -247,12 +240,19 @@
     </div>
   </div>
 
-  <!-- In full screen there is no topbar to click, and a native-fullscreen Esc never reaches our
+  <!-- In full screen there is no chrome left to click, and a native-fullscreen Esc never reaches our
        keydown — so the way back is a chip of its own, floating over the chart. -->
   <button type="button" class="chart-focus-exit" id="chart-focus-exit" hidden
           title="Leave full screen (Esc)">✕ Exit full screen</button>
 
   <footer class="statusbar">
+    <!-- One dot for Agent + bars (3 Oct): they were two pills that read "fine" almost always —
+         the dot is green when both are, and grows text only when something is wrong. -->
+    <span id="status-dot" class="status-dot is-wait" title="Agent and bars"></span>
+    <!-- Names whose overlay geometry is on screen — set by the unified landasan. Lives HERE (with
+         the activity line), not in .chart-head: workspace mode hides that row. -->
+    <span class="chart-legend" id="lib-legend" hidden></span>
+    <span class="chart-legend" id="script-legend" hidden></span>
     <!-- The last thing that touched the chart, in one human sentence (spec §5). Telemetry lives in
          the title and the backend log; this line answers "what did the agent just do?". -->
     <span id="last-action" class="last-action" title="The last thing that touched this chart"></span>

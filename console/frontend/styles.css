@@ -161,7 +161,6 @@
   /* The console's own top row. Chart-first (operator's call, 16 Sep): this is the ONLY bar above
      the chart — the plugin's separate title row was removed — so it stays slimmer than a panel
      head and its buttons are sized to match. */
-  --lx-topbar-h:       34px;
   --lx-statusbar-h:    24px;   /* the toast line; the fixed detail panel stops above it */
   --lx-chart-head-h:   28px;
 }
@@ -328,7 +327,7 @@ input:focus-visible, textarea:focus-visible {
    ≥ 640px: 1440−300−380=760 · 1280−280−340=660 · 1100−260=840 (detail
    overlays, so it costs the chart nothing). 1240px — not 1100 — is where
    three tracks must break, because 1240−280−340=620 < 640.            */
-.app { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; height: 100dvh; }
+.app { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; height: 100dvh; }
 
 /* ── The shell's ONE column may not grow (3 Oct) ─────────────────────────────────────────────────
    Measured live: body 868px, but .topbar / .main / #chart / .statusbar all 2286px. `.app` declared
@@ -346,17 +345,10 @@ input:focus-visible, textarea:focus-visible {
    document wider. Everything that scrolls in here is a PANE (the library list, the results, the
    grid) — never the shell. */
 .app { overflow: hidden; }
-.topbar { flex-wrap: wrap; height: auto; min-height: var(--lx-topbar-h); row-gap: 2px; }
-.topbar__right { flex-wrap: wrap; justify-content: flex-end; }
 .chart-legend { flex: 0 1 auto; min-width: 0; max-width: 34%; }
-/* A control that has lost its label is still a control: below this width the four docked buttons go
-   icon-only rather than pushing the row (and the page) wider than the pane. */
-@media (max-width: 1180px) {
-  .topbar .btn__label { display: none; }
-}
 
 /* Chart-first (operator's call, 16 Sep): one column is the chart. The library and the detail panel
-   are opt-in, from the two small toggles in the topbar — no permanent side columns, so Vela gets
+   are opt-in (the agent's browse action, or Escape) — no permanent side columns, so Vela gets
    the whole pane until he asks for something else. */
 .main {
   display: grid;
@@ -377,7 +369,7 @@ input:focus-visible, textarea:focus-visible {
 .main[data-detail="on"]:not([data-library="on"]) { grid-template-columns: minmax(0, 1fr); }
 .main[data-library="on"][data-detail="on"] { grid-template-columns: 300px minmax(0, 1fr); }
 .panel--right {
-  position: fixed; inset-block: var(--lx-topbar-h) var(--lx-statusbar-h); inset-inline-end: 0;
+  position: fixed; inset-block: 0 var(--lx-statusbar-h); inset-inline-end: 0;
   width: min(420px, 46vw);
   box-shadow: var(--lx-shadow-4);
   z-index: var(--lx-z-overlay);
@@ -387,8 +379,8 @@ input:focus-visible, textarea:focus-visible {
 .main[data-detail="on"] .panel--right { transform: none; }
 /* F5 (25 Sep): the pane starts BELOW the chart's own toolbar row, measured at runtime from the row
    itself (--lx-pane-top, set in app.js) — so Vela's controls and our docked Script / catalogue
-   buttons stay reachable while the pane is open. The fallback keeps the old topbar offset. */
-.panel--right { inset-block-start: var(--lx-pane-top, calc(var(--lx-topbar-h) + 44px)); }
+   buttons stay reachable while the pane is open. The fallback is the bare Vela-row height. */
+.panel--right { inset-block-start: var(--lx-pane-top, 44px); }
 
 /* ── #4 — the Run split (27 Sep, from LuxAlgo Quant's stills) ──────────────────────────────────
    Quant shows the editor and the chart at the same time, so a Run's paint is visible the moment it
@@ -414,14 +406,14 @@ input:focus-visible, textarea:focus-visible {
 @media (max-width: 1239px) {
   .main[data-library="on"] { grid-template-columns: 260px minmax(0, 1fr); }
   /* The detail panel overlays here, so it costs the chart nothing. */
-  /* The overlay must not swallow the topbar: the Library and Details toggles live up there, and a
+  /* The overlay must not swallow the pane's own top: Vela's toolbar row lives there, and a
      covered toggle leaves no visible way to close this panel (operator's stills, 25 Sep: "≡ Libr"
      clipped mid-word). It starts under the bar instead — see the global .panel--right rule above. */
 }
 @media (max-width: 1099px) {
   /* The chart keeps the height (operator's call, 15 Sep): the app stays viewport-tall and the
      stacked main grid hands the chart every row that is left, instead of sizing to content. */
-  .app { grid-template-rows: auto minmax(0, 1fr) auto; height: 100dvh; }
+  .app { grid-template-rows: minmax(0, 1fr) auto; height: 100dvh; }
   .main,
   .main[data-library="on"],
   .main[data-detail="on"],
@@ -430,11 +422,11 @@ input:focus-visible, textarea:focus-visible {
      or utilising 80% of the view"). Stacked in the grid it took ~45% of the pane and shrank the
      chart to about half; as a fixed sheet it costs the chart nothing — same pattern the Details
      pane has used since 25 Sep — so the chart owns the whole pane at rest, and the sheet closes
-     from the same toggle (☰ Library, or Escape). It starts under the topbar/pane-top like the
+     from the agent's browse action or Escape. It starts at the pane top like the
      Details sheet, so the toggles that open it stay reachable. */
   .panel--left {
     position: fixed; inset-inline: 0;
-    inset-block-start: var(--lx-pane-top, calc(var(--lx-topbar-h) + 44px));
+    inset-block-start: var(--lx-pane-top, 44px);
     /* A plain vh cap: the first cut used `min(60dvh, 540px)` and the pane's engine dropped the
        declaration — the sheet ran its full content height down the pane (measured live, 2 Oct),
        while the same sheet capped correctly in a current Chromium. Never rely on the fancy
@@ -485,59 +477,7 @@ body.chart-focus .panel--chart { border: 0; }
 .chart-focus-exit:hover,
 .chart-focus-exit:focus-visible { opacity: 1; }
 
-/* ── Layer 5b — topbar / statusbar ───────────────────────────────────────── */
-.topbar {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: var(--lx-space-3); height: var(--lx-topbar-h);
-  padding: 0 var(--lx-space-25);
-  background: var(--lx-surface-1);
-  border-bottom: 1px solid var(--lx-border);
-}
-.brand { display: flex; align-items: baseline; gap: var(--lx-space-15); }
-.brand__mark { color: var(--lx-accent-ink); font-size: var(--lx-fs-sm); }
-.brand__name { font-weight: var(--lx-fw-semibold); font-size: var(--lx-fs-lg); letter-spacing: var(--lx-ls-tight); }
-.brand__sub { color: var(--lx-fg-muted); font-size: var(--lx-fs-sm); }
-.topbar__right { display: flex; align-items: center; gap: var(--lx-space-2); }
-/* Inside the slim topbar the controls shrink with it, so nothing pokes out of the 34px row. */
-.topbar .btn { height: 26px; padding: 0 var(--lx-space-2); }
-
-/* ── The narrow topbar (the plugin's chart pane is ~620px) ───────────────────────────────────────
-   The first version wrapped the brand onto a second line inside a 34px row, which clips text — that
-   IS the misalignment. At this width nothing wraps: the sub-label goes, the pills and buttons tighten,
-   the gaps come in, and the row may grow instead of hiding content. The chart keeps the rest. */
-@media (max-width: 780px) {
-  .topbar {
-    height: auto; min-height: var(--lx-topbar-h);
-    flex-wrap: nowrap; gap: var(--lx-space-2);
-    padding: 5px var(--lx-space-2);
-  }
-  .brand, .topbar__right { flex-wrap: nowrap; min-width: 0; }
-  .brand { gap: var(--lx-space-1); }
-  .brand__name { white-space: nowrap; }
-  .brand__sub { display: none; }            /* "× Vela chart" is the first thing to go */
-  .topbar__right { gap: 4px; }
-  .topbar .btn { font-size: var(--lx-fs-xs); padding: 0 7px; white-space: nowrap; }
-  .topbar .pill { font-size: 10.5px; padding: 1px 6px; white-space: nowrap; }
-}
-
-/* The app draws its own chrome around the pane, so the console can end up narrower than the 620px
-   the dock asks for — and a clipped pill is the misalignment the operator saw. Below 640px the
-   indicator count goes first (the chart's own legend carries it), and every control gets a hard
-   max-width with an ellipsis, so a longer label can never push a neighbour off the edge. */
-@media (max-width: 640px) {
-  #indicator-count { display: none; }
-  .topbar .btn, .topbar .pill { max-width: 132px; overflow: hidden; text-overflow: ellipsis; }
-}
-
-/* Nose-bleed widths get air instead of density: the attribution name shrinks (it must stay visible),
-   the controls tighten once more, and the gaps grow back a little so the row reads as a row. */
-@media (max-width: 560px) {
-  .topbar { gap: 6px; padding: 5px 8px; }
-  .topbar__right { gap: 6px; }
-  .brand__name { font-size: var(--lx-fs-md); }
-  .topbar .btn, .topbar .pill { font-size: 10px; padding: 1px 5px; }
-}
-
+/* ── Layer 5b — statusbar (the console's own first row is gone, 3 Oct) ─────────────────────── */
 .pill {
   display: inline-flex; align-items: center; gap: var(--lx-space-1);
   padding: 2px var(--lx-space-2); border-radius: var(--lx-radius-pill);
@@ -1166,8 +1106,6 @@ pre {
 .row__sub .pill,
 .browse__concepts-head strong,
 .chart-legend,
-#indicator-count,
-#mcp-status,
 .statusbar,
 .toast {
   font-variant-numeric: tabular-nums;
@@ -1420,14 +1358,14 @@ body.has-ind-modal { overflow: hidden; }
    Slides over the chart from the left. Motion is transform/opacity only, so Vela never resizes, and
    the rows stagger in once on open (Linear/Raycast-style list reveal, ported to tokens). */
 .drawer-scrim {
-  position: fixed; inset: var(--lx-topbar-h) 0 0 0; z-index: calc(var(--lx-z-modal) - 2);
+  position: fixed; inset: 0; z-index: calc(var(--lx-z-modal) - 2);
   background: var(--lx-backdrop); opacity: 0; pointer-events: none;
   transition: opacity 200ms var(--lx-ease);
 }
 .drawer-scrim.is-open { opacity: 1; pointer-events: auto; }
 
 .lib-drawer {
-  position: fixed; top: var(--lx-topbar-h); left: 0; bottom: 0; z-index: calc(var(--lx-z-modal) - 1);
+  position: fixed; top: 0; left: 0; bottom: 0; z-index: calc(var(--lx-z-modal) - 1);
   width: min(400px, 92vw); display: flex; flex-direction: column; gap: 10px;
   padding: 12px 12px 8px;
   background: var(--lx-surface-1); border-right: 1px solid var(--lx-border);
@@ -1532,7 +1470,28 @@ body.has-ind-modal { overflow: hidden; }
 .drawer__more button { border: 1px solid var(--lx-border); background: var(--lx-surface-2);
   color: var(--lx-fg-muted); border-radius: var(--lx-radius-pill); padding: 5px 14px; cursor: pointer; font-size: 12px; }
 .drawer__more button:hover { color: var(--lx-fg); border-color: var(--lx-border-strong); }
-.drawer__foot { margin: 0; font-size: 10.5px; text-align: center; }
+.drawer__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--lx-space-2);
+  padding-top: var(--lx-space-2); border-top: 1px solid var(--lx-border);
+}
+.drawer__brand { color: var(--lx-fg-muted); font-size: var(--lx-fs-2xs); }
+.drawer__theme {
+  background: none; border: 0; cursor: pointer; font-size: 13px; padding: 2px 6px;
+  color: var(--lx-fg-muted); border-radius: var(--lx-radius-md);
+}
+.drawer__theme:hover { color: var(--lx-fg-bright); background: var(--lx-bg-hover); }
+.drawer__note { margin: 0; font-size: var(--lx-fs-2xs); text-align: center; }
+
+/* ── The bare-chart fallback strip (3 Oct) ───────────────────────────────────────────────────────
+   With no Vela row the drawer / script / full-screen controls have no home; these appear over the
+   chart only when the workspace is missing. All three hidden = an empty 0x0 box, invisible. */
+.fallback-strip { position: fixed; top: 8px; right: 8px; z-index: calc(var(--lx-z-modal) - 3); display: flex; gap: 6px; }
+
+/* ── One status dot (3 Oct) — Agent + bars merged ──────────────────────────────────────────────── */
+.status-dot { flex: 0 0 auto; color: var(--lx-fg-faint); font-size: var(--lx-fs-2xs); white-space: nowrap; }
+.status-dot.is-ok { color: var(--lx-profit); }
+.status-dot.is-wait { color: var(--lx-warn); }
+.status-dot.is-bad { color: var(--lx-loss); }
 
 @media (prefers-reduced-motion: no-preference) {
   .lib-drawer.is-open .drow { animation: lx-row-in 260ms var(--lx-ease) both;

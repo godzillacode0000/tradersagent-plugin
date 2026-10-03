@@ -13,7 +13,7 @@
 const $ = (sel) => document.querySelector(sel);
 const el = {
   q: $('#q'), form: $('#search-form'), results: $('#results'), detail: $('#detail'),
-  mcp: $('#mcp-status'), bars: $('#bars-status'), count: $('#indicator-count'),
+  dot: $('#status-dot'),
   chartLog: $('#chart-log'), chartOrigin: $('#chart-origin'), toast: $('#toast'),
   libraryPanel: $('.panel--left'), libraryToggle: $('#library-toggle'),
   main: $('.main'),
@@ -30,7 +30,7 @@ const el = {
 };
 
 /* ── panel layout (chart-first, 16 Sep) ──────────────────────────────────────
- * The chart owns the pane. The library and the detail panel open from their two small topbar
+ * The chart owns the pane. The library and the detail panel open from the agent's own actions
  * toggles, and that choice sticks across reloads. The panels follow intent, never the reverse: a
  * picked result opens the detail panel, running a search opens the library.
  */
@@ -137,10 +137,6 @@ let mounted = [];
 let markChartReady;
 const chartReady = new Promise((resolve) => { markChartReady = resolve; });
 
-/* The chart restores Vela's persisted studies after a reload, and the chart bridge can apply
-   or add more at any time, so the chip follows the chart's own report on a light timer —
-   not only when this page happens to mount something itself. */
-setInterval(refreshIndicatorCount, 4000);
 
 /* `<>` Script and full screen are real Vela widget actions now (3 Oct, workspace.js registers them):
    Vela renders and maintains them in its own row, so the hand-docking this file used to do — and its
@@ -215,8 +211,8 @@ window.isChartFullscreen = isChartFullscreen;
 function setPaneTop() {
   const row = document.querySelector('.vela-widget-topbar');
   const h = row ? Math.ceil(row.getBoundingClientRect().height) : 0;
-  document.documentElement.style.setProperty(
-    '--lx-pane-top', `calc(var(--lx-topbar-h) + ${h > 0 ? h : 44}px)`);
+  /* No console first row any more (3 Oct): the pane's top is Vela's own row height, nothing else. */
+  document.documentElement.style.setProperty('--lx-pane-top', `${h > 0 ? h : 44}px`);
 }
 window.addEventListener('resize', setPaneTop);
 
@@ -456,21 +452,33 @@ function newChart(host, options) {
   return instance;
 }
 
-/* The bars pill is the longest thing in the top row, and the pane the plugin docks is ~620px wide —
-   at that width the row has almost no slack left. The pill carries a hard CSS cap (#bars-status),
-   and the old window-width heuristic missed the real pane width: the operator saw "bars: live ·
-   wo…", a word cut in half (23 Sep pane audit). So don't guess — measure: if the full sentence
-   cannot fit its own pill, show the short form. Everything the pill knows stays in `title`. */
+/* The bars line feeds the status dot (3 Oct). It used to be a pill in the top row whose text had to
+   be measured against a hard CSS cap (#bars-status) — the operator once saw "bars: live · wo…", a
+   word cut in half (23 Sep pane audit). The dot shows text only when something is wrong, so the full
+   sentence now lives in `title` and nothing can be clipped mid-word. */
 let barsLast = null;
+/* One status dot (3 Oct): the Agent pill and the bars pill were two green lights saying "fine".
+   Each source keeps its own state; the dot paints green when both are fine and grows text only
+   when something is wrong — "it is green almost always, so show text only when something is wrong". */
+const statusState = { mcp: null, bars: null };   // null = not answered yet; { ok, text }
+function paintStatus() {
+  if (!el.dot) return;
+  const m = statusState.mcp, b = statusState.bars;
+  const bad = [];
+  if (m && m.ok === false) bad.push(m.text || 'agent offline');
+  if (b && b.ok === false) bad.push(b.text || 'no bars');
+  const waiting = !m || !b;
+  el.dot.className = 'status-dot ' + (bad.length ? 'is-bad' : waiting ? 'is-wait' : 'is-ok');
+  el.dot.textContent = bad.length ? '● ' + bad.join(' · ') : '●';
+  el.dot.title = [m && m.text, b && b.text].filter(Boolean).join(' · ')
+    || 'Agent and bars — the two lights this dot replaced';
+}
 function setBars(text, detail) {
   barsLast = { text, detail };
   const full = detail ? text + ' · ' + detail : text;
-  el.bars.textContent = full;
-  el.bars.title = full;
-  if (detail && el.bars.scrollWidth > el.bars.clientWidth) el.bars.textContent = text;
+  statusState.bars = { ok: /live/.test(text) ? true : /offline|failed/.test(text) ? false : null, text: full };
+  paintStatus();
 }
-/* The pane can be resized while the page stays open — re-measure rather than keep a stale form. */
-window.addEventListener('resize', () => { if (barsLast) setBars(barsLast.text, barsLast.detail); });
 
 /* F6 (25 Sep): dragging the app's split changes this page's box, and nothing repainted it —
    measured live: #chart 360px tall inside a 295px .panel--chart, so the chart overflowed its own
@@ -491,7 +499,6 @@ window.addEventListener('resize', onWindowResize);
 async function bootChart() {
   const host = $('#chart');
   setBars('bars: loading…');
-  el.bars.className = 'pill pill--wait';
 
   // Preferred path: the FULL Vela application (workspace.js). It brings the real
   // chrome — symbol/timeframe pickers, drawing toolbar, object tree, data window,
@@ -506,7 +513,6 @@ async function bootChart() {
         // script actually executes is still verified per mount, never assumed.
         pineReady = !!window.__wsApp.pineRegistered;
         setBars('bars: live', 'workspace cell');
-        el.bars.className = 'pill pill--ok';
         el.chartOrigin.textContent = 'full Vela workspace · binance provider';
         document.body.classList.add('has-workspace');   // hides our redundant chart header
         log('Workspace active: cell chart adopted. Pine mounting remains experimental.');
@@ -550,7 +556,6 @@ async function bootChart() {
       const ready = typeof chart.ready === 'function' ? chart.ready() : Promise.resolve();
       await Promise.race([ready, new Promise((_, rej) => setTimeout(() => rej(new Error('provider timeout')), 12000))]);
       setBars('bars: live', 'Binance BTCUSDT 1h');
-      el.bars.className = 'pill pill--ok';
       el.chartOrigin.textContent = 'provider: binance (live public data)';
       log('Live bars via Vela’s BinanceProvider. Pine engine: ' + (pineReady ? 'ready' : 'missing'));
       unblockPineEngine();
@@ -564,7 +569,6 @@ async function bootChart() {
 
   chart = newChart(host, { data: syntheticBars(400), timeframe: '1h' });
   setBars('bars: offline', 'synthetic bars');
-  el.bars.className = 'pill pill--bad';
   el.chartOrigin.textContent = 'provider: none (offline bars)';
   unblockPineEngine();
   markChartReady(); exposeChart();
@@ -726,46 +730,12 @@ async function mountIndicator(source, name) {
   }
 
   mounted.push(name);
-  refreshIndicatorCount();
   log('Ran on chart after ' + ((Date.now() - t0) / 1000).toFixed(1) + 's: ' + name);
   return true;
 }
 
-/**
- * What the chip counts: the studies Vela says are on the chart right now.
- *
- * `mounted` only knows the scripts THIS page ran, so a page load that restores Vela's
- * persisted indicators left the chip reading "0 indicators" while the legend listed
- * several — the chart was right and the chip was wrong. The chart's own report is the
- * honest source; `mounted` is only the fallback for when the handle cannot answer,
- * and the always-present volume pane is not an applied study, so it is filtered out.
- */
-function studiesOnChart() {
-  try {
-    const snap = typeof chart?.inspect === 'function' ? chart.inspect() : null;
-    const list = Array.isArray(snap?.indicators) ? snap.indicators : null;
-    if (!list) return null;
-    return list
-      .map((i) => i.title || i.id || i.type || '')
-      .filter((t) => t && !/^vol(ume)?$/i.test(String(t)));
-  } catch { return null; }
-}
-
-function refreshIndicatorCount() {
-  const onChart = studiesOnChart();
-  const names = onChart || mounted;
-  /* Overlay runs are not Vela studies, so inspect() never lists them — yet SMC sitting on screen
-     while the chip read "0 indicators" was the confusion of 23 Sep. Count them here. */
-  const overlay = (window.TraderRun ? window.TraderRun.list() : [])
-    .filter((n) => !names.includes(n));
-  const all = names.concat(overlay);
-  const n = all.length;
-  el.count.textContent = n + (n === 1 ? ' indicator' : ' indicators');
-  el.count.title = n
-    ? 'On the chart now: ' + (names.join(' · ') || '(none as a Vela study)') +
-      (overlay.length ? ' · overlay: ' + overlay.join(' · ') : '')
-    : 'Indicators that actually executed on the chart — a mount that silently did nothing is never counted';
-}
+/* The indicator-count pill is gone (3 Oct): what is on the chart is named by the drawer's own
+   "On chart" strip (drawer.js), which reads the same one landasan list. */
 
 /** Mount after the chart has finished booting (queues instead of throwing). */
 async function queueMount(source, name) {
@@ -1297,8 +1267,7 @@ async function openResult(row, button) {
             : (r.paint && r.paint.added)
               ? `Vela native “${r.paint.added.title}” on the chart`
               : 'nothing drawn'));
-          refreshIndicatorCount();
-          toast(`PineTS: “${label}” ran in ${r.ms} ms`);
+                  toast(`PineTS: “${label}” ran in ${r.ms} ms`);
         } catch (err) {
           headline.textContent = 'PineTS failed: ' + err.message;
           toast('PineTS failed: ' + err.message, true);
@@ -1727,7 +1696,6 @@ function mountNative(type, title) {
   const landed = after.includes(type);
   toast(landed ? 'Added ' + title : title + ' did not land — the chart still does not carry it', !landed);
   noteActivity((landed ? 'added ' : 'tried to add ') + title + ' from the Indicators panel', 'chart_add_indicator');
-  refreshIndicatorCount();
   renderIndicators();
   return landed;
 }
@@ -1957,17 +1925,19 @@ async function checkHealth() {
           : 'ready');
     /* Spec §5: the counter is engineer telemetry — the chrome keeps a connection DOT and the
        numbers move into the tooltip. */
-    el.mcp.textContent = ready ? '● Agent' : '● Agent offline';
-    el.mcp.className = 'pill ' + (ready ? 'pill--ok' : 'pill--bad');
-    el.mcp.title = (ready ? 'MCP: ' + label : 'MCP: offline')
-      + ' · ' + (ready
+    /* Spec §5, amended 3 Oct: the dot is shared with the bars state — see paintStatus(). The numbers
+       live in the tooltip; text appears on the dot only when something is wrong. */
+    statusState.mcp = {
+      ok: ready,
+      text: (ready ? 'Agent: ' + label : 'Agent: offline') + ' · ' + (ready
         ? (data.mcp_url || (data.mcp && data.mcp.url) || 'connected')
-        : ((data.mcp_error || (data.mcp && data.mcp.last_error)) || 'not connected'));
+        : ((data.mcp_error || (data.mcp && data.mcp.last_error)) || 'not connected')),
+    };
+    paintStatus();
     if (!ready) toast('LuxAlgo MCP is not connected — see backend log', true);
   } catch (err) {
-    el.mcp.textContent = '● Agent offline';
-    el.mcp.className = 'pill pill--bad';
-    el.mcp.title = err.message;
+    statusState.mcp = { ok: false, text: 'Agent: offline — ' + err.message };
+    paintStatus();
     toast('Backend unreachable — start ./console/start.sh (or luxalgo-web.service) first', true);
   }
 }
@@ -2061,11 +2031,16 @@ async function main() {
      actions now, so with no workspace row there is nothing to press. One check after boot reveals
      plain buttons for the two here (drawer.js reveals its own), wired to the same functions the
      widget actions run. */
+  /* The door is unreachable in Vela's compact mode too: under ~640px Vela hides its desktop row
+     (0-width), so "no row" must mean "no USABLE row", not "no element" — else a narrow pane has no
+     toolbar and no way in (the doc's compact-mode check). */
   const showFallbacks = () => {
-    if (document.querySelector('.vela-widget-topbar')) return;
-    for (const b of [el.scriptFallback, el.fullFallback]) if (b) b.hidden = false;
+    const row = document.querySelector('.vela-widget-topbar');
+    const usable = !!(row && row.getBoundingClientRect().width > 0);
+    for (const b of [el.scriptFallback, el.fullFallback]) if (b) b.hidden = usable;
   };
   window.addEventListener('ws-failed', showFallbacks);
+  window.addEventListener('resize', showFallbacks);
   setTimeout(showFallbacks, 8000);
   el.scriptFallback?.addEventListener('click', () => togglePanel('script'));
   el.fullFallback?.addEventListener('click', () => setChartFullscreen(!isChartFullscreen()));
@@ -2164,8 +2139,7 @@ async function main() {
       } else {
         outBox.textContent = window.TraderRun.summarize(r);
         log(`“${label}” ran in ${r.ms} ms`);
-        refreshIndicatorCount();
-        /* F3 (25 Sep): say where the paint went, and point at it — the operator's recording showed
+              /* F3 (25 Sep): say where the paint went, and point at it — the operator's recording showed
            a run finishing with nothing visibly changing, because the chart behind the pane was
            blank. A pulse on the chart closes that loop. */
         const n = Array.isArray(r.series) ? r.series.length : (r.series || 0);

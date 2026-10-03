@@ -41,11 +41,15 @@ class TheNameFieldIsDressed(unittest.TestCase):
 
 
 class TheBarsPillMeasuresInsteadOfGuessing(unittest.TestCase):
-    def test_the_pill_measures_its_own_overflow(self):
+    def test_the_dot_cannot_clip_a_word(self):
+        """3 Oct: the bars line is no longer a pill measuring its own overflow — the dot shows text
+        only when something is wrong and the full sentence lives in the tooltip, so nothing can be
+        cut mid-word again (the 23 Sep "bars: live · wo…")."""
         app = read(APP)
         block = app.split("function setBars", 1)[1].split("\n}", 1)[0]
-        self.assertIn("scrollWidth", block)
-        self.assertIn("clientWidth", block)
+        self.assertNotIn("scrollWidth", block)
+        self.assertIn("statusState.bars", block)
+        self.assertIn("paintStatus", block)
 
     def test_the_window_width_guess_is_gone(self):
         # The guess is what produced "bars: live · wo…": innerWidth said wide, the CSS cap said

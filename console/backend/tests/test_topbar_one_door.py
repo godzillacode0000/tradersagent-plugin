@@ -89,6 +89,59 @@ class TheDuplicateDoorsAreGone(unittest.TestCase):
         self.assertIn('id="full-fallback"', HTML)
 
 
+class TheFirstRowIsGone(unittest.TestCase):
+    """3 Oct, second half of the consolidation: the console's own bar (brand, pills, toggles) is
+    deleted — it duplicated Vela's row and cost the chart ~34 px. Brand and ◐ moved into the drawer,
+    Agent + bars merged into one dot, the legends ride the statusbar, and the bare-chart fallbacks
+    float over the chart."""
+
+    def test_no_console_bar_and_no_pills(self):
+        self.assertNotIn('<header class="topbar">', HTML)
+        self.assertNotIn('id="mcp-status"', HTML)
+        self.assertNotIn('id="bars-status"', HTML)
+        self.assertNotIn('id="indicator-count"', HTML)
+
+    def test_one_status_dot_in_the_statusbar(self):
+        self.assertEqual(HTML.count('id="status-dot"'), 1)
+        self.assertIn("function paintStatus()", APP)
+        self.assertIn("statusState", APP)
+        block = APP.split("function paintStatus()", 1)[1].split("\n}", 1)[0]
+        self.assertIn("is-bad", block)
+        self.assertIn("bad.length", block, "text appears only when something is wrong")
+
+    def test_brand_and_theme_live_in_the_drawer_footer(self):
+        i = HTML.index('id="lib-drawer"')
+        foot = HTML[i:HTML.index("</aside>", i)]
+        self.assertIn('id="theme-toggle"', foot)
+        self.assertIn("drawer__brand", foot)
+        self.assertNotIn('id="theme-toggle"', HTML[:i], "the ◐ left the first row")
+
+    def test_the_shell_has_two_rows_now(self):
+        # The three-row shell assumed [topbar][main][statusbar]; with the topbar gone, the statusbar
+        # took the 1fr row and swallowed 105 px of chart height (caught live, 3 Oct). Two rows now.
+        css = read("styles.css")
+        self.assertIn("grid-template-rows: minmax(0, 1fr) auto;", css)
+        self.assertNotIn("grid-template-rows: auto minmax(0, 1fr) auto;", css)
+
+    def test_legends_ride_the_statusbar(self):
+        i = HTML.index('class="statusbar"')
+        bar = HTML[i:HTML.index("</footer>", i)]
+        for chip in ('id="lib-legend"', 'id="script-legend"'):
+            self.assertIn(chip, bar)
+
+    def test_fallbacks_float_only_when_there_is_no_vela_row(self):
+        self.assertIn('class="fallback-strip"', HTML)
+        for b in ('id="drawer-fallback"', 'id="script-fallback"', 'id="full-fallback"'):
+            self.assertIn(b, HTML)
+
+    def test_a_collapsed_row_counts_as_no_row(self):
+        """Vela's compact mode hides the desktop row (0 width) — the door is gone with it, so the
+        fallback must key on the row's SIZE, not its existence (the doc's compact-mode check)."""
+        for src in (APP, read("drawer.js")):
+            self.assertIn("getBoundingClientRect().width > 0", src)
+            self.assertIn("addEventListener('resize', showFallback", src)
+
+
 class TheAgentStillHasItsPaths(unittest.TestCase):
     """The agent drove these surfaces by clicking buttons that no longer exist."""
 
