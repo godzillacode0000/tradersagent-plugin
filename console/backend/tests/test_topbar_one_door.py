@@ -116,6 +116,13 @@ class TheFirstRowIsGone(unittest.TestCase):
         self.assertIn("drawer__brand", foot)
         self.assertNotIn('id="theme-toggle"', HTML[:i], "the ◐ left the first row")
 
+    def test_the_bridge_can_read_the_drawer(self):
+        """The agent needs the drawer's state the way `indicators` reports the modal — and the rect
+        is NOT the truth while the page is occluded (the slide is a frozen CSS transition)."""
+        self.assertIn("case 'drawer'", BRIDGE)
+        self.assertIn("window.libDrawer.state()", BRIDGE)
+        self.assertIn("'drawer',", BRIDGE)          # published in the page's ACTIONS list
+
     def test_the_shell_has_two_rows_now(self):
         # The three-row shell assumed [topbar][main][statusbar]; with the topbar gone, the statusbar
         # took the 1fr row and swallowed 105 px of chart height (caught live, 3 Oct). Two rows now.

@@ -38,7 +38,7 @@
      200 with nothing done). So the page publishes its real list in every heartbeat and the server
      validates against that instead of trusting a constant. */
   const ACTIONS = ['apply', 'add', 'remove', 'draw', 'clear', 'probe', 'market', 'shot', 'reload',
-                   'mode', 'script', 'palette', 'browse', 'open', 'rect',
+                   'mode', 'script', 'palette', 'browse', 'open', 'rect', 'drawer',
     'bars',
                    'signals',
                    'layout',
@@ -1414,6 +1414,23 @@
           out.ok = true;
           out.detail = 'opened ' + kind + ' “' + titleOf() + '” in the detail pane';
           out.opened = { slug: command.slug, kind, title: titleOf() };
+          break;
+        }
+        case 'drawer': {
+          /* Read-only state of the operator's ONE surface (3 Oct). `indicators` reports the modal;
+             the drawer is the surface he actually uses, so the agent reads it the same way. The
+             drawer's own rect is NOT the truth while the page is occluded — its slide is a CSS
+             transition the compositor freezes at the old position — so report the class list and
+             the API's state, not getBoundingClientRect. */
+          const dEl = document.getElementById('lib-drawer');
+          const ds = window.libDrawer && window.libDrawer.state ? window.libDrawer.state() : null;
+          out.ok = true;
+          out.detail = ds
+            ? 'drawer ' + (ds.open ? 'open' : 'closed') + ' · ' + (ds.detail ? 'detail view' : 'list view') +
+              ' · rows ' + ds.rows + '/' + ds.total + ' · catalogue ' + ds.catalogue +
+              ' · builtins ' + ds.builtins + ' · classes: ' + (dEl ? dEl.className : 'NO ELEMENT')
+            : 'no drawer API on this page';
+          out.drawer = ds;
           break;
         }
         case 'mode': {

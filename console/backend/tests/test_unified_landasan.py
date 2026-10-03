@@ -97,11 +97,16 @@ class TheScriptPaneIsBack(unittest.TestCase):
     def test_draft_survives_reload(self):
         self.assertIn("luxalgo-web:script", APP)
 
-    def test_right_column_hosts_both_views(self):
+    def test_the_column_hosts_the_editor_and_the_detail_lives_in_the_drawer(self):
         self.assertIn("rightViewIs", APP)
         self.assertIn("showRightView", APP)
-        # both views live in the one right-hand track
-        self.assertLess(HTML.index('id="view-script"'), HTML.index('id="detail"'))
+        # 3 Oct (the operator's doc §1): Details became a view inside the drawer, so the column
+        # keeps the editor only and the picked result renders in the drawer.
+        column = HTML.split('class="panel panel--right"', 1)[1].split('</section>', 1)[0]
+        self.assertIn('id="view-script"', column)
+        self.assertNotIn('id="detail"', column)
+        drawer = HTML.split('id="lib-drawer"', 1)[1].split('</aside>', 1)[0]
+        self.assertIn('id="detail"', drawer)
 
     def test_the_drawer_strip_names_what_is_on_the_chart(self):
         """The count pill is gone (3 Oct) — what is on the chart is named by the drawer's own
@@ -120,9 +125,10 @@ class TheScriptPaneIsBack(unittest.TestCase):
         m = re.search(r"\.view--hidden\s*\{([^}]*)\}", CSS)
         self.assertIsNotNone(m)
         self.assertIn("!important", m.group(1))
-        # and both right-track views must actually be wired to that state
+        # the editor is wired to that state; the detail moved into the drawer (3 Oct), where the
+        # view container's [hidden] attribute is the visibility switch
         self.assertIn("classList.toggle('view--hidden', which !== 'script')", APP)
-        self.assertIn("classList.toggle('view--hidden', which === 'script')", APP)
+        self.assertIn("detailBox.hidden = !st.detail", read("console/frontend/drawer.js"))
 
     def test_editor_surface_is_styled_and_legend_hides_via_hidden_attr(self):
         self.assertIn(".script__src", CSS)

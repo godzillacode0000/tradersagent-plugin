@@ -1420,6 +1420,20 @@ body.has-ind-modal { overflow: hidden; }
 .drawer__clear { border: 0; background: transparent; color: var(--lx-fg-muted); font-size: 12px; cursor: pointer; }
 .drawer__clear:hover { color: var(--lx-loss); }
 
+/* The drawer's second view (3 Oct): the picked result. The list parts stand down while it shows,
+   and the way back sits above the source. */
+.drawer__detail { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* An author `display: flex` outranks the UA's `[hidden] { display: none }` — without this line the
+   detail sits under the list even when hidden. */
+.drawer__detail[hidden] { display: none; }
+.drawer__back { align-self: flex-start; margin: 0 0 var(--lx-space-2) 0; padding: 0; border: 0;
+  background: none; color: inherit; opacity: .8; font: inherit; font-size: var(--lx-fs-xs); cursor: pointer; }
+.drawer__back:hover { opacity: 1; text-decoration: underline; }
+.lib-drawer.is-detail .drawer__search,
+.lib-drawer.is-detail .drawer__fams,
+.lib-drawer.is-detail .drawer__now,
+.lib-drawer.is-detail .drawer__list { display: none; }
+
 .drawer__list { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -4px; padding: 0 4px; list-style: none;
   overscroll-behavior: contain; }
 .drow {

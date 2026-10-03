@@ -54,7 +54,7 @@ function rightViewIs(name) {
 function showRightView(which) {
   const v = document.getElementById('view-script');
   if (v) v.classList.toggle('view--hidden', which !== 'script');
-  el.detail.classList.toggle('view--hidden', which === 'script');
+  /* The detail element moved into the drawer (3 Oct); its visibility is the drawer's business. */
   try {
     localStorage.setItem(PANELS_KEY, JSON.stringify({ ...readPanelPrefs(), rightview: which }));
   } catch { /* private mode */ }
@@ -1191,7 +1191,9 @@ async function openResult(row, button) {
   document.querySelectorAll('.row--active').forEach((n) => n.classList.remove('row--active'));
   button?.classList.add('row--active');
   el.detail.innerHTML = '<h2 class="detail__title">Loading…</h2><div class="skeleton"></div>';
-  setPanel('detail', true);   // picking a result IS the reason this panel exists
+  /* The detail is a view of the DRAWER now (3 Oct): one surface over the chart. This opens the
+     drawer too, so a pick from the Library panel or the modal lands in the same place. */
+  if (window.libDrawer && window.libDrawer.detail) window.libDrawer.detail(true);
   try {
     if (row.kind === 'indicator') {
       const data = await api('/api/source', { slug: row.slug });
@@ -2026,7 +2028,7 @@ async function main() {
   setPanel('library', panelPrefs.library === true);
   toggleBrowse(panelPrefs.browse === true);
   setPanel('detail', false);   // never restore the column open (his 17 Sep complaint)
-  showRightView(panelPrefs.rightview === 'script' ? 'script' : 'detail');
+  showRightView('script');   /* the column keeps ONE view now (3 Oct) — the editor; the detail is the drawer's */
   /* Bare-chart fallbacks (3 Oct): the drawer door, the script pane and full screen are Vela widget
      actions now, so with no workspace row there is nothing to press. One check after boot reveals
      plain buttons for the two here (drawer.js reveals its own), wired to the same functions the

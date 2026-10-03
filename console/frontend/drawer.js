@@ -16,6 +16,7 @@
   const SLICE = 60;                       /* rows painted at once; search still sees all 800 */
   const st = {
     open: false, q: '', family: '', shown: SLICE,
+    detail: false,                        /* the drawer's second view: the picked result (3 Oct) */
     busy: '',                             /* slug currently running */
     result: {},                           /* slug → {ok, text} of its last run here */
   };
@@ -28,6 +29,8 @@
   const fams = $id('drawer-fams');
   const list = $id('drawer-list');
   const now = $id('drawer-now');
+  const detailBox = $id('drawer-detail');
+  const back = $id('drawer-detail-back');
   const count = $id('drawer-count');
   if (!drawer) return;
 
@@ -155,11 +158,26 @@
       }
       if (indState.natives === null) loadNatives().then(paint);
       paint();
-      setTimeout(() => box.focus({ preventScroll: true }), 180);
-    } else if (drawer.contains(document.activeElement)) {
-      (document.querySelector('.vela-widget-indicators, .vela-widget-action') || fallback || document.body).focus?.({ preventScroll: true });
+      setTimeout(() => { if (!st.detail) box.focus({ preventScroll: true }); }, 180);
+    } else {
+      showDetail(false);                       /* reopening shows the catalogue, not a stale pick */
+      if (drawer.contains(document.activeElement)) {
+        (document.querySelector('.vela-widget-indicators, .vela-widget-action') || fallback || document.body).focus?.({ preventScroll: true });
+      }
     }
   }
+
+  /* The drawer's second view (3 Oct): a picked result. "Back" returns to the list, and closing the
+     drawer resets to it too. app.js reaches this through window.libDrawer.detail(true). */
+  function showDetail(on) {
+    st.detail = Boolean(on);
+    if (detailBox) detailBox.hidden = !st.detail;
+    drawer.classList.toggle('is-detail', st.detail);
+  }
+  if (back) back.addEventListener('click', () => {
+    showDetail(false);
+    box.focus({ preventScroll: true });
+  });
 
   async function run(slug) {
     if (st.busy) return;
@@ -259,7 +277,7 @@
       return;
     }
     if (ev.target.closest('[data-open]')) {
-      setOpen(false);
+      /* The picked result IS this drawer's second view now (3 Oct) — no close-then-reopen. */
       openResult({ ...row, kind: 'indicator' }, li);
     }
   });
@@ -286,7 +304,8 @@
 
   window.libDrawer = {
     open: setOpen, toggle: () => setOpen(!st.open), run,
-    state: () => ({ open: st.open, q: st.q, family: st.family, busy: st.busy,
+    detail: (on) => { if (on !== false) setOpen(true); showDetail(on !== false); },
+    state: () => ({ open: st.open, detail: st.detail, q: st.q, family: st.family, busy: st.busy,
                     rows: list.querySelectorAll('.drow[data-slug]').length,
                     total: (indState.cat.rows || []).length, catalogue: indState.cat.state,
                     builtins: (indState.natives || []).length }),

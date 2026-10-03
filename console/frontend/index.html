@@ -37,6 +37,16 @@
     <div class="drawer__fams" id="drawer-fams" role="toolbar" aria-label="Families"></div>
     <div class="drawer__now" id="drawer-now" hidden></div>
     <ul class="drawer__list" id="drawer-list" aria-live="polite"></ul>
+    <!-- Details is a VIEW of this drawer now (3 Oct, the operator's doc §1): a picked script shows
+         its Pine source and its actions right here, with a way back — one surface, not two. -->
+    <div class="drawer__detail" id="drawer-detail" hidden>
+      <button type="button" class="drawer__back" id="drawer-detail-back">← Back to the list</button>
+      <div class="detail" id="detail">
+        <h2 class="detail__title">Nothing selected</h2>
+        <p class="muted">Pick a script above. Indicators show their Pine source and can be run or
+        added to the chart; concepts show the Library write-up.</p>
+      </div>
+    </div>
     <!-- The console's first row is gone (3 Oct): its brand and its ◐ live here now, where they
          cost the chart nothing. -->
     <div class="drawer__foot">
@@ -196,12 +206,9 @@
         plots become Vela natives, boxes / lines / labels go on the overlay. Press
         <kbd>&lt;&gt;</kbd> (or ✕) to close this pane and see the chart full width.</p>
       </div>
-      <!-- VIEW: the picked result / concept write-up -->
-      <div class="detail" id="detail">
-        <h2 class="detail__title">Nothing selected</h2>
-        <p class="muted">Pick a result on the left. Indicators show their Pine source and can be
-        mounted on the chart; concepts show the Library write-up.</p>
-      </div>
+      <!-- The picked result / concept write-up is not a column view any more (3 Oct): Details became
+           a view inside the drawer — one surface over the chart, no close-then-reopen. This column
+           keeps the Pine editor. -->
     </section>
   </main>
 
