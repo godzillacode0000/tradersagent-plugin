@@ -304,6 +304,37 @@ def bt_data_list() -> str:
     return "\n".join(f"{f['name']}  {f['size_kb']}KB  {f.get('rows', '?')} rows" for f in files)
 
 
+@mcp.tool(annotations=_ann("Paper account", read_only=True))
+def broker_state() -> str:
+    """The PAPER (simulated Binance spot) account: cash, equity, open positions with live P&L, and the
+    orders waiting for the operator's approval. Nothing here is real money."""
+    try:
+        d = _call("/api/broker", timeout=10.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    lines = [f"PAPER · cash {d['cash']:,.2f} · equity {d['equity']:,.2f} · realised {d['realized']:+,.2f}"]
+    for p in d["positions"]:
+        lines.append(f"  {p['symbol']} {p['qty']:g} @ {p['avg']:,.2f} → {p['mark']:,.2f} ({p['unrealized']:+,.2f})")
+    for o in d["pending"]:
+        lines.append(f"  ⏳ #{o['id']} {o['side']} {o['qty']:g} {o['symbol']} — waiting for the operator")
+    return "\n".join(lines)
+
+
+@mcp.tool(annotations=_ann("Propose a paper order", destructive=False))
+def broker_propose(symbol: str, side: str, qty: float, note: str = "") -> str:
+    """Propose a PAPER order (Binance spot, simulated). It does NOT trade: it puts an Approve/Reject card on
+    the chart and waits. Only the operator can approve it, on the card — there is deliberately no tool for
+    that. It fills at the live price at the moment the operator approves, not at today's price.
+    `side` is buy or sell; spot has no shorting. `note` is the reason shown on the card — say why."""
+    try:
+        d = _call("/api/broker/propose", {"symbol": symbol, "side": side, "qty": qty, "note": note}, timeout=10.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    o = d["order"]
+    return (f"⏳ proposed #{o['id']}: {o['side']} {o['qty']:g} {o['symbol']} — paper, waiting for the operator "
+            "to Approve or Reject on the chart. Nothing has traded.")
+
+
 @mcp.tool(annotations=_ann("Chart views attached", read_only=True))
 def chart_views() -> str:
     """Is a chart view attached right now? Every command tool needs one (the chart is not headless)."""

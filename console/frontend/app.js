@@ -234,6 +234,7 @@ function noteActivity(text, tool) {
   if (bar) bar.classList.add('has-activity');
 }
 
+window.taToast = (m, b) => toast(m, b);          // broker.js speaks through the footer slip
 function toast(message, bad = false) {
   el.toast.textContent = message;
   el.toast.className = 'toast' + (bad ? ' toast--bad' : '');

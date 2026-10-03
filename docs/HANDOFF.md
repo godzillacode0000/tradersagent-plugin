@@ -77,7 +77,7 @@ flowchart TB
   subgraph AGENTS["Agent side"]
     ME["Hermes agent"]
     CLI["CLI · bin/trader-chart<br/>state · shot · apply · add · remove<br/>market · draw · reload · caps"]
-    MCP["MCP · traders-chart<br/>39 chart tools"]
+    MCP["MCP · traders-chart<br/>41 chart tools"]
     LUX["LuxAlgo MCP<br/>library · edge · prop-firm"]
   end
 
@@ -200,7 +200,7 @@ short note with the way out instead of failing silently.
 | `pinets-runner.js`, `pinets-layer.js` | PineTS execution + the native paint layer |
 | `styles.css` | console chrome, responsive top row (clip-proof from ~500 px to 1280 px pane width) |
 
-**MCP server (`console/mcp/server.py`)** — 39 tools (`chart_views`, `chart_caps`, `chart_state`,
+**MCP server (`console/mcp/server.py`)** — 41 tools (`chart_views`, `chart_caps`, `chart_state`,
 `chart_shot`, `chart_apply_pine`, `chart_draw`, `chart_clear`, `chart_add_indicator`,
 `chart_remove_indicator`, `chart_set_market`, `chart_reload`, `chart_palette`, `library_search`,
 `library_indicator` among them). Thin wrapper over the HTTP API. **Tools load at session start: after adding a

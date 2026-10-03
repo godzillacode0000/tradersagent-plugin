@@ -1486,6 +1486,10 @@
       } catch (err) {
         return;
       }
+      if (payload && payload.type === 'broker') {        // the paper broker: the card repaints from the server
+        try { window.dispatchEvent(new CustomEvent('ta-broker', { detail: payload })); } catch (err) { /* no DOM events */ }
+        return;
+      }
       if (!payload || payload.type !== 'command' || !payload.command) return;
       const id = Number(payload.command.id) || 0;
       if (seen.has(id)) return;

@@ -1,4 +1,4 @@
-# Trader's Agent — MCP tools (39)
+# Trader's Agent — MCP tools (41)
 
 The `traders-chart` MCP server exposes the live LuxAlgo **Vela** chart as native tools.
 Every tool talks to the local console (`http://127.0.0.1:8787`) over its push channel (SSE), so a
@@ -23,6 +23,8 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | `chart_shot` | `name: str = ""` | One PNG of the chart. Returned as an image when the client takes images, plus the path on disk. |
 | `chart_palette` | `try_apply: bool = false` | What colours the chart is actually wearing (background, candles, console theme). `try_apply=true` asserts the console's palette and reports what landed 300 ms later. |
 | `chart_browse` | `family: str = ""`, `show: bool = true` | Open the Library's concept-family list in the pane, optionally narrowed to one family slug. Family bubbles expose Library **concepts** (not indicator scripts); the empty family opens all concepts. Answers with the rows actually painted. The catalogue itself is `library_list`; this one is the *surface*. |
+| `broker_state` | — | The **paper** (simulated Binance spot) account: cash, equity, positions with live P&L, and the orders waiting for the operator. Read-only. |
+| `broker_propose` | `symbol: str`, `side: str` (`buy`/`sell`), `qty: float`, `note: str = ""` | Propose a paper order. It does **not** trade: it puts an Approve/Reject card on the chart and waits. There is deliberately **no approve tool** — only the operator, on the card. Fills at the live price at approval. |
 | `library_search` | `query: str`, `kind: str = ""` (`concept`/`indicator`), `limit: int = 8` | Search the LuxAlgo Library (concepts + indicators). See the Library section below for the other nine. |
 | `library_indicator` | `query: str` | One indicator by name or slug: summary, licence, and its full Pine source. |
 

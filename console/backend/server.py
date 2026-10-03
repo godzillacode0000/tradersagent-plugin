@@ -1278,7 +1278,84 @@ def warm_catalogue_thumbs(pages: int = 0) -> None:
     _WARM.update(state="done", done=True, finished=time.time())
 
 
+# ── Paper broker (Phase 5) ────────────────────────────────────────────────────────────────────────
+# The agent PROPOSES; only the page APPROVES. `from_page` is decided in do_POST from the Origin header
+# a browser always sends on a POST (the MCP, the CLI and curl send none), so the agent cannot approve by
+# accident. It is a guard against a talked-into mistake, not a boundary against local malware.
+from broker import PaperBroker, BrokerError  # noqa: E402
+
+_BROKER = None
+_BROKER_LOCK = threading.Lock()
+_BROKER_HTTP = {"unknown_order": 404, "not_pending": 409, "insufficient_cash": 409,
+                "insufficient_position": 409, "no_price": 503, "too_many_pending": 429}
+_BROKER_NEEDS_PAGE = ("approve", "reject", "reset")
+
+
+def _http_json(url: str):
+    import urllib.request as _u
+    req = _u.Request(url, headers={"User-Agent": "traders-agent-console/1.0"})
+    with _u.urlopen(req, timeout=8) as res:
+        return json.load(res)
+
+
+def binance_price(symbol: str) -> float:
+    """Last traded price from Binance's public ticker. Any failure is a clean `no_price`, never a guess."""
+    from urllib.parse import quote as _quote
+    try:
+        row = _http_json("https://api.binance.com/api/v3/ticker/price?symbol=" + _quote(symbol))
+        px = float(row["price"])
+    except Exception as exc:  # noqa: BLE001 - offline, bad symbol, odd payload: all the same answer
+        raise BrokerError("no_price", f"no price for {symbol} ({type(exc).__name__})")
+    if not (px > 0):
+        raise BrokerError("no_price", f"no price for {symbol}")
+    return px
+
+
+def get_broker() -> PaperBroker:
+    global _BROKER
+    with _BROKER_LOCK:
+        if _BROKER is None:
+            path = os.environ.get("TRADER_PAPER_FILE") or str(
+                Path(os.path.expanduser("~")) / ".local/state/traders-agent/paper.json")
+            _BROKER = PaperBroker(path, binance_price)
+        return _BROKER
+
+
+def broker_action(action: str, body: dict, from_page: bool) -> dict:
+    if action not in ("state", "propose") + _BROKER_NEEDS_PAGE:
+        raise ApiError(f"unknown broker action: {action}", 404, "unknown_endpoint")
+    if action in _BROKER_NEEDS_PAGE and not from_page:
+        raise ApiError("approving, rejecting and resetting are done on the chart card by the operator — "
+                       "the agent can only propose", 403, "approval_needs_the_page")
+    b = get_broker()
+    try:
+        if action == "state":
+            return b.state()
+        if action == "propose":
+            o = b.propose(body.get("symbol"), body.get("side"), body.get("qty"), body.get("note", ""))
+            STREAM.publish({"type": "broker", "event": "proposed", "order": o})
+            return {"order": o}
+        if action == "approve":
+            o = b.approve(body.get("id"))
+            STREAM.publish({"type": "broker", "event": "filled", "order": o})
+            return {"order": o}
+        if action == "reject":
+            o = b.reject(body.get("id"))
+            STREAM.publish({"type": "broker", "event": "rejected", "order": o})
+            return {"order": o}
+        b.reset()
+        STREAM.publish({"type": "broker", "event": "reset"})
+        return {"reset": True}
+    except BrokerError as exc:
+        raise ApiError(exc.message, _BROKER_HTTP.get(exc.code, 400), exc.code)
+
+
+def ep_broker(params: dict) -> dict:
+    return broker_action("state", {}, from_page=False)
+
+
 ROUTES = {
+    "/api/broker": (ep_broker, 0.0),
     "/api/health": (ep_health, 0.0),
     "/api/build": (ep_build, 0.0),
     "/api/agents": (ep_agents, 0.0),
@@ -1317,6 +1394,7 @@ API_INDEX = {
     "version": SERVER_VERSION,
     "mcp": DEFAULT_MCP_URL,
     "endpoints": [
+        {"path": "/api/broker", "params": [], "upstream": None},
         {"path": "/api/health", "params": ["probe?"], "upstream": None},
         {"path": "/api/search", "params": ["q", "type?", "family?", "limit?"], "upstream": "library_search"},
         {"path": "/api/indicators", "params": ["family?", "text?", "concept?", "tier?", "sort?", "direction?", "page?", "page_size?"], "upstream": "library_list_indicators"},
@@ -1733,6 +1811,12 @@ class Handler(BaseHTTPRequestHandler):
                                           title=str(payload.get("title", "note")),
                                           body=str(payload.get("body", "")))
                 self._ok({"written": written, "agent": load_study(AGENTS_ROOT, sid)})
+                return
+            if path.startswith("/api/broker"):
+                # A browser sets Origin on every POST; the MCP, the CLI and curl do not. _origin_ok has
+                # already refused any non-local Origin above, so "present" here means "our own page".
+                from_page = bool(self.headers.get("Origin"))
+                self._ok(broker_action(path[len("/api/broker"):].strip("/") or "state", payload, from_page))
                 return
             if path == "/api/chat":
                 self._chat(payload)

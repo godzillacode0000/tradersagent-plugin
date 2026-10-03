@@ -39,6 +39,8 @@ capabilities:
     - chart_reload
     - chart_palette
     - chart_browse
+    - broker_state
+    - broker_propose
     - library_search
     - library_indicator
     - library_list

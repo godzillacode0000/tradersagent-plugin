@@ -166,6 +166,7 @@ state.ready = (async () => {
     if (old) { old.remove(); return; }
     const items = [
       ['Alerts', () => ws.openAlertsMenu(anchor)],
+      ['Paper account', () => { if (window.taBroker) window.taBroker.open(); }],
       ['Data window', () => ws.dock.toggle('dataWindow')],
       ['Object tree', () => ws.dock.toggle('objects')],
       ['Download screenshot', () => ws.downloadScreenshot()],

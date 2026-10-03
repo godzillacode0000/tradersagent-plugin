@@ -33,7 +33,7 @@ for fam in pinets vela vela-pinets zag; do
   mkdir -p "$LIVE/frontend/vendor/$fam"
   cp -r "$HERE/console/frontend/vendor/$fam/." "$LIVE/frontend/vendor/$fam/"
 done
-cp "$HERE"/console/backend/{server.py,chart_bridge.py,chart_stream.py,agents_store.py,chat.py,backtest_service.py,library_thumbs.py} \
+cp "$HERE"/console/backend/{server.py,chart_bridge.py,chart_stream.py,agents_store.py,chat.py,backtest_service.py,library_thumbs.py,broker.py} \
   "$LIVE/backend/"
 cp "$HERE"/console/bin/trader-chart "$LIVE/bin/trader-chart"
 chmod +x "$LIVE/bin/trader-chart"

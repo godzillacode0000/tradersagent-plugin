@@ -178,6 +178,8 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_palette` | what colours the chart is wearing (`try_apply` asserts the console theme) |
 | `chart_theme` | read or set the console theme — `light` / `dark` (no argument reports what is worn); the console palette, Vela's chrome and the chart's own colours move together, and the choice survives a reload |
 | `chart_browse` | open the Library concept list in the pane (optional `family`) |
+| `broker_state` | the paper (simulated Binance) account: cash, equity, positions, orders waiting for you |
+| `broker_propose` | propose a paper order — it only puts an Approve/Reject card on the chart; the agent cannot approve it |
 | `chart_draw` | run Pine and paint the boxes/lines/labels it builds on the chart overlay |
 | `chart_clear` | clear the overlay and the indicators our paint layer added (then report what is left) |
 | `chart_batch` | run several chart actions in ONE call, in order (`[{"action": "market", …}, …]`), stopping at the first failure unless told otherwise |
