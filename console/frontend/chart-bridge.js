@@ -1422,7 +1422,11 @@
               const bars = Math.max(1, Number(command.bars) || 100);
               const tf = (() => { try { const m = window.chartMarket ? window.chartMarket() : null; return (m && m.interval) || ''; } catch (err) { return ''; } })();
               const mm = /^(\d+(?:\.\d+)?)([mhdwM]?)$/.exec(tf);
-              const mins = mm ? (mm[2].toLowerCase() === 'h' ? +mm[1] * 60 : mm[2].toLowerCase() === 'd' ? +mm[1] * 1440 : mm[2].toLowerCase() === 'w' ? +mm[1] * 10080 : mm[2] === 'M' ? +mm[1] * 43200 : +mm[1]) : 15;
+              /* The display timeframe writes minutes with a capital M ("1M", "30M" — app.js
+                 normalises it for the venue) and this UI has no month timeframe. Reading M as
+                 months turned `--bars 60` into a 60-month rewind, clamped to the oldest bar
+                 (measured live 4 Oct: "9996 bars left"). */
+              const mins = mm ? (mm[2].toLowerCase() === 'h' ? +mm[1] * 60 : mm[2].toLowerCase() === 'd' ? +mm[1] * 1440 : mm[2].toLowerCase() === 'w' ? +mm[1] * 10080 : +mm[1]) : 15;
               from = Math.max(b.first, b.last - bars * Math.max(1, mins) * 60000);
             }
             await r.start({ from });
