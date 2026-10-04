@@ -6,6 +6,31 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Fixed
 
+- **LuxAlgo-library scripts always ran on 1-minute bars, whatever the chart showed.** The chart's market
+  was read by scanning the page for text that looks like a timeframe, and Vela keeps its *closed*
+  timeframe dropdown in the DOM with "1m" first — so 4h, 15m and 1h all read `1m` (measured 4 Oct).
+  Every Pine run, study number and the heartbeat's timeframe came from the last 500 **minutes** of
+  bars, and the drawings were mapped by time onto a chart showing days. The active workspace cell is
+  asked first now (`marketFromWorkspace`, with `intervalOf` translating Vela's `60` / `240` / `D` /
+  `1h` spellings), and the DOM fallback skips menus. Built-ins were never affected: Vela computes them.
+- **Every library script drew at most 7 boxes, 7 lines and 7 labels — the oldest ones.** The worker's
+  projection did `value.map(jsonSafe)`; `Array.map` passes the index as the second argument, which
+  `jsonSafe` reads as its depth, so every object after the 7th became `null` and was filtered out. A script
+  creating 250 lines showed 7; the volume-profile style 7 of 24; the SMC reference 5 lines / 7 labels
+  instead of 9 / 12. The SMC / ICT, levels and patterns families (the drawing-heavy ones) were the
+  hardest hit. `docs/PINETS-COVERAGE.md` counts *runs*, not drawings, so its numbers stand.
+- **Drawings did not follow a symbol or timeframe change.** A built-in recomputes; the overlay is a picture
+  of one run, so after 1h → 4h the 1h boxes floated over the 4h candles at prices that meant nothing.
+  The last script is re-run against the new market (once the new bars have settled, with a second pass for
+  quick scripts), and taken off with a toast if it cannot run there.
+- **"legend shows 7 studies · the console knows 4 — reload" appeared when you added a plain RSI.** The
+  banner compared Vela's *series* count with the *indicator* count, and RSI draws six series. It now
+  fires only when the chart draws series and the console can name no study at all (the AMD POC case it
+  was written for); clicking it reloaded the page.
+- **The script legend listed every script run since the page loaded**, over a canvas that holds one: it
+  names the one that is there. The overlay also removes any canvas left over from an earlier host
+  instead of letting old pixels ghost under new ones (seen once; not reproducible on demand).
+
 - **The ⋯ menu had no door at the plugin's default 620 px width.** In Vela's compact mode the desktop
   row is 0-width; the menu was anchored to its hidden ⋯ button and opened at `left: -168`, off-screen,
   so Alerts, Paper account, Data window, Object tree, the screenshot and Edge Stats could not be

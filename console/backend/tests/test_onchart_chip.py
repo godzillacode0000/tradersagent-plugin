@@ -35,7 +35,8 @@ HTML, APP, DRAWER, WS, UNIFIED, CSS, BRIDGE = (
 class TheRunAnnouncesItself(unittest.TestCase):
     def test_the_landasan_fires_one_event_when_what_is_on_changes(self):
         self.assertIn("ta-onchart", UNIFIED, "the chip and the drawer must hear about every change")
-        push = UNIFIED.split("if (!applied.includes(name)) applied.push(name);", 1)[1][:300]
+        # The overlay holds ONE script, so a landed run REPLACES the list (4 Oct) instead of appending to it.
+        push = UNIFIED.split("applied.length = 0;\n    applied.push(name);", 1)[1][:300]
         self.assertIn("announce()", push, "a run that landed must announce it")
         reset = UNIFIED.split("function reset()", 1)[1].split("\n  }", 1)[0]
         self.assertIn("announce()", reset, "a clear must announce it")
