@@ -1170,5 +1170,40 @@ pre {
 }
 .ta-replay__speed:hover, .ta-replay__speed:focus-visible { background: var(--lx-accent-soft); }
 .ta-replay__speed.is-on { background: var(--lx-accent-soft); color: var(--lx-accent); }
+/* The drag handle (the graphic's ⠿) and the free spot it drops the strip into. */
+.ta-replay__drag { all: unset; box-sizing: border-box; cursor: grab; display: inline-flex; align-items: center; padding: 3px 3px 3px 1px; color: var(--lx-fg-muted); }
+.ta-replay__drag svg { width: 12px; height: 12px; display: block; fill: currentColor; }
+.ta-replay__drag:hover, .ta-replay__drag:focus-visible { color: var(--lx-fg); }
+.ta-replay__drag:active { cursor: grabbing; }
+.ta-replay--free { left: auto; bottom: auto; transform: none; animation-name: ta-replay-in-free; }
+/* The timestamp button and the calendar it opens (the graphic's top panel). */
+.ta-replay__btn--time { padding: 3px 7px; }
+.ta-replay__cal {
+  position: absolute; bottom: calc(100% + 6px); z-index: 56; width: 236px; padding: 8px 9px 9px;
+  border-radius: var(--lx-radius-md); background: var(--lx-surface-2);
+  border: 1px solid var(--lx-border-strong); box-shadow: var(--lx-shadow-3);
+}
+.ta-replay__cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+.ta-replay__nav { all: unset; box-sizing: border-box; cursor: pointer; padding: 2px 7px; border-radius: var(--lx-radius-sm); color: var(--lx-fg-muted); }
+.ta-replay__nav:hover, .ta-replay__nav:focus-visible { background: var(--lx-accent-soft); color: var(--lx-fg); }
+.ta-replay__nav svg { width: 11px; height: 11px; display: block; }
+.ta-replay__cal-head [data-cal-title] { font-weight: 600; }
+.ta-replay__cal-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; margin-bottom: 2px; }
+.ta-replay__cal-week span { font-size: 10px; color: var(--lx-fg-muted); text-align: center; }
+.ta-replay__cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+.ta-replay__day { all: unset; box-sizing: border-box; cursor: pointer; text-align: center; font-size: var(--lx-fs-sm); padding: 3px 0; border-radius: var(--lx-radius-sm); color: var(--lx-fg); }
+.ta-replay__day:hover, .ta-replay__day:focus-visible { background: var(--lx-accent-soft); }
+.ta-replay__day.is-on { background: var(--lx-accent-soft); color: var(--lx-accent); font-weight: 600; }
+.ta-replay__day.is-dim { color: var(--lx-fg-muted); opacity: .4; cursor: default; }
+.ta-replay__day.is-dim:hover { background: none; }
+.ta-replay__cal-foot { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+.ta-replay__chip {
+  font-family: var(--lx-font-mono); font-size: var(--lx-fs-sm); color: var(--lx-fg);
+  border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-sm);
+  padding: 2px 8px; background: transparent;
+}
+.ta-replay__time { width: 84px; text-align: center; padding: 2px 4px; }
+.ta-replay__time::-webkit-calendar-picker-indicator { opacity: .5; cursor: pointer; }
 @keyframes ta-replay-in { from { opacity: 0; transform: translateX(-50%) translateY(6px); } to { opacity: 1; transform: translateX(-50%); } }
+@keyframes ta-replay-in-free { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .ta-replay { animation: none; } .ta-replay__btn { transition: none; } }

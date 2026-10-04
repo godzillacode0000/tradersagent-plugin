@@ -53,7 +53,8 @@ consolidation, the drawer as the single Library surface, and Phase 7 — three a
 now rebuilds only when a visible label changes (a replay tick used to rebuild it ~8×/s, which strobed
 the row and ate clicks mid-press — measured 46→1 rebuilds, one-click drawer opens 4/6→6/6), and the
 replay strip wears Vela's v0.8.0 Bar-replay composition (⏮ Start bar · ▶ · ⏭ | 1× ⌄ | cursor time |
-bars left | ✕, scrubber over the row) — with `--bars N` fixed to count minutes: the display timeframe
+bars left | ✕, scrubber over the row, a date calendar behind the timestamp and a ⠿ drag handle
+whose spot persists) — with `--bars N` fixed to count minutes: the display timeframe
 writes "1M"/"30M" for minutes, and the old month branch clamped every bars-back start to the oldest
 bar ("9996 bars left" for `--bars 60`).
 

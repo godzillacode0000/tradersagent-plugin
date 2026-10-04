@@ -228,6 +228,34 @@ class TheStripWearsVelasBarReplayDesign(unittest.TestCase):
         self.assertIn("ta-replay__row", self.js)
         self.assertIn("ta-replay__sep", self.js)
 
+    def test_the_timestamp_opens_a_calendar(self):
+        self.assertIn('data-act="time"', self.js)
+        self.assertIn("ta-replay__cal", self.js)
+        self.assertIn("data-nav", self.js)
+        self.assertIn("data-day", self.js)
+
+    def test_the_calendar_footer_carries_a_date_and_a_time(self):
+        self.assertIn("data-cal-date", self.js)
+        self.assertIn('type="time"', self.js)
+        self.assertIn("Su", self.js)
+
+    def test_the_calendar_seeks_to_the_picked_day_at_the_picked_time(self):
+        # pick = day + the time chip's HH:MM, clamped to replay.bounds (a day outside cannot seek)
+        self.assertIn("calPick", self.js)
+        self.assertIn("dataset.day", self.js)
+
+    def test_the_strip_drags_by_its_handle(self):
+        self.assertIn("data-drag", self.js)
+        self.assertIn("pointerdown", self.js)
+        self.assertIn("pointermove", self.js)
+        self.assertIn("ta-replay-pos", self.js)
+        self.assertIn("ta-replay--free", self.css)
+
+    def test_the_calendar_and_handle_paint_in_the_css(self):
+        for cls in (".ta-replay__cal", ".ta-replay__cal-head", ".ta-replay__cal-week",
+                    ".ta-replay__day", ".ta-replay__cal-foot", ".ta-replay__drag"):
+            self.assertIn(cls, self.css, f"{cls} has no rule")
+
     def test_the_css_paints_every_new_part(self):
         for cls in (".ta-replay__row", ".ta-replay__sep", ".ta-replay__range",
                     ".ta-replay__ends", ".ta-replay__left", ".ta-replay__speeds"):
