@@ -1311,9 +1311,10 @@
   const fallback = $('edge-fallback');
   if (fallback) fallback.addEventListener('click', () => open());
   function showFallbackIfNeeded() {
-    const row = document.querySelector('.vela-widget-topbar');
-    const usable = !!(row && row.getBoundingClientRect().width > 0);
-    if (fallback) fallback.hidden = usable;
+    /* Only a MISSING row needs this door. In compact mode (a 0-width row) Vela's bottom sheet has a
+       "More" item that opens the ⋯ menu, whose first entry is Edge Stats — so a fourth floating button
+       there only printed over the chart (measured at 620 px, 4 Oct). */
+    if (fallback) fallback.hidden = !!document.querySelector('.vela-widget-topbar');
   }
   window.addEventListener('ws-failed', showFallbackIfNeeded);
   window.addEventListener('resize', showFallbackIfNeeded);

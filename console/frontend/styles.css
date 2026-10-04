@@ -773,9 +773,9 @@ pre {
 .btn--toggle[data-tip]::after {
   content: attr(data-tip);
   position: absolute; top: calc(100% + 7px); right: 0;
-  padding: 5px 9px; border-radius: var(--lx-radius-2, 6px);
-  background: var(--lx-surface-3); color: var(--lx-text-1);
-  border: 1px solid var(--lx-border-2); box-shadow: var(--lx-shadow-3);
+  padding: 5px 9px; border-radius: var(--lx-radius-md);
+  background: var(--lx-surface-3); color: var(--lx-fg);
+  border: 1px solid var(--lx-border-strong); box-shadow: var(--lx-shadow-3);
   font-size: 11px; font-weight: 500; line-height: 1.25; white-space: nowrap;
   pointer-events: none; opacity: 0; z-index: 999;
 }
@@ -791,10 +791,10 @@ pre {
 
 /* F4 (25 Sep): the pane says where the paint lands — the question the operator asked of the
    recording ("I want to see if it shown in chart or not") is answered inside the pane itself. */
-.script__hint { margin: 8px 0 0; color: var(--lx-text-2); font-size: 11.5px; line-height: 1.5; }
-.script__hint em { font-style: normal; color: var(--lx-text-1); }
+.script__hint { margin: 8px 0 0; color: var(--lx-fg-muted); font-size: 11.5px; line-height: 1.5; }
+.script__hint em { font-style: normal; color: var(--lx-fg); }
 .script__hint kbd {
-  font: inherit; padding: 0 4px; border: 1px solid var(--lx-border-2);
+  font: inherit; padding: 0 4px; border: 1px solid var(--lx-border-strong);
   border-radius: 4px; background: var(--lx-surface-2);
 }
 
@@ -933,7 +933,7 @@ pre {
   max-height: 380px;
   object-fit: cover;
   object-position: top left;
-  border-radius: var(--lx-radius-3, 10px);
+  border-radius: var(--lx-radius-xl);
   border: 1px solid var(--lx-border);
   background: var(--lx-field-bg);
   margin-bottom: 10px;
@@ -1020,7 +1020,11 @@ pre {
 /* ── The bare-chart fallback strip (3 Oct) ───────────────────────────────────────────────────────
    With no Vela row the drawer / script / full-screen controls have no home; these appear over the
    chart only when the workspace is missing. All three hidden = an empty 0x0 box, invisible. */
-.fallback-strip { position: fixed; top: 8px; right: 8px; z-index: calc(var(--lx-z-modal) - 3); display: flex; gap: 6px; }
+.fallback-strip { position: fixed; top: 8px; right: 8px; z-index: calc(var(--lx-z-modal) - 3); display: flex; gap: 6px;
+  flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 16px); }
+/* The ghost button is transparent: over the chart it printed on top of the symbol header and the price
+   axis (measured at 620 px, 4 Oct). Opaque, and a label never wraps onto a second line. */
+.fallback-strip .btn { background: var(--lx-surface-2); white-space: nowrap; }
 
 /* ── One status dot (3 Oct) — Agent + bars merged ──────────────────────────────────────────────── */
 .status-dot { flex: 0 0 auto; color: var(--lx-fg-faint); font-size: var(--lx-fs-2xs); white-space: nowrap; }

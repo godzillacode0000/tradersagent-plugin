@@ -164,6 +164,8 @@
 .edge-chip .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .edge-chips--scroll { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; margin: 0 -14px; padding: 0 14px 2px; }
 .edge-chips--scroll::-webkit-scrollbar { display: none; }
+/* A row cut at the sheet's edge looked like a rendering fault at 620 px — fade it so it reads as scrollable. */
+.edge-chips--scroll { -webkit-mask-image: linear-gradient(90deg, var(--lx-surface-1) calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, var(--lx-surface-1) calc(100% - 28px), transparent); }
 
 /* ── reports list ──────────────────────────────────────────────────────────────────────────── */
 .edge-search { width: 100%; height: 34px; border-radius: var(--lx-radius-lg); font-size: var(--lx-fs-md); }
