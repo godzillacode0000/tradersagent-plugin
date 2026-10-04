@@ -230,6 +230,10 @@ def record_result(root: str | Path, payload: dict) -> dict:
         # The pane's own "what is on the chart" list (`studies` door): every reader, labelled.
         "studies": payload.get("studies"),
         "doors": payload.get("doors"),
+        # Edge Stats (`edge` door): what the sheet actually shows after the call — view, symbol and the
+        # answer's N / estimate. Named here because the store whitelists: without it the agent is told
+        # "ok" and never what is on screen.
+        "edge": payload.get("edge"),
     }
     if payload.get("shot"):
         path = _decode_shot(root, f"shot-{rid}", str(payload["shot"]))

@@ -1,0 +1,358 @@
+{
+ "entries": [
+  {
+   "name": "gapFill",
+   "kind": "outcome",
+   "title": "Gap fill",
+   "doc": "Of the sessions that opened with a gap, how often price traded back to the prior session's close. Roll days are excluded by construction: a gap across a futures roll is a roll, not a gap.",
+   "examples": [
+    "gapFill",
+    "gapFill WHERE gapPct BETWEEN 0.2% AND 0.6% AND dayOfWeek = Tue",
+    "gapFill WHERE fvgPresent(open, below) AND NOT eventDay('FOMC')"
+   ],
+   "library": [
+    {
+     "kind": "concept",
+     "slug": "gap-fill",
+     "url": "https://www.luxalgo.com/library/concept/gap-fill/"
+    },
+    {
+     "kind": "indicator",
+     "slug": "session-gap-fill",
+     "url": "https://www.luxalgo.com/library/indicator/session-gap-fill/"
+    }
+   ],
+   "args": [],
+   "valueDoc": "Minutes from the open to the fill, among filled sessions.",
+   "valueUnit": "minutes"
+  },
+  {
+   "name": "gapHold",
+   "kind": "outcome",
+   "title": "Gap holds (gap-and-go)",
+   "doc": "Of the sessions that opened with a gap, how often the gap NEVER filled and the session closed beyond its open in the gap's direction: the gap-and-go continuation, measured directly instead of as the complement of the fill rate.",
+   "examples": [
+    "gapHold",
+    "gapHold(up) WHERE gapBucket = l"
+   ],
+   "library": [
+    {
+     "kind": "concept",
+     "slug": "gap-and-go",
+     "url": "https://www.luxalgo.com/library/concept/gap-and-go/"
+    },
+    {
+     "kind": "concept",
+     "slug": "gap-fill",
+     "url": "https://www.luxalgo.com/library/concept/gap-fill/"
+    }
+   ],
+   "args": [
+    {
+     "name": "dir",
+     "type": "enum",
+     "values": [
+      "up",
+      "down",
+      "any"
+     ],
+     "required": false,
+     "default": "any",
+     "doc": "Gap direction to count"
+    }
+   ]
+  },
+  {
+   "name": "gapReversal",
+   "kind": "outcome",
+   "title": "Reversal after gap fill",
+   "doc": "Of the sessions that filled their opening gap, how often the session then closed beyond the prior close against the gap's direction (fill-and-reverse).",
+   "library": [
+    {
+     "kind": "concept",
+     "slug": "gap-fill",
+     "url": "https://www.luxalgo.com/library/concept/gap-fill/"
+    },
+    {
+     "kind": "indicator",
+     "slug": "session-gap-fill",
+     "url": "https://www.luxalgo.com/library/indicator/session-gap-fill/"
+    }
+   ],
+   "args": []
+  },
+  {
+   "name": "closeGreen",
+   "kind": "outcome",
+   "title": "Session closes green",
+   "doc": "How often the session closed above its open, under whatever conditions you compose.",
+   "examples": [
+    "closeGreen WHERE streak(red, 3)",
+    "closeGreen WHERE insideDay"
+   ],
+   "library": [
+    {
+     "kind": "concept",
+     "slug": "session-open-close-behaviors",
+     "url": "https://www.luxalgo.com/library/concept/session-open-close-behaviors/"
+    }
+   ],
+   "args": [],
+   "valueDoc": "Open\u2192close return distribution across eligible sessions.",
+   "valueUnit": "%"
+  },
+  {
+   "name": "nextCloseGreen",
+   "kind": "outcome",
+   "title": "Next session closes green",
+   "doc": "How often the NEXT session closed green given today's conditions: the day-after family of questions as one outcome.",
+   "examples": [
+    "nextCloseGreen WHERE insideDay",
+    "nextCloseGreen WHERE nr7"
+   ],
+   "args": [],
+   "valueDoc": "Next session's open\u2192close return distribution.",
+   "valueUnit": "%"
+  },
+  {
+   "name": "orbBreak",
+   "kind": "outcome",
+   "title": "Opening range break",
+   "doc": "Of the sessions with a formed opening range, how often the range broke in the given direction.",
+   "examples": [
+    "orbBreak(15m, up)",
+    "orbBreak(30m) WHERE gapUp"
+   ],
+   "library": [
+    {
+     "kind": "indicator",
+     "slug": "ultimate-opening-range-breakout",
+     "url": "https://www.luxalgo.com/library/indicator/ultimate-opening-range-breakout/"
+    }
+   ],
+   "args": [
+    {
+     "name": "window",
+     "type": "duration",
+     "required": true,
+     "doc": "Opening-range window, e.g. 15m"
+    },
+    {
+     "name": "dir",
+     "type": "enum",
+     "values": [
+      "up",
+      "down",
+      "any"
+     ],
+     "required": false,
+     "default": "any",
+     "doc": "Break direction to count"
+    }
+   ],
+   "valueDoc": "Minutes from the open to the first break, among breaking sessions.",
+   "valueUnit": "minutes"
+  },
+  {
+   "name": "gapUp",
+   "kind": "predicate",
+   "title": "Gapped up",
+   "doc": "The session opened above the prior session's close.",
+   "library": [
+    {
+     "kind": "concept",
+     "slug": "gap-fill",
+     "url": "https://www.luxalgo.com/library/concept/gap-fill/"
+    }
+   ],
+   "args": []
+  },
+  {
+   "name": "gapDown",
+   "kind": "predicate",
+   "title": "Gapped down",
+   "doc": "The session opened below the prior session's close.",
+   "args": []
+  },
+  {
+   "name": "noGap",
+   "kind": "predicate",
+   "title": "No gap",
+   "doc": "The session opened exactly at the prior session's close (or gap data is unavailable).",
+   "args": []
+  },
+  {
+   "name": "orbBroke",
+   "kind": "predicate",
+   "title": "Opening range broke",
+   "doc": "The session broke its opening range (first n minutes) in the given direction after the range formed.",
+   "examples": [
+    "closeGreen WHERE orbBroke(15m, up)"
+   ],
+   "library": [
+    {
+     "kind": "indicator",
+     "slug": "ultimate-opening-range-breakout",
+     "url": "https://www.luxalgo.com/library/indicator/ultimate-opening-range-breakout/"
+    }
+   ],
+   "args": [
+    {
+     "name": "window",
+     "type": "duration",
+     "required": true,
+     "doc": "Opening-range window, e.g. 15m"
+    },
+    {
+     "name": "dir",
+     "type": "enum",
+     "values": [
+      "up",
+      "down",
+      "any"
+     ],
+     "required": false,
+     "default": "any",
+     "doc": "Break direction"
+    }
+   ]
+  },
+  {
+   "name": "orbFalseBroke",
+   "kind": "predicate",
+   "title": "Opening range false break (condition)",
+   "doc": "The first opening-range break failed: price closed back inside the range (or beyond the opposite side). Condition form of the orbFalseBreak outcome.",
+   "args": [
+    {
+     "name": "window",
+     "type": "duration",
+     "required": true,
+     "doc": "Opening-range window, e.g. 15m"
+    },
+    {
+     "name": "dir",
+     "type": "enum",
+     "values": [
+      "up",
+      "down",
+      "any"
+     ],
+     "required": false,
+     "default": "any",
+     "doc": "Direction of the failed break"
+    }
+   ]
+  },
+  {
+   "name": "orbBrokeBoth",
+   "kind": "predicate",
+   "title": "Opening range broke both sides",
+   "doc": "The session traded beyond both extremes of its opening range.",
+   "args": [
+    {
+     "name": "window",
+     "type": "duration",
+     "required": true,
+     "doc": "Opening-range window"
+    }
+   ]
+  },
+  {
+   "name": "dayOfWeek",
+   "kind": "field",
+   "title": "Day of week",
+   "doc": "Weekday of the session's trade date (Mon\u2013Sun). The classic seasonality cut: any query can be grouped or filtered by it.",
+   "examples": [
+    "gapFill WHERE dayOfWeek = Tue",
+    "closeGreen GROUP BY dayOfWeek"
+   ],
+   "library": [
+    {
+     "kind": "indicator",
+     "slug": "seasonality-widget",
+     "url": "https://www.luxalgo.com/library/indicator/seasonality-widget/"
+    },
+    {
+     "kind": "indicator",
+     "slug": "asset-class-seasonality",
+     "url": "https://www.luxalgo.com/library/indicator/asset-class-seasonality/"
+    }
+   ],
+   "valueType": "enum",
+   "enumValues": [
+    "Mon",
+    "Tue",
+    "Wed",
+    "Thu",
+    "Fri",
+    "Sat",
+    "Sun"
+   ],
+   "groupable": true
+  },
+  {
+   "name": "month",
+   "kind": "field",
+   "title": "Month",
+   "doc": "Calendar month of the trade date (1\u201312), for monthly seasonality cuts.",
+   "library": [
+    {
+     "kind": "indicator",
+     "slug": "seasonality-chart",
+     "url": "https://www.luxalgo.com/library/indicator/seasonality-chart/"
+    }
+   ],
+   "valueType": "number",
+   "unit": "count",
+   "groupable": true
+  },
+  {
+   "name": "year",
+   "kind": "field",
+   "title": "Year",
+   "doc": "Calendar year of the trade date. Grouping by year is the manual stability check.",
+   "valueType": "number",
+   "unit": "count",
+   "groupable": true
+  },
+  {
+   "name": "rangePct",
+   "kind": "field",
+   "title": "Session range %",
+   "doc": "Session high-to-low range as a percent of the session's open.",
+   "valueType": "number",
+   "unit": "%"
+  },
+  {
+   "name": "retOcPct",
+   "kind": "field",
+   "title": "Open\u2192close return %",
+   "doc": "Session return from open to close, in percent (signed).",
+   "library": [
+    {
+     "kind": "concept",
+     "slug": "session-open-close-behaviors",
+     "url": "https://www.luxalgo.com/library/concept/session-open-close-behaviors/"
+    }
+   ],
+   "valueType": "number",
+   "unit": "%"
+  },
+  {
+   "name": "green",
+   "kind": "field",
+   "title": "Green session",
+   "doc": "True when the session closed above its open.",
+   "library": [
+    {
+     "kind": "indicator",
+     "slug": "session-streaks",
+     "url": "https://www.luxalgo.com/library/indicator/session-streaks/"
+    }
+   ],
+   "valueType": "boolean",
+   "groupable": true
+  }
+ ],
+ "_note": "first six of each kind, from edgestats 0.1.0"
+}

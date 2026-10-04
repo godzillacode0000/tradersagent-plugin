@@ -33,9 +33,13 @@ for fam in pinets vela vela-pinets zag; do
   mkdir -p "$LIVE/frontend/vendor/$fam"
   cp -r "$HERE/console/frontend/vendor/$fam/." "$LIVE/frontend/vendor/$fam/"
 done
-cp "$HERE"/console/backend/{server.py,chart_bridge.py,chart_stream.py,agents_store.py,chat.py,backtest_service.py,library_thumbs.py,broker.py} \
+cp "$HERE"/console/backend/{server.py,chart_bridge.py,chart_stream.py,agents_store.py,chat.py,backtest_service.py,library_thumbs.py,broker.py,edgestats.py} \
   "$LIVE/backend/"
 cp "$HERE"/console/bin/trader-chart "$LIVE/bin/trader-chart"
+# `trader-chart edge …` prints through the same renderer the MCP tools use. The live tree has no mcp/
+# folder (the MCP server runs from the repo checkout), so the module travels beside the CLI — which
+# looks next to itself first (see _edge_text in trader-chart).
+cp "$HERE"/console/mcp/edge_text.py "$LIVE/bin/edge_text.py"
 chmod +x "$LIVE/bin/trader-chart"
 
 echo "synced repo → $LIVE"

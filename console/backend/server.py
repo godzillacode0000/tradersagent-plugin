@@ -73,6 +73,7 @@ from chart_bridge import (save_state as save_chart_state, load_state as load_cha
                           commands_since as chart_commands_since,
                           record_result as record_chart_result, get_result as get_chart_result)
 from chart_stream import ChartStream
+import edgestats
 
 # The push channel: chart views attach to /api/chart/stream and commands are pushed down it, so an
 # agent command no longer waits for the page's 2s poll (see chart_stream.py).
@@ -1069,7 +1070,7 @@ def ep_agents(params: dict) -> dict:
 # already — "overlay" sat here with no matching case in frontend/chart-bridge.js, so the command
 # passed this check, got an HTTP 200, and the page replied "unknown action" with nothing done.
 CHART_ACTIONS_FALLBACK = {"apply", "add", "market", "shot", "draw", "clear", "probe", "reload",
-                         "mode", "script", "rect", "replay", "drawing", "view", "marks"}
+                         "mode", "script", "rect", "replay", "drawing", "view", "marks", "edge"}
 
 
 def chart_actions() -> set:
@@ -1389,8 +1390,63 @@ def ep_broker(params: dict) -> dict:
     return broker_action("state", {}, from_page=False)
 
 
+# ── Edge Stats (LuxAlgo/edge-stats, optional local engine — console/backend/edgestats.py) ────────────
+# The console is a proxy and a supervisor here, never a calculator: every number comes from the engine.
+# Reads are GETs (Host-gated like everything else); questions, downloads and cancels are POSTs, so they
+# need the token like every other write. An EdgeError becomes an ApiError with the engine's own hint,
+# and a machine without Node or without data is an ANSWER (`overview.reason`), not a fault.
+
+
+def _edge(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except edgestats.EdgeError as exc:
+        raise ApiError(exc.message, exc.status, exc.code, exc.as_detail() or None)
+
+
+def ep_edgestats_status(params: dict) -> dict:
+    return edgestats.status()
+
+
+def ep_edgestats_overview(params: dict) -> dict:
+    return edgestats.overview()
+
+
+def ep_edgestats_registry(params: dict) -> dict:
+    return _edge(edgestats.registry, _one(params, "kind") or "")
+
+
+def ep_edgestats_presets(params: dict) -> dict:
+    return _edge(edgestats.presets)
+
+
+def ep_edgestats_session(params: dict) -> dict:
+    ctx = _one(params, "context")
+    return _edge(edgestats.session_bars, _one(params, "id", required=True), 30 if ctx is None else ctx)
+
+
+def edgestats_action(action: str, body: dict) -> dict:
+    """The POST side: one table, so an unknown action is a 404 and not a silent no-op."""
+    table = {
+        "query": lambda: edgestats.query(body),
+        "preset": lambda: edgestats.preset(body),
+        "sessions": lambda: edgestats.sessions(body.get("ids")),
+        "setup": lambda: edgestats.setup(body),
+        "cancel": lambda: edgestats.cancel_job(),
+    }
+    if action not in table:
+        raise ApiError(f"unknown Edge Stats action: {action}", 404, "unknown_endpoint",
+                       {"available": sorted(table)})
+    return _edge(table[action])
+
+
 ROUTES = {
     "/api/broker": (ep_broker, 0.0),
+    "/api/edgestats/status": (ep_edgestats_status, 0.0),
+    "/api/edgestats/overview": (ep_edgestats_overview, 0.0),
+    "/api/edgestats/registry": (ep_edgestats_registry, 0.0),
+    "/api/edgestats/presets": (ep_edgestats_presets, 0.0),
+    "/api/edgestats/session": (ep_edgestats_session, 0.0),
     "/api/health": (ep_health, 0.0),
     "/api/build": (ep_build, 0.0),
     "/api/agents": (ep_agents, 0.0),
@@ -1430,6 +1486,11 @@ API_INDEX = {
     "mcp": DEFAULT_MCP_URL,
     "endpoints": [
         {"path": "/api/broker", "params": [], "upstream": None},
+        {"path": "/api/edgestats/status", "params": [], "upstream": None},
+        {"path": "/api/edgestats/overview", "params": [], "upstream": "edgestats serve"},
+        {"path": "/api/edgestats/registry", "params": ["kind?"], "upstream": "edgestats serve"},
+        {"path": "/api/edgestats/presets", "params": [], "upstream": "edgestats serve"},
+        {"path": "/api/edgestats/session", "params": ["id", "context?"], "upstream": "edgestats serve"},
         {"path": "/api/health", "params": ["probe?"], "upstream": None},
         {"path": "/api/search", "params": ["q", "type?", "family?", "limit?"], "upstream": "library_search"},
         {"path": "/api/indicators", "params": ["family?", "text?", "concept?", "tier?", "sort?", "direction?", "page?", "page_size?"], "upstream": "library_list_indicators"},
@@ -1846,6 +1907,9 @@ class Handler(BaseHTTPRequestHandler):
                                           title=str(payload.get("title", "note")),
                                           body=str(payload.get("body", "")))
                 self._ok({"written": written, "agent": load_study(AGENTS_ROOT, sid)})
+                return
+            if path.startswith("/api/edgestats/"):
+                self._ok(edgestats_action(path[len("/api/edgestats/"):].strip("/"), payload))
                 return
             if path.startswith("/api/broker"):
                 # A browser sets Origin on every POST; the MCP, the CLI and curl do not. _origin_ok has

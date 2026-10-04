@@ -1,0 +1,40 @@
+{
+ "symbols": [
+  {
+   "symbol": "DEMO_STK",
+   "adapter": "synthetic",
+   "assetClass": "equity",
+   "tf": "1m",
+   "orWindows": [
+    5,
+    10,
+    15,
+    30,
+    60
+   ],
+   "ibWindow": 60,
+   "adapterOptions": {
+    "profile": "equity",
+    "seed": 42
+   }
+  },
+  {
+   "symbol": "DEMO_FUT",
+   "adapter": "synthetic",
+   "assetClass": "future",
+   "tf": "1m",
+   "orWindows": [
+    5,
+    10,
+    15,
+    30,
+    60
+   ],
+   "ibWindow": 60,
+   "adapterOptions": {
+    "profile": "future",
+    "seed": 1337
+   }
+  }
+ ]
+}

@@ -1,0 +1,181 @@
+{
+ "engine": {
+  "version": "0.1.0",
+  "storeFingerprint": "79763594fe94",
+  "calendarVersion": "427e1cdc5046"
+ },
+ "query": {
+  "dsl": "gapFill",
+  "ast": {
+   "outcome": {
+    "name": "gapFill",
+    "args": []
+   }
+  },
+  "outcome": "gapFill",
+  "symbol": "DEMO_STK",
+  "sessionKey": "rth",
+  "since": null,
+  "until": null
+ },
+ "n": 495,
+ "successes": 421,
+ "estimate": 0.8505,
+ "ci95": [
+  0.8164,
+  0.8792
+ ],
+ "guards": {
+  "lowSample": false,
+  "refused": false,
+  "warnFloor": 30,
+  "refuseFloor": 10
+ },
+ "stability": {
+  "firstHalf": {
+   "n": 247,
+   "k": 215,
+   "estimate": 0.8704453441295547,
+   "ci95": [
+    0.8228296521349049,
+    0.9067148213359323
+   ]
+  },
+  "secondHalf": {
+   "n": 248,
+   "k": 206,
+   "estimate": 0.8306451612903226,
+   "ci95": [
+    0.7790055181404133,
+    0.8721978252962391
+   ]
+  },
+  "agree": true
+ },
+ "perYear": [
+  {
+   "year": 2023,
+   "n": 247,
+   "successes": 215,
+   "estimate": 0.8704
+  },
+  {
+   "year": 2024,
+   "n": 248,
+   "successes": 206,
+   "estimate": 0.8306
+  }
+ ],
+ "recency": {
+  "window": 250,
+  "n": 250,
+  "successes": 208,
+  "estimate": 0.832,
+  "ci95": [
+   0.7807,
+   0.8732
+  ],
+  "diverges": false
+ },
+ "distribution": {
+  "count": 421,
+  "mean": 28.5606,
+  "min": 0,
+  "p25": 0,
+  "median": 1,
+  "p75": 10,
+  "p90": 80,
+  "max": 389,
+  "unit": "minutes"
+ },
+ "groups": [
+  {
+   "group": "Fri",
+   "n": 101,
+   "successes": 88,
+   "estimate": 0.8713,
+   "ci95": [
+    0.7922,
+    0.9232
+   ],
+   "lowSample": false
+  },
+  {
+   "group": "Mon",
+   "n": 92,
+   "successes": 81,
+   "estimate": 0.8804,
+   "ci95": [
+    0.7985,
+    0.9319
+   ],
+   "lowSample": false
+  },
+  {
+   "group": "Thu",
+   "n": 100,
+   "successes": 87,
+   "estimate": 0.87,
+   "ci95": [
+    0.7902,
+    0.9224
+   ],
+   "lowSample": false
+  },
+  {
+   "group": "Tue",
+   "n": 102,
+   "successes": 81,
+   "estimate": 0.7941,
+   "ci95": [
+    0.7057,
+    0.8612
+   ],
+   "lowSample": false
+  },
+  {
+   "group": "Wed",
+   "n": 100,
+   "successes": 84,
+   "estimate": 0.84,
+   "ci95": [
+    0.7558,
+    0.899
+   ],
+   "lowSample": false
+  }
+ ],
+ "sessions": [
+  {
+   "sessionId": "DEMO_STK|rth|2024-12-30",
+   "tradeDate": "2024-12-30",
+   "success": true,
+   "value": 0
+  },
+  {
+   "sessionId": "DEMO_STK|rth|2024-12-27",
+   "tradeDate": "2024-12-27",
+   "success": true,
+   "value": 1
+  },
+  {
+   "sessionId": "DEMO_STK|rth|2024-12-26",
+   "tradeDate": "2024-12-26",
+   "success": true,
+   "value": 0
+  },
+  {
+   "sessionId": "DEMO_STK|rth|2024-12-24",
+   "tradeDate": "2024-12-24",
+   "success": false,
+   "value": null
+  }
+ ],
+ "disclaimer": "Historical conditional frequencies with sample sizes. Not predictions, not advice.",
+ "preset": {
+  "id": "gap-fill",
+  "version": 1,
+  "title": "Gap Fill",
+  "params": {}
+ }
+}

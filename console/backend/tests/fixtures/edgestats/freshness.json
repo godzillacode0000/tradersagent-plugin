@@ -1,0 +1,39 @@
+{
+ "symbols": [
+  {
+   "symbol": "DEMO_STK",
+   "tf": "1m",
+   "adapter": "synthetic",
+   "lastBar": "2024-12-30T20:59:00.000Z",
+   "lastBarMs": 1735592340000
+  },
+  {
+   "symbol": "DEMO_FUT",
+   "tf": "1m",
+   "adapter": "synthetic",
+   "lastBar": "2024-12-30T21:59:00.000Z",
+   "lastBarMs": 1735595940000
+  }
+ ],
+ "calendars": [
+  {
+   "exchange": "CME",
+   "version": "2026-08.1",
+   "coverage": {
+    "from": "2010-01-01",
+    "to": "2027-12-31"
+   }
+  },
+  {
+   "exchange": "NYSE",
+   "version": "2026-08.1",
+   "coverage": {
+    "from": "2010-01-01",
+    "to": "2027-12-31"
+   }
+  }
+ ],
+ "calendarHash": "427e1cdc5046",
+ "engineVersion": "0.1.0",
+ "storeFingerprint": "79763594fe94"
+}

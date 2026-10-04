@@ -1,0 +1,173 @@
+{
+ "presets": [
+  {
+   "id": "day-after-event",
+   "version": 1,
+   "title": "Day After an Event",
+   "category": "events",
+   "summary": "Of the sessions whose PREVIOUS trading session was an event day in the named calendar, how often the session closed above its open. Adjacency is trading-calendar aware, so weekends and holidays never miscount which session came after the event. The default calendar is OPEX because it ships with the engine; any other named calendar reports zero matching sessions until its date file is present.",
+   "outcome": "closeGreen",
+   "params": [
+    {
+     "name": "event",
+     "type": "string",
+     "default": "OPEX",
+     "doc": "Event calendar name as listed in the events data (e.g. OPEX, FOMC, CPI, NFP).",
+     "fragment": "dayAfterEvent({value})",
+     "target": "where"
+    }
+   ],
+   "deltas": [
+    "one parameterized preset covers the entire post-event family",
+    "holiday-aware adjacency instead of calendar-day arithmetic",
+    "open-to-close return distribution attached for the size of the after-move"
+   ],
+   "library": []
+  },
+  {
+   "id": "day-before-event",
+   "version": 1,
+   "title": "Day Before an Event",
+   "category": "events",
+   "summary": "Of the sessions whose NEXT trading session is an event day in the named calendar, how often the session closed above its open. 'Next' is trading-calendar aware: a Thursday counts as the day before a Monday event when Friday is a holiday: not naive date arithmetic. The default calendar is OPEX because it ships with the engine; point the parameter at FOMC, CPI, NFP, or any calendar file you add, and the preset reports zero matching sessions until that file is present.",
+   "outcome": "closeGreen",
+   "params": [
+    {
+     "name": "event",
+     "type": "string",
+     "default": "OPEX",
+     "doc": "Event calendar name as listed in the events data (e.g. OPEX, FOMC, CPI, NFP).",
+     "fragment": "dayBeforeEvent({value})",
+     "target": "where"
+    }
+   ],
+   "deltas": [
+    "one parameterized preset covers the entire pre-event family",
+    "holiday-aware adjacency instead of calendar-day arithmetic",
+    "user-supplied event files (earnings, expiries, your own day tags) work identically"
+   ],
+   "library": []
+  },
+  {
+   "id": "day-of-week",
+   "version": 1,
+   "title": "Green Rate by Weekday",
+   "category": "seasonality",
+   "summary": "The share of sessions closing above their open, split by weekday. Each row's denominator is every complete session on that weekday in your data; the numerator is the green ones. Weekday folklore is abundant and mostly noise: the per-row intervals and the stability split are the test, and the attached open-to-close return distribution shows whether a 'strong day' is a rate effect or a size effect.",
+   "outcome": "closeGreen",
+   "params": [],
+   "groupBy": "dayOfWeek",
+   "deltas": [
+    "per-weekday N and 95% CI instead of five bare percentages",
+    "return distribution alongside the rate separates frequency from magnitude",
+    "condition the whole split on anything: gaps, events, volatility regime"
+   ],
+   "library": [
+    {
+     "kind": "indicator",
+     "slug": "seasonality-widget"
+    },
+    {
+     "kind": "indicator",
+     "slug": "asset-class-seasonality"
+    }
+   ]
+  },
+  {
+   "id": "doji-follow-through",
+   "version": 1,
+   "title": "Doji Follow-Through",
+   "category": "session-shape",
+   "summary": "Of the sessions that closed as a session-level doji: close within 10% of the session range from the open: how often the NEXT session closed green. The denominator is doji sessions with a next session on record; the numerator is the ones followed by a green close. A doji is an indecision flag, so the informative comparison is against the unconditional next-session green rate: a doji that changes nothing is itself a finding.",
+   "outcome": "nextCloseGreen",
+   "where": "doji",
+   "params": [],
+   "deltas": [
+    "a stated, reproducible doji definition instead of an eyeballed one",
+    "next-session return distribution attached alongside the rate",
+    "compose with gap state or weekday to test the pattern in context"
+   ],
+   "library": [
+    {
+     "kind": "concept",
+     "slug": "candlestick-patterns"
+    }
+   ]
+  },
+  {
+   "id": "engulfing-bear",
+   "version": 1,
+   "title": "Bearish Engulfing Follow-Through",
+   "category": "session-shape",
+   "summary": "Of the sessions whose red body engulfed the prior green session's body: a session-level bearish engulfing candle: how often the NEXT session closed green. The denominator is engulfing sessions with a next session on record; the numerator is the ones followed by a green close, so a LOW estimate is what the pattern's usual story predicts. Rare patterns mean small N: the guards and intervals are part of the answer, not decoration.",
+   "outcome": "nextCloseGreen",
+   "where": "bearEngulfing",
+   "params": [],
+   "deltas": [
+    "the exact mirror of engulfing-bull, on one definition, so the asymmetry is measurable",
+    "minimum-N guards and CIs keep rare-pattern statistics honest",
+    "compose with trend or streak conditions to test the context the textbooks assume"
+   ],
+   "library": [
+    {
+     "kind": "concept",
+     "slug": "engulfing-bar"
+    },
+    {
+     "kind": "concept",
+     "slug": "candlestick-patterns"
+    }
+   ]
+  },
+  {
+   "id": "engulfing-bull",
+   "version": 1,
+   "title": "Bullish Engulfing Follow-Through",
+   "category": "session-shape",
+   "summary": "Of the sessions whose green body engulfed the prior red session's body: a session-level bullish engulfing candle: how often the NEXT session closed green. The denominator is engulfing sessions with a next session on record; the numerator is the ones followed by a green close. Session-level engulfings are much rarer than intraday ones: expect small N, and let the guards, not the point estimate, set the tone when the sample is thin.",
+   "outcome": "nextCloseGreen",
+   "where": "bullEngulfing",
+   "params": [],
+   "deltas": [
+    "an explicit engulfing definition (body engulfs prior red body) instead of chart-by-chart judgment",
+    "minimum-N guards and CIs keep rare-pattern statistics honest",
+    "next-session return distribution attached alongside the rate"
+   ],
+   "library": [
+    {
+     "kind": "concept",
+     "slug": "engulfing-bar"
+    },
+    {
+     "kind": "concept",
+     "slug": "candlestick-patterns"
+    }
+   ]
+  },
+  {
+   "id": "day-after-event",
+   "version": 1,
+   "title": "Day After an Event",
+   "category": "events",
+   "summary": "Of the sessions whose PREVIOUS trading session was an event day in the named calendar, how often the session closed above its open. Adjacency is trading-calendar aware, so weekends and holidays never miscount which session came after the event. The default calendar is OPEX because it ships with the engine; any other named calendar reports zero matching sessions until its date file is present.",
+   "outcome": "closeGreen",
+   "params": [
+    {
+     "name": "event",
+     "type": "string",
+     "default": "OPEX",
+     "doc": "Event calendar name as listed in the events data (e.g. OPEX, FOMC, CPI, NFP).",
+     "fragment": "dayAfterEvent({value})",
+     "target": "where"
+    }
+   ],
+   "deltas": [
+    "one parameterized preset covers the entire post-event family",
+    "holiday-aware adjacency instead of calendar-day arithmetic",
+    "open-to-close return distribution attached for the size of the after-move"
+   ],
+   "library": []
+  }
+ ],
+ "_note": "first six presets + one with a parameter"
+}

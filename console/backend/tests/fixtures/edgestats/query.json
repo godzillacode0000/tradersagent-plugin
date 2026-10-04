@@ -1,0 +1,133 @@
+{
+ "engine": {
+  "version": "0.1.0",
+  "storeFingerprint": "79763594fe94",
+  "calendarVersion": "427e1cdc5046"
+ },
+ "query": {
+  "dsl": "gapFill WHERE dayOfWeek = Tue",
+  "ast": {
+   "outcome": {
+    "name": "gapFill",
+    "args": []
+   },
+   "where": {
+    "t": "cmp",
+    "left": {
+     "name": "dayOfWeek",
+     "args": []
+    },
+    "op": "=",
+    "right": {
+     "t": "word",
+     "v": "Tue"
+    }
+   }
+  },
+  "outcome": "gapFill",
+  "symbol": "DEMO_STK",
+  "sessionKey": "rth",
+  "since": null,
+  "until": null
+ },
+ "n": 102,
+ "successes": 81,
+ "estimate": 0.7941,
+ "ci95": [
+  0.7057,
+  0.8612
+ ],
+ "guards": {
+  "lowSample": false,
+  "refused": false,
+  "warnFloor": 30,
+  "refuseFloor": 10
+ },
+ "stability": {
+  "firstHalf": {
+   "n": 51,
+   "k": 45,
+   "estimate": 0.8823529411764706,
+   "ci95": [
+    0.7661915568567753,
+    0.9449492632208182
+   ]
+  },
+  "secondHalf": {
+   "n": 51,
+   "k": 36,
+   "estimate": 0.7058823529411765,
+   "ci95": [
+    0.5700092442431359,
+    0.8129127357986454
+   ]
+  },
+  "agree": true
+ },
+ "perYear": [
+  {
+   "year": 2023,
+   "n": 50,
+   "successes": 44,
+   "estimate": 0.88
+  },
+  {
+   "year": 2024,
+   "n": 52,
+   "successes": 37,
+   "estimate": 0.7115
+  }
+ ],
+ "recency": null,
+ "distribution": {
+  "count": 81,
+  "mean": 28.8889,
+  "min": 0,
+  "p25": 0,
+  "median": 1,
+  "p75": 16,
+  "p90": 100,
+  "max": 369,
+  "unit": "minutes"
+ },
+ "groups": null,
+ "sessions": [
+  {
+   "sessionId": "DEMO_STK|rth|2024-12-24",
+   "tradeDate": "2024-12-24",
+   "success": false,
+   "value": null
+  },
+  {
+   "sessionId": "DEMO_STK|rth|2024-12-17",
+   "tradeDate": "2024-12-17",
+   "success": true,
+   "value": 0
+  },
+  {
+   "sessionId": "DEMO_STK|rth|2024-12-10",
+   "tradeDate": "2024-12-10",
+   "success": false,
+   "value": null
+  },
+  {
+   "sessionId": "DEMO_STK|rth|2024-12-03",
+   "tradeDate": "2024-12-03",
+   "success": false,
+   "value": null
+  },
+  {
+   "sessionId": "DEMO_STK|rth|2024-11-26",
+   "tradeDate": "2024-11-26",
+   "success": true,
+   "value": 100
+  },
+  {
+   "sessionId": "DEMO_STK|rth|2024-11-19",
+   "tradeDate": "2024-11-19",
+   "success": false,
+   "value": null
+  }
+ ],
+ "disclaimer": "Historical conditional frequencies with sample sizes. Not predictions, not advice."
+}

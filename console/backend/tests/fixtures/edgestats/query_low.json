@@ -1,0 +1,134 @@
+{
+ "engine": {
+  "version": "0.1.0",
+  "storeFingerprint": "79763594fe94",
+  "calendarVersion": "427e1cdc5046"
+ },
+ "query": {
+  "dsl": "gapFill WHERE dayOfWeek = Tue AND gapPct BETWEEN 0.05% AND 0.06%",
+  "ast": {
+   "outcome": {
+    "name": "gapFill",
+    "args": []
+   },
+   "where": {
+    "t": "and",
+    "items": [
+     {
+      "t": "cmp",
+      "left": {
+       "name": "dayOfWeek",
+       "args": []
+      },
+      "op": "=",
+      "right": {
+       "t": "word",
+       "v": "Tue"
+      }
+     },
+     {
+      "t": "between",
+      "left": {
+       "name": "gapPct",
+       "args": []
+      },
+      "lo": {
+       "t": "num",
+       "v": 0.05,
+       "unit": "%"
+      },
+      "hi": {
+       "t": "num",
+       "v": 0.06,
+       "unit": "%"
+      }
+     }
+    ]
+   }
+  },
+  "outcome": "gapFill",
+  "symbol": "DEMO_STK",
+  "sessionKey": "rth",
+  "since": null,
+  "until": null
+ },
+ "n": 3,
+ "successes": 2,
+ "estimate": null,
+ "ci95": null,
+ "guards": {
+  "lowSample": true,
+  "refused": true,
+  "warnFloor": 30,
+  "refuseFloor": 10
+ },
+ "stability": {
+  "firstHalf": {
+   "n": 1,
+   "k": 1,
+   "estimate": 1,
+   "ci95": [
+    0.20654931437723745,
+    1
+   ]
+  },
+  "secondHalf": {
+   "n": 2,
+   "k": 1,
+   "estimate": 0.5,
+   "ci95": [
+    0.09453120573423074,
+    0.9054687942657693
+   ]
+  },
+  "agree": true
+ },
+ "perYear": [
+  {
+   "year": 2023,
+   "n": 2,
+   "successes": 2,
+   "estimate": 1
+  },
+  {
+   "year": 2024,
+   "n": 1,
+   "successes": 0,
+   "estimate": 0
+  }
+ ],
+ "recency": null,
+ "distribution": {
+  "count": 2,
+  "mean": 1.5,
+  "min": 0,
+  "p25": 0.75,
+  "median": 1.5,
+  "p75": 2.25,
+  "p90": 2.7,
+  "max": 3,
+  "unit": "minutes"
+ },
+ "groups": null,
+ "sessions": [
+  {
+   "sessionId": "DEMO_STK|rth|2024-02-13",
+   "tradeDate": "2024-02-13",
+   "success": false,
+   "value": null
+  },
+  {
+   "sessionId": "DEMO_STK|rth|2023-07-11",
+   "tradeDate": "2023-07-11",
+   "success": true,
+   "value": 3
+  },
+  {
+   "sessionId": "DEMO_STK|rth|2023-06-13",
+   "tradeDate": "2023-06-13",
+   "success": true,
+   "value": 0
+  }
+ ],
+ "disclaimer": "Historical conditional frequencies with sample sizes. Not predictions, not advice."
+}

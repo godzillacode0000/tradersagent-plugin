@@ -5,6 +5,9 @@
 #   ./install.sh --doctor           check interpreter, console port, service, plugin folder
 #   ./install.sh --with-backtest    also install the optional vectorbt backtesting engine
 #                                   into ~/.local/share/traders-agent/bt/venv (~840 MB, once)
+#   ./install.sh --with-edge        also install LuxAlgo's open-source Edge Stats engine (MIT, pinned
+#                                   commit) into ~/.local/share/traders-agent/edge/engine (~300 MB,
+#                                   needs Node 20+ and git; the pane's Edge Stats view uses it)
 #   ./install.sh --vendor           also fetch LuxAlgo's pinned browser builds into
 #                                   console/frontend/vendor/ for offline use (not tracked by git)
 #   HERMES_HOME=/path ./install.sh  install into another Hermes home
@@ -39,6 +42,13 @@ if [[ "${1:-}" == "--doctor" ]]; then
   fi
   check "plugin deployed" "test -f \"$DST/plugin.js\""
   check "desk skill deployed" "test -f \"$HERMES_HOME/skills/trading/trader-desk/SKILL.md\""
+  # Optional pieces are reported, never failed: a machine without them is a normal install.
+  EDGE_HOME="${TRADERS_EDGE_HOME:-$HOME/.local/share/traders-agent/edge}"
+  if [[ -x "$EDGE_HOME/engine/node_modules/.bin/tsx" ]]; then
+    echo "  ok  Edge Stats engine installed (optional)"
+  else
+    echo "  --  Edge Stats engine not installed (optional: ./install.sh --with-edge)"
+  fi
   if [[ $fail -ne 0 ]]; then
     echo "one or more checks failed — start the console (./console/start.sh or the user unit) and ./install.sh"
     exit 1
@@ -75,6 +85,59 @@ if [[ " $* " == *" --with-backtest "* ]]; then
     echo "done. start it with:"
     echo "  ~/.local/share/traders-agent/bt/venv/bin/python console/backend/backtest_service.py --port 8788"
   fi
+fi
+
+if [[ " $* " == *" --with-edge "* ]]; then
+  # Optional, and never a default — the same shape as --with-backtest: NOT bundled, fetched once into
+  # its own folder, so the console stays stdlib-only and the plugin works with or without it. This is
+  # LuxAlgo/edge-stats (MIT): P(outcome | conditions) with the sample size and a Wilson 95% interval on
+  # every number, computed over bars you download yourself. The commit is PINNED (the console pins the
+  # same one — a test fails if the two drift), so an upstream change never reaches a user unreviewed.
+  # See THIRD-PARTY.md.
+  EDGE_COMMIT="a48259887962d0f67a27d2b0815e2df9a52efca5"
+  EDGE_HOME="${TRADERS_EDGE_HOME:-$HOME/.local/share/traders-agent/edge}"
+  EDGE_DIR="${EDGESTATS_ENGINE:-$EDGE_HOME/engine}"
+
+  if ! command -v node >/dev/null 2>&1; then
+    echo "Edge Stats needs Node.js 20 or newer (https://nodejs.org) — install it, then run this again" >&2
+    exit 1
+  fi
+  NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+  if [[ "$NODE_MAJOR" -lt 20 ]]; then
+    echo "Edge Stats needs Node.js 20 or newer; found $(node --version) — upgrade it, then run this again" >&2
+    exit 1
+  fi
+  if ! command -v git >/dev/null 2>&1; then
+    echo "Edge Stats needs git to fetch the pinned commit" >&2
+    exit 1
+  fi
+  # pnpm: use it if present, else corepack (ships with Node), else npx. The repo pins pnpm 11.
+  if command -v pnpm >/dev/null 2>&1; then PNPM=(pnpm)
+  elif command -v corepack >/dev/null 2>&1; then PNPM=(corepack pnpm)
+  else PNPM=(npx --yes pnpm@11.0.8); fi
+
+  if [[ -x "$EDGE_DIR/node_modules/.bin/tsx" ]] && \
+     [[ "$(git -C "$EDGE_DIR" rev-parse HEAD 2>/dev/null || true)" == "$EDGE_COMMIT" ]]; then
+    echo "Edge Stats engine already installed at $EDGE_DIR (pinned ${EDGE_COMMIT:0:7}) — skipping"
+  else
+    echo "installing the Edge Stats engine (LuxAlgo/edge-stats @ ${EDGE_COMMIT:0:7}) into $EDGE_DIR — needs the network once"
+    mkdir -p "$(dirname "$EDGE_DIR")"
+    if [[ ! -d "$EDGE_DIR/.git" ]]; then
+      git clone --quiet https://github.com/LuxAlgo/edge-stats "$EDGE_DIR"
+    else
+      git -C "$EDGE_DIR" fetch --quiet origin
+    fi
+    git -C "$EDGE_DIR" checkout --quiet --detach "$EDGE_COMMIT"
+    (cd "$EDGE_DIR" && "${PNPM[@]}" install --frozen-lockfile --silent)
+    # Prove it starts before saying it is installed: a half-installed engine would otherwise first
+    # fail inside the pane, where the cause is invisible.
+    if ! (cd "$EDGE_DIR" && node_modules/.bin/tsx packages/cli/src/index.ts --help >/dev/null 2>&1); then
+      echo "the engine installed but does not start — try: cd $EDGE_DIR && node_modules/.bin/tsx packages/cli/src/index.ts --help" >&2
+      exit 1
+    fi
+    echo "Edge Stats engine installed -> $EDGE_DIR"
+  fi
+  echo "next: open the pane, ⋯ -> Edge Stats, and load the demo data (or download BTCUSDT)"
 fi
 
 if [[ "${1:-}" == "--vendor" ]]; then
