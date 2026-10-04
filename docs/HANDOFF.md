@@ -46,12 +46,16 @@ native tools.
 
 Versions: Hermes Desktop 0.21.5, console `SERVER_VERSION = 1.0.0`. CI was red from
 28 Sep (`1f9d340`) to 2 Oct (`8df6e2e` — a stale MCP test only CI could see); green since `ab3708b`, and
-green on every ship below. **546 backend tests** (+43 skipped), 8 plugin contributions across 5 areas.
+green on every ship below. **555 backend tests** (+43 skipped), 8 plugin contributions across 5 areas.
 Shipped since this file was written: the paper broker (Phase 5), replay (6/6b), the top-bar one-door
 consolidation, the drawer as the single Library surface, and Phase 7 — three agent doors into Vela
 (`chart_drawing` 76 types / `chart_view` settings / `chart_marks`), 45 MCP tools. 4 Oct: the top row
 now rebuilds only when a visible label changes (a replay tick used to rebuild it ~8×/s, which strobed
-the row and ate clicks mid-press — measured 46→1 rebuilds, one-click drawer opens 4/6→6/6).
+the row and ate clicks mid-press — measured 46→1 rebuilds, one-click drawer opens 4/6→6/6), and the
+replay strip wears Vela's v0.8.0 Bar-replay composition (⏮ Start bar · ▶ · ⏭ | 1× ⌄ | cursor time |
+bars left | ✕, scrubber over the row) — with `--bars N` fixed to count minutes: the display timeframe
+writes "1M"/"30M" for minutes, and the old month branch clamped every bars-back start to the oldest
+bar ("9996 bars left" for `--bars 60`).
 
 ---
 

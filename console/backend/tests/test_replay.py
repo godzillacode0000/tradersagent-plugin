@@ -155,6 +155,13 @@ class TheControlStrip(unittest.TestCase):
         self.assertIn("replay:start", self.js)
         self.assertIn("replay:tick", self.js)
 
+    def test_a_bars_back_start_counts_minutes_not_months(self):
+        """The display timeframe writes minutes with a capital M ("1M", "30M" — app.js normalises
+        it for the venue) and this UI has no month timeframe. Reading M as months turned `--bars 60`
+        into a 60-month rewind clamped to the oldest bar (measured live 4 Oct: "9996 bars left")."""
+        self.assertNotIn("43200", self.js)
+        self.assertNotIn("43200", _read(FRONT / "chart-bridge.js"))
+
     def test_the_menu_starts_and_exits_replay(self):
         self.assertIn("taReplay", self.ws)
         self.assertIn("'Replay'", self.ws)
@@ -180,6 +187,55 @@ class TheControlStrip(unittest.TestCase):
         block = self.css.split(".ta-replay {", 1)[1].split("@media", 1)[0]
         self.assertNotRegex(block, r"transition:[^;]*\b(height|width|top|left)\b")
         self.assertIn("prefers-reduced-motion", self.css.split(".ta-replay", 1)[1])
+
+
+class TheStripWearsVelasBarReplayDesign(unittest.TestCase):
+    """4 Oct, the operator's ask: "Amend replay button to look like this" — Vela's v0.8.0 Bar-replay
+    release graphic. The strip keeps its behaviour and takes that composition: ⏮ Start bar · ▶ · ⏭ |
+    1× ⌄ | the cursor time | N bars left | ✕, with a scrubber over the row. Vela itself ships only
+    the ENGINE (checked: no "Start bar" / "bars left" strings in the vendored dist), so the design is
+    ours to paint — the glyphs are inline SVGs because the row is rebuilt from a string."""
+
+    js = _read(FRONT / "replay.js")
+    css = _read(FRONT / "styles.css")
+
+    def test_the_strip_carries_the_start_bar_door(self):
+        self.assertIn('data-act="start"', self.js)
+        self.assertIn("Start bar", self.js)
+
+    def test_start_bar_seeks_back_to_where_the_replay_began(self):
+        # origin = the earliest cursor seen while this replay is on; seeking is start({from}) again
+        # (the changelog's own rule: "calling start() again while replaying jumps backward").
+        self.assertIn("origin", self.js)
+        self.assertIn("r.start({ from: origin })", self.js)
+
+    def test_the_readout_is_the_cursor_time_and_bars_left(self):
+        self.assertIn('data-label', self.js)
+        self.assertIn('data-left', self.js)
+        self.assertIn("bars left", self.js)
+
+    def test_the_scrubber_spans_the_replay_bounds_and_seeks_on_release(self):
+        self.assertIn('data-scrub', self.js)
+        self.assertIn('type="range"', self.js)
+        self.assertIn("r.bounds", self.js)
+        self.assertIn("addEventListener('change'", self.js)
+
+    def test_the_speed_control_opens_a_menu(self):
+        self.assertIn("ta-replay__speeds", self.js)
+        self.assertIn("SPEEDS", self.js)
+
+    def test_the_row_is_grouped_with_separators(self):
+        self.assertIn("ta-replay__row", self.js)
+        self.assertIn("ta-replay__sep", self.js)
+
+    def test_the_css_paints_every_new_part(self):
+        for cls in (".ta-replay__row", ".ta-replay__sep", ".ta-replay__range",
+                    ".ta-replay__ends", ".ta-replay__left", ".ta-replay__speeds"):
+            self.assertIn(cls, self.css, f"{cls} has no rule")
+
+    def test_the_scrubber_fill_uses_the_console_accent(self):
+        block = self.css.split(".ta-replay__range", 1)[1]
+        self.assertIn("--lx-accent", block)
 
 
 class TheAgentDoor(unittest.TestCase):
