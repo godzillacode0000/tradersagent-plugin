@@ -6,6 +6,27 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Fixed
 
+- **The ⋯ menu had no door at the plugin's default 620 px width.** In Vela's compact mode the desktop
+  row is 0-width; the menu was anchored to its hidden ⋯ button and opened at `left: -168`, off-screen,
+  so Alerts, Paper account, Data window, Object tree, the screenshot and Edge Stats could not be
+  reached by tapping *More* in the bottom sheet. A hidden anchor now counts as no anchor and the menu
+  opens top-right. With that door working, the Edge Stats fallback button shows only when the row is
+  missing entirely.
+- **Floating buttons printed on top of the chart at 620 px and below.** The bare-chart fallback strip
+  used transparent ghost buttons, so *Scripts / <> Script / Full screen* overlapped the symbol header
+  and the price axis, and wrapped their labels at 360 px. They are opaque now and never wrap.
+- **`trader-chart` died on every command under Python 3.14.** A bare `95%` in the `edge` help text is a
+  `%i` conversion to argparse, which 3.14 rejects when the parser is built (3.11–3.13 only on
+  `--help`, so the 3.11-only CI never saw it). Escaped by hand (4 Oct); now a static test scans every
+  `help=` in the repo, and CI runs the unit suite on 3.11 **and 3.14**.
+- **`/api/agents`, `/api/agents/delete` and `/api/agents/learning` answered bad input with a 500.** The
+  study store's validation errors are the caller's mistake; they are a 400 `bad_request` now.
+- **Five CSS variables that nothing defined** (`--lx-text-1`, `--lx-text-2`, `--lx-border-2`,
+  `--lx-radius-2`, `--lx-radius-3`) made the Script pane's hint colour and key-cap border and the
+  chart-tip tooltip's border silently do nothing. They point at the real tokens, and a test fails on
+  any `var(--lx-…)` that nothing defines. The Edge Stats category row also fades at its right edge so a
+  cut-off chip reads as scrollable.
+
 - **A Library script that mounted and drew nothing.** The operator's recording showed *Wyckoff Wave &
   Volume Studies* opening an empty pane with `PineTS: Index -2 is out of bounds, array size is 0`.
   Cause, measured: the Pine engine (`pinets@0.9.33`, pinned in the page's import map) evaluates **both
