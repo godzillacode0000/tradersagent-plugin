@@ -8,7 +8,6 @@ page is attached. Skipped without fastmcp (CI sets TRADER_CHART_REQUIRE_MCP=1 so
 
 import asyncio
 import importlib.util
-import json
 import os
 import sys
 import tempfile

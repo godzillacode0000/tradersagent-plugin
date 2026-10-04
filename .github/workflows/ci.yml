@@ -21,13 +21,19 @@ jobs:
       - run: node tools/verify-plugin-selftest.mjs
 
   tests:
-    name: tests (unit suite)
+    name: tests (unit suite, py${{ matrix.python }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # 3.14 is the interpreter the operator actually runs: argparse there rejects a bare `%` in a help
+      # string at parser-build time, which killed every `trader-chart` command while 3.11 stayed green.
+      matrix:
+        python: ['3.11', '3.14']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python }}
       # The suite is stdlib-only by design: the study store, the chat bridge, the chart bridge and
       # the push channel are all covered without a browser, a network, or the app — so this step
       # installs nothing at all.

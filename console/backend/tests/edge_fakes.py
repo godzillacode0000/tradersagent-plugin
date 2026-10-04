@@ -17,7 +17,6 @@ import socket
 import stat
 import sys
 import tempfile
-import textwrap
 from pathlib import Path
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "edgestats"

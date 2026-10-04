@@ -216,8 +216,7 @@ class TheRefusalListMatchesTheEngine(unittest.TestCase):
     """
 
     def test_while_and_for_in_are_not_refused(self):
-        src = read(APP_DIR + "/pinets-runner.js") if "APP_DIR" in globals() else read(
-            os.path.join(ROOT, "console", "frontend", "pinets-runner.js"))
+        src = read(os.path.join(ROOT, "console", "frontend", "pinets-runner.js"))
         gaps = src.split("const GAPS = [", 1)[1].split("];", 1)[0]
         self.assertNotIn("while", gaps,
                          "PineTS runs while loops — prove a refusal with the battery before adding it")
