@@ -51,6 +51,7 @@
                    'drawing',
                    'view',
                    'marks',
+                   'edge',
                    'overlay',];
 
   /* The console mints a token and requires it on POSTs. This page usually lives in an IFRAME on
@@ -1453,6 +1454,35 @@
         case 'marks': {
           if (!window.TaVela) throw new Error('this page has no vela-doors module (older frontend) — reload the chart');
           Object.assign(out, await window.TaVela.marks(command));
+          break;
+        }
+        case 'edge': {
+          /* Edge Stats (4 Oct): the agent SHOWS what it asked the engine, so the operator sees the same
+             answer — the numbers themselves come from the edgestats_* tools, never from here. `op`:
+             open (default) · ask {dsl} · report {preset, params} · session {session} · data · close ·
+             state. The reply is what the sheet really displays, not what was requested. */
+          if (!window.edgeSheet) throw new Error('this page has no Edge Stats sheet (older frontend) — reload the chart');
+          const es = window.edgeSheet;
+          const op = String(command.op || 'open');
+          const opts = { symbol: command.symbol, since: command.since, until: command.until, group_by: command.group_by, params: command.params };
+          let r;
+          if (op === 'ask') r = await es.ask(String(command.dsl || ''), opts);
+          else if (op === 'report') r = await es.report(String(command.preset || ''), opts);
+          else if (op === 'session') r = await es.session(String(command.session || ''));
+          else if (op === 'data') r = await es.data();
+          else if (op === 'close') { es.close(); r = es.describe(); }
+          else if (op === 'state') r = es.describe();
+          else if (op === 'open') r = await es.show();
+          else throw new Error('unknown edge op: ' + op);
+          out.ok = r.ok !== false;
+          out.edge = r;
+          const a = r.result;
+          out.detail = r.ok === false && r.error ? 'Edge Stats could not answer — ' + r.error + (r.hint ? ' — ' + r.hint : '')
+            : !r.open ? 'Edge Stats is closed'
+            : !r.ready ? 'Edge Stats is open but cannot answer (' + (r.reason || 'not ready') + ')'
+            : r.view === 'result' && a ? 'Edge Stats shows “' + a.dsl + '” — ' + a.successes + ' of ' + a.n + (a.refused ? ' (too few sessions for an estimate)' : ' · ' + (a.estimate * 100).toFixed(1) + '%')
+            : r.view === 'session' && r.session ? 'Edge Stats shows session ' + r.session
+            : 'Edge Stats is open on its ' + r.view + ' view';
           break;
         }
         case 'mode': {

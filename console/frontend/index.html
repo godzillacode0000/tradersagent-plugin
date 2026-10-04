@@ -8,6 +8,7 @@
      fetched: this box is a 2016 Pavilion, and the brief's stack is deliberately
      system-first so first paint never waits on a font request. -->
 <link rel="stylesheet" href="./styles.css" />
+<link rel="stylesheet" href="./edge.css" />
 </head>
 <body>
 <div class="app">
@@ -16,6 +17,7 @@
        appear over the chart only then; drawer.js / app.js reveal them. -->
   <div class="fallback-strip" id="fallback-strip">
     <button type="button" class="btn btn--ghost" id="drawer-fallback" hidden>Scripts</button>
+    <button type="button" class="btn btn--ghost" id="edge-fallback" hidden>Edge Stats</button>
     <button type="button" class="btn btn--ghost" id="script-fallback" hidden>&lt;&gt; Script</button>
     <button type="button" class="btn btn--ghost" id="full-fallback" hidden>⛶ Full screen</button>
   </div>
@@ -53,6 +55,23 @@
       <button type="button" class="drawer__theme" id="theme-toggle" title="Switch light / dark" aria-label="Switch theme">◐</button>
     </div>
     <p class="drawer__note muted">▶ Run paints the script on this chart · one at a time · it stays after a restart</p>
+  </aside>
+
+  <!-- Edge Stats (4 Oct): LuxAlgo's open-source engine — "how often did this setup actually work?", with
+       the sample size and a 95% interval on every number. It slides over the chart from the RIGHT (the
+       drawer owns the left), so opening it never resizes Vela. Its door is the ⋯ menu, with a plain
+       button on the bare-chart path; edge.js fills the three regions below. -->
+  <div class="edge-scrim" id="edge-scrim" aria-hidden="true"></div>
+  <aside class="edge-sheet" id="edge-sheet" aria-hidden="true" aria-label="Edge Stats">
+    <header class="edge__head">
+      <div class="edge__title"><strong>Edge Stats</strong><span id="edge-sub">How often did it actually happen?</span></div>
+      <button type="button" class="edge__icon" id="edge-data" aria-label="Data — where the bars come from" title="Data — where the bars come from">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="8" cy="3.8" rx="5" ry="2"/><path d="M3 3.8v8.4c0 1.1 2.2 2 5 2s5-.9 5-2V3.8"/><path d="M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/></svg>
+      </button>
+      <button type="button" class="edge__x" id="edge-close" aria-label="Close Edge Stats">✕</button>
+    </header>
+    <div class="edge__bar" id="edge-bar" hidden></div>
+    <div class="edge__body" id="edge-body"></div>
   </aside>
 
   <main class="main">
@@ -221,5 +240,9 @@
 <!-- The replay control strip (Phase 6, 3 Oct): started from the ⋯ menu, hidden until replay is on.
      It also keeps the server's replay price in step, so a paper fill during replay uses the cursor. -->
 <script src="./replay.js"></script>
+<!-- Edge Stats (4 Oct): the sheet over the chart. Loaded last — it only needs the DOM above, the console
+     token bootstrap (it fetches its own) and, for the session view, the vendored Vela the import map
+     already resolves. window.edgeSheet is what the bridge's `edge` command drives. -->
+<script src="./edge.js"></script>
 </body>
 </html>

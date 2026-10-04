@@ -171,6 +171,7 @@ state.ready = (async () => {
     const old = document.querySelector('.ta-more');
     if (old) { old.remove(); return; }
     const items = [
+      ['Edge Stats', () => { if (window.edgeSheet) window.edgeSheet.open(); }],
       [replayOn() ? 'Exit replay' : 'Replay', () => {
         if (!window.taReplay) return;
         const p = replayOn() ? window.taReplay.stop() : window.taReplay.start();
