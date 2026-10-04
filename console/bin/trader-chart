@@ -877,7 +877,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--id", default="", help="(remove) which mark")
     s.set_defaults(func=cmd_marks)
 
-    s = sub.add_parser("edge", help="Edge Stats: how often did a setup actually work? (N + 95% interval on every number)")
+    s = sub.add_parser("edge", help="Edge Stats: how often did a setup actually work? (N + 95%% interval on every number)")
     es = s.add_subparsers(dest="edge_op", required=True)
 
     def _edge_common(sp, with_show=True):
