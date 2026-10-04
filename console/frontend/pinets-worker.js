@@ -74,7 +74,7 @@ function projectPlots(plots) {
        * drawing row became `value: null` and the overlay had nothing to paint: the script ran, the
        * panel said "the engine stored NO rows", and the chart stayed empty. Carry the payload. */
       if (Array.isArray(p.value)) {
-        return { value: p.value.map(jsonSafe), options: { style: (p.options && p.options.style) || null }, time: time };
+        return { value: p.value.map((v) => jsonSafe(v)), options: { style: (p.options && p.options.style) || null }, time: time };
       }
       const v = typeof p.value === 'number' && isFinite(p.value) ? p.value : null;
       const color = (p.options && p.options.color) || null;

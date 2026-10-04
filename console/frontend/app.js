@@ -604,7 +604,40 @@ function exposeChart() { window.__consoleChart = chart; }
  * Exposed as `window.chartMarket` so the bridge and this file agree on one reading instead of
  * keeping two scrapes that drift.
  */
+/* Vela's timeframe strings → the lowercase interval the venue (and /api/bars) takes. A cell keeps whatever
+   string it was set with: '1m' '15m' '1h' '4h' '1d' '1w', or bare minutes ('60', '240') or TradingView
+   style ('D', 'W'). An unrecognised string is passed on lowercased rather than guessed at. */
+function intervalOf(tf) {
+  const s = String(tf == null ? '' : tf).trim();
+  if (/^\d+$/.test(s)) {
+    const n = Number(s);
+    return n % 1440 === 0 ? (n / 1440) + 'd' : n % 60 === 0 ? (n / 60) + 'h' : n + 'm';
+  }
+  const m = s.match(/^(\d*)([mhdwMHDW])$/);
+  if (!m) return s.toLowerCase();
+  const n = m[1] || '1';
+  const u = m[2];
+  return u === 'M' ? n + 'M' : n + u.toLowerCase();   // a capital M is a month (Binance's own spelling)
+}
+
+/** What the ACTIVE workspace cell is showing — the workspace knows; nothing has to be scraped. */
+function marketFromWorkspace() {
+  try {
+    const ws = window.__wsApp && window.__wsApp.ws;
+    if (!ws || !ws.cellsById) return null;
+    const cell = typeof ws.cellsById.get === 'function' ? ws.cellsById.get(ws.activeId) : ws.cellsById[ws.activeId];
+    if (!cell || !cell.symbol || !cell.timeframe) return null;
+    return { symbol: String(cell.symbol), interval: intervalOf(cell.timeframe) };
+  } catch (err) { return null; }
+}
+
 function marketFromDom() {
+  /* The workspace first. The DOM scan below used to be the only reader, and Vela keeps its closed
+     timeframe dropdown in the page: its first item is "1m", so the scan answered "1m" on EVERY chart
+     (measured 4 Oct: 4h, 15m and 1h all read 1m) and every Pine run, study number and the heartbeat's
+     timeframe came from the last 500 minutes of bars instead of the chart's own. */
+  const fromWs = marketFromWorkspace();
+  if (fromWs) return fromWs;
   const host = document.getElementById('chart') || document.body;
   const texts = [];
   const active = [];
@@ -615,6 +648,7 @@ function marketFromDom() {
   try {
     host.querySelectorAll('button, span, div').forEach((el) => {
       if (el.children.length) return;
+      if (el.closest('.vela-menu-item, [role="menu"], [role="listbox"], [hidden]')) return;   // a closed dropdown lists every choice
       read(texts, el);
     });
     host.querySelectorAll('[aria-current], [aria-pressed="true"], [aria-selected="true"], [class*="active"], [class*="selected"]')
