@@ -161,6 +161,19 @@ class ApiError(Exception):
         self.detail = detail
 
 
+def _study_input(fn, *args, **kwargs):
+    """Run a study-store call, answering its validation failures as the caller's 400.
+
+    agents_store raises ValueError for every bad id / name / body — the caller's mistake, not ours —
+    and the generic handler used to turn that into a 500 "internal_error" (fuzzed 4 Oct: all three
+    /api/agents* writes). OSError and the rest still propagate: those are ours.
+    """
+    try:
+        return fn(*args, **kwargs)
+    except ValueError as exc:
+        raise ApiError(str(exc), HTTPStatus.BAD_REQUEST, "bad_request") from exc
+
+
 class MCPUnavailable(ApiError):
     def __init__(self, message: str, detail=None):
         super().__init__(
@@ -1895,18 +1908,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._fail("body must be a JSON object", HTTPStatus.BAD_REQUEST, "bad_body")
                 return
             if path == "/api/agents":
-                self._ok({"agent": upsert_study(AGENTS_ROOT, payload)})
+                self._ok({"agent": _study_input(upsert_study, AGENTS_ROOT, payload)})
                 return
             if path == "/api/agents/delete":
-                self._ok({"removed": delete_study(AGENTS_ROOT, str(payload.get("id", ""))),
+                self._ok({"removed": _study_input(delete_study, AGENTS_ROOT, str(payload.get("id", ""))),
                           "agents": list_studies(AGENTS_ROOT)})
                 return
             if path == "/api/agents/learning":
                 sid = str(payload.get("agent_id", ""))
-                written = append_learning(AGENTS_ROOT, sid,
-                                          title=str(payload.get("title", "note")),
-                                          body=str(payload.get("body", "")))
-                self._ok({"written": written, "agent": load_study(AGENTS_ROOT, sid)})
+                written = _study_input(append_learning, AGENTS_ROOT, sid,
+                                       title=str(payload.get("title", "note")),
+                                       body=str(payload.get("body", "")))
+                self._ok({"written": written, "agent": _study_input(load_study, AGENTS_ROOT, sid)})
                 return
             if path.startswith("/api/edgestats/"):
                 self._ok(edgestats_action(path[len("/api/edgestats/"):].strip("/"), payload))
