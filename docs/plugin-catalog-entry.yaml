@@ -54,6 +54,14 @@ capabilities:
     - edge_presets
     - edge_report
     - edge_symbols
+    - edgestats_status
+    - edgestats_fields
+    - edgestats_presets
+    - edgestats_query
+    - edgestats_report
+    - edgestats_session
+    - edgestats_show
+    - edgestats_setup
     - propfirms
     - bt_run
     - bt_optimize

@@ -105,6 +105,35 @@ stated.
   use under this license — selling them, redistributing them for a fee, or building them into a paid
   product is."*
 
+## Edge Stats — LuxAlgo's open-source statistics engine (optional, not bundled)
+
+- **Licence:** code **MIT**, © LuxAlgo Global, LLC — <https://github.com/LuxAlgo/edge-stats>. The calendar
+  and event date files under its `data/` are **CC BY 4.0** (`DATA_LICENSE`); the required attribution is:
+  *"Calendar data from Edge Stats by LuxAlgo (github.com/LuxAlgo/edge-stats)"*. The pane's home and Data views carry it.
+- **How it is used:** **not bundled and not vendored.** `./install.sh --with-edge` clones it at a **pinned
+  commit** (`a482598…`, the same string `console/backend/edgestats.py` pins — a test fails if the two drift)
+  into `~/.local/share/traders-agent/edge/engine` and runs `pnpm install --frozen-lockfile` there. The console
+  starts it on demand as a local process on `127.0.0.1` and talks to it over HTTP; the console itself stays
+  stdlib-only. Nothing from the engine is committed to this repository. Its dependencies are installed from its
+  own lockfile; upstream gates them to permissive licences (MIT / Apache-2.0 / BSD / ISC / MPL-2.0).
+- **What this project adds:** the supervisor (`console/backend/edgestats.py`), the `/api/edgestats/*` routes,
+  the eight `edgestats_*` MCP tools, `trader-chart edge`, and the pane's Edge Stats sheet
+  (`console/frontend/edge.js`, `edge.css`). **No statistic is computed here** — every number is the engine's.
+- **Adapted code:** the session view's overlay logic (levels, gap band, opening-range box, outcome marker) is
+  adapted from edge-stats' own dashboard (`packages/web/src/components/session-view.tsx`, MIT), rewritten in
+  plain JavaScript onto the vendored Vela. The notice above covers it.
+- **Data is not shipped.** The sheet can download free history through the engine's own adapters — **Binance**
+  (public archive `data.binance.vision`) and **Dukascopy** (public tick archive) — keyless, on the user's
+  machine, into the user's store. Each provider's terms apply to what is downloaded (personal analysis; do not
+  redistribute it). The `demo` source is synthetic and deterministic, never market data. No downloaded bars,
+  keys or store files may be committed here — the store lives in the user's home folder, outside this repository, by design.
+- **Trademark:** "Edge Stats", "LuxAlgo" and the LuxAlgo logo are trademarks of LuxAlgo Global, LLC. This
+  project is unofficial and uses the name only descriptively ("built on Edge Stats"), as the engine's
+  `TRADEMARKS.md` permits for nominative use.
+- **What it will not do (upstream's non-goals, kept):** order execution, broker connections, predictions or trade
+  advice. Every result carries the engine's fixed disclaimer: *historical conditional frequencies with sample
+  sizes — not predictions, not advice.*
+
 ## Trademarks
 
 "LuxAlgo", the LuxAlgo logo and the "LuxAlgo MCP" project name are trademarks of LuxAlgo Global, LLC.

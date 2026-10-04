@@ -30,6 +30,10 @@ MCP server) in one local web app — your chat session is left exactly where it 
 - **The agent can drive the chart.** `console/bin/trader-chart` reads what the chart is showing and
   puts indicator scripts on it through a small file bridge, so you prompt your agent instead of
   clicking around. `console/bin/library-indicator` pulls an indicator's Pine source by name.
+- **Edge Stats — how often did it actually happen?** An optional, local port of LuxAlgo's open-source
+  [Edge Stats](https://github.com/LuxAlgo/edge-stats) engine: ask "how often does a gap fill by the
+  close?" and get the rate **with its sample size and a 95% interval** — never a bare percentage — plus
+  the sessions behind it, drawn on a Vela chart. `./install.sh --with-edge` installs it; the ⋯ menu opens it.
 
 > **Unofficial.** This project is not affiliated with, endorsed by, or sponsored by LuxAlgo. It uses
 > the LuxAlgo name descriptively ("compatible with LuxAlgo MCP") and ships no LuxAlgo logo. See
@@ -42,6 +46,7 @@ MCP server) in one local web app — your chat session is left exactly where it 
 | **Hermes Desktop** | v0.21.3 or newer (the plugin uses the `sidebar.nav` + `routes` contribution areas) |
 | **Python** | 3.11+ with the `mcp` client: `pip install mcp` (a venv is fine — point `PY=` at it) |
 | **Network** | for LuxAlgo's MCP endpoint and the Binance data feed; the chart falls back to synthetic bars when the provider is unreachable. The chart engine and Pine runtime are served locally |
+| **Node 20+** *(optional)* | only for [Edge Stats](#edge-stats--how-often-did-it-actually-happen) — `./install.sh --with-edge` installs LuxAlgo's engine (~300 MB with its dependencies) next to the console. Without it everything else works and the sheet explains what is missing |
 | **Preview resizer** *(optional)* | `libvips` (or ImageMagick, or `ffmpeg`) — see [Catalogue previews](#catalogue-previews-are-kept-on-your-machine). With none of them the console still shows every preview, just at the catalogue's original size |
 | **OS** | Linux — built and verified on Omarchy (Arch + Hyprland). macOS and Windows are out of scope. |
 
@@ -124,6 +129,7 @@ systemctl --user enable --now traders-agent.service
 | Chart top bar → **Layout** | Vela's own grid picker — presets and custom `g<cols>x<rows>` grids. The console boots at `2h` (two side by side); the same door is `chart_set_layout` / `trader-chart layout` |
 | Chart top bar → **⌗ Indicators** | One surface for both halves: **Favourites** (your own ☆), **BUILT-INS** (Vela's natives for this market, read live from the frame) and **LIBRARY** (the 806-row LuxAlgo catalogue). Every LIBRARY card carries the catalogue's own **chart preview** above its name — and the Details pane shows it full size — so "how does this look applied?" is answered before running anything. The LIBRARY arrives **grouped into families** (SMC / ICT 74, Trend 108, Volume & Flow 96, …) with a rail down the left to jump between them, and each family opens into its own **clusters** ("Moving-average lineage", "Candlestick catalog"); every card has a **Reading** button that unfolds what the indicator is and how it is read, in place. Star the ones you reach for; clicking a built-in mounts it, a Library row opens the Details pane with its Run PineTS / Add to chart. The same door is `chart_indicators` / `trader-chart indicators` (`--family trend --reading mlma --fold trend:on`) |
 | Chart top bar → **⛶ Full screen** | Gives the chart the whole pane — and the whole display: the console's chrome, panels and statusbar step aside and the page asks the browser for fullscreen. `Esc` (or the floating `✕`, or the same button) comes back. Docked on Vela's own toolbar row beside `<> Script` and `☰ catalogue`; the door is `chart_fullscreen` / `trader-chart fullscreen [--off]` |
+| Chart ⋯ menu → **Edge Stats** | the Edge Stats sheet: ask a question, run one of the 42 catalogue reports, group by weekday / month / year, open any historical session on a chart. [Details below](#edge-stats--how-often-did-it-actually-happen) |
 | The chart's own bottom bar | Vela's range buttons, timezone clock and settings (not ours) |
 
 ### Chat beside the chart
@@ -147,6 +153,47 @@ copy *inlined* in vela-pinets, without the patches; the console therefore does n
 reports what actually happened rather than pretending. (A heavy script can be run off the page's main
 thread instead with `?engine=worker` on the console URL, or localStorage `luxalgo-web:pine-engine` =
 `worker` — at the cost of running vela-pinets' copy, which does not carry the patches.)
+
+### Edge Stats — how often did it actually happen?
+
+LuxAlgo's open-source **Edge Stats** engine measures *P(outcome | conditions)* on historical sessions:
+"of the sessions that gapped up, how many filled the gap that day?" This plugin runs it locally, as a
+sidecar the console starts the first time you ask a question (no engine process runs until then). It keeps
+running if the console restarts, and is paused automatically while a data download holds the store.
+
+```bash
+./install.sh --with-edge        # needs Node 20+ and git; clones the pinned engine and installs it
+```
+
+Then open the chart's **⋯ menu → Edge Stats**. First run: one button loads **demo data** (synthetic bars,
+about 10 seconds, clearly labelled) or downloads **free history** from Binance (crypto) or Dukascopy
+(FX, metals, indices) for the symbols you choose. After that:
+
+- **Ask** in the engine's own query language, with suggestions as you type — `gapFill WHERE gapDirection = up`.
+- **Reports** — the 42-report catalogue, grouped by theme (gap fill, opening-range break, weekday effects, …).
+- **Read the answer honestly** — every rate is printed with **N**, its **95% Wilson interval**, whether the
+  two halves of history agree and whether recent sessions match all history. Fewer than 10 matching
+  sessions gives **no rate at all**, only the counts; fewer than 30 is flagged as thin.
+- **Group by** weekday, month, year or any registry field; **Refine** with conditions and parameters.
+- **Open a session** — any matching day on a chart with its prior high / low / close, open and gap drawn as levels.
+
+| | |
+|---|---|
+| ![The answer: 85.0% — 421 of 495 sessions, 95% CI, stability checks](docs/shots/edge-stats-answer.png) | ![One session on a Vela chart with its levels](docs/shots/edge-stats-session.png) |
+| **The answer** — rate, N, interval, and whether it is stable | **One session** — the levels behind the number |
+| ![Grouped by weekday, light theme](docs/shots/edge-stats-grouped-light.png) | |
+| **Group by** weekday, month or year — light theme | |
+
+*(Shown on the demo data.)* The same questions are open to your agent: `edgestats_query`,
+`edgestats_report`, `edgestats_session`, `edgestats_show` (puts the answer on your screen) and friends
+(see the tool table below), or `trader-chart edge ask "gapFill"` from a shell. The engine does all the
+arithmetic; the plugin never invents or rounds a number of its own.
+
+**Where the data lives.** Everything stays on this machine, under `~/.local/share/traders-agent/edge/`
+(override with `TRADERS_EDGE_HOME`). Downloads go straight from Binance / Dukascopy to your disk and are
+not redistributed; their terms apply to the data. The engine is MIT; its calendar data is **CC BY 4.0**
+("Calendar data from Edge Stats by LuxAlgo") — see [`THIRD-PARTY.md`](THIRD-PARTY.md). Historical
+frequencies are not predictions and not advice.
 
 ### Letting your agent drive the chart
 
@@ -200,6 +247,14 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `edge_presets` | LuxAlgo's measured edge presets and their categories |
 | `edge_report` | one preset's measured edge on one symbol |
 | `edge_symbols` | which symbols the edge reports cover |
+| `edgestats_status` | is the local Edge Stats engine installed, what data it holds, whether a download is running |
+| `edgestats_fields` | the query language's vocabulary — every outcome, condition and field, with definitions |
+| `edgestats_presets` | the 42-report catalogue (gap fill, opening-range break, weekday effects, …) with parameters |
+| `edgestats_query` | **P(outcome \| conditions)** on your own bars, with N and a 95% interval — or no rate when too few sessions matched |
+| `edgestats_report` | run one catalogue report on one symbol |
+| `edgestats_session` | one historical session behind a result: OHLC, prior levels, gap, opening ranges |
+| `edgestats_show` | put an answer (or a session with its levels) on the operator's screen |
+| `edgestats_setup` | load the demo data or download free history (Binance, Dukascopy) in the background |
 | `propfirms` | prop-firm directory, with an optional filter |
 | `bt_run` | run one vectorbt MA-cross backtest; returns metrics |
 | `bt_optimize` | sweep MA pairs at once and rank by return |
@@ -262,8 +317,9 @@ Nothing else is written outside the repo; `console/agents/` holds the runtime st
 ```
 plugin/            the Hermes Desktop plugin: plugin.js + its harness expectations
 console/frontend/  the web app: Vela chart, Library panel, detail panel, PineTS paint layer
-console/backend/   one stdlib HTTP server proxying LuxAlgo's MCP + the chart bridge + the push channel
-console/mcp/       trader-chart-mcp — the chart as MCP tools (stdio, FastMCP)
+console/backend/   one stdlib HTTP server proxying LuxAlgo's MCP + the chart bridge + the push channel;
+                   edgestats.py runs the optional Edge Stats engine as a sidecar
+console/mcp/       trader-chart-mcp — the chart as MCP tools (stdio, FastMCP); edge_text.py renders Edge Stats answers
 console/bin/       agent-side CLIs (trader-chart, library-indicator)
 tools/             verify-plugin.mjs — runs a plugin in Node against SDK stubs (used by CI)
 tools/             verify-plugin-hook.mjs — the resolve hook it registers; only the three allowed specifiers resolve
@@ -283,6 +339,10 @@ install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/
 | `TRADERS_AGENT_THUMB_WARM` | `1` | `0` turns off warming the catalogue's previews in the background at start-up |
 | `TRADERS_AGENT_THUMB_WARM_PAGES` | `0` (all) | how many catalogue pages to warm; set a small number on a metered link |
 | `TRADERS_AGENT_THUMBS` | `~/.local/share/traders-agent/thumbs` | where the shrunk previews live |
+| `TRADERS_EDGE_HOME` | `~/.local/share/traders-agent/edge` | where the Edge Stats engine, its workspace and downloaded data live |
+| `EDGESTATS_ENGINE` | `$TRADERS_EDGE_HOME/engine` | use an existing checkout of LuxAlgo's engine instead |
+| `TRADERS_EDGE_PORT` | `8789` | loopback port the engine sidecar listens on |
+| `LUXALGO_EDGESTATS` | unset | talk to an engine you already run (base URL) instead of starting one |
 | `--mcp-url` | `https://mcp.luxalgo.com/mcp` | point at a different (or local) MCP server |
 
 ## Catalogue previews are kept on your machine
@@ -330,6 +390,7 @@ node tools/verify-plugin.mjs plugin/plugin.js                                   
 python3 -m unittest discover -s console/backend/tests -t console/backend/tests -v   # the unit suite (no dependencies)
 uv run --with fastmcp python -m unittest discover \
     -s console/backend/tests -t console/backend/tests -p 'test_mcp_server.py' -v     # the MCP tool layer
+TRADERS_EDGE_HOME=/path/with/engine python3 -m unittest discover -s console/backend/tests -t console/backend/tests -p 'test_edgestats_real_engine.py' -v   # against the real engine (skips without one)
 python3 console/backend/server.py --port 8899 --no-mcp                             # console without the MCP backend
 python3 -m compileall console/backend                                              # syntax pass
 ```

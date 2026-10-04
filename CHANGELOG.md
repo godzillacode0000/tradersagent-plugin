@@ -25,6 +25,29 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Edge Stats — how often did it actually happen?** LuxAlgo's open-source
+  [Edge Stats](https://github.com/LuxAlgo/edge-stats) engine (MIT, pinned to a commit) runs beside the
+  console as a lazily started sidecar, and the chart's `⋯` menu opens a sheet for it: ask in the
+  engine's query language (`gapFill WHERE gapDirection = up`, with autocomplete from the engine's own
+  registry), run any of the 42 catalogue reports, group by weekday / month / year, and open a
+  historical session on a Vela chart with its prior high / low / close, open and gap drawn as levels.
+  The rule the whole feature is built on: **no percentage without its N** — every rate carries its
+  sample size and a 95 % Wilson interval, the two-halves and recent-vs-all checks, and a result with
+  fewer than 10 matching sessions prints counts only, no rate. The engine does all the arithmetic; the
+  plugin never computes or rounds one. Data: one-click synthetic demo, or free Binance / Dukascopy
+  history downloaded as a background job (the sidecar steps aside while a download holds the
+  single-writer store; it is adopted again after a console restart). Installed with
+  `./install.sh --with-edge` (Node 20+, ~300 MB; nothing changes without the flag). The agent gets
+  eight tools — `edgestats_status` / `fields` / `presets` / `query` / `report` / `session` (read-only),
+  `edgestats_show` (puts the answer on the operator's screen through the chart bridge) and
+  `edgestats_setup` (asks the operator before real downloads) — plus `trader-chart edge …` and a
+  section in the desk skill (MCP tools 45 → 53). Attribution for the engine (MIT) and its calendar
+  data (CC BY 4.0) is in the sheet's footer and in `THIRD-PARTY.md`. Also: the MCP layer and
+  `trader-chart` now pass an engine's 4xx message and hint through instead of a generic failure, and
+  `sync-live.sh` carries `edgestats.py` and `edge_text.py` to the live tree. Verified against the real
+  engine (demo job, seeded queries, session bars, adoption after restart); **real Binance / Dukascopy
+  downloads were not exercised** — the build machine's network blocks both.
+
 - **Full screen for the chart.** The operator, looking at the pane: *"sy nak ada button capability
   untuk boleh kasi fullscreen ni chart,,, sekarang mcm takde"*. There is one now — `⛶ Full screen`,
   in the console's topbar and docked onto Vela's own toolbar row beside `<> Script` and

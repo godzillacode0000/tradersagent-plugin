@@ -46,10 +46,10 @@ native tools.
 
 Versions: Hermes Desktop 0.21.5, console `SERVER_VERSION = 1.0.0`. CI was red from
 28 Sep (`1f9d340`) to 2 Oct (`8df6e2e` — a stale MCP test only CI could see); green since `ab3708b`, and
-green on every ship below. **546 backend tests** (+43 skipped), 8 plugin contributions across 5 areas.
+green on every ship below. **702 backend tests** (+67 skipped without `fastmcp` / a real Edge Stats engine), 8 plugin contributions across 5 areas.
 Shipped since this file was written: the paper broker (Phase 5), replay (6/6b), the top-bar one-door
 consolidation, the drawer as the single Library surface, and Phase 7 — three agent doors into Vela
-(`chart_drawing` 76 types / `chart_view` settings / `chart_marks`), 45 MCP tools. 4 Oct: the top row
+(`chart_drawing` 76 types / `chart_view` settings / `chart_marks`), 53 MCP tools (8 of them `edgestats_*`). 4 Oct: Edge Stats — the optional local engine, the sheet behind the `⋯` menu, the eight tools (see CHANGELOG; real Binance / Dukascopy downloads were never run from the build machine). Also 4 Oct: the top row
 now rebuilds only when a visible label changes (a replay tick used to rebuild it ~8×/s, which strobed
 the row and ate clicks mid-press — measured 46→1 rebuilds, one-click drawer opens 4/6→6/6).
 
@@ -204,14 +204,14 @@ short note with the way out instead of failing silently.
 | `pinets-runner.js`, `pinets-layer.js` | PineTS execution + the native paint layer |
 | `styles.css` | console chrome, responsive top row (clip-proof from ~500 px to 1280 px pane width) |
 
-**MCP server (`console/mcp/server.py`)** — 45 tools (`chart_views`, `chart_caps`, `chart_state`,
+**MCP server (`console/mcp/server.py`)** — 53 tools (`chart_views`, `chart_caps`, `chart_state`,
 `chart_shot`, `chart_apply_pine`, `chart_draw`, `chart_clear`, `chart_add_indicator`,
 `chart_remove_indicator`, `chart_set_market`, `chart_reload`, `chart_palette`, `chart_replay`,
 `chart_drawing`, `chart_view`, `chart_marks`, `library_search`,
-`library_indicator` among them). Thin wrapper over the HTTP API. **Tools load at session start: after adding a
+`library_indicator`, `edgestats_query` / `_report` / `_session` / `_show` / `_setup` among them). Thin wrapper over the HTTP API. **Tools load at session start: after adding a
 tool, the running session will not see it — start a new session or `/reload-mcp`.**
 
-**CLI (`console/bin/trader-chart`)** — 25 subcommands (`drawing` / `view` / `marks` added 3-4 Oct); also `console/bin/library-indicator` (fetch one
+**CLI (`console/bin/trader-chart`)** — 26 subcommands (`drawing` / `view` / `marks` added 3-4 Oct, `edge` 4 Oct); also `console/bin/library-indicator` (fetch one
 Library indicator) and `console/bin/all-library-context-dependency.py` (Library analysis helper).
 
 ---
@@ -263,7 +263,7 @@ Working, with evidence:
 - Latency: symbol switch **686–698 ms** end to end, screenshot **35 ms**, `clear` **7 ms**, SSE push
   single-digit ms (transport is not the bottleneck; the chart engine fetch+render is).
 - Console health: `/api/health` ok, LuxAlgo MCP connected, 19 endpoints.
-- 546 backend tests (43 skipped), plugin harness OK (8 contributions / 5 areas), CI green since `ab3708b`
+- 702 backend tests (67 skipped bare; 1 with fastmcp + a real engine), plugin harness OK (8 contributions / 5 areas), CI green since `ab3708b`
   (see the correction above — earlier runs were red for a week and nobody looked).
 
 Current live state (transient): chart on **BTCUSDT 1m** (dark), the Breakout Detector overlay restored

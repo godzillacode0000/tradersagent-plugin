@@ -1,4 +1,4 @@
-# Trader's Agent — MCP tools (45)
+# Trader's Agent — MCP tools (53)
 
 The `traders-chart` MCP server exposes the live LuxAlgo **Vela** chart as native tools.
 Every tool talks to the local console (`http://127.0.0.1:8787`) over its push channel (SSE), so a
@@ -68,6 +68,14 @@ Read-only, and every one leaves this machine (they reach LuxAlgo's hosted MCP).
 | `edge_presets` | `category: str = ""` | LuxAlgo's measured edge presets (42 measured). |
 | `edge_report` | `preset: str`, `symbol: str` | One preset's measured performance on one symbol. |
 | `edge_symbols` | — | The symbols the edge dataset covers. |
+| `edgestats_status` | — | Is the local Edge Stats engine installed, which symbols it holds (to which date), and is a data job running. Never starts anything. |
+| `edgestats_fields` | `kind: str = ""`, `search: str = ""`, `limit: int = 40` | The query language: every outcome / condition / field with its definition and an example. |
+| `edgestats_presets` | `category: str = ""` | The 42 ready-made reports with their parameters. |
+| `edgestats_query` | `query: str`, `symbol: str`, `since`, `until`, `group_by`, `sessions: int = 8`, `session` | `P(outcome \| conditions)` with N, a Wilson 95% interval, a first-half/second-half stability split, recency, per-year counts and the value distribution. **Below 10 sessions: counts only, no rate.** |
+| `edgestats_report` | `preset: str`, `symbol: str`, `params: dict`, `since`, `until`, `group_by`, `sessions`, `session` | One catalogue report, same envelope and same guards. |
+| `edgestats_session` | `session_id: str` (`SYMBOL\|session\|DATE`) | One session: OHLC, prior high/low/close, the gap, opening ranges, event times. |
+| `edgestats_show` | `op: str = "open"` (`ask`/`report`/`session`/`data`/`close`/`state`), `query`, `preset`, `session`, `symbol`, `since`, `until`, `group_by`, `params` | Show an answer in the Edge Stats sheet over the chart. Changes no study or drawing. |
+| `edgestats_setup` | `source: str = ""` (`demo`/`binance`/`dukascopy`), `symbol`, `years: float`, `archive_only: bool`, `cancel: bool` | Load the demo data or download free history in the background; questions answer "busy" while it runs. |
 | `propfirms` | `query: str` | Prop-firm challenges (25 measured). |
 | `propfirm_offers` | `query: str` | Offers for those challenges. |
 
