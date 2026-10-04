@@ -42,6 +42,12 @@ jobs:
           pip install fastmcp
           python -m unittest discover -s console/backend/tests -t console/backend/tests \
             -p 'test_mcp_server.py' -v
+          # The tool contract (annotations) and the Edge Stats tools, end to end: tool -> console -> a fake
+          # engine speaking the real engine's responses. Both skip without fastmcp, so they live here.
+          python -m unittest discover -s console/backend/tests -t console/backend/tests \
+            -p 'test_mcp_tool_annotations.py' -v
+          python -m unittest discover -s console/backend/tests -t console/backend/tests \
+            -p 'test_edgestats_mcp.py' -v
 
   backend:
     name: backend (compile + boot)

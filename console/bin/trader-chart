@@ -12,6 +12,9 @@ composer, not a second one.
     trader-chart add NATIVE                add one of Vela's native indicators
     trader-chart market SYMBOL TIMEFRAME   switch the chart's market
     trader-chart wait ID                   wait for one earlier command's outcome
+    trader-chart edge ask "gapFill WHERE dayOfWeek = Tue" --symbol BTCUSDT
+                                           Edge Stats: P(outcome | conditions) with N and a 95% interval
+                                           (also: edge status | presets | fields | report | session | show | setup)
 
 Exit codes: 0 = it worked · 1 = the chart refused or failed · 2 = no chart is open right now.
 `--json` prints the raw payload instead of prose.
@@ -26,6 +29,7 @@ import shutil
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 BASE = os.environ.get("LUXALGO_CONSOLE", "http://127.0.0.1:8787").rstrip("/")
@@ -59,8 +63,23 @@ def _request(path: str, payload: dict | None = None) -> dict:
         headers=headers,
         method="POST" if data else "GET")
     try:
-        with urllib.request.urlopen(req, timeout=30) as res:
+        with urllib.request.urlopen(req, timeout=TIMEOUT if path.startswith("/api/edgestats") else 30) as res:
             body = json.loads(res.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        # urllib raises for every 4xx/5xx — and HTTPError is a URLError, so without this branch a console
+        # that answered "401 no token" or "400 unknown outcome 'gapFil'" read as "cannot reach the console".
+        try:
+            body = json.loads(exc.read().decode("utf-8"))
+        except (ValueError, OSError):
+            die(f"the console answered HTTP {exc.code}", 1)
+        message = f"console error: {body.get('error') or body}"
+        detail = body.get("detail") if isinstance(body.get("detail"), dict) else {}
+        inner = detail.get("detail") if isinstance(detail.get("detail"), dict) else {}
+        if inner.get("position") is not None:
+            message += f" (at character {inner['position']})"
+        if detail.get("hint"):
+            message += f" — {detail['hint']}"
+        die(message, 1)
     except urllib.error.URLError as exc:
         die(f"cannot reach the console at {BASE} ({exc.reason}) — is luxalgo-web running?", 2)
     except ValueError as exc:
@@ -545,6 +564,102 @@ def cmd_replay(args) -> int:
     return ok_code(result)
 
 
+def _edge_text():
+    """The same plain-text renderer the MCP tools use (console/mcp/edge_text.py)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    sys.path.insert(0, os.path.join(here, "..", "mcp"))      # the repo layout
+    sys.path.insert(0, here)                                  # the live tree: sync-live.sh copies it beside the CLI
+    import edge_text
+    edge_text.use_cli_names()          # the answers point at `trader-chart edge …`, not at MCP tools
+    return edge_text
+
+
+def _edge_params(pairs: list[str]) -> dict:
+    out: dict = {}
+    for pair in pairs or []:
+        key, sep, raw = pair.partition("=")
+        if not sep or not key:
+            raise SystemExit(f"--param wants name=value, got {pair!r}")
+        try:
+            out[key] = int(raw) if raw.lstrip("-").isdigit() else float(raw)
+        except ValueError:
+            out[key] = raw
+    return out
+
+
+def cmd_edge(args) -> int:
+    """Edge Stats — LuxAlgo's open-source engine, on this machine: how often did a setup actually work?
+
+    Every answer carries its sample size and a 95% interval; below 10 sessions it prints counts and NO
+    rate. `--show` also puts the same answer on the operator's screen. Historical frequencies, not
+    predictions. Exit: 0 answered · 1 refused/failed · 2 no console (or, with --show, no chart open).
+    """
+    txt = _edge_text()
+    op = args.edge_op
+    api = "/api/edgestats"
+    if op == "status":
+        data = get(api + "/status")
+        text = txt.format_status(data)
+    elif op == "presets":
+        data = get(api + "/presets")
+        text = txt.format_presets(data.get("presets") or [], args.category)
+    elif op == "fields":
+        data = get(api + "/registry")
+        text = txt.format_fields(data.get("entries") or [], args.kind, args.search, args.limit)
+    elif op in ("ask", "report"):
+        body = {"symbol": args.symbol, "sessionsLimit": args.sessions}
+        for key, value in (("since", args.since), ("until", args.until), ("groupBy", args.group), ("sessionKey", args.session)):
+            if value:
+                body[key] = value
+        if op == "ask":
+            body["dsl"] = args.query
+            data = post(api + "/query", body)
+            text = txt.format_result(data, sessions=args.sessions, group_by=args.group)
+        else:
+            body["presetId"] = args.preset
+            params = _edge_params(args.param)
+            if params:
+                body["params"] = params
+            data = post(api + "/preset", body)
+            text = txt.format_result(data, sessions=args.sessions, group_by=args.group,
+                                     title=f"{(data.get('preset') or {}).get('title') or args.preset} (report)")
+        if args.show:
+            shown = send(args, {"action": "edge", "op": "ask" if op == "ask" else "report", "symbol": args.symbol,
+                                "dsl": getattr(args, "query", ""), "preset": getattr(args, "preset", ""),
+                                "params": _edge_params(getattr(args, "param", [])) or None,
+                                "since": args.since, "until": args.until, "group_by": args.group})
+            text += "\n  on screen: " + (shown.get("detail") or "no detail")
+    elif op == "session":
+        quoted = urllib.parse.quote(args.session_id, safe="")
+        data = get(f"{api}/session?id={quoted}&context=0")
+        text = txt.format_session(data)
+        if args.show:
+            shown = send(args, {"action": "edge", "op": "session", "session": args.session_id})
+            text += "\n  on screen: " + (shown.get("detail") or "no detail")
+    elif op == "show":
+        shown = send(args, {"action": "edge", "op": args.what})
+        data = shown
+        text = shown.get("detail") or "no detail"
+        if args.json:
+            print(json.dumps(shown, indent=2, ensure_ascii=False))
+            return ok_code(shown)
+    elif op == "setup":
+        if args.cancel:
+            data = post(api + "/cancel", {})
+        else:
+            body = {k: v for k, v in (("source", args.source), ("symbol", args.symbol), ("years", args.years),
+                                      ("archive_only", args.archive_only or None)) if v}
+            data = post(api + "/setup", body)
+        text = txt.format_job(data)
+    else:                                                        # argparse already restricts this
+        raise SystemExit(f"unknown edge op {op!r}")
+    if args.json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        print(text)
+    return 0
+
+
 def _anchor(text: str) -> dict:
     """`bars_ago:price` (e.g. 20:84500) or `time:price` (epoch ms/s or ISO) → one anchor dict."""
     left, sep, price = text.rpartition(":")
@@ -761,6 +876,53 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--letter", default="", help="up to 2 characters on the glyph")
     s.add_argument("--id", default="", help="(remove) which mark")
     s.set_defaults(func=cmd_marks)
+
+    s = sub.add_parser("edge", help="Edge Stats: how often did a setup actually work? (N + 95% interval on every number)")
+    es = s.add_subparsers(dest="edge_op", required=True)
+
+    def _edge_common(sp, with_show=True):
+        sp.add_argument("--symbol", default="", help="a symbol the store holds (see `edge status`)")
+        sp.add_argument("--since", default="", help="ISO date lower bound")
+        sp.add_argument("--until", default="", help="ISO date upper bound")
+        sp.add_argument("--group", default="", help="split by a categorical field (dayOfWeek, month, gapBucket …)")
+        sp.add_argument("--session", default="", help="session window (rth, utc, london …)")
+        sp.add_argument("--sessions", type=int, default=8, help="matching sessions to list (default 8)")
+        if with_show:
+            sp.add_argument("--show", action="store_true", help="also put the answer on the operator's screen")
+        sp.add_argument("--json", action="store_true", help="print the raw envelope")
+
+    e = es.add_parser("status", help="installed? what data? a download running?")
+    e.add_argument("--json", action="store_true")
+    e = es.add_parser("presets", help="the 42-report catalogue")
+    e.add_argument("--category", default="")
+    e.add_argument("--json", action="store_true")
+    e = es.add_parser("fields", help="the query language's vocabulary")
+    e.add_argument("--kind", default="", choices=["", "outcome", "predicate", "field"])
+    e.add_argument("--search", default="")
+    e.add_argument("--limit", type=int, default=40)
+    e.add_argument("--json", action="store_true")
+    e = es.add_parser("ask", help="P(outcome | conditions): edge ask \"gapFill WHERE dayOfWeek = Tue\" --symbol BTCUSDT")
+    e.add_argument("query", help="OUTCOME [WHERE condition [AND condition …]]")
+    _edge_common(e)
+    e = es.add_parser("report", help="run one catalogue report: edge report orb --symbol BTCUSDT --param window=30")
+    e.add_argument("preset")
+    e.add_argument("--param", action="append", default=[], help="name=value (repeatable)")
+    _edge_common(e)
+    e = es.add_parser("session", help="one session: levels and event times (SYMBOL|session|DATE)")
+    e.add_argument("session_id")
+    e.add_argument("--show", action="store_true", help="also show its chart on screen")
+    e.add_argument("--json", action="store_true")
+    e = es.add_parser("show", help="open / close the Edge Stats sheet on the operator's screen")
+    e.add_argument("what", nargs="?", default="open", choices=["open", "data", "close", "state"])
+    e.add_argument("--json", action="store_true")
+    e = es.add_parser("setup", help="load demo data or download free history (background job)")
+    e.add_argument("--source", default="", choices=["", "demo", "binance", "dukascopy"])
+    e.add_argument("--symbol", default="")
+    e.add_argument("--years", type=float, default=0)
+    e.add_argument("--archive-only", dest="archive_only", action="store_true")
+    e.add_argument("--cancel", action="store_true")
+    e.add_argument("--json", action="store_true")
+    s.set_defaults(func=cmd_edge)
 
     s = sub.add_parser("wait", help="wait for an earlier command's outcome")
     s.add_argument("id", type=int)

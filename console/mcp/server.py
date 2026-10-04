@@ -78,6 +78,14 @@ except ImportError:  # pragma: no cover - running as a path, not a package
     _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from freshness import DEAD_AFTER_S, STALE_AFTER_S, _command_gate, _freshness
 
+try:
+    import edge_text
+except ImportError:  # pragma: no cover - running as a path, not a package
+    import sys as _sys2
+
+    _sys2.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import edge_text
+
 BASE = os.environ.get("LUXALGO_CONSOLE", "http://127.0.0.1:8787").rstrip("/")
 INLINE_WAIT = float(os.environ.get("LUXALGO_CHART_INLINE_WAIT", "8"))
 SHOT_DIR = os.environ.get("LUXALGO_SHOT_DIR", "/tmp")
@@ -129,6 +137,13 @@ def _call(path: str, payload: dict | None = None, timeout: float = 20.0) -> dict
     try:
         with urllib.request.urlopen(req, timeout=timeout) as res:
             body = json.loads(res.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        # The console answers refusals with a JSON body (401 no token, 400 a bad query, 409 busy…).
+        # Read it: "the console is not answering" would be a lie for a console that just said no.
+        try:
+            body = json.loads(exc.read().decode("utf-8"))
+        except (ValueError, OSError):
+            raise RuntimeError(f"the console answered HTTP {exc.code}") from exc
     except TimeoutError as exc:
         # Not an URLError: py3.13 surfaces a response-read timeout unwrapped, so the handler
         # below never sees it and the agent would get a traceback instead of the sentence this
@@ -147,7 +162,17 @@ def _call(path: str, payload: dict | None = None, timeout: float = 20.0) -> dict
     except ValueError as exc:
         raise RuntimeError(f"the console sent something unreadable: {exc}") from exc
     if not body.get("ok", False):
-        raise RuntimeError(f"console refused: {body.get('error') or body}")
+        message = f"console refused: {body.get('error') or body}"
+        detail = body.get("detail")
+        if isinstance(detail, dict):
+            # An engine-side explanation (did-you-mean, where the syntax error is, how to install) is the
+            # most useful part of a refusal — keep it.
+            inner = detail.get("detail") if isinstance(detail.get("detail"), dict) else {}
+            if inner.get("position") is not None:
+                message += f" (at character {inner['position']})"
+            if detail.get("hint"):
+                message += f" — {detail['hint']}"
+        raise RuntimeError(message)
     return body.get("data") or {}
 
 
@@ -1000,6 +1025,173 @@ def edge_symbols() -> str:
     if data.get("note"):
         head += f" · {data['note']}"
     return head + "\n" + ", ".join(map(str, rows[:60]))
+
+
+# ── Edge Stats: LuxAlgo's open-source engine, run locally (console/backend/edgestats.py) ──────────────
+# The hosted edge_* tools above read LuxAlgo's published BTC/ETH presets. These ask the ENGINE on this
+# machine, over bars the operator downloaded — any question, any symbol they hold. Every answer carries
+# its sample size and a 95% interval; below the engine's floors it gives counts and NO rate, and the
+# tools repeat that rather than rounding it into a confident-sounding sentence.
+
+def _edge(path: str, payload: dict | None = None, timeout: float = 60.0) -> dict:
+    return _call("/api/edgestats" + path, payload, timeout=timeout)
+
+
+@mcp.tool(annotations=_ann("Edge Stats status", read_only=True))
+def edgestats_status() -> str:
+    """Is the local Edge Stats engine installed, what data does it hold, and is a download running?
+
+    Call this first. It never starts the engine or a download. When nothing is stored yet it says how
+    to begin (`edgestats_setup`).
+    """
+    try:
+        return edge_text.format_status(_edge("/status", timeout=15.0))
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+
+
+@mcp.tool(annotations=_ann("Edge Stats query language", read_only=True))
+def edgestats_fields(kind: str = "", search: str = "", limit: int = 40) -> str:
+    """The query language's vocabulary: every outcome, condition (predicate) and field, with definitions.
+
+    A question is `OUTCOME [WHERE condition [AND condition ...]]`, e.g.
+    `gapFill WHERE dayOfWeek = Tue AND gapPct BETWEEN 0.2% AND 0.6% AND NOT eventDay('FOMC')`.
+    `kind` is outcome | predicate | field; `search` filters by name or definition. A name that is not
+    here does not exist — the engine answers a typo with the nearest real name.
+    """
+    try:
+        data = _edge("/registry", timeout=60.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    return edge_text.format_fields(data.get("entries") or [], kind, search, max(1, min(int(limit or 40), 100)))
+
+
+@mcp.tool(annotations=_ann("Edge Stats reports", read_only=True))
+def edgestats_presets(category: str = "") -> str:
+    """The report catalogue (42 ready-made questions: gap fill, opening-range break, weekday effects, …).
+
+    Each line is `id [category] title — params`. Run one with `edgestats_report`.
+    """
+    try:
+        data = _edge("/presets", timeout=60.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    return edge_text.format_presets(data.get("presets") or [], category)
+
+
+@mcp.tool(annotations=_ann("Ask Edge Stats a question", read_only=True))
+def edgestats_query(query: str, symbol: str, since: str = "", until: str = "", group_by: str = "",
+                    sessions: int = 8, session: str = "") -> str:
+    """P(outcome | conditions) on the operator's own bars — with N and a 95% confidence interval.
+
+    `query` is the engine's language: `gapFill WHERE dayOfWeek = Tue`, `orbBreak(15m, up) WHERE gapDir = up`,
+    `closeGreen WHERE streak(red, 3)`. Use `edgestats_fields` for names. `symbol` must be one the store
+    holds (see `edgestats_status`). `since`/`until` are ISO dates. `group_by` splits the answer by a
+    categorical field (dayOfWeek, month, year, gapBucket, gapDir, a yes/no condition …). `session`
+    overrides the session window (rth, utc, london, globex …).
+
+    READ THE GUARDS before you quote a number: below 10 sessions the engine gives NO estimate; below 30
+    it is a LOW SAMPLE; the first-half/second-half split says whether it held up over time. These are
+    historical frequencies, not predictions — say so when you report them.
+    """
+    body: dict = {"dsl": query, "symbol": symbol, "sessionsLimit": max(0, min(int(sessions or 0), 50))}
+    for key, value in (("since", since), ("until", until), ("groupBy", group_by), ("sessionKey", session)):
+        if value:
+            body[key] = value
+    try:
+        env = _edge("/query", body, timeout=90.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    return edge_text.format_result(env, sessions=body["sessionsLimit"], group_by=group_by)
+
+
+@mcp.tool(annotations=_ann("Run an Edge Stats report", read_only=True))
+def edgestats_report(preset: str, symbol: str, params: dict | None = None, since: str = "", until: str = "",
+                     group_by: str = "", sessions: int = 8, session: str = "") -> str:
+    """Run one catalogue report (see `edgestats_presets`) on one symbol.
+
+    `params` fills the report's parameters, e.g. `{"window": 15, "dir": "up"}` for the opening-range
+    report; omit a parameter to use its default. Same guards and same honesty as `edgestats_query`.
+    """
+    body: dict = {"presetId": preset, "symbol": symbol, "sessionsLimit": max(0, min(int(sessions or 0), 50))}
+    if params:
+        body["params"] = params
+    for key, value in (("since", since), ("until", until), ("groupBy", group_by), ("sessionKey", session)):
+        if value:
+            body[key] = value
+    try:
+        env = _edge("/preset", body, timeout=90.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    meta = env.get("preset") or {}
+    return edge_text.format_result(env, sessions=body["sessionsLimit"], group_by=group_by,
+                                   title=f"{meta.get('title') or preset} (report)")
+
+
+@mcp.tool(annotations=_ann("One Edge Stats session", read_only=True))
+def edgestats_session(session_id: str) -> str:
+    """One historical session behind a result: its OHLC, the prior session's levels, the gap, the
+    opening ranges and when events happened. `session_id` is `SYMBOL|session|DATE`
+    (e.g. `BTCUSDT|utc|2026-03-11`) — build it from the dates `edgestats_query` lists. To SEE the bars
+    with the levels drawn on them, use `edgestats_show(op='session', session=...)`.
+    """
+    try:
+        view = _edge("/session?id=" + urllib.parse.quote(session_id, safe="") + "&context=0", timeout=60.0)
+    except RuntimeError as exc:
+        return f"✗ {exc}"
+    return edge_text.format_session(view)
+
+
+@mcp.tool(annotations=_ann("Show Edge Stats in the pane", read_only=False, destructive=False))
+def edgestats_show(op: str = "open", query: str = "", preset: str = "", session: str = "", symbol: str = "",
+                   since: str = "", until: str = "", group_by: str = "", params: dict | None = None) -> str:
+    """Put an answer on the operator's screen — the Edge Stats sheet over the chart.
+
+    `op`: open | ask (needs `query`) | report (needs `preset`, optional `params`) | session (needs
+    `session` = SYMBOL|session|DATE) | data (the download view) | close | state. This only SHOWS: ask the
+    numbers with `edgestats_query` first, then show the same question so the operator sees what you saw.
+    Nothing here changes the chart's studies or drawings.
+    """
+    fields: dict = {"op": op}
+    for key, value in (("dsl", query if op == "ask" else ""), ("preset", preset), ("session", session), ("symbol", symbol),
+                       ("since", since), ("until", until), ("group_by", group_by)):
+        if value:
+            fields[key] = value
+    if params:
+        fields["params"] = params
+    return _command("edge", **fields)
+
+
+@mcp.tool(annotations=_ann("Download data for Edge Stats", read_only=False, destructive=False, open_world=True))
+def edgestats_setup(source: str = "", symbol: str = "", years: float = 0, archive_only: bool = False,
+                    cancel: bool = False) -> str:
+    """Load or download the bars Edge Stats measures. Runs in the background; poll `edgestats_status`.
+
+    `source`: `demo` (synthetic DEMO_STK / DEMO_FUT, about 10 s — the quickest way to try everything),
+    `binance` (free, keyless crypto 1-minute history; `symbol` like BTCUSDT) or `dukascopy` (free, keyless
+    forex / metals / indices: EURUSD, XAUUSD, US500 …; slow the first time). `years` is how far back
+    (default 3 for Binance, 1 for Dukascopy, max 15). With no `source`, every symbol already stored is
+    brought up to date. `cancel=true` stops a running job. `archive_only` skips Binance's live API (for
+    regions where it is blocked).
+
+    Ask the operator before starting a REAL download: it uses their disk (hundreds of MB for years of
+    1-minute bars), their bandwidth and several minutes. While a job runs, questions answer "busy".
+    """
+    try:
+        if cancel:
+            return edge_text.format_job(_edge("/cancel", {}, timeout=15.0))
+        body: dict = {}
+        if source:
+            body["source"] = source
+        if symbol:
+            body["symbol"] = symbol
+        if years:
+            body["years"] = years
+        if archive_only:
+            body["archive_only"] = True
+        return edge_text.format_job(_edge("/setup", body, timeout=30.0))
+    except RuntimeError as exc:
+        return f"✗ {exc}"
 
 
 @mcp.tool(annotations=_ann("Prop-firm directory", read_only=True, open_world=True))

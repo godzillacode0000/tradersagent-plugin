@@ -25,9 +25,13 @@ hosted `tradingview` entry) — ruled out by the operator (30 Sep).
   `bt_run` = MA-cross only; `bt_optimize` = full pair sweep; `bt_status` reads back a run. If a bt tool
   answers `backtest_down`, check `systemctl --user status traders-agent-bt` — never hand-start the engine.
   Custom vectorbt experiments: `~/.local/share/traders-agent/bt/smc_sweep_bos.py` (liquidity-sweep + BOS demo).
+- **Edge Stats** (`edgestats_*`, LuxAlgo's open-source engine running **on this machine**) — "how often did
+  this setup actually work?" on bars the operator downloaded. It is a different thing from the hosted
+  `edge_*` reads below (LuxAlgo's published BTC/ETH presets): the local engine answers ANY question over ANY
+  symbol the store holds. See the Edge Stats section.
 - **`luxalgo`** (hosted, keyless) — catalogue truth + wider datasets: `library_search`,
   `library_get_source_code`, `library_list_*`, `library_taxonomy`, `propfirms_*`, `edge_*`, `trackers_*`.
-  Every call needs its 15–25-word third-person `context`. Edge Stats covers BTCUSDT + ETHUSDT only.
+  Every call needs its 15–25-word third-person `context`. The hosted `edge_*` reads cover BTCUSDT + ETHUSDT only.
   There are **no SMC/ICT strategies** in the Library (60 smc-ict *indicators*; the whole catalogue has
   one `strategy()` script — moon-phases).
 - **OAuth-gated**: `luxalgo_account`, `journal_*` error until `hermes mcp login luxalgo` runs in a
@@ -87,6 +91,10 @@ change — report that, never "done".
 | give the chart the whole screen / come back | `chart_fullscreen` (`on=False` to return) — the console's chrome steps aside and the page asks the browser for fullscreen |
 | chart looks stale / old JS | `chart_reload` |
 | chart is light/dark | `chart_palette` |
+| how often does X happen / did that gap fill / weekday effect / opening-range break | `edgestats_query` (ask) or `edgestats_report` (a catalogue report) — then **read the guards before quoting a number** |
+| what can I ask / which reports exist | `edgestats_presets`, `edgestats_fields` |
+| show me / put it on screen / which sessions were those | `edgestats_show` (`ask` / `report` / `session`) |
+| no data / "it says not installed" / load something to try | `edgestats_status` → `edgestats_setup` |
 
 ## The grid (multi-pane)
 
@@ -269,6 +277,47 @@ Vela's toolbar row carry. Two halves, and only the first is guaranteed:
   attaches to the backend and commands can be routed to the tab that has no bars (`the chart did not
   answer command … within 45s`). Confirm with `trader-chart state` afterwards.
 
+## Edge Stats — how often did it actually happen (4 Oct)
+
+LuxAlgo's open-source engine (github.com/LuxAlgo/edge-stats, MIT) runs locally and answers
+`P(outcome | conditions)` over the operator's own 1-minute bars. **Every number comes from the engine; never
+compute or estimate one yourself.** The pane has an Edge Stats sheet (⋯ menu → Edge Stats) and you have the
+`edgestats_*` tools.
+
+**Order of work**
+1. `edgestats_status` — installed? what symbols and to what date? a download running? It never starts anything.
+   Not installed → tell the operator the one command (`./install.sh --with-edge`); do not try to install it.
+   No data → `edgestats_setup(source="demo")` (10 s, synthetic — say it is synthetic) or a real download.
+2. Compose the question in the engine's language: `OUTCOME [WHERE condition [AND condition …]]`, e.g.
+   `gapFill WHERE dayOfWeek = Tue AND gapPct BETWEEN 0.2% AND 0.6%`. Unsure of a name → `edgestats_fields`
+   (filter with `search`); a catalogue report fits → `edgestats_presets`. The engine answers a typo with the
+   nearest real name — use it, don't guess again.
+3. `edgestats_query` / `edgestats_report` — then, if the operator would like to see it,
+   `edgestats_show(op="ask"|"report"|"session", …)` with **the same question**, so the sheet shows what you read.
+4. A single session behind a result: `edgestats_session`, or `edgestats_show(op="session")` for its bars with the
+   levels drawn on a chart. Session ids are `SYMBOL|session|DATE`.
+
+**Quoting rules (these are the engine's, and they are not optional)**
+- **Never state a rate without its N.** "79.4% of 102 sessions, 95% CI 70.6–86.1%" — never "79%".
+- **`NO ESTIMATE`** (fewer than 10 sessions): report the counts and say there is not enough history. Do not
+  say "roughly", do not infer a direction, do not round a count into a probability.
+- **`LOW SAMPLE`** (fewer than 30): say it is a hint, and that the interval is wide.
+- **Check the stability line.** "The halves DISAGREE" or "recent sessions DIVERGE" means the pattern may have
+  changed — say so before any conclusion.
+- These are **historical frequencies, not predictions and not advice.** Never turn one into "it will", "buy"
+  or "sell". Do not size a trade from it. Context the engine does not have (news, regime, liquidity) is yours to
+  mention as a caveat, not to fill in.
+- Say which data it is: `DEMO_*` symbols are synthetic; Dukascopy volume is tick count; index/metal prices are
+  Dukascopy's own CFD quotes.
+
+**Downloads (`edgestats_setup`) — ask first.** A real download uses the operator's disk (hundreds of MB for
+years of 1-minute bars), bandwidth and minutes. Say what you will fetch, from where, how far back, then wait for a
+yes. Free keyless sources only: `binance` (crypto, e.g. BTCUSDT) and `dukascopy` (EURUSD, XAUUSD, US500 …). While
+a job runs every question answers `busy` — poll `edgestats_status`, do not retry in a loop. `cancel=true` stops it.
+
+**Errors you will see:** `edge_not_installed` / `edge_no_data` / `edge_busy` / `edge_start_failed` carry their own
+hint — relay it. `bad_query` carries the engine's suggestion and the character position.
+
 ## Hard stops
 
 - **`chart_shot` includes our overlay now (fixed 1 Oct).** The page's `screenshot()` in `workspace.js`
@@ -283,6 +332,7 @@ Vela's toolbar row carry. Two halves, and only the first is guaranteed:
   invisible. For a diagnostic label, anchor it mid-pane (`bar_index - 150`), never at `bar_index`.
 
 - One indicator per chart. Replace, never stack.
+- Edge Stats numbers: N with every rate; no estimate below 10 sessions; never a prediction. Real downloads need a yes.
 - No claim without a screenshot.
 - Do not invent LuxAlgo lookalikes unless the operator asked for a data-drawn level (PDH/PDL pattern).
 - A frozen/occluded pane executes nothing — `chart_views` / heartbeat `build`, then `chart_reload`.
