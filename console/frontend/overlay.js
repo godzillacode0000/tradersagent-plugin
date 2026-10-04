@@ -284,14 +284,23 @@
     return calibCache;
   }
 
+  /* A canvas made for an earlier host (a rebuilt cell) keeps its pixels in the DOM if nobody removes
+     it — old drawings ghosting under the new ones, and clear() never reaching them (seen once on
+     4 Oct, ids doubled). There is one overlay: drop every other. */
+  function sweepStale(keep) {
+    document.querySelectorAll('canvas#chart-overlay').forEach((c) => { if (c !== keep) c.remove(); });
+  }
+
   function ensureCanvas() {
     const target = overlayHost();
     if (!target) return null;
     if (canvas && host === target && canvas.isConnected) {
+      sweepStale(canvas);
       sizeCanvas();
       target.appendChild(canvas);
       return canvas;
     }
+    sweepStale(null);
     host = target;
     canvas = document.createElement('canvas');
     canvas.id = 'chart-overlay';
@@ -487,6 +496,7 @@
 
   function clear() {
     lastSpec = null;                               // state() reads this back as "nothing painted"
+    sweepStale(canvas);
     if (tablesHost) tablesHost.innerHTML = '';
     if (!canvas) return 0;
     const ctx = canvas.getContext('2d');

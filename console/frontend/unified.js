@@ -203,7 +203,11 @@ window.TraderRun = (function () {
 
   function record(name, drew) {
     if (!name || counts(drew) === 0) return;
-    if (!applied.includes(name)) applied.push(name);
+    /* ChartOverlay.apply() clears the canvas, so a new script REPLACES the last: the legend and the chip
+       name that one script, not every script ever run since the page loaded (4 Oct: "Object Flood ·
+       Pivot Zones · Mini Volume Profile" over a canvas that held only the last). */
+    applied.length = 0;
+    applied.push(name);
     announce();
     const legend = document.getElementById('script-legend');
     if (legend) {
@@ -408,5 +412,60 @@ window.TraderRun = (function () {
     return r;
   }
 
-  return { run, summarize, flatten, reset, restore, list: () => applied.slice() };
+  /* The drawings are a picture of ONE run on ONE market. A built-in recomputes itself when the symbol or
+     timeframe changes; the overlay does not, so after 1h -> 4h the 1h boxes floated over the 4h candles
+     at prices that had nothing to do with them (measured 4 Oct). Re-run what is on the chart against the
+     new market; if that fails, take the stale picture off rather than leave it lying. */
+  let marketSig = null;
+  let rerunning = false;
+  async function rerun() {
+    if (rerunning || !applied.length) return null;
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(RUN_KEY) || 'null'); } catch (err) { saved = null; }
+    if (!saved || !saved.pine) return null;
+    rerunning = true;
+    try {
+      const r = await run(saved.pine, saved.name, Object.assign({}, saved.opts || {}, { restoring: true }));
+      if (!r.ok || !r.drew) {
+        if (window.ChartOverlay) window.ChartOverlay.clear();
+        applied.length = 0;
+        announce();
+        const legend = document.getElementById('script-legend');
+        if (legend) { legend.hidden = true; legend.textContent = ''; legend.title = ''; }
+        if (window.taToast) window.taToast('The script could not be re-run on this market, so its drawings were removed.', true);
+      }
+      return r;
+    } finally { rerunning = false; }
+  }
+  function watchMarket() {
+    const ws = window.__wsApp && window.__wsApp.ws;
+    const sigNow = () => { const m = window.chartMarket ? window.chartMarket() : null; return m && m.symbol && m.interval ? m.symbol + '@' + m.interval : null; };
+    marketSig = sigNow();
+    let pendingSig = null;
+    let timer = null;
+    /* NOT a reset-on-every-event debounce: the workspace emits state:changed constantly, so a timer that
+       restarts on each one never fires (measured 4 Oct — the re-run silently never happened). The wait
+       starts when a NEW market is first seen and only restarts if the market changes again. */
+    const check = () => {
+      const now = sigNow();
+      if (!now || now === marketSig || now === pendingSig) return;
+      pendingSig = now;
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        pendingSig = null;
+        if (sigNow() !== now) { check(); return; }
+        marketSig = now;
+        /* The new bars load and Vela's visible window settles first: drawing against the old window put
+           boxes at the wrong bars. A quick script gets a second pass after the chart has surely settled. */
+        const t0 = Date.now();
+        const r = await rerun();
+        if (r && r.ok && Date.now() - t0 < 2000) setTimeout(() => { if (sigNow() === now) rerun(); }, 2500);
+      }, 1500);
+    };
+    try { if (ws && typeof ws.on === 'function') { ws.on('state:changed', check); ws.on('cell:created', check); } } catch (err) { /* no events: the poll below covers it */ }
+    setInterval(check, 1000);   // an older Vela without those events still gets the re-run, a moment later
+  }
+  window.addEventListener('ws-ready', watchMarket, { once: true });
+
+  return { run, summarize, flatten, reset, restore, rerun, list: () => applied.slice() };
 })();

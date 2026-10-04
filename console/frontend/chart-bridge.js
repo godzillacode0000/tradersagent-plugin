@@ -1626,7 +1626,14 @@
       let natives = 0;
       try { natives = (c && typeof c.presentNativeIndicators === 'function')
         ? (c.presentNativeIndicators() || []).length : 0; } catch (err) { natives = 0; }
-      return { series, natives, mismatch: series > natives };
+      /* The legend is stale when the chart draws series and the console can name NO study at all (the
+         AMD POC case). The old test, `series > natives`, compared a count of SERIES with a count of
+         INDICATORS: RSI alone draws six series, so adding a plain built-in raised "legend shows 7
+         studies · the console knows 4 — reload" (measured 4 Oct), and the banner reloads the page when
+         clicked. paneStudies() is the same list the pane's chip counts, volume excluded. */
+      let named = 0;
+      try { named = paneStudies().length; } catch (err) { named = 0; }
+      return { series, natives, named, mismatch: series > 0 && named === 0 };
     },
     streamState: () => ({
       connected: !!stream && stream.readyState === 1,
