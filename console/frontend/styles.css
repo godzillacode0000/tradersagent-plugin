@@ -48,6 +48,16 @@
   --lx-accent-line:     #1197e2;
   --lx-accent-ink:      #6cc6f5;
 
+  /* the script editor's syntax colours (script-highlight.js): five roles, each AA on the canvas and under the
+     caret-line wash (pinned in test_script_highlight.py). Soft tones of the accent's own family plus one violet, one
+     green and one amber — a code editor needs them; the rest of the pane keeps its one accent. Comments are the
+     faint ink. */
+  --lx-syn-keyword:     #6cc6f5;
+  --lx-syn-builtin:     #b8a3f2;
+  --lx-syn-string:      #8fd694;
+  --lx-syn-number:      #f0b86e;
+  --lx-syn-comment:     #82828b;
+
   /* P&L / direction — the same pair trade-journal hands to Vela, so
      candles and chips agree */
   --lx-profit:          #0ca30c;
@@ -193,6 +203,12 @@
   --lx-accent-soft:   rgba(11, 124, 189, .10);
   --lx-accent-line:   #0b7cbd;
   --lx-accent-ink:    #0b6ba3;
+
+  --lx-syn-keyword:   #0b6ba3;
+  --lx-syn-builtin:   #6b4fbb;
+  --lx-syn-string:    #2d6a31;
+  --lx-syn-number:    #935600;
+  --lx-syn-comment:   #686760;
 
   --lx-profit:        #006300;
   --lx-loss:          #c93434;
@@ -756,15 +772,55 @@ pre {
 .script__gutter .is-cur { color: var(--lx-fg-muted); }
 .script__gutter .is-err { color: var(--lx-danger); font-weight: 700; }
 .script__src {
-  flex: 1; min-width: 0; width: 100%; box-sizing: border-box;
+  position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box;
   padding: var(--lx-space-2) var(--lx-space-3);
-  border: 0; background: transparent; color: inherit; resize: none;
-  white-space: pre; overflow-wrap: normal; overflow: auto;
-  font-family: var(--lx-font-mono);
-  font-size: 12.5px; line-height: 1.55; tab-size: 2;
+  border: 0; background: transparent; color: inherit; resize: none; overflow: auto;
 }
 .script__src:focus { outline: none; }
 .script__edit:focus-within { box-shadow: inset 2px 0 0 var(--lx-accent); }
+/* The editor's text and its coloured copy. `.script__code` is the box both live in; the copy (`.script__hl`, in
+   `.script__clip`) is kept in step with the textarea by script-highlight.js, and every property that sets where a
+   glyph lands is the SAME on both — font, size, line height, tab size, no ligatures, no letter spacing. The
+   textarea's own text goes transparent only while the copy is on screen (`.is-hl`, set after its first successful
+   render): if the script is huge, or anything fails, the plain text simply shows. */
+.script__code { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+.script__hl, .script__src {
+  font-family: var(--lx-font-mono); font-size: 12.5px; line-height: 1.55; tab-size: 2;
+  font-variant-ligatures: none; font-kerning: none; letter-spacing: 0; white-space: pre; overflow-wrap: normal;
+  text-rendering: geometricPrecision;      /* fractional advances on both, so a run split into spans lands where one run does */
+}
+/* The copy is a second scroller shaped like the textarea: the same padding, the same client area (script-highlight.js
+   sets right / bottom to the scrollbars' size, so text scrolled under a scrollbar never shows through it), and the
+   same scroll offsets, copied from the textarea. The copy's own text is a window of the lines near the view between
+   two spacers, so its scroll height is the textarea's. The browser then snaps both to the pixel grid the same way
+   — it does not when the copy is merely positioned over a clip (measured: a pixel off at a fractional editor
+   position or a fractional scroll offset on a scaled display). Nothing ever scrolls it but the script: it takes no
+   pointer events, holds nothing focusable and has no scrollbars. */
+.script__clip {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0; box-sizing: border-box;
+  padding: var(--lx-space-2) var(--lx-space-3);
+  overflow: auto; scrollbar-width: none; pointer-events: none;
+}
+.script__clip::-webkit-scrollbar { display: none; }
+.script__edit:not(.is-hl) .script__clip { visibility: hidden; }       /* colours off (composing, too big, failed): only the textarea's own text */
+.script__hl {                              /* a plain block: the global `pre` rule (a card, 60vh tall, scrolling) is undone */
+  display: block; margin: 0; padding: 0; border: 0; border-radius: 0; background: none; box-sizing: content-box;
+  max-height: none; overflow: visible; color: var(--lx-fg); pointer-events: none; user-select: none;
+}
+.script__edit.is-hl .script__src { color: transparent; -webkit-text-fill-color: transparent; caret-color: var(--lx-fg); }
+.script__edit.is-hl .script__src::selection { background: color-mix(in srgb, var(--lx-accent) 38%, transparent); -webkit-text-fill-color: transparent; }
+.script__src::placeholder { color: var(--lx-fg-faint); -webkit-text-fill-color: var(--lx-fg-faint); }
+.hl-k, .hl-d { color: var(--lx-syn-keyword); }
+.hl-b { color: var(--lx-syn-builtin); }
+.hl-s { color: var(--lx-syn-string); }
+.hl-n { color: var(--lx-syn-number); }
+.hl-c { color: var(--lx-syn-comment); font-style: italic; }
+.hl-d { font-style: normal; }
+@media (forced-colors: active) {
+  .script__hl { display: none; }
+  .script__edit.is-hl .script__src { color: CanvasText; -webkit-text-fill-color: CanvasText; }
+}
+
 /* Row tints, drawn over the text from the same arithmetic as the gutter (row height x line): the line the
    caret is on (a quiet wash) and the line an error names (a left marker and a stronger wash). */
 .script__mark { position: absolute; left: 0; right: 0; top: 0; pointer-events: none; }

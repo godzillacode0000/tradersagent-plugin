@@ -46,7 +46,7 @@ native tools.
 
 Versions: Hermes Desktop 0.21.5, console `SERVER_VERSION = 1.0.0`. CI was red from
 28 Sep (`1f9d340`) to 2 Oct (`8df6e2e` — a stale MCP test only CI could see); green since `ab3708b`, and
-green on every ship below. **974 backend tests** (+67 skipped without `fastmcp` / a real Edge Stats engine), 8 plugin contributions across 5 areas.
+green on every ship below. **1006 backend tests** (+77 skipped without `fastmcp` / a real Edge Stats engine), 8 plugin contributions across 5 areas.
 Shipped since this file was written: the paper broker (Phase 5), replay (6/6b), the top-bar one-door
 consolidation, the drawer as the single Library surface, and Phase 7 — three agent doors into Vela
 (`chart_drawing` 76 types / `chart_view` settings / `chart_marks`), 54 MCP tools (8 of them `edgestats_*`). 4 Oct: Edge Stats — the optional local engine, the sheet behind the `⋯` menu, the eight tools (see CHANGELOG; real Binance / Dukascopy downloads were never run from the build machine). Also 4 Oct: the top row
@@ -268,7 +268,7 @@ Working, with evidence:
 - Latency: symbol switch **686–698 ms** end to end, screenshot **35 ms**, `clear` **7 ms**, SSE push
   single-digit ms (transport is not the bottleneck; the chart engine fetch+render is).
 - Console health: `/api/health` ok, LuxAlgo MCP connected, 29 endpoints.
-- 974 backend tests (67 skipped bare; 1 with fastmcp + a real engine), plugin harness OK (8 contributions / 5 areas), CI green since `ab3708b`
+- 1006 backend tests (77 skipped bare; 1 with fastmcp + a real engine), plugin harness OK (8 contributions / 5 areas), CI green since `ab3708b`
   (see the correction above — earlier runs were red for a week and nobody looked).
 
 Current live state (transient): chart on **BTCUSDT 1m** (dark), the Breakout Detector overlay restored

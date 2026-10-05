@@ -6,6 +6,22 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Syntax colouring in the script editor.** Comments, `//@directives`, strings, numbers and `#RRGGBB`
+  colours, keywords and types, and Pine's built-ins (`ta.sma`, `close`, `size.small` …) are coloured as you
+  type — in five inks (the accent's own soft tones, one violet, one green, one amber; comments are the
+  faint ink), AA on the canvas and under the caret-line wash in both themes. No library, no CDN, offline:
+  the editor is still a plain `<textarea>` (so the gutter, the row marks, Ctrl/Cmd+Enter, Escape, undo,
+  selection and input methods work exactly as before) and its text is made transparent while a coloured
+  copy of the same text is drawn under it — the same font, line height and scroll offsets, a scroller
+  shaped like the textarea so the browser snaps both to the same pixels (measured to the pixel at 1×,
+  1.25×, 1.5× and 2×, with the editor starting on a fraction of a pixel and scrolled to fractional
+  positions). Pine has no multi-line strings or comments, so a line is coloured on its own and only the
+  lines on screen (plus a margin) are ever coloured: scrolling costs about 3 ms a frame whatever the
+  script's length, and an edit in a 150 000-character script about 30 ms, most of it the browser laying the
+  text out. The copy switches itself off — the plain text shows again — for a script over 300 000 characters, while an input
+  method is composing, in forced-colours mode, and if anything in it throws; a name followed by `=` is a
+  variable or a named argument, never a keyword (`timeframe = "D"`, `plot(x, color = red)`).
+
 - **Saved scripts: Save, Open, Rename, Delete.** A list button in the script pane's action bar (a view in the
   editor's place, like Settings — no new pane, nothing pushes the chart) keeps scripts on this machine
   (localStorage): the name, the code **and the settings values you chose**, so "Hull Butterfly, tight" and

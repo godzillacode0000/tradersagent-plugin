@@ -1345,6 +1345,7 @@ async function main() {
     gutter.style.paddingBottom = `calc(var(--lx-space-2) + ${bar}px)`;
     gutter.scrollTop = srcBox.scrollTop;
     paintMarks();
+    window.dispatchEvent(new Event('scriptpane:painted'));      // the coloured layer (script-highlight.js) repaints on this
   };
   const caretLine = () => srcBox.value.slice(0, srcBox.selectionStart).split('\n').length;
   const syncCaret = () => { const l = caretLine(); if (l !== curLine) { curLine = l; paintMarks(); } };

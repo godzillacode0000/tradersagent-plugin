@@ -143,9 +143,14 @@
                pointer-events: none — they are a picture, never a target. -->
           <div class="script__mark script__mark--cur" id="script-mark-cur" aria-hidden="true" hidden></div>
           <div class="script__mark script__mark--err" id="script-mark-err" aria-hidden="true" hidden></div>
-          <textarea id="script-src" class="script__src" wrap="off" spellcheck="false" autocapitalize="off"
-                    aria-label="Pine source"
-                    placeholder="// Paste Pine here, then press ▶ Run.&#10;// Plots become Vela series; boxes, lines and labels go on the chart."></textarea>
+          <!-- The coloured copy of the text lives under the textarea (script-highlight.js): the textarea keeps the
+               caret, the selection and every key; its text is transparent only while the copy is on screen. -->
+          <div class="script__code" id="script-code">
+            <div class="script__clip" aria-hidden="true"><pre class="script__hl" id="script-hl"></pre></div>
+            <textarea id="script-src" class="script__src" wrap="off" spellcheck="false" autocapitalize="off"
+                      aria-label="Pine source"
+                      placeholder="// Paste Pine here, then press ▶ Run.&#10;// Plots become Vela series; boxes, lines and labels go on the chart."></textarea>
+          </div>
         </div>
         <!-- Settings (the script's input.*() values): a view that takes the editor's place while it is open.
              A change applies at once — no Save — so the status line below is where the result shows. -->
@@ -288,6 +293,7 @@
 <script type="module" src="./workspace.js"></script>
 <script src="./app.js"></script>
 <script src="./script-library.js"></script>
+<script src="./script-highlight.js"></script>
 <script src="./drawer.js"></script>
 <script src="./broker.js"></script>
 <!-- The replay control strip (Phase 6, 3 Oct): started from the ⋯ menu, hidden until replay is on.

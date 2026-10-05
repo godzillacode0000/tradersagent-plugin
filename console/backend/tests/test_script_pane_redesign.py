@@ -60,9 +60,9 @@ class ActionBar(unittest.TestCase):
 class Gutter(unittest.TestCase):
     def test_the_editor_does_not_wrap(self):
         self.assertIn('wrap="off"', PANE)
-        body = rule(".script__src")
-        self.assertIn("white-space: pre", body)
-        self.assertIn("resize: none", body)
+        # white-space is shared with the coloured copy under the textarea (script-highlight.js), which must not wrap either
+        self.assertIn("white-space: pre", rule(".script__hl, .script__src"))
+        self.assertIn("resize: none", rule(".script__src"))
 
     def test_the_gutter_makes_room_for_a_horizontal_scrollbar(self):
         paint = BLOCK.split("const paintGutter = () => {", 1)[1].split("\n  };", 1)[0]
