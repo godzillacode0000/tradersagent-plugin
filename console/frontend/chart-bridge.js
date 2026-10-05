@@ -281,6 +281,53 @@
     }
   }
 
+  /* ── `inputs` on an agent command (apply / draw / script) ─────────────────────────────────────────
+     The script's own settings, by label: { "Length": 50, "Show upper band": false }. They are checked
+     against what the script declares (ScriptTools.resolveInputs, the same coerce the Settings panel uses),
+     so the reply says what was used, what was refused and WHY, and which inputs the script does have —
+     the agent fixes its call instead of guessing. A script that is not told anything runs on its
+     defaults exactly as before. */
+  async function agentInputs(pine, given) {
+    if (given === undefined || given === null) return null;
+    const ST = window.ScriptTools;
+    const R = window.PineTSRunner;
+    const refuse = (reason) => ({
+      overrides: null, keyed: {}, applied: [], available: [], metas: null,
+      ignored: (given && typeof given === 'object' && !Array.isArray(given) && Object.keys(given).length
+        ? Object.keys(given) : ['(inputs)']).map((name) => ({ name, reason })),
+    });
+    if (typeof given !== 'object' || Array.isArray(given)) {
+      return refuse('inputs must be an object that maps an input\u2019s label to its value, e.g. {"Length": 50}');
+    }
+    if (!Object.keys(given).length) return { overrides: {}, keyed: {}, applied: [], ignored: [], available: [], metas: null };
+    if (!ST || !R || typeof R.scanInputs !== 'function') return refuse('this page cannot read a script\u2019s inputs \u2014 reload the console');
+    const scan = await R.scanInputs(pine);
+    if (!scan.ok) return refuse('the script\u2019s inputs could not be read (' + ST.cleanMessage(scan.reason) + ')');
+    const res = ST.resolveInputs(scan.inputs, given);
+    res.metas = scan.inputs;
+    return res;
+  }
+
+  /** After a run that took `inputs`: put what happened on the reply, and let the editor's Settings show it
+   *  (only when the editor holds this very script — an agent run never overwrites the operator's draft). */
+  async function settleInputs(out, pine, res, ran) {
+    if (!res) return;
+    const ST = window.ScriptTools;
+    const sp = window.scriptPane;
+    let inEditor = false;
+    try {
+      if (res.overrides && sp && typeof sp.adoptInputs === 'function') inEditor = await sp.adoptInputs(pine, res.keyed, { ran, metas: res.metas });
+    } catch (err) { inEditor = false; }
+    out.inputs = { applied: res.applied, ignored: res.ignored, inEditor };
+    if (res.ignored.length) out.inputs.available = res.available;
+    const notes = res.applied.filter((a) => a.note).map((a) => a.name + ': ' + a.note);
+    const bits = [];
+    if (res.applied.length) bits.push('inputs: ' + ST.appliedLine(res.applied) + (notes.length ? ' (' + notes.join('; ') + ')' : ''));
+    if (res.ignored.length) bits.push('\u26a0 not used \u2014 ' + ST.ignoredLine(res.ignored, res.available));
+    if (inEditor) bits.push('shown in the script pane\u2019s Settings');
+    if (bits.length) out.detail = (out.detail ? out.detail + ' \u00b7 ' : '') + bits.join(' \u00b7 ');
+  }
+
   /** Did anything actually LAND on the canvas? "The engine ran" is a different question, and the
    *  two were conflated until the audit's follow-up (#55 and its review): a series-only script whose
    *  paths the overlay painted was reported as "nothing landed", because the test summed the
@@ -340,7 +387,8 @@
           if (!c || typeof window.chartBars !== 'function') throw new Error('no chart on this page');
           /* One landasan (unified.js): geometry to the overlay, plot series to a native — the
              same run the script editor and the Library's Run PineTS perform. */
-          const r = await window.TraderRun.run(pine, 'agent');
+          const given = await agentInputs(pine, command.inputs);
+          const r = await window.TraderRun.run(pine, 'agent', given ? { inputs: given.overrides || {} } : undefined);
           if (!r.ok) {
             out.detail = r.reason || 'not runnable: unknown';
             out.error = r.error || null;             // stable code + hint, not just prose
@@ -371,6 +419,7 @@
               ? window.TraderRun.summarize(r)
               : 'ran, but nothing landed on the chart · ' + window.TraderRun.summarize(r);
           }
+          await settleInputs(out, pine, given, true);
           break;
         }
         case 'add': {
@@ -414,7 +463,9 @@
           const pine = String(command.pine || '');
           if (!pine.trim()) throw new Error('no Pine source in the command');
           if (!window.ChartOverlay) throw new Error('no overlay on this page — reload the console');
-          const r = await window.TraderRun.run(pine, 'agent-draw', command.opts || {});
+          const given = await agentInputs(pine, command.inputs);
+          const r = await window.TraderRun.run(pine, 'agent-draw',
+            Object.assign({}, command.opts || {}, given ? { inputs: given.overrides || {} } : {}));
           if (!r.ok) {
             out.detail = r.reason || 'not runnable: unknown';
             out.error = r.error || null;             // same contract as `apply`
@@ -430,6 +481,7 @@
             out.result = 'metrics';
             out.detail = '◆ ran, metrics only (no plot/overlay) · ' + window.TraderRun.summarize(r);
           } else out.detail = window.TraderRun.summarize(r);
+          await settleInputs(out, pine, given, true);
           break;
         }
         case 'clear': {
@@ -1214,6 +1266,26 @@
               'newer frontend files';
             break;
           }
+          /* `mode: inputs` is a READ: what settings the script declares, nothing run and no pane opened.
+             It is how an agent learns the labels before it sets them. */
+          if (String(command.mode || '') === 'inputs') {
+            const src = String(command.pine || command.source || '');
+            if (!src.trim()) { out.detail = 'no Pine source in the command'; break; }
+            const ST = window.ScriptTools;
+            const R = window.PineTSRunner;
+            if (!ST || !R || typeof R.scanInputs !== 'function') {
+              out.detail = 'this page cannot read a script\u2019s inputs \u2014 reload the console to pick up the newer frontend files';
+              break;
+            }
+            const scan = await R.scanInputs(src);
+            if (!scan.ok) { out.detail = 'the script\u2019s inputs could not be read: ' + ST.cleanMessage(scan.reason); break; }
+            out.ok = true;
+            out.inputs = { available: scan.inputs.map(ST.inputSummary) };
+            out.detail = scan.inputs.length
+              ? scan.inputs.length + (scan.inputs.length === 1 ? ' input: ' : ' inputs: ') + scan.inputs.map(ST.describeInput).join('; ')
+              : 'this script declares no input.*() settings';
+            break;
+          }
           /* The bridge could open the editor but never close it (23 Sep pane audit). `close: true`
              makes the door symmetric: the state says whether the pane is up. */
           if (command.close) {
@@ -1241,14 +1313,22 @@
               out.detail = 'no editor on this page — the script pane did not open';
               break;
             }
-            box.value = pine;
-            box.dispatchEvent(new Event('input', { bubbles: true }));
+            if (typeof sp.load === 'function') {
+              sp.load({ source: pine });         // the pane's own hands: marks, values and any saved-script attachment reset
+            } else {
+              box.value = pine;
+              box.dispatchEvent(new Event('input', { bubbles: true }));
+            }
             out.ok = true;
             out.lines = pine.split('\n').length;
             out.detail = 'loaded ' + out.lines + ' line(s) into the editor — press Run to execute';
+            /* With `inputs`, the editor's Settings are set too, so the operator's Run uses them. */
+            await settleInputs(out, pine, await agentInputs(pine, command.inputs), false);
             break;
           }
-          const r = await window.TraderRun.run(pine, String(command.name || 'agent-script'));
+          const given = await agentInputs(pine, command.inputs);
+          const r = await window.TraderRun.run(pine, String(command.name || 'agent-script'),
+            given ? { inputs: given.overrides || {} } : undefined);
           out.ok = paintedAnything(r);         // the same read-back rule as `apply` and `draw`
           out.ms = r.ms || null;
           out.series = r.ok ? r.series.length : 0;
@@ -1260,6 +1340,7 @@
               : 'ran, but nothing landed on the chart · ' + window.TraderRun.summarize(r))
             : r.reason;
           if (!r.ok) out.error = r.error || null;
+          else await settleInputs(out, pine, given, true);
           break;
         }
         case 'rect': {

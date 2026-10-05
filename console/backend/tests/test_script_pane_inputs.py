@@ -95,8 +95,8 @@ class Settings(unittest.TestCase):
         self.assertLess(HTML.index('src="./script-tools.js"'), HTML.index('src="./app.js"'))
 
     def test_the_view_takes_the_editors_place_and_never_adds_height(self):
-        self.assertIn(".script.is-settings .script__edit { display: none; }", CSS)
-        self.assertIn(".script.is-settings .script__out { display: none; }", CSS)
+        self.assertRegex(CSS, r"\.script\.is-settings \.script__edit,\s*\.script\.is-scripts \.script__edit,\s*\.script\.is-scripts \.script__settings \{ display: none; \}")
+        self.assertRegex(CSS, r"\.script\.is-settings \.script__out,\s*\.script\.is-scripts \.script__out \{ display: none; \}")
 
     def test_one_escape_closes_one_layer_drawer_then_settings_then_the_pane(self):
         """The behaviour is run in test_escape_layers.py; this pins that the pane block adds no second
@@ -105,7 +105,8 @@ class Settings(unittest.TestCase):
         self.assertLess(esc.index("closeDrawerIfOpen"), esc.index("closeScriptLayerIfOpen"))
         self.assertLess(esc.index("closeScriptLayerIfOpen"), esc.index("setPanel('detail', false)"))
         self.assertNotIn("'Escape'", BLOCK.replace("Escape: see escapeKeydown", ""))
-        self.assertIn("window.closeScriptLayerIfOpen = () => { if (!settingsOpen) return false; setSettingsOpen(false); return true; };", BLOCK)
+        # any view that holds the editor's place (Settings, the saved scripts) steps back to the editor first
+        self.assertIn("window.closeScriptLayerIfOpen = () => { if (view === 'editor') return false; setView('editor'); return true; };", BLOCK)
 
     def test_values_go_through_coerce_so_nothing_unchecked_reaches_the_engine(self):
         commit = BLOCK.split("const commit = (raw) => {", 1)[1].split("};", 1)[0]

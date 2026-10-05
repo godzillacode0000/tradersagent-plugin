@@ -237,13 +237,41 @@ def cmd_shot(args) -> int:
     return 0
 
 
+def parse_inputs(pairs) -> dict | None:
+    """`--input Length=50 --input "Show upper band=false"` -> {"Length": 50, "Show upper band": False}.
+
+    A value that is valid JSON (50, 2.5, true, null, "text") is read as JSON; anything else is text, so
+    `--input "MA type=EMA"` and `--input "Basis colour=#ff8800"` work without quoting. The page checks every
+    label against the script and answers with the labels it does have.
+    """
+    if not pairs:
+        return None
+    out: dict = {}
+    for item in pairs:
+        name, sep, raw = item.partition("=")
+        if not sep or not name.strip():
+            die(f"--input wants NAME=VALUE, got {item!r}", 2)
+        try:
+            value = json.loads(raw)
+        except ValueError:
+            value = raw
+        if isinstance(value, (dict, list)):
+            die(f"--input {name.strip()!r}: a value is a number, true/false, text or null", 2)
+        out[name.strip()] = value
+    return out
+
+
 def cmd_draw(args) -> int:
     """Run a Library script and paint what it built (boxes/lines/labels) on our own overlay."""
     import sys as _sys
     pine = _sys.stdin.read() if args.pine == "-" else open(args.pine, "r", encoding="utf-8").read()
     if not pine.strip():
         die("no Pine source given", 1)
-    result = send(args, {"action": "draw", "pine": pine})
+    command = {"action": "draw", "pine": pine}
+    inputs = parse_inputs(getattr(args, "input", None))
+    if inputs is not None:
+        command["inputs"] = inputs
+    result = send(args, command)
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
@@ -291,6 +319,11 @@ def cmd_script(args) -> int:
     if getattr(args, "pine", None):
         with open(args.pine, "r", encoding="utf-8") as fh:
             command["source"] = fh.read()
+    if args.what == "inputs" and "source" not in command:
+        die("script inputs needs --pine FILE (the script whose settings to list)", 2)
+    inputs = parse_inputs(getattr(args, "input", None))
+    if inputs is not None:
+        command["inputs"] = inputs
     result = send(args, command)
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
@@ -770,6 +803,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("draw", help="run a Library script and draw its boxes/lines on the overlay")
     s.add_argument("pine", help="a .pine file, or - to read stdin")
+    s.add_argument("--input", action="append", metavar="LABEL=VALUE",
+                   help="set one of the script's own settings, by label; repeat for more "
+                        "(--input Length=50 --input \"Show upper band=false\")")
     s.set_defaults(func=cmd_draw)
 
     s = sub.add_parser("clear", help="clear the overlay and the natives our paint layer added")
@@ -780,9 +816,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--all", action="store_true", help="remove every study the chart carries")
     s.set_defaults(func=cmd_remove)
 
-    s = sub.add_parser("script", help="drive Script mode: show / draw / native / clear, optionally loading a .pine")
-    s.add_argument("what", choices=["show", "draw", "native", "clear"])
+    s = sub.add_parser("script", help="drive Script mode: show / draw / native / clear / inputs, optionally loading a .pine")
+    s.add_argument("what", choices=["show", "draw", "native", "clear", "inputs"],
+                   help="inputs lists the script's settings (needs --pine) and runs nothing")
     s.add_argument("--pine", help="a .pine file to load into the editor first")
+    s.add_argument("--input", action="append", metavar="LABEL=VALUE",
+                   help="set one of the script's own settings, by label; repeat for more")
     s.set_defaults(func=cmd_script)
 
     s = sub.add_parser("browse", help="open the Library concept list, optionally on one family")

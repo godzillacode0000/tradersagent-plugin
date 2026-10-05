@@ -99,10 +99,13 @@ class TheDrawerMarksTheRowNotAStrip(unittest.TestCase):
 class TheDetailsViewCanEditACopy(unittest.TestCase):
     def test_the_button_exists_and_opens_the_script_pane(self):
         self.assertIn('id="edit-copy"', APP)
-        body = APP.split("$('#edit-copy').addEventListener", 1)[1][:700]
+        body = APP.split("$('#edit-copy').addEventListener", 1)[1][:1800]
         self.assertIn("script-src", body)
         self.assertIn("(copy)", body)
         self.assertIn("setPanel('script', true)", body)
+        # the copy goes in through the pane's own hands (5 Oct): it detaches the editor from any saved script,
+        # so Save can never overwrite the one that was open
+        self.assertIn("window.scriptPane.load({ source, name: copyName })", body)
 
 
 class TheDotRidesTheRow(unittest.TestCase):

@@ -234,6 +234,10 @@ def record_result(root: str | Path, payload: dict) -> dict:
         # answer's N / estimate. Named here because the store whitelists: without it the agent is told
         # "ok" and never what is on screen.
         "edge": payload.get("edge"),
+        # `inputs` on apply / draw / script (and `mode: inputs`): what was applied, what was refused and
+        # why, and the settings the script does declare. Named here because the store whitelists — without
+        # it the agent is told "ok" and never that a label it sent was ignored.
+        "inputs": payload.get("inputs"),
     }
     if payload.get("shot"):
         path = _decode_shot(root, f"shot-{rid}", str(payload["shot"]))

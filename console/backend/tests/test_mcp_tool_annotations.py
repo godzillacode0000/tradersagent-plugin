@@ -80,7 +80,8 @@ class ToolAnnotationsTest(unittest.TestCase):
         self.assertGreaterEqual(len(self.tools), 10, sorted(self.tools))
         for name in ("chart_state", "chart_shot", "chart_apply_pine", "chart_add_indicator",
                      "chart_set_market", "chart_draw", "chart_clear", "chart_views",
-                     "chart_remove_indicator", "chart_reload", "chart_palette", "chart_replay"):
+                     "chart_remove_indicator", "chart_reload", "chart_palette", "chart_replay",
+                     "chart_pine_inputs"):
             self.assertIn(name, self.tools)
 
     def test_every_tool_has_a_title_and_an_explicit_read_only_flag(self):
@@ -91,7 +92,7 @@ class ToolAnnotationsTest(unittest.TestCase):
                                  f"{name} leaves readOnlyHint unset — clients then guess")
 
     def test_read_only_tools_change_nothing(self):
-        for name in ("chart_views", "chart_state", "chart_shot"):
+        for name in ("chart_views", "chart_state", "chart_shot", "chart_pine_inputs"):
             self.assertTrue(hint(self.ann(name), "read_only_hint"), f"{name} should be read-only")
 
     def test_chart_mutating_tools_say_so(self):

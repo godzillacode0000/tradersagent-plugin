@@ -196,5 +196,132 @@ class LostLineBreaks(unittest.TestCase):
         self.assertEqual(self.diagnose("// just a note indicator(\"x\")"), {"kind": None})
 
 
+AGENT_METAS = [
+    {"id": "in_0", "type": "int", "title": "Length", "varId": "len", "defval": 20, "minval": 2, "maxval": 200, "group": "Basis"},
+    {"id": "in_1", "type": "string", "title": "MA type", "varId": "kind", "defval": "SMA", "options": ["SMA", "EMA"]},
+    {"id": "in_2", "type": "float", "title": "Multiplier", "varId": "mult", "defval": 2, "minval": 0.1},
+    {"id": "in_3", "type": "bool", "title": "Show upper band", "varId": "show", "defval": True},
+    {"id": "in_4", "type": "color", "title": "Basis colour", "varId": "col", "defval": "#2962FFFF"},
+]
+
+
+def resolve(given):
+    return run(f"T.resolveInputs({json.dumps(AGENT_METAS)}, {json.dumps(given)})")
+
+
+@unittest.skipUnless(NODE, "node is not installed")
+class AgentInputs(unittest.TestCase):
+    """What the agent sends ({"Length": 50}) against the script's own declarations: matched by label, checked
+    like the Settings panel checks the operator's values, and every refusal says why and what exists."""
+
+    def test_a_label_a_case_variant_a_variable_name_and_an_engine_id_all_find_the_input(self):
+        for name in ("Length", "length", "  LENGTH ", "len", "LEN", "in_0"):
+            got = resolve({name: 50})
+            self.assertEqual(got["overrides"], {"in_0": 50}, name)
+            self.assertEqual(got["ignored"], [], name)
+
+    def test_only_what_differs_from_a_default_is_handed_to_the_engine(self):
+        got = resolve({"Length": 20, "MA type": "SMA", "Multiplier": 3})
+        self.assertEqual(got["overrides"], {"in_2": 3})
+        self.assertEqual([a["name"] for a in got["applied"]], ["Length", "MA type", "Multiplier"])   # all matched
+
+    def test_the_keyed_form_is_the_panels_own_key(self):
+        got = resolve({"Length": 50})
+        self.assertEqual(got["keyed"], {"len|Length|int": 50})
+
+    def test_null_puts_an_input_back_to_its_default(self):
+        got = resolve({"Length": None})
+        self.assertEqual(got["overrides"], {})
+        self.assertEqual(got["applied"][0]["note"], "back to the default")
+
+    def test_a_number_is_limited_to_the_inputs_range_and_the_answer_says_so(self):
+        got = resolve({"Length": 9999})
+        self.assertEqual(got["overrides"], {"in_0": 200})
+        self.assertIn("asked for 9999, limited to 200", got["applied"][0]["note"])
+
+    def test_a_fraction_for_a_whole_number_input_is_rounded_and_said_so(self):
+        got = resolve({"Length": 7.6})
+        self.assertEqual(got["overrides"], {"in_0": 8})
+        self.assertEqual(got["applied"][0]["note"], "rounded from 7.6")
+
+    def test_a_numeric_string_is_read_as_a_number(self):
+        self.assertEqual(resolve({"Multiplier": " 3.5 "})["overrides"], {"in_2": 3.5})
+
+    def test_a_booleans_words_are_strict(self):
+        self.assertEqual(resolve({"Show upper band": "false"})["overrides"], {"in_3": False})
+        self.assertEqual(resolve({"Show upper band": 0})["overrides"], {"in_3": False})
+        got = resolve({"Show upper band": "no"})
+        self.assertEqual(got["overrides"], {})
+        self.assertEqual(got["ignored"][0]["reason"], "must be true or false")
+
+    def test_a_choice_must_be_one_of_its_options(self):
+        got = resolve({"MA type": "WMA"})
+        self.assertEqual(got["overrides"], {})
+        self.assertEqual(got["ignored"][0]["reason"], "must be one of: SMA, EMA")
+
+    def test_a_six_digit_colour_takes_the_defaults_alpha_and_junk_is_refused(self):
+        self.assertEqual(resolve({"Basis colour": "#ff8800"})["overrides"], {"in_4": "#FF8800FF"})
+        self.assertEqual(resolve({"Basis colour": "#ff880080"})["overrides"], {"in_4": "#FF880080"})
+        self.assertIn("colour like #2962FF", resolve({"Basis colour": "red"})["ignored"][0]["reason"])
+
+    def test_a_value_that_is_not_a_scalar_is_refused(self):
+        for bad in ({"a": 1}, [1, 2]):
+            got = resolve({"Length": bad})
+            self.assertEqual(got["overrides"], {}, bad)
+            self.assertEqual(len(got["ignored"]), 1, bad)
+
+    def test_an_unknown_label_is_refused_with_a_suggestion_when_one_is_close(self):
+        got = resolve({"Lenght": 10})
+        self.assertEqual(got["overrides"], {})
+        self.assertEqual(got["ignored"][0]["reason"], 'this script has no input called that \u2014 did you mean "Length"?')
+        far = resolve({"Banana": 1})["ignored"][0]["reason"]
+        self.assertEqual(far, "this script has no input called that")
+
+    def test_the_same_input_named_twice_is_set_once(self):
+        got = resolve({"Length": 30, "len": 40})
+        self.assertEqual(got["overrides"], {"in_0": 30})
+        self.assertIn("already set", got["ignored"][0]["reason"])
+
+    def test_two_inputs_with_one_label_are_ambiguous_and_neither_is_guessed(self):
+        twin = AGENT_METAS + [{"id": "in_5", "type": "int", "title": "Length", "varId": "len2", "defval": 9}]
+        got = run(f"T.resolveInputs({json.dumps(twin)}, {{ Length: 5 }})")
+        self.assertEqual(got["overrides"], {})
+        self.assertIn("2 inputs are called that", got["ignored"][0]["reason"])
+        self.assertIn("len2", got["ignored"][0]["reason"])
+        # ...and either is reachable by its variable name
+        self.assertEqual(run(f"T.resolveInputs({json.dumps(twin)}, {{ len2: 5 }})")["overrides"], {"in_5": 5})
+
+    def test_a_refusal_never_blocks_the_rest(self):
+        got = resolve({"Length": 50, "Nope": 1, "MA type": "EMA"})
+        self.assertEqual(got["overrides"], {"in_0": 50, "in_1": "EMA"})
+        self.assertEqual([i["name"] for i in got["ignored"]], ["Nope"])
+
+    def test_every_declared_input_is_described_for_the_agent(self):
+        got = resolve({})
+        self.assertEqual([a["name"] for a in got["available"]], ["Length", "MA type", "Multiplier", "Show upper band", "Basis colour"])
+        length = got["available"][0]
+        self.assertEqual((length["type"], length["default"], length["min"], length["max"], length["group"]),
+                         ("int", 20, 2, 200, "Basis"))
+        self.assertEqual(got["available"][1]["options"], ["SMA", "EMA"])
+
+    def test_the_one_line_summaries(self):
+        got = resolve({"Length": 50, "Show upper band": False, "MA type": "EMA", "Nope": 1})
+        self.assertEqual(run(f"T.appliedLine({json.dumps(got['applied'])})"), 'Length=50, Show upper band=false, MA type="EMA"')
+        said = run(f"T.ignoredLine({json.dumps(got['ignored'])}, {json.dumps(got['available'])})")
+        self.assertTrue(said.startswith('"Nope": this script has no input called that \u2014 this script has: Length (int, default 20)'), said)
+        self.assertEqual(run("T.ignoredLine([], [])"), "")
+
+    def test_a_range_reads_naturally_with_one_end_or_both(self):
+        self.assertEqual(run(f"T.describeInput({json.dumps(AGENT_METAS[0])})"), "Length (int, default 20, 2-200)")
+        self.assertEqual(run(f"T.describeInput({json.dumps(AGENT_METAS[2])})"), "Multiplier (float, default 2, min 0.1)")
+        self.assertEqual(run(f"T.describeInput({json.dumps(AGENT_METAS[1])})"), 'MA type (string, default "SMA", one of SMA/EMA)')
+
+    def test_near_misses_are_found_but_unrelated_words_are_not(self):
+        for typo, want in (("Lenght", "Length"), ("Multipler", "Multiplier"), ("show band", "Show upper band"), ("len gth", "Length")):
+            self.assertEqual(run(f"(T.nearestInput({json.dumps(AGENT_METAS)}, {json.dumps(typo)}) || {{}}).title"), want, typo)
+        for far in ("Banana", "x", "zzzzzz"):
+            self.assertIsNone(run(f"T.nearestInput({json.dumps(AGENT_METAS)}, {json.dumps(far)})"), far)
+
+
 if __name__ == "__main__":
     unittest.main()

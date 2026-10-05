@@ -4,6 +4,56 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- **Syntax colouring in the script editor.** Comments, `//@directives`, strings, numbers and `#RRGGBB`
+  colours, keywords and types, and Pine's built-ins (`ta.sma`, `close`, `size.small` …) are coloured as you
+  type — in five inks (the accent's own soft tones, one violet, one green, one amber; comments are the
+  faint ink), AA on the canvas and under the caret-line wash in both themes. No library, no CDN, offline:
+  the editor is still a plain `<textarea>` (so the gutter, the row marks, Ctrl/Cmd+Enter, Escape, undo,
+  selection and input methods work exactly as before) and its text is made transparent while a coloured
+  copy of the same text is drawn under it — the same font, line height and scroll offsets, a scroller
+  shaped like the textarea so the browser snaps both to the same pixels (measured to the pixel at 1×,
+  1.25×, 1.5× and 2×, with the editor starting on a fraction of a pixel and scrolled to fractional
+  positions). Pine has no multi-line strings or comments, so a line is coloured on its own and only the
+  lines on screen (plus a margin) are ever coloured: scrolling costs about 3 ms a frame whatever the
+  script's length, and an edit in a 150 000-character script about 30 ms, most of it the browser laying the
+  text out. The copy switches itself off — the plain text shows again — for a script over 300 000 characters, while an input
+  method is composing, in forced-colours mode, and if anything in it throws; a name followed by `=` is a
+  variable or a named argument, never a keyword (`timeframe = "D"`, `plot(x, color = red)`).
+
+- **Saved scripts: Save, Open, Rename, Delete.** A list button in the script pane's action bar (a view in the
+  editor's place, like Settings — no new pane, nothing pushes the chart) keeps scripts on this machine
+  (localStorage): the name, the code **and the settings values you chose**, so "Hull Butterfly, tight" and
+  "…, loose" can be switched without re-pasting. Rows are hairlines with the length, how many settings are
+  set, and the day. Save is `Ctrl/Cmd+S` (`Ctrl/Cmd+Shift+S` saves a copy). The rules: Save overwrites the
+  script that is open **only while the name is still its name** — any other name is a new script and a taken
+  one becomes "Name (2)", so nothing is replaced by accident (a script loaded from elsewhere, like the
+  Library's "Edit a copy" or the agent's `show`, is attached to nothing); opening or starting another script
+  never throws work away — when the editor has changes saved nowhere the list asks first, in the list
+  (Save and open / Discard and open / Cancel); a delete asks first and names the script; a rename that
+  would reuse a name is refused. A dot on the button says the open script has unsaved changes. A write the
+  browser refuses (storage full or blocked) is reverted and said — never a list that looks saved and is not.
+  Up to 50 scripts, 400 000 characters each; another console view that saves is picked up. The pane gained
+  public hands for this (`working` / `settled` / `load` / `setName` / `setView`), and the Library's "Edit a
+  copy" and the agent's `show` now go through `load` instead of writing into the textarea.
+
+- **The agent can set a script's own settings.** `chart_apply_pine` and `chart_draw` take `inputs`, e.g.
+  `{"Length": 50, "Show upper band": false}`, and a new read-only tool `chart_pine_inputs` lists what a
+  script declares (label, type, default, range or options, group) without running it, opening the pane or
+  touching the chart (MCP tools 53 → 54). The same on the CLI: `trader-chart draw FILE --input Length=50`,
+  `trader-chart script inputs --pine FILE`, and `inputs` on the raw `apply` / `draw` / `script` actions.
+  Labels are matched exactly, then ignoring case and spacing, then by variable name, then by engine id; a
+  value goes through the same checks as the Settings panel (a number is limited to the input's own range, a
+  choice must be one of its options, a boolean is `true` / `false` — not "yes"). Nothing is guessed: the
+  reply says what was used (with a note when a number was limited or rounded), what was refused and why — a
+  mistyped label gets a *did you mean* — and which inputs the script does have. The run happens either way.
+  `null` puts an input back to its default; an explicit `{}` means all defaults. When the script pane holds
+  this very script, its Settings show the agent's values and a change there re-runs it; an agent run never
+  overwrites the operator's draft and stays out of the pane's run list. `mode: show` with `inputs` loads the
+  editor with the values and waits for Run. The values are saved with the last run, so a reload or a market
+  change keeps them.
+
 ### Fixed
 
 - **With the drawer open, one Escape closed the script pane and left the drawer open** — the reverse of
