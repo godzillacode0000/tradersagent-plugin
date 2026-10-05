@@ -292,7 +292,7 @@ window.TraderRun = (function () {
       other++;
     }
     if (other > 0) {
-      notes.push('request.security: this engine returns the chart\u2019s OWN timeframe for every request, so the '
+      notes.push('request.security: on this run path the engine returns the chart\u2019s OWN timeframe for every request, so the '
         + 'higher-timeframe values from ' + other + ' call(s) equal this chart\u2019s bars, not the daily / weekly / '
         + 'other bars the script asked for');
     }
@@ -345,7 +345,14 @@ window.TraderRun = (function () {
     /* ── surface 1: geometry -> our overlay, read back after drawing ── */
     const geo = flatten(res.raw, bars);
     const stored = engineRows(res.raw);
-    const warnings = scriptNotes(pine, window.chartMarket ? (window.chartMarket() || {}).interval : '');
+    /* Multi-timeframe: the worker serves other timeframes from /api/bars and reports what it fetched or
+       could not. With that report the warning is exactly what failed; without one (the main-thread
+       fallback, whose engine still gets only the chart's own bars) the static call-out stands. */
+    const mtf = res.mtf || null;
+    const warnings = mtf
+      ? (mtf.failed || []).map((f) => 'higher-timeframe bars for ' + f.symbol + ' ' + f.interval + ' could not be fetched ('
+          + f.reason + ') \u2014 the script was given this chart\u2019s own bars for it, so those values are not the ' + f.interval + ' ones')
+      : scriptNotes(pine, window.chartMarket ? (window.chartMarket() || {}).interval : '');
     if (depth.need && bars.length < depth.need + 20) {
       warnings.push('the script looks back about ' + depth.need + ' bars but only ' + bars.length + ' are available'
         + (bars.length >= MAX_BARS ? ' (the ceiling is ' + MAX_BARS + ')' : ' on this market') + ' \u2014 its longest-lookback values will be empty');
@@ -397,7 +404,7 @@ window.TraderRun = (function () {
       series: res.series || [], strategy: res.strategy || null,
       ctor: res.ctor ? (retried ? res.ctor + '->chart-bars' : res.ctor) : null,
       context: res.context || null,
-      containers, drew, verified, drawFail, paint, warnings, depth,
+      containers, drew, verified, drawFail, paint, warnings, depth, mtf,
       drawingKeys: res.drawings || [],   // which __*__ containers the engine declared at all
       rawRows: geo.rawRows, engineN, emptyN: stored.empty, retried, retryFail,
     };
@@ -476,6 +483,9 @@ window.TraderRun = (function () {
     }
 
     if (r.retryFail) s += ' \u00b7 chart-bars retry failed: ' + r.retryFail;
+    if (r.mtf && r.mtf.fetched && r.mtf.fetched.length) {
+      s += ' \u00b7 multi-timeframe: ' + r.mtf.fetched.map((x) => x.symbol + ' ' + x.interval + ' (' + x.bars + ' bars)').join(', ');
+    }
     if (r.warnings && r.warnings.length) s += ' \u00b7 \u26a0 ' + r.warnings.join(' \u00b7 \u26a0 ');
     if (r.ctor) s += ' \u00b7 engine context: ' + r.ctor + (r.context ? ' (' + r.context + ')' : '');
     return s;

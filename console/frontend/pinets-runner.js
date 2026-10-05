@@ -307,7 +307,7 @@
           return;
         }
         finish({ ok: true, ms: d.ms, plots: d.plots || {}, strategy: d.strategy || null,
-                 drawings: d.drawings || [] });
+                 drawings: d.drawings || [], mtf: d.mtf || null });
       };
       worker.onerror = (ev) => {
         const why = (ev && ev.message) || 'worker failed to start';
@@ -508,7 +508,7 @@
         return { ok: true, ms: ms, series: toSeries({ plots: viaWorker.plots }),
                  raw: { plots: viaWorker.plots, strategy: viaWorker.strategy },
                  strategy: toStrategy({ strategy: viaWorker.strategy }),
-                 drawings: viaWorker.drawings, ctor: 'worker', context: context };
+                 drawings: viaWorker.drawings, mtf: viaWorker.mtf || null, ctor: 'worker', context: context };
       }
       /* a worker that could not start falls through to the old main-thread path */
     }
