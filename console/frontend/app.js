@@ -667,7 +667,10 @@ function marketFromDom() {
  * builds, so try each accessor that exists and fall back to the venue's own public
  * endpoint — for the market the chart is actually showing, so the series line up by time.
  */
-async function chartBars() {
+async function chartBars(opts) {
+  /* `opts.limit` is how many bars a Pine run asked for (default 500: the heartbeat and the overlay's
+     bar-index map ask often and stay cheap). A chart that hands over its own series ignores it. */
+  const want = Math.max(30, Math.min(5000, Math.round(Number(opts && opts.limit) || 500)));
   const c = chart;
   if (!c) return [];
   const pick = (v) => (Array.isArray(v) && v.length ? v : null);
@@ -695,7 +698,7 @@ async function chartBars() {
     // Access-Control-Allow-Origin for http://127.0.0.1:8787, so the browser blocked this fetch and
     // every run reported "0 bars available". Same origin, and the console normalises the chart's
     // display timeframe ("30M") to the lowercase interval the venue accepts.
-    const res = await fetch(`/api/bars?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=500`);
+    const res = await fetch(`/api/bars?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${want}`);
     const payload = await res.json();
     // The console wraps every endpoint the same way: { ok, data: { bars, count, ... } }.
     const rows = payload && payload.ok && payload.data && Array.isArray(payload.data.bars)

@@ -33,7 +33,10 @@ CASES = [
     # CISD normalises by ATR.
     ("ta.atr", H + 'indicator("t10")\\nplot(0.3 * ta.atr(200))'),
     ("ta.highest", H + 'indicator("t11")\\nplot(ta.highest(high, 20))'),
-    # HTF context.
+    # HTF context. NOTE (4 Oct 2026, measured): fed a plain bar array the engine ignores the timeframe —
+    # request.security(..., "D", close) returned the chart's own close — so a pass here is not proof of
+    # real multi-timeframe data. Since 5 Oct the console's worker feeds it a source that serves other
+    # timeframes (makeSource in pinets-worker.js); the check below still uses a bare array.
     ("request.security", H + 'indicator("t12")\\nplot(request.security(syminfo.tickerid, "D", high))'),
     # The CISD trigger: a close crossing a remembered open.
     ("remembered open", H + 'indicator("t13")\\nvar float ref = na\\nif close >= close[1]\\n    ref := open\\nplot(ref)'),

@@ -124,20 +124,83 @@ function projectStrategy(s) {
   };
 }
 
+/* ── real multi-timeframe: a data source that can answer for ANY timeframe ─────────────────────────
+   PineTS builds a second engine for `request.security` on the same data source it was given. A plain bar
+   array has one timeframe, so every request came back as the chart's own bars (the daily close equalled
+   the chart's close). A source object with getMarketData(symbol, timeframe, limit, from, to) is asked per
+   request: the chart's own market is answered from the bars already in hand, anything else is fetched
+   from the console's /api/bars (same origin, so no CORS). */
+const MS = { m: 60000, h: 3600000, d: 86400000, w: 604800000 };
+
+/** Pine / Vela / venue spellings -> { interval for /api/bars, milliseconds }. */
+function venueInterval(tf) {
+  const s = String(tf == null ? '' : tf).trim();
+  let n, u;
+  if (/^\d+$/.test(s)) { const m = Number(s); if (m % 1440 === 0) { n = m / 1440; u = 'd'; } else if (m % 60 === 0) { n = m / 60; u = 'h'; } else { n = m; u = 'm'; } }
+  else {
+    const m = s.match(/^(\d*)([mhdwMHDW])$/);
+    if (!m) return { interval: s.toLowerCase(), ms: MS.h };
+    n = Number(m[1] || 1);
+    u = m[2] === 'M' ? 'M' : m[2].toLowerCase();
+  }
+  if (u === 'M') return { interval: n + 'M', ms: 30 * MS.d * n };
+  return { interval: n + u, ms: MS[u] * n };
+}
+
+function makeSource(bars, msg, report) {
+  const own = venueInterval(msg.timeframe).interval;
+  const ownSym = String(msg.symbol || '').toUpperCase();
+  const memo = new Map();
+  return {
+    async getMarketData(tickerId, timeframe, limit, from, to) {
+      const sym = String(tickerId || ownSym).split(':').pop().toUpperCase();
+      const iv = venueInterval(timeframe);
+      if (iv.interval === own && sym === ownSym) return bars;      // the chart's own market, already in hand
+      const end = to != null ? Number(to) : Date.now();
+      const start = from != null ? Number(from) : end - 500 * iv.ms;
+      const span = end - start;
+      const want = Math.max(30, Math.min(5000, Math.ceil(span / iv.ms) + 3));
+      const key = sym + '|' + iv.interval + '|' + want;
+      if (!memo.has(key)) {
+        memo.set(key, (async () => {
+          const res = await fetch(self.location.origin + '/api/bars?symbol=' + encodeURIComponent(sym)
+            + '&interval=' + encodeURIComponent(iv.interval) + '&limit=' + want);
+          const body = await res.json();
+          const rows = body && body.ok && body.data && Array.isArray(body.data.bars) ? body.data.bars : [];
+          if (!rows.length) throw new Error((body && body.data && body.data.error) || 'no bars');
+          return rows.map((r) => ({ openTime: r.time, closeTime: r.time + iv.ms - 1, open: r.open, high: r.high,
+                                    low: r.low, close: r.close, volume: r.volume }));
+        })());
+      }
+      try {
+        const candles = await memo.get(key);
+        if (!report.fetched.some((f) => f.key === key)) report.fetched.push({ key, symbol: sym, interval: iv.interval, bars: candles.length });
+        return candles;
+      } catch (err) {
+        /* No higher-timeframe data: fall back to the chart's own bars (the old behaviour) and SAY so. */
+        if (!report.failed.some((f) => f.key === key)) report.failed.push({ key, symbol: sym, interval: iv.interval, reason: String((err && err.message) || err) });
+        return bars;
+      }
+    },
+    getSymbolInfo: (t) => bars.getSymbolInfo(t),
+  };
+}
+
 self.onmessage = async (event) => {
   const msg = event.data || {};
   const started = Date.now();
   try {
     const mod = await engine(msg.engineUrl);
     const bars = attachSymbolInfo(msg.bars, msg.symbol, msg.mintick);
-    const engineInstance = new mod.PineTS(bars, msg.symbol, msg.timeframe, Math.max(30, bars.length));
+    const mtf = { fetched: [], failed: [] };
+    const engineInstance = new mod.PineTS(makeSource(bars, msg, mtf), msg.symbol, msg.timeframe, Math.max(30, bars.length));
     const out = await engineInstance.run(msg.source);
     const ms = Date.now() - started;
     const plots = projectPlots(out && out.plots);
     const strategy = projectStrategy(out && out.strategy);
     let payload;
     try {
-      payload = { ok: true, ms: ms, plots: plots, strategy: strategy,
+      payload = { ok: true, ms: ms, plots: plots, strategy: strategy, mtf: mtf,
                   drawings: Object.keys(plots).filter((k) => k.startsWith('__')) };
     } catch (err) {
       payload = { ok: true, ms: ms, plots: {}, strategy: strategy, drawings: [] };

@@ -1116,6 +1116,65 @@ _BINANCE_TF = {
 }
 
 
+# Binance returns at most 1000 klines per request. A Pine run that looks back further than the page it
+# was given (a 52-week high on a 4h chart needs ~2200 bars) used to get nothing at all, so the endpoint
+# pages backwards with endTime and the cap is ours: 5000 bars = 5 requests.
+BARS_PAGE = 1000
+BARS_MAX = 5000
+BARS_PAGE_TIMEOUT_S = 10
+BARS_DEADLINE_S = 25
+
+
+def _fetch_klines(symbol: str, interval: str, limit: int, end_time: int | None = None) -> list:
+    from urllib.parse import quote as _quote
+    import urllib.request as _u
+    url = ("https://api.binance.com/api/v3/klines"
+           f"?symbol={_quote(symbol)}&interval={_quote(interval)}&limit={int(limit)}")
+    if end_time is not None:
+        url += f"&endTime={int(end_time)}"
+    req = _u.Request(url, headers={"User-Agent": "traders-agent-console/1.0"})
+    with _u.urlopen(req, timeout=BARS_PAGE_TIMEOUT_S) as res:
+        return json.load(res)
+
+
+def fetch_bars(symbol: str, interval: str, limit: int) -> dict:
+    """`limit` most recent bars, oldest first, paged back from now. Never raises: a failed page is an
+    answer — the bars gathered so far come back with `partial: true` and the reason in `error`."""
+    limit = max(1, min(BARS_MAX, int(limit)))
+    rows: list = []
+    error = None
+    end_time = None
+    started = time.monotonic()
+    while len(rows) < limit:
+        want = min(BARS_PAGE, limit - len(rows))
+        try:
+            page = _fetch_klines(symbol, interval, want, end_time)
+        except Exception as exc:  # noqa: BLE001 - an upstream failure is an answer, not a crash
+            error = f"{type(exc).__name__}: {exc}"
+            break
+        if not isinstance(page, list):
+            error = "unexpected_payload"
+            break
+        page = [r for r in page if isinstance(r, list) and len(r) >= 6]
+        if not page:
+            break                       # the venue has nothing older
+        rows = page + rows
+        end_time = int(page[0][0]) - 1  # the next page ends just before this one starts
+        if len(page) < want:
+            break                       # a short page is the start of the symbol's history
+        if time.monotonic() - started > BARS_DEADLINE_S:
+            error = "deadline"
+            break
+    # Binance returns every numeric field as a JSON *string*; float() is what coerces it.
+    bars = [{"time": int(r[0]), "open": float(r[1]), "high": float(r[2]), "low": float(r[3]),
+             "close": float(r[4]), "volume": float(r[5])} for r in rows]
+    out = {"bars": bars, "symbol": symbol, "interval": interval, "count": len(bars)}
+    if error:
+        out["error"] = error
+        out["partial"] = bool(bars)
+    return out
+
+
 def ep_bars(params: dict) -> dict:
     """Public OHLCV for one symbol/timeframe, fetched server-side.
 
@@ -1127,31 +1186,14 @@ def ep_bars(params: dict) -> dict:
     symbol = str((params.get("symbol") or [""])[0] or "").strip().upper()
     interval = str((params.get("interval") or [""])[0] or "1h").strip()
     try:
-        limit = max(1, min(1000, int((params.get("limit") or ["500"])[0] or 500)))
+        limit = max(1, min(BARS_MAX, int((params.get("limit") or ["500"])[0] or 500)))
     except (TypeError, ValueError):
         limit = 500
     if not symbol:
         return {"bars": [], "symbol": symbol, "interval": interval, "error": "symbol_required"}
 
     interval = _BINANCE_TF.get(interval, interval) or "1h"
-    from urllib.parse import quote as _quote
-    url = ("https://api.binance.com/api/v3/klines"
-           f"?symbol={_quote(symbol)}&interval={_quote(interval)}&limit={limit}")
-    try:
-        import urllib.request as _u
-        req = _u.Request(url, headers={"User-Agent": "traders-agent-console/1.0"})
-        with _u.urlopen(req, timeout=15) as res:
-            rows = json.load(res)
-    except Exception as exc:  # noqa: BLE001 - an upstream failure is an answer, not a crash
-        return {"bars": [], "symbol": symbol, "interval": interval,
-                "error": f"{type(exc).__name__}: {exc}"}
-    if not isinstance(rows, list):
-        return {"bars": [], "symbol": symbol, "interval": interval, "error": "unexpected_payload"}
-    # Binance returns every numeric field as a JSON *string*; float() is what coerces it.
-    bars = [{"time": int(r[0]), "open": float(r[1]), "high": float(r[2]), "low": float(r[3]),
-             "close": float(r[4]), "volume": float(r[5])}
-            for r in rows if isinstance(r, list) and len(r) >= 6]
-    return {"bars": bars, "symbol": symbol, "interval": interval, "count": len(bars)}
+    return fetch_bars(symbol, interval, limit)
 
 
 def ep_chart_commands(params: dict) -> dict:
