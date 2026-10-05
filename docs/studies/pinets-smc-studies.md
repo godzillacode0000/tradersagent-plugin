@@ -39,7 +39,7 @@ had reported nothing, the other two numbers would have meant nothing.
 | `for i = 0 to <negative>` | **CRASH** — same `Index -1` error. Compute the count first and guard the loop with an `if`. |
 | for-loop over an empty array | **CRASH** — guard with `if array.size(a) > 0`. |
 | 3-bar indexing `high[2]`, `var`, UDTs, arrays, `ta.pivothigh`, `hour`/`minute`, `box.new`/`line.new`/`label.new`/`table.new`, `ta.atr`, `for … in`, `strategy()` | **RUN** (200–430 ms over 500 bars) |
-| `request.security(…, "D", …)` | **RUNS, BUT THE TIMEFRAME IS IGNORED** — measured 4 Oct 2026 on a 1h chart: the "D" close came back identical to the chart's own close and the "W" high to its high. It does not error, so a multi-timeframe script draws the chart's own levels. The console now says so in the run result and the legend (5 Oct). Real multi-timeframe data is not implemented. |
+| `request.security(…, "D", …)` | **RUNS, with real higher-timeframe data since 5 Oct 2026.** Before that the timeframe was ignored — measured 4 Oct on a 1h chart: the "D" close came back identical to the chart's own close — because the engine was fed a bare array of chart bars and asks *its data source* for other timeframes. The worker (`pinets-worker.js`, `makeSource`) now answers the chart's own market from memory and every other symbol / timeframe from the console's `/api/bars` (Binance symbols only; if a fetch fails the script gets the chart's own bars and the run result says so). The main-thread fallback engine still has the old limit and keeps the ⚠ note. |
 
 An earlier probe of mine reported 1/18 constructs working. That was wrong, and the cause was the
 probe itself: its Pine templates began with a newline, so the engine saw an empty line 1 and refused

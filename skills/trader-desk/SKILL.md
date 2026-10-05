@@ -167,11 +167,12 @@ quote those.
 - Clicking a built-in mounts it; a **Library row does not mount** — it opens the Details pane, because
   its Pine has to go through PineTS. `mount "library:…"` is refused for that reason; use
   `chart_apply_pine`.
-- **Read the run result's `⚠` notes aloud.** A script that calls `request.security` for another
-  timeframe RUNS here but gets the chart's OWN timeframe back (a daily close equals the chart's close), so
-  a multi-timeframe indicator is showing the chart's own levels — say so rather than presenting them as
-  daily/weekly levels. A script with a long lookback is given up to 5000 bars; if the note says it still
-  does not have enough, its longest-lookback values are empty.
+- **Read the run result's `⚠` notes aloud.** `request.security` returns real higher-timeframe (and
+  other-symbol) data — the run result lists what it fetched (`multi-timeframe: BTCUSDT 1d (54 bars)`).
+  If a `⚠` says the fetch failed, those values are the chart's OWN bars, not the daily/weekly ones: say so
+  rather than presenting them as such. Only Binance symbols can be fetched. A script with a long lookback
+  is given up to 5000 bars; if the note says it still does not have enough, its longest-lookback values
+  are empty.
 - The favourites ★ list is one localStorage list shared by both halves, so starring from chat shows
   up on the operator's screen (and vice versa).
 - Backend changes need a **console restart** (`systemctl --user restart luxalgo-web.service`), not just

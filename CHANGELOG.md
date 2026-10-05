@@ -71,6 +71,20 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **`request.security` returns real higher-timeframe and other-symbol data.** PineTS builds a second engine
+  for each `request.security` on the *same data source it was given*; the worker gave it a bare array of
+  chart bars, which has one timeframe, so a "daily" close came back identical to the chart's close. The
+  worker (`pinets-worker.js`, `makeSource`) now gives the engine a source object: the chart's own
+  market is answered from the bars already in hand, and every other (symbol, timeframe) is fetched from
+  the console's `/api/bars`, sized to the range the engine asks for, shared across calls, and normalised
+  across Pine's spellings (`D`, `60`, `1W`, `BINANCE:ETHUSDT`). Measured: on a 1h chart the daily high
+  went from 500 values identical to the chart's to 22 real daily values. If a fetch fails (an unknown
+  symbol, no network) the script is given the chart's own bars and the run result says exactly which
+  request fell back; what *was* fetched is listed (`multi-timeframe: BTCUSDT 1d (54 bars)`). Only Binance
+  symbols can be fetched, and the main-thread fallback engine (used only if the worker cannot start) still
+  has the old limit and keeps the ⚠ note. Tested in Node through the real vendored engine, with a fake
+  `fetch`; a start time of `0` being read as "missing" was caught by that test.
+
 - **Deeper history for Pine runs, and an honest note about multi-timeframe.** Every run was handed the
   last 500 bars whatever the script asked for, and a lookback longer than that does not give a slightly
   wrong number — it gives *nothing* (on a 4h chart `ta.highest(high, 2184)`, a 52-week high, was na on all
@@ -83,8 +97,8 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   *runs* in this engine but ignores the timeframe — `request.security(…, "D", close)` returned the chart's
   own close (measured 4 Oct) — so a multi-timeframe indicator drew the chart's own levels in silence. The
   run result and the on-chart legend now carry a `⚠` note whenever a script asks for a timeframe other than
-  the chart's, and two docs that called it a clean `RUN` are corrected. **Real multi-timeframe data is
-  still not implemented.**
+  the chart's, and two docs that called it a clean `RUN` are corrected (real
+  multi-timeframe data followed — see the entry above).
 
 - **Edge Stats — how often did it actually happen?** LuxAlgo's open-source
   [Edge Stats](https://github.com/LuxAlgo/edge-stats) engine (MIT, pinned to a commit) runs beside the
