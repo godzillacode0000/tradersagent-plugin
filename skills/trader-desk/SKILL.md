@@ -227,6 +227,7 @@ Vela's toolbar row carry. Two halves, and only the first is guaranteed:
 | code | meaning | what to do |
 |---|---|---|
 | `NOT_RUNNABLE[while/for-in/import]` | PineTS cannot execute that construct | Stop. Do not port Library scripts unless asked. For levels, compute from data and `chart_draw`. |
+| `SYNTAX_ERROR` | Pine could not parse the script | The error has `line` and `col`: fix that line in the source and send it again. An unclosed bracket is often reported at the end of the file, not where it was opened. |
 | `RUNTIME_CRASH[…]` | engine threw mid-run | Report the code + line. `Index -2 is out of bounds, array size is 0` is the guarded-ternary class below — check the engine pin before blaming the script. |
 | `TOO_FEW_BARS` | not enough history | Widen range, retry once. |
 | `ENGINE_UNAVAILABLE` | PineTS module not fetched | Network; retry when online. |

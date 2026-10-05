@@ -112,8 +112,16 @@
         <div class="script__bar">
           <input id="script-name" class="script__name" type="text" value="Untitled script"
                  aria-label="Script name" spellcheck="false" />
+          <!-- Only present when the script declares input.*() values (app.js reveals it). Opens the
+               Settings view in place of the editor — the pane gains no height and the chart no width. -->
+          <button type="button" class="btn btn--ghost script__gear" id="script-gear" hidden
+                  aria-pressed="false" aria-controls="script-settings" aria-label="Script inputs">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"
+                 stroke-linecap="round" aria-hidden="true"><path d="M2 4.5h7M12 4.5h2M2 11.5h2M7 11.5h7"/>
+              <circle cx="10.5" cy="4.5" r="1.5"/><circle cx="5.5" cy="11.5" r="1.5"/></svg>
+          </button>
           <button type="button" class="btn btn--run" id="script-run"
-                  title="Run this script on the chart">▶ Run</button>
+                  title="Run this script on the chart (Ctrl+Enter)">▶ Run</button>
           <button type="button" class="btn btn--ghost script__x" id="script-close"
                   title="Close (Esc)" aria-label="Close the script pane">✕</button>
         </div>
@@ -121,10 +129,23 @@
              the numbers drifted off their lines (measured 5 Oct). Long lines scroll sideways instead. -->
         <div class="script__edit">
           <div class="script__gutter" id="script-gutter" aria-hidden="true"></div>
+          <!-- Row tints drawn over the editor's text area: the caret's line and the line an error names.
+               pointer-events: none — they are a picture, never a target. -->
+          <div class="script__mark script__mark--cur" id="script-mark-cur" aria-hidden="true" hidden></div>
+          <div class="script__mark script__mark--err" id="script-mark-err" aria-hidden="true" hidden></div>
           <textarea id="script-src" class="script__src" wrap="off" spellcheck="false" autocapitalize="off"
                     aria-label="Pine source"
                     placeholder="// Paste Pine here, then press ▶ Run.&#10;// Plots become Vela series; boxes, lines and labels go on the chart."></textarea>
         </div>
+        <!-- Settings (the script's input.*() values): a view that takes the editor's place while it is open.
+             A change applies at once — no Save — so the status line below is where the result shows. -->
+        <section class="script__settings" id="script-settings" aria-label="Script inputs" hidden>
+          <header class="set__head">
+            <span class="set__title" id="script-settings-title">Inputs</span>
+            <button type="button" class="btn btn--ghost set__reset" id="script-settings-reset" hidden>Reset all</button>
+          </header>
+          <div class="set__body" id="script-settings-body"></div>
+        </section>
         <!-- The status line is the only thing always shown; it opens the run list. -->
         <div class="script__runs" id="script-runs">
           <button type="button" class="script__status" id="script-status" aria-expanded="true"
@@ -184,6 +205,7 @@
 <!-- PineTS execution + its paint layer. Classic scripts, loaded BEFORE the workspace
      module builds a chart, because Vela reads its renderer-layer registry at
      construction. pinets itself is imported lazily, on the first Run PineTS. -->
+<script src="./script-tools.js"></script>
 <script src="./pinets-layer.js"></script>
 <script src="./pinets-runner.js"></script>
 <script src="./overlay.js"></script>

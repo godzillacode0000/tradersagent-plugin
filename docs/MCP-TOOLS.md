@@ -96,6 +96,7 @@ Read-only, and every one leaves this machine (they reach LuxAlgo's hosted MCP).
 |---|---|
 | `SYMBOL_NOT_SERVED[XAUUSD]` | This console's workspace provider is Binance only, and it never answered for that symbol. The chart is unchanged — use a crypto pair (the op has a 6 s deadline so it refuses instead of hanging). |
 | `NOT_RUNNABLE[import/for-in]` | PineTS cannot execute that construct — the script needs a full TradingView engine. Measured: `import` is the real one; `for … in` actually runs. |
+| `SYNTAX_ERROR` | Pine could not parse the script. The error carries `line` and `col` (1-based) — fix that line; an unclosed bracket is often reported at the end of the file. |
 | `RUNTIME_CRASH[…]` | The engine threw mid-run (engine bug, not the caller's). |
 | `TOO_FEW_BARS` | Not enough history loaded — widen the range, retry once. |
 | `ENGINE_UNAVAILABLE` | The PineTS module could not be fetched (network). |
