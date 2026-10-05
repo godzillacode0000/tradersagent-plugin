@@ -707,44 +707,24 @@ pre {
   border-bottom: 1px solid var(--lx-border);
 }
 .script__name { flex: 1; min-width: 0; }
-/* Two groups: name left, actions right. Run is the loudest control in the pane. */
-.script__acts { display: flex; align-items: center; gap: var(--lx-space-2); }
+/* Run is the one loud control in the pane. Ink-on-canvas inverted from the tokens, so it follows the
+   theme without a light-mode override (it used raw #fff / #111 until 5 Oct). */
 .btn--run {
-  background: #ffffff; color: #111111; border-color: #ffffff; font-weight: 600;
-  padding-inline: 14px;
+  background: var(--lx-fg); color: var(--lx-canvas); border-color: var(--lx-fg);
+  font-weight: 600; padding-inline: 14px;
 }
-.btn--run:hover { background: #f0f0f0; border-color: #f0f0f0; }
-.btn--run:disabled { opacity: .6; }
-/* Light theme keeps the same white-on-dark idea, inverted for legibility. */
-:root[data-theme="light"] .btn--run { background: #111111; color: #ffffff; border-color: #111111; }
-:root[data-theme="light"] .btn--run:hover { background: #2a2a2a; border-color: #2a2a2a; }
+.btn--run:hover { background: var(--lx-fg); border-color: var(--lx-fg); color: var(--lx-canvas); opacity: .86; }
+.btn--run:disabled { opacity: .55; }
+.script__x { padding-inline: 10px; }
 
-/* The status strip under the editor: Logs toggle, the Pine badge, and the last run's numbers. */
-.script__status {
-  display: flex; align-items: center; gap: var(--lx-space-2);
-  padding: 3px var(--lx-space-3);
-  border-top: 1px solid var(--lx-border);
-  font-size: 11px;
-}
-.script__logs {
-  background: none; border: 1px solid var(--lx-border); color: var(--lx-fg-muted);
-  border-radius: 4px; padding: 1px 8px; cursor: pointer; font: inherit;
-}
-.script__logs:hover { color: var(--lx-fg); border-color: var(--lx-border-strong, var(--lx-border)); }
-.script__logs[aria-pressed="true"] { color: var(--lx-accent-ink); border-color: currentColor; }
-.script__pill {
-  padding: 1px 7px; border-radius: 999px;
-  border: 1px solid var(--lx-border); color: var(--lx-fg-muted);
-}
-.script__stat { color: var(--lx-fg-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-/* Logs closed = the output folds away; the numbers stay on the strip. */
-.script__out.is-folded { display: none; }
-/* The editor is a flex row: a numbers column and the textarea sharing one scroll line. A textarea
-   cannot grow its own gutter, so the sibling is painted from the same value (see app.js). */
-.script__edit { display: flex; flex: 1; min-height: 120px; overflow: hidden; }
+/* The editor: a numbers column and the textarea sharing one scroll line. The textarea does not wrap
+   (wrap="off" in the markup, pre here), so one source line is one row and the numbers stay on their
+   lines; long lines scroll sideways. A textarea cannot grow its own gutter, so app.js paints it. */
+.script__edit { display: flex; flex: 1 1 auto; min-height: 160px; overflow: hidden; }
 .script__gutter {
   flex: 0 0 auto; overflow: hidden; user-select: none;
   padding: var(--lx-space-2) 6px var(--lx-space-2) var(--lx-space-2);
+  min-width: 2.6em; box-sizing: border-box;
   text-align: right; color: var(--lx-fg-faint);
   font-family: ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace;
   font-size: 12.5px; line-height: 1.55;
@@ -753,17 +733,81 @@ pre {
 }
 .script__gutter span { display: block; }
 .script__src {
-  flex: 1; min-height: 120px; width: 100%; box-sizing: border-box;
+  flex: 1; min-width: 0; width: 100%; box-sizing: border-box;
   padding: var(--lx-space-2) var(--lx-space-3);
-  border: 0; border-bottom: 1px solid var(--lx-border);
-  background: transparent; color: inherit; resize: vertical;
+  border: 0; background: transparent; color: inherit; resize: none;
+  white-space: pre; overflow-wrap: normal; overflow: auto;
   font-family: ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace;
   font-size: 12.5px; line-height: 1.55; tab-size: 2;
 }
+.script__src:focus { outline: none; }
+.script__edit:focus-within { box-shadow: inset 2px 0 0 var(--lx-accent); }
+
+/* The runs block: one status line, always shown, and the run list it opens. */
+.script__runs {
+  display: flex; flex-direction: column; flex: 0 0 auto;
+  border-top: 1px solid var(--lx-border); background: var(--lx-surface-1);
+}
+.script__status {
+  display: flex; align-items: center; gap: var(--lx-space-2); width: 100%;
+  padding: 7px var(--lx-space-3);
+  background: none; border: 0; color: var(--lx-fg-muted); cursor: pointer;
+  font: inherit; font-size: var(--lx-fs-sm); text-align: left;
+}
+.script__status:hover { color: var(--lx-fg); }
+.script__status:focus-visible { outline: var(--lx-focus-ring); outline-offset: -2px; }
+.script__stat { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* The dot is a second signal, never the only one: the line itself starts with Ran / Failed / Running. */
+.script__state { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--lx-fg-faint); }
+.script__state[data-state="ok"]   { background: var(--lx-accent); }
+.script__state[data-state="warn"] { background: var(--lx-warn); }
+.script__state[data-state="fail"] { background: var(--lx-danger); }
+.script__state[data-state="busy"] { background: var(--lx-accent); animation: lx-run-busy 900ms var(--lx-ease) infinite alternate; }
+@keyframes lx-run-busy { from { opacity: 1; } to { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .script__state[data-state="busy"] { animation: none; } }
+.script__chev { flex: 0 0 auto; width: 0; height: 0; border: 4px solid transparent;
+  border-top-color: currentColor; transform: translateY(2px); }
+.script__status[aria-expanded="false"] .script__chev { transform: translateY(-2px) rotate(180deg); }
+
+/* Lost line breaks: a one-line script is said out loud, with the fix one press away. */
+.script__fix {
+  display: flex; align-items: center; gap: var(--lx-space-2); flex-wrap: wrap;
+  margin: 0 var(--lx-space-3) var(--lx-space-2); padding: 6px var(--lx-space-25);
+  border-radius: var(--lx-radius-md); background: var(--lx-warn-soft);
+  color: var(--lx-fg); font-size: var(--lx-fs-sm);
+}
+.script__fix[hidden] { display: none; }
+.script__fix span { flex: 1; min-width: 12em; }
+
+/* The run list: newest first. It takes what the editor can spare and scrolls on its own. */
 .script__out {
-  margin: 0; max-height: 34%; overflow: auto;
-  padding: var(--lx-space-2) var(--lx-space-3);
-  font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
+  margin: 0; padding: 0 var(--lx-space-3) var(--lx-space-2); list-style: none;
+  max-height: min(36vh, 320px); overflow: auto;
+}
+.script__runs.is-folded .script__out { display: none; }
+.script__out:empty::before {
+  content: "▶ Run draws on the chart beside this pane.";
+  display: block; padding: 2px 0 6px; color: var(--lx-fg-faint); font-size: var(--lx-fs-sm);
+}
+.run { padding: var(--lx-space-2) 0; border-top: 1px solid var(--lx-border); font-size: var(--lx-fs-sm); }
+.run:first-child { border-top: 0; }
+.run__head { display: flex; align-items: baseline; gap: var(--lx-space-15); }
+.run__mark { flex: 0 0 auto; font-weight: 700; }
+.run--ok .run__mark { color: var(--lx-accent); }
+.run--fail .run__mark { color: var(--lx-danger); }
+.run__name { flex: 1; min-width: 0; color: var(--lx-fg); font-weight: 600;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.run__time { flex: 0 0 auto; color: var(--lx-fg-faint); font-variant-numeric: tabular-nums; }
+.run__facts { margin-top: 2px; color: var(--lx-fg-muted); overflow-wrap: anywhere; }
+.run--fail .run__facts { color: var(--lx-fg); }
+.run__note { margin-top: 3px; color: var(--lx-fg); overflow-wrap: anywhere; }
+.run__more { margin-top: 4px; color: var(--lx-fg-faint); }
+.run__more summary { cursor: pointer; width: max-content; }
+.run__more summary:hover { color: var(--lx-fg); }
+.run__more pre {
+  margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace; font-size: 11.5px;
+  color: var(--lx-fg-muted);
 }
 /* The legend must NOT set `display`: hiding is the [hidden] attribute (UA display:none), and an
    author display would win, leaving an empty pill on every chart. */
@@ -793,15 +837,6 @@ pre {
 @media (prefers-reduced-motion: reduce) {
   .btn--toggle[data-tip]:hover::after,
   .btn--toggle[data-tip]:focus-visible::after { animation: none; opacity: 1; }
-}
-
-/* F4 (25 Sep): the pane says where the paint lands — the question the operator asked of the
-   recording ("I want to see if it shown in chart or not") is answered inside the pane itself. */
-.script__hint { margin: 8px 0 0; color: var(--lx-fg-muted); font-size: 11.5px; line-height: 1.5; }
-.script__hint em { font-style: normal; color: var(--lx-fg); }
-.script__hint kbd {
-  font: inherit; padding: 0 4px; border: 1px solid var(--lx-border-strong);
-  border-radius: 4px; background: var(--lx-surface-2);
 }
 
 /* F3 (25 Sep): after a successful Run the chart itself says "the paint landed here" — a short

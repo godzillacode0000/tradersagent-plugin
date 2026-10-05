@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Changed
+
+- **The script pane, rebuilt around the editor (5 Oct).** One action bar — name, ▶ Run, ✕. The editor no
+  longer wraps, so the line numbers stay on their lines (a wrapped license line pushed line 2 down to row
+  6); long lines scroll sideways, and the gutter keeps room for a desktop scrollbar. The Logs chip, the
+  static "Pine v6" pill and the three-line hint are gone: one status line says what the last Run did
+  ("Ran · 2 series · 1 box · 500 bars · 101 ms", "Failed · …") and opens a run list — newest first, time,
+  script, what it drew, its ⚠ notes, and the engine's full line behind a fold. The engine has no `log.*`
+  output, so this is a run history, not a Pine console. Stacked under the chart (under 760 px) the list
+  starts folded. A script that arrives as one line is flagged — its first `//` would hide everything after
+  it — with "Restore line breaks" when the breaks are only escaped `\n`. Run's colours come from tokens.
+- **The script pane at 760–1099 px is full height and clear of the fallback buttons** (`5879933`): docked
+  beside the chart it had inherited the stacked layout's 40dvh cap, and the bare-chart Scripts / Script /
+  Full screen buttons covered its name field, ▶ Run and ✕.
+
 ### Fixed
 
 - **LuxAlgo-library scripts always ran on 1-minute bars, whatever the chart showed.** The chart's market
