@@ -4,6 +4,26 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- **Script inputs become a Settings view (5 Oct).** The engine reads a script's `input.*()` declarations
+  without running it (`PineTSRunner.scanInputs`, in a worker). A script that has any gets an inputs button
+  in the action bar (a dot says some are changed); it opens a view in the editor's place — grouped by the
+  script's own `group`, one control per input (number with its min / max / step, switch, choice, source,
+  colour, text), a per-row reset and "Reset all". A change applies at once to the script on the chart (the
+  Run re-runs with the new value, and the run list says "N inputs changed"); there is no Save. Only changed
+  values are sent, as `new Indicator(source, { in_N: value })`, so an untouched script runs exactly as
+  before. Values are kept against the script's declared title (a different script with an input called
+  "Length" does not inherit them), survive a reload and a market change, and are clamped to the input's own
+  range before the engine sees them. Esc closes Settings before it closes the pane.
+- **Errors are marked on their line.** A syntax error is its own code, `SYNTAX_ERROR`, with `line` and
+  `col` from the engine's `at 3:7` (the agent gets them too). The line is tinted and its number turns red in
+  the gutter, the status line and the run entry name it, and "Go to line N" selects it. A runtime error
+  that names only a variable or a Pine function (`nope is not defined`, `array.get`) points at the first
+  line that uses it, labelled "likely line N" — never presented as exact. Editing clears the mark.
+- **Ctrl/Cmd+Enter runs** from anywhere in the pane (editor, name, a Settings control). The caret's line is
+  tinted in the editor.
+
 ### Changed
 
 - **The script pane, rebuilt around the editor (5 Oct).** One action bar — name, ▶ Run, ✕. The editor no

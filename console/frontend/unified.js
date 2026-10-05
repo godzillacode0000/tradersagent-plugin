@@ -310,7 +310,8 @@ window.TraderRun = (function () {
        more bars — instead of timing out at the 20 s a 500-bar run is allowed. */
     const depth = depthFor(pine);
     const bars = await window.chartBars({ limit: depth.limit });
-    const runOpts = { name, timeoutMs: Math.min(90000, Math.round(20000 * Math.max(1, bars.length / BASE_BARS))) };
+    const runOpts = { name, timeoutMs: Math.min(90000, Math.round(20000 * Math.max(1, bars.length / BASE_BARS))),
+                      inputs: (opts && opts.inputs) || null };
     let res = await window.PineTSRunner.run(String(pine), bars, runOpts);
     if (!res.ok) {
       return { ok: false, name, reason: res.reason || 'not runnable: unknown', error: res.error || null, ms: res.ms || null };

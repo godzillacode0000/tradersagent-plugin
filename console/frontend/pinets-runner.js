@@ -272,7 +272,7 @@
     return /^https?:/.test(PINETS_SPECIFIER) ? PINETS_SPECIFIER : null;
   }
 
-  function workerRun(source, bars, ctx, timeoutMs, label) {
+  function workerRun(source, bars, ctx, timeoutMs, label, inputs) {
     return new Promise((resolve) => {
       const url = engineUrl();
       if (typeof Worker === 'undefined' || !url) {
@@ -303,7 +303,9 @@
       worker.onmessage = (ev) => {
         const d = (ev && ev.data) || {};
         if (!d.ok) {
-          finish({ ok: false, reason: 'PineTS error: ' + d.reason, error: classify(d.reason) });
+          const error = classify(d.reason);
+          if (d.method) error.method = d.method;
+          finish({ ok: false, reason: 'PineTS error: ' + d.reason, error });
           return;
         }
         finish({ ok: true, ms: d.ms, plots: d.plots || {}, strategy: d.strategy || null,
@@ -317,6 +319,7 @@
       worker.postMessage({
         engineUrl: url,
         source: source,
+        inputs: inputs || null,
         bars: normalizeBars(list),
         symbol: ctx.symbol,
         timeframe: ctx.timeframe,
@@ -426,6 +429,7 @@
     ENGINE_UNAVAILABLE: 'PineTS could not be fetched (offline/CDN). Retry when online.',
     TIMEOUT: 'The run exceeded its time budget. Retry, or run it on a shorter history.',
     NO_SOURCE: 'Pass the script source: a LuxAlgo Library slug or a .pine file.',
+    SYNTAX_ERROR: 'Pine could not parse the script. Fix the line named (an unclosed bracket is often reported at the end of the file).',
   };
 
   /** Which construct the engine refused, named the way the docs name it. */
@@ -436,10 +440,18 @@
     return null;
   }
 
-  /** `… at line 42 …` / `line 42` in an engine error → the line number when one is quoted. */
+  /** `… at line 42 …` / `line 42` in an engine error → the line number when one is quoted. A syntax error
+   *  says `at 3:7` (line:column) instead — see quotedCol. */
   function quotedLine(msg) {
+    const at = String(msg).match(/\bat ([0-9]{1,6}):[0-9]{1,6}\b/);
+    if (at) return Number(at[1]);
     const m = String(msg).match(/line[^0-9]{0,4}([0-9]{1,6})/i);
     return m ? Number(m[1]) : null;
+  }
+
+  function quotedCol(msg) {
+    const at = String(msg).match(/\bat [0-9]{1,6}:([0-9]{1,6})\b/);
+    return at ? Number(at[1]) : null;
   }
 
   function classify(msg, fallbackCode) {
@@ -456,6 +468,10 @@
     }
     if (/PineTS unavailable/i.test(text)) {
       return { code: 'ENGINE_UNAVAILABLE', message: text, retryable: true, hint: ERROR_HINTS.ENGINE_UNAVAILABLE };
+    }
+    if (/Failed to transpile|Unexpected (token|character)|Unterminated/i.test(text)) {
+      return { code: 'SYNTAX_ERROR', message: text, line: quotedLine(text), col: quotedCol(text), retryable: false,
+               hint: ERROR_HINTS.SYNTAX_ERROR };
     }
     if (/is not defined|Cannot read propert|undefined \(reading/i.test(text)) {
       const kind = /get_v/.test(text) ? 'pinets-get_v'
@@ -493,7 +509,7 @@
 
     /* Worker first (fix #2). A run that overruns is terminated, not waited on — the pane stays usable,
        which is the whole point: the bridge's earlier "page is dead" reports were runs, not crashes. */
-    const viaWorker = await workerRun(source, bars, ctx, timeoutMs, label);
+    const viaWorker = await workerRun(source, bars, ctx, timeoutMs, label, opts.inputs);
     if (!viaWorker.unavailable) {
       const ms = Math.round(performance.now() - t0);
       const context = ctx.symbol + '@' + ctx.timeframe;
@@ -522,17 +538,20 @@
     }
 
     let built = newEngine(mod, bars, opts.forceBars);
+    /* Changed inputs ride in on an Indicator, as in the worker; an untouched script runs from its source. */
+    const target = opts.inputs && Object.keys(opts.inputs).length && typeof mod.Indicator === 'function'
+      ? new mod.Indicator(source, opts.inputs) : source;
     try {
       let out;
       try {
-        out = await withTimeout(built.engine.run(source), timeoutMs, label);
+        out = await withTimeout(built.engine.run(target), timeoutMs, label);
       } catch (err) {
         // A script that needs market context fails on custom bars with the ticker/syminfo error.
         // Retry the documented provider form before reporting a failure.
         const msg = String((err && err.message) || err);
         if (built.ctor === 'custom-bars' || !/ticker|syminfo/i.test(msg)) throw err;
         built = newEngine(mod, bars, true);
-        out = await withTimeout(built.engine.run(source), timeoutMs, label);
+        out = await withTimeout(built.engine.run(target), timeoutMs, label);
       }
       const ms = Math.round(performance.now() - t0);
       return { ok: true, ms, series: toSeries(out), strategy: toStrategy(out),
@@ -545,6 +564,29 @@
     }
   }
 
-  window.PineTSRunner = { run, runnable, loadPineTS, toSeries, marketContext, newEngine, normalizeBars };
+  /**
+   * The script's input.*() declarations, read by the engine without running it: [{ id, type, title, defval,
+   * group, minval, maxval, step, options, tooltip, varId }]. A one-shot worker (like a run), so a big
+   * source never costs the page a frame, with a short deadline. Resolves { ok, inputs } or { ok:false }.
+   */
+  function scanInputs(source) {
+    return new Promise((resolve) => {
+      const url = engineUrl();
+      if (typeof Worker === 'undefined' || !url || !String(source || '').trim()) { resolve({ ok: false, reason: 'no engine' }); return; }
+      let worker;
+      try { worker = new Worker('pinets-worker.js', { type: 'module' }); } catch (err) { resolve({ ok: false, reason: 'no worker' }); return; }
+      let done = false;
+      const finish = (v) => { if (done) return; done = true; clearTimeout(timer); try { worker.terminate(); } catch (err) { /* gone */ } resolve(v); };
+      const timer = setTimeout(() => finish({ ok: false, reason: 'scan timed out' }), 8000);
+      worker.onmessage = (ev) => {
+        const d = (ev && ev.data) || {};
+        finish(d.ok ? { ok: true, inputs: Array.isArray(d.inputs) ? d.inputs : [] } : { ok: false, reason: d.reason || 'scan failed' });
+      };
+      worker.onerror = () => finish({ ok: false, reason: 'worker failed' });
+      worker.postMessage({ type: 'inputs', engineUrl: url, source: String(source) });
+    });
+  }
+
+  window.PineTSRunner = { run, runnable, loadPineTS, toSeries, marketContext, newEngine, normalizeBars, scanInputs };
   console.log('[pinets-runner] ready — PineTS loads on first run (independent of Vela’s Pine engine)');
 })();

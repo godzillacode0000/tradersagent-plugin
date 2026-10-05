@@ -707,8 +707,13 @@ pre {
   border-bottom: 1px solid var(--lx-border);
 }
 .script__name { flex: 1; min-width: 0; }
+/* The name reads as a title, not a form field: no box until it is hovered or focused (hairline, not a
+   ring). Specificity beats the global text-input dressing on purpose. */
+.script__bar .script__name { background: transparent; border-color: transparent; font-weight: 600; }
+.script__bar .script__name:hover { border-color: var(--lx-border); }
+.script__bar .script__name:focus { border-color: var(--lx-border-strong); box-shadow: none; }
 /* Run is the one loud control in the pane. Ink-on-canvas inverted from the tokens, so it follows the
-   theme without a light-mode override (it used raw #fff / #111 until 5 Oct). */
+   theme without a light-mode override (it used raw white and black until 5 Oct). */
 .btn--run {
   background: var(--lx-fg); color: var(--lx-canvas); border-color: var(--lx-fg);
   font-weight: 600; padding-inline: 14px;
@@ -716,32 +721,114 @@ pre {
 .btn--run:hover { background: var(--lx-fg); border-color: var(--lx-fg); color: var(--lx-canvas); opacity: .86; }
 .btn--run:disabled { opacity: .55; }
 .script__x { padding-inline: 10px; }
+/* The inputs button exists only for a script that declares input.*() values. A dot says some are changed. */
+.script__gear { position: relative; padding-inline: 10px; }
+.script__gear[hidden] { display: none; }
+.script__gear[aria-pressed="true"] { background: var(--lx-bg-hover-strong); }
+.script__gear[data-changed]::after {
+  content: ""; position: absolute; top: 5px; right: 5px; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--lx-accent);
+}
 
 /* The editor: a numbers column and the textarea sharing one scroll line. The textarea does not wrap
    (wrap="off" in the markup, pre here), so one source line is one row and the numbers stay on their
    lines; long lines scroll sideways. A textarea cannot grow its own gutter, so app.js paints it. */
-.script__edit { display: flex; flex: 1 1 auto; min-height: 160px; overflow: hidden; }
+.script__edit { position: relative; display: flex; flex: 1 1 auto; min-height: 160px; overflow: hidden; }
 .script__gutter {
   flex: 0 0 auto; overflow: hidden; user-select: none;
   padding: var(--lx-space-2) 6px var(--lx-space-2) var(--lx-space-2);
   min-width: 2.6em; box-sizing: border-box;
   text-align: right; color: var(--lx-fg-faint);
-  font-family: ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace;
+  font-family: var(--lx-font-mono);
   font-size: 12.5px; line-height: 1.55;
   border-right: 1px solid var(--lx-border);
   scrollbar-width: none;
 }
 .script__gutter span { display: block; }
+.script__gutter .is-cur { color: var(--lx-fg-muted); }
+.script__gutter .is-err { color: var(--lx-danger); font-weight: 700; }
 .script__src {
   flex: 1; min-width: 0; width: 100%; box-sizing: border-box;
   padding: var(--lx-space-2) var(--lx-space-3);
   border: 0; background: transparent; color: inherit; resize: none;
   white-space: pre; overflow-wrap: normal; overflow: auto;
-  font-family: ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace;
+  font-family: var(--lx-font-mono);
   font-size: 12.5px; line-height: 1.55; tab-size: 2;
 }
 .script__src:focus { outline: none; }
 .script__edit:focus-within { box-shadow: inset 2px 0 0 var(--lx-accent); }
+/* Row tints, drawn over the text from the same arithmetic as the gutter (row height x line): the line the
+   caret is on (a quiet wash) and the line an error names (a left marker and a stronger wash). */
+.script__mark { position: absolute; left: 0; right: 0; top: 0; pointer-events: none; }
+.script__mark[hidden] { display: none; }
+.script__mark--cur { background: var(--lx-bg-hover); }
+.script__mark--err { background: var(--lx-loss-soft); box-shadow: inset 2px 0 0 var(--lx-danger); }
+
+/* ── Settings: the script's inputs, in the editor's place while open ─────────────────────────────── */
+.script.is-settings .script__edit { display: none; }
+/* While the inputs are open the run list steps aside (the status line stays, and says what each change
+   did), so the controls get the room. */
+.script.is-settings .script__out { display: none; }
+.script__settings { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.script__settings[hidden] { display: none; }
+.set__head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--lx-space-2);
+  padding: var(--lx-space-2) var(--lx-space-3); border-bottom: 1px solid var(--lx-border);
+}
+.set__title { font-family: var(--lx-font-mono); font-size: var(--lx-fs-xs); color: var(--lx-fg-faint); }
+.set__reset { padding: 2px var(--lx-space-2); font-size: var(--lx-fs-xs); }
+.set__reset[hidden] { display: none; }
+.set__body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 0 var(--lx-space-3) var(--lx-space-3); }
+.set__group { padding-top: var(--lx-space-3); }
+.set__h {
+  margin: 0 0 var(--lx-space-1); font: 500 var(--lx-fs-xs)/1.3 var(--lx-font-mono);
+  letter-spacing: .06em; text-transform: uppercase; color: var(--lx-fg-faint);
+}
+.set__row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--lx-space-3);
+  min-height: 36px; padding: var(--lx-space-1) 0; border-top: 1px solid var(--lx-border);
+}
+.set__h + .set__row { border-top: 0; }
+.set__label { flex: 1 1 0; min-width: 0; color: var(--lx-fg-muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.set__ctl { display: flex; align-items: center; justify-content: flex-end; gap: var(--lx-space-1); flex: 0 0 auto; max-width: 58%; }
+.set__input, .set__select {
+  width: 9.5em; max-width: 100%; height: 28px; box-sizing: border-box; padding: 0 var(--lx-space-2);
+  background: var(--lx-field-bg); color: var(--lx-fg);
+  border: 1px solid var(--lx-border); border-radius: var(--lx-radius-sm);
+  font: 12.5px var(--lx-font-mono); font-variant-numeric: tabular-nums;
+}
+.set__input[type="number"] { text-align: right; }
+.set__input:hover, .set__select:hover { border-color: var(--lx-border-strong); }
+.set__input:focus, .set__select:focus { border-color: var(--lx-accent-line); outline: none; }
+.set__select { padding-right: var(--lx-space-1); }
+.set__color { display: flex; align-items: center; gap: var(--lx-space-2); }
+.set__swatch {
+  width: 28px; height: 28px; padding: 2px; box-sizing: border-box; cursor: pointer;
+  background: var(--lx-field-bg); border: 1px solid var(--lx-border); border-radius: var(--lx-radius-sm);
+}
+.set__hex { font: 12px var(--lx-font-mono); color: var(--lx-fg-muted); min-width: 6.5em; text-align: right; }
+/* The switch: a track and a knob; only transform and background move (120ms). */
+.set__switch {
+  position: relative; width: 34px; height: 20px; padding: 0; cursor: pointer;
+  background: var(--lx-surface-3); border: 1px solid var(--lx-border-strong); border-radius: 999px;
+  transition: background var(--lx-dur-120) var(--lx-ease);
+}
+.set__knob {
+  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--lx-fg-muted); transition: transform var(--lx-dur-120) var(--lx-ease), background var(--lx-dur-120) var(--lx-ease);
+}
+.set__switch[aria-checked="true"] { background: var(--lx-accent-soft); border-color: var(--lx-accent-line); }
+.set__switch[aria-checked="true"] .set__knob { transform: translateX(14px); background: var(--lx-accent); }
+.set__switch:focus-visible, .set__undo:focus-visible { outline: var(--lx-focus-ring); outline-offset: 2px; }
+.set__undo {
+  width: 22px; height: 22px; padding: 0; cursor: pointer; line-height: 1;
+  background: none; border: 0; border-radius: var(--lx-radius-sm); color: var(--lx-fg-faint);
+}
+.set__undo[hidden] { display: none; }
+.set__undo:hover { color: var(--lx-fg); background: var(--lx-bg-hover); }
+@media (prefers-reduced-motion: reduce) {
+  .set__switch, .set__knob { transition: none; }
+}
 
 /* The runs block: one status line, always shown, and the run list it opens. */
 .script__runs {
@@ -750,9 +837,9 @@ pre {
 }
 .script__status {
   display: flex; align-items: center; gap: var(--lx-space-2); width: 100%;
-  padding: 7px var(--lx-space-3);
+  padding: var(--lx-space-2) var(--lx-space-3);
   background: none; border: 0; color: var(--lx-fg-muted); cursor: pointer;
-  font: inherit; font-size: var(--lx-fs-sm); text-align: left;
+  font: inherit; font-family: var(--lx-font-mono); font-size: var(--lx-fs-sm); text-align: left;
 }
 .script__status:hover { color: var(--lx-fg); }
 .script__status:focus-visible { outline: var(--lx-focus-ring); outline-offset: -2px; }
@@ -772,14 +859,15 @@ pre {
 /* Lost line breaks: a one-line script is said out loud, with the fix one press away. */
 .script__fix {
   display: flex; align-items: center; gap: var(--lx-space-2); flex-wrap: wrap;
-  margin: 0 var(--lx-space-3) var(--lx-space-2); padding: 6px var(--lx-space-25);
+  margin: 0 var(--lx-space-3) var(--lx-space-2); padding: var(--lx-space-2) var(--lx-space-3);
   border-radius: var(--lx-radius-md); background: var(--lx-warn-soft);
   color: var(--lx-fg); font-size: var(--lx-fs-sm);
 }
 .script__fix[hidden] { display: none; }
 .script__fix span { flex: 1; min-width: 12em; }
 
-/* The run list: newest first. It takes what the editor can spare and scrolls on its own. */
+/* The run list: newest first, hairline rows, no cards. It takes what the editor can spare and scrolls on
+   its own. Names are the UI face; everything that is a measurement (facts, time) is mono. */
 .script__out {
   margin: 0; padding: 0 var(--lx-space-3) var(--lx-space-2); list-style: none;
   max-height: min(36vh, 320px); overflow: auto;
@@ -787,26 +875,32 @@ pre {
 .script__runs.is-folded .script__out { display: none; }
 .script__out:empty::before {
   content: "▶ Run draws on the chart beside this pane.";
-  display: block; padding: 2px 0 6px; color: var(--lx-fg-faint); font-size: var(--lx-fs-sm);
+  display: block; padding: 0 0 var(--lx-space-2); color: var(--lx-fg-faint); font-size: var(--lx-fs-sm);
 }
 .run { padding: var(--lx-space-2) 0; border-top: 1px solid var(--lx-border); font-size: var(--lx-fs-sm); }
 .run:first-child { border-top: 0; }
-.run__head { display: flex; align-items: baseline; gap: var(--lx-space-15); }
+.run__head { display: flex; align-items: baseline; gap: var(--lx-space-2); }
 .run__mark { flex: 0 0 auto; font-weight: 700; }
 .run--ok .run__mark { color: var(--lx-accent); }
 .run--fail .run__mark { color: var(--lx-danger); }
 .run__name { flex: 1; min-width: 0; color: var(--lx-fg); font-weight: 600;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.run__time { flex: 0 0 auto; color: var(--lx-fg-faint); font-variant-numeric: tabular-nums; }
-.run__facts { margin-top: 2px; color: var(--lx-fg-muted); overflow-wrap: anywhere; }
+.run__time { flex: 0 0 auto; color: var(--lx-fg-faint); font: 12px var(--lx-font-mono); font-variant-numeric: tabular-nums; }
+.run__facts { margin-top: var(--lx-space-05); color: var(--lx-fg-muted); font: 12px/1.45 var(--lx-font-mono); overflow-wrap: anywhere; }
 .run--fail .run__facts { color: var(--lx-fg); }
-.run__note { margin-top: 3px; color: var(--lx-fg); overflow-wrap: anywhere; }
-.run__more { margin-top: 4px; color: var(--lx-fg-faint); }
+/* A note is amber TEXT (never red, never a badge): it says the run is fine and what to know about it. */
+.run__note { margin-top: var(--lx-space-1); color: var(--lx-warn); overflow-wrap: anywhere; }
+.run__go {
+  margin-top: var(--lx-space-1); padding: 0; background: none; border: 0; cursor: pointer;
+  color: var(--lx-accent-ink); font: inherit; text-decoration: underline; text-underline-offset: 2px;
+}
+.run__go:hover { color: var(--lx-fg); }
+.run__more { margin-top: var(--lx-space-1); color: var(--lx-fg-faint); }
 .run__more summary { cursor: pointer; width: max-content; }
 .run__more summary:hover { color: var(--lx-fg); }
 .run__more pre {
-  margin: 4px 0 0; white-space: pre-wrap; overflow-wrap: anywhere;
-  font-family: ui-monospace, "Cascadia Code", Consolas, "Liberation Mono", monospace; font-size: 11.5px;
+  margin: var(--lx-space-1) 0 0; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: var(--lx-font-mono); font-size: 11.5px;
   color: var(--lx-fg-muted);
 }
 /* The legend must NOT set `display`: hiding is the [hidden] attribute (UA display:none), and an

@@ -189,12 +189,27 @@ function makeSource(bars, msg, report) {
 self.onmessage = async (event) => {
   const msg = event.data || {};
   const started = Date.now();
+  /* `{ type: 'inputs' }` is not a run: it reads the script's input.*() declarations (the Settings panel's
+     source of truth) and answers. The engine's Indicator scans the source without executing it. */
+  if (msg.type === 'inputs') {
+    try {
+      const mod = await engine(msg.engineUrl);
+      const meta = new mod.Indicator(String(msg.source || '')).getInputsMeta() || [];
+      self.postMessage({ ok: true, inputs: JSON.parse(JSON.stringify(meta)) });
+    } catch (err) {
+      self.postMessage({ ok: false, reason: String((err && err.message) || err) });
+    }
+    return;
+  }
   try {
     const mod = await engine(msg.engineUrl);
     const bars = attachSymbolInfo(msg.bars, msg.symbol, msg.mintick);
     const mtf = { fetched: [], failed: [] };
     const engineInstance = new mod.PineTS(makeSource(bars, msg, mtf), msg.symbol, msg.timeframe, Math.max(30, bars.length));
-    const out = await engineInstance.run(msg.source);
+    /* Changed inputs ride in on an Indicator ({ in_N: value }); a script nobody touched is run from its
+       source exactly as before, so this path only exists when the operator asked for it. */
+    const changed = msg.inputs && typeof msg.inputs === 'object' && Object.keys(msg.inputs).length > 0;
+    const out = await engineInstance.run(changed ? new mod.Indicator(msg.source, msg.inputs) : msg.source);
     const ms = Date.now() - started;
     const plots = projectPlots(out && out.plots);
     const strategy = projectStrategy(out && out.strategy);
@@ -207,7 +222,10 @@ self.onmessage = async (event) => {
     }
     self.postMessage(payload);
   } catch (err) {
+    /* `method` names the Pine function a PineRuntimeError came from ("array.get"): the pane uses it to
+       point at the line when the message itself carries no position. */
     self.postMessage({ ok: false, ms: Date.now() - started,
-                       reason: String((err && err.message) || err), phase: 'run' });
+                       reason: String((err && err.message) || err), phase: 'run',
+                       method: err && err.method ? String(err.method) : undefined });
   }
 };

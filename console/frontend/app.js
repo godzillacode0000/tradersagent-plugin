@@ -1175,6 +1175,12 @@ window.scriptPane = {
    hides the script pane. */
 function escapeKeydown(e) {
   if (e.key !== 'Escape') return;
+  /* One Escape closes ONE layer: the script pane's Settings view (which takes the editor's place) goes
+     before the pane does. The pane block binds this when it is built. */
+  if (typeof window.closeScriptLayerIfOpen === 'function' && window.closeScriptLayerIfOpen()) {
+    e.preventDefault();
+    return;
+  }
   if (el.main && el.main.dataset.detail === 'on') {
     e.preventDefault();
     setPanel('detail', false);
@@ -1215,6 +1221,10 @@ async function main() {
   const srcBox = $('#script-src'), outBox = $('#script-out'), nameBox = $('#script-name'), runBtn = $('#script-run');
   const statBox = $('#script-stat'), stateDot = $('#script-state'), statusBtn = $('#script-status');
   const runsBox = $('#script-runs'), fixBox = $('#script-fix'), gutter = $('#script-gutter');
+  const paneEl = $('#view-script'), gearBtn = $('#script-gear'), setBox = $('#script-settings');
+  const setBody = $('#script-settings-body'), setTitle = $('#script-settings-title'), setReset = $('#script-settings-reset');
+  const markCur = $('#script-mark-cur'), markErr = $('#script-mark-err');
+  const ST = window.ScriptTools;
 
   /* The status line (5 Oct) replaces the Logs chip, the static "Pine v6" pill and the hint paragraph:
      one line that always says what the last Run did, as a word first ("Ran", "Failed") so the dot is
@@ -1234,10 +1244,10 @@ async function main() {
     statusBtn.addEventListener('click', () => setRunsOpen(statusBtn.getAttribute('aria-expanded') !== 'true'));
   }
 
-  /* The run list: newest first, one entry per Run — when, which script, what it drew, its ⚠ notes,
-     and the full engine line behind a fold. Built with textContent only: the name is typed by the
-     operator and the reason is engine text, so neither ever reaches innerHTML. The engine has no
-     log.* output to show (searched the bundle, 5 Oct), so this is a run history, not a Pine console. */
+  /* The run list: newest first, one entry per Run — when, which script, what it drew, its ⚠ notes, and the
+     full engine line behind a fold. Built with textContent only: the name is typed by the operator and
+     the reason is engine text, so neither ever reaches innerHTML. The engine has no log.* output to
+     show (searched the bundle, 5 Oct), so this is a run history, not a Pine console. */
   const RUNS_MAX = 20;
   const node = (tag, cls, text) => {
     const n = document.createElement(tag);
@@ -1254,16 +1264,21 @@ async function main() {
     }
     return parts.join(' · ');
   };
-  const addRun = ({ ok, label, facts, notes, detail }) => {
+  const addRun = ({ ok, label, facts, notes, detail, line }) => {
     if (!outBox) return;
     const li = node('li', 'run ' + (ok ? 'run--ok' : 'run--fail'));
     const head = node('div', 'run__head');
     head.appendChild(node('span', 'run__mark', ok ? '✓' : '✗'));
     head.appendChild(node('span', 'run__name', label));
-    const t = node('time', 'run__time', new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    head.appendChild(t);
+    head.appendChild(node('time', 'run__time', new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })));
     li.appendChild(head);
     if (facts) li.appendChild(node('div', 'run__facts', facts));
+    if (line) {
+      const go = node('button', 'run__go', 'Go to line ' + line);
+      go.type = 'button';
+      go.addEventListener('click', () => goToLine(line));
+      li.appendChild(go);
+    }
     for (const n of notes || []) li.appendChild(node('div', 'run__note', '⚠ ' + n));
     if (detail) {
       const d = node('details', 'run__more');
@@ -1276,10 +1291,37 @@ async function main() {
     outBox.scrollTop = 0;
   };
 
-  /* Line numbers. A textarea has no gutter of its own, so a sibling mirrors the count. The editor no
-     longer wraps (wrap="off"), so one source line is one row and the numbers cannot drift. Once lines
-     scroll sideways the textarea grows a horizontal scrollbar its sibling does not have; without the
-     same room at the bottom the gutter could not scroll as far, and the last numbers slid off. */
+  /* ── line numbers, the caret's line, and the line an error names ─────────────────────────────────
+     A textarea has no gutter of its own, so a sibling mirrors the count. The editor does not wrap
+     (wrap="off"), so one source line is one row and the numbers cannot drift. Once lines scroll
+     sideways the textarea grows a horizontal scrollbar its sibling does not have; without the same room
+     at the bottom the gutter could not scroll as far, and the last numbers slid off. The two row
+     tints are drawn from the same arithmetic (row height x line), so they sit exactly on their line. */
+  let curLine = 0, errLine = 0;
+  const rowHeight = () => parseFloat(getComputedStyle(srcBox).lineHeight) || 19;
+  const padTop = () => parseFloat(getComputedStyle(srcBox).paddingTop) || 0;
+  const placeMark = (mark, line) => {
+    if (!mark) return;
+    if (!line) { mark.hidden = true; return; }
+    const lh = rowHeight();
+    const y = padTop() + (line - 1) * lh - srcBox.scrollTop;
+    mark.hidden = y < -lh || y > srcBox.clientHeight;
+    mark.style.height = lh + 'px';
+    mark.style.transform = `translateY(${y}px)`;
+  };
+  const paintGutterClasses = () => {
+    if (!gutter) return;
+    for (const s of gutter.querySelectorAll('.is-cur, .is-err')) s.classList.remove('is-cur', 'is-err');
+    const c = gutter.children[curLine - 1];
+    if (c && document.activeElement === srcBox) c.classList.add('is-cur');
+    const e = gutter.children[errLine - 1];
+    if (e) e.classList.add('is-err');
+  };
+  const paintMarks = () => {
+    placeMark(markCur, document.activeElement === srcBox ? curLine : 0);
+    placeMark(markErr, errLine);
+    paintGutterClasses();
+  };
   const paintGutter = () => {
     if (!gutter) return;
     const n = Math.max(1, srcBox.value.split('\n').length);
@@ -1290,6 +1332,30 @@ async function main() {
     const bar = Math.max(0, srcBox.offsetHeight - srcBox.clientHeight);
     gutter.style.paddingBottom = `calc(var(--lx-space-2) + ${bar}px)`;
     gutter.scrollTop = srcBox.scrollTop;
+    paintMarks();
+  };
+  const caretLine = () => srcBox.value.slice(0, srcBox.selectionStart).split('\n').length;
+  const syncCaret = () => { const l = caretLine(); if (l !== curLine) { curLine = l; paintMarks(); } };
+  const clearError = () => { if (errLine) { errLine = 0; paintMarks(); } };
+  const revealLine = (line) => {
+    const lh = rowHeight();
+    const top = padTop() + (line - 1) * lh;
+    if (top < srcBox.scrollTop + lh || top > srcBox.scrollTop + srcBox.clientHeight - 2 * lh) {
+      srcBox.scrollTop = Math.max(0, top - srcBox.clientHeight / 3);
+    }
+    if (gutter) gutter.scrollTop = srcBox.scrollTop;
+  };
+  const showErrorAt = (line) => { errLine = line; revealLine(line); paintMarks(); };
+  const goToLine = (line) => {
+    const rows = srcBox.value.split('\n');
+    const n = Math.min(Math.max(1, line), rows.length);
+    let start = 0;
+    for (let i = 0; i < n - 1; i++) start += rows[i].length + 1;
+    setSettingsOpen(false);
+    srcBox.focus();
+    srcBox.setSelectionRange(start, start + rows[n - 1].length);
+    revealLine(n);
+    syncCaret();
   };
 
   /* Lost line breaks (5 Oct). A script that arrives as ONE line — pasted from somewhere that ate the
@@ -1319,38 +1385,233 @@ async function main() {
     fixBox.hidden = false;
   };
 
+  /* ── the script's inputs (Settings) ──────────────────────────────────────────────────────────────
+     The engine reads the script's input.*() declarations without running it (PineTSRunner.scanInputs, in
+     a worker). Each becomes a control; a value the operator changes is kept against the script's own
+     title, handed to the next Run as an override, and — if that script is on the chart — applied at once,
+     so there is no Save. Untouched inputs are never sent: an unchanged script runs exactly as before. */
+  let inputsMeta = [];            // what the engine says the script declares
+  let inputStore = {};            // inputKey -> value, only what differs from the default
+  let storeFor = '';              // the declared title those values belong to
+  let settingsOpen = false;
+  let scanSeq = 0, scanTimer = null, scanDirty = false;
+  let lastRunSource = null;       // the source of the last successful Run from this pane
+  let applyTimer = null;
+
+  const changedCount = () => Object.keys(ST.overridesFor(inputsMeta, inputStore)).length;
+  const currentValue = (meta) => {
+    const key = ST.inputKey(meta);
+    return Object.prototype.hasOwnProperty.call(inputStore, key) ? inputStore[key] : meta.defval;
+  };
+  const paintGear = () => {
+    if (!gearBtn) return;
+    gearBtn.hidden = inputsMeta.length === 0;
+    const n = changedCount();
+    gearBtn.setAttribute('aria-label', 'Script inputs (' + inputsMeta.length + (n ? ', ' + n + ' changed' : '') + ')');
+    gearBtn.title = 'Inputs · ' + inputsMeta.length + (n ? ' · ' + n + ' changed' : '');
+    if (n) gearBtn.dataset.changed = '1'; else delete gearBtn.dataset.changed;
+  };
+
+  const setSettingsOpen = (open) => {
+    open = Boolean(open) && inputsMeta.length > 0;
+    settingsOpen = open;
+    if (paneEl) paneEl.classList.toggle('is-settings', open);
+    if (setBox) setBox.hidden = !open;
+    if (gearBtn) gearBtn.setAttribute('aria-pressed', String(open));
+    if (open) renderSettings();
+    else paintGutter();
+  };
+
+  /* one control per input; every value goes through ScriptTools.coerce, so a number is clamped to its own
+     min / max and a choice is always one of its options before it can reach the engine */
+  const hexParts = (v) => { const s = String(v || '#000000FF'); return { rgb: s.slice(0, 7).toLowerCase(), a: s.length >= 9 ? s.slice(7, 9).toUpperCase() : 'FF' }; };
+  const msToLocalInput = (ms) => { const d = new Date(Number(ms)); return isFinite(d) ? d.toISOString().slice(0, 16) : ''; };
+
+  const settingRow = (meta) => {
+    const key = ST.inputKey(meta);
+    const id = 'set-' + meta.id;
+    const row = node('div', 'set__row');
+    const label = node('label', 'set__label', meta.title || meta.name || meta.varId || meta.id);
+    label.htmlFor = id;
+    if (meta.tooltip) label.title = String(meta.tooltip);
+    const ctl = node('div', 'set__ctl');
+    const undo = node('button', 'set__undo', '↺');
+    undo.type = 'button';
+    undo.hidden = true;
+    undo.title = 'Back to ' + String(meta.defval);
+    undo.setAttribute('aria-label', 'Reset ' + (meta.title || meta.id) + ' to ' + String(meta.defval));
+
+    const commit = (raw) => {
+      const o = ST.overridesFor([meta], { [key]: raw });
+      if (Object.prototype.hasOwnProperty.call(o, meta.id)) inputStore[key] = o[meta.id]; else delete inputStore[key];
+      undo.hidden = !Object.prototype.hasOwnProperty.call(inputStore, key);
+      inputsChanged();
+    };
+    const t = meta.type;
+    let field;
+    if (t === 'bool') {
+      field = node('button', 'set__switch');
+      field.type = 'button';
+      field.setAttribute('role', 'switch');
+      field.appendChild(node('span', 'set__knob'));
+      const paint = () => field.setAttribute('aria-checked', String(currentValue(meta) === true));
+      paint();
+      field.addEventListener('click', () => { commit(!(currentValue(meta) === true)); paint(); });
+    } else if (Array.isArray(meta.options) && meta.options.length) {
+      field = node('select', 'set__select');
+      for (const o of meta.options) { const op = node('option', null, String(o)); op.value = String(o); field.appendChild(op); }
+      field.value = String(currentValue(meta));
+      field.addEventListener('change', () => commit(field.value));
+    } else if (t === 'color') {
+      field = node('span', 'set__color');
+      const pick = node('input', 'set__swatch');
+      pick.type = 'color';
+      pick.id = id;
+      const hex = node('span', 'set__hex');
+      const paint = () => { const v = hexParts(currentValue(meta)); pick.value = v.rgb; hex.textContent = v.rgb.toUpperCase() + (v.a === 'FF' ? '' : v.a); };
+      paint();
+      pick.addEventListener('input', () => { commit(pick.value.toUpperCase() + hexParts(currentValue(meta)).a); paint(); });
+      field.append(pick, hex);
+    } else if (t === 'int' || t === 'float' || t === 'price') {
+      field = node('input', 'set__input');
+      field.type = 'number';
+      if (Number.isFinite(meta.minval)) field.min = String(meta.minval);
+      if (Number.isFinite(meta.maxval)) field.max = String(meta.maxval);
+      field.step = Number.isFinite(meta.step) ? String(meta.step) : (t === 'int' ? '1' : 'any');
+      field.value = String(currentValue(meta));
+      /* While typing, only a value already inside the input's own range counts ("1" on the way to "14" must
+         not be clamped to the minimum and re-run); on leaving the field it is clamped and shown as kept. */
+      field.addEventListener('input', () => {
+        const n = Number(field.value);
+        const inRange = field.value !== '' && isFinite(n) && !(Number.isFinite(meta.minval) && n < meta.minval) && !(Number.isFinite(meta.maxval) && n > meta.maxval);
+        if (inRange) commit(field.value);
+      });
+      field.addEventListener('change', () => { commit(field.value); field.value = String(currentValue(meta)); });
+      field.addEventListener('blur', () => { field.value = String(currentValue(meta)); });
+    } else if (t === 'time') {
+      field = node('input', 'set__input');
+      field.type = 'datetime-local';
+      field.value = msToLocalInput(currentValue(meta));
+      field.addEventListener('change', () => { const ms = Date.parse(field.value + ':00Z'); if (isFinite(ms)) commit(ms); });
+    } else {
+      field = node('input', 'set__input');
+      field.type = 'text';
+      field.spellcheck = false;
+      field.value = String(currentValue(meta));
+      field.addEventListener('input', () => commit(field.value));
+    }
+    if (t !== 'color') field.id = id;
+    undo.hidden = !Object.prototype.hasOwnProperty.call(inputStore, key);
+    undo.addEventListener('click', () => {
+      delete inputStore[key];
+      undo.hidden = true;
+      inputsChanged();
+      renderSettings();
+    });
+    ctl.append(field, undo);
+    row.append(label, ctl);
+    return row;
+  };
+
+  const renderSettings = () => {
+    if (!setBody) return;
+    const keep = setBody.scrollTop;
+    setBody.textContent = '';
+    for (const g of ST.groupInputs(inputsMeta)) {
+      const sec = node('section', 'set__group');
+      sec.appendChild(node('h3', 'set__h', g.name));
+      for (const meta of g.items) sec.appendChild(settingRow(meta));
+      setBody.appendChild(sec);
+    }
+    const n = changedCount();
+    if (setTitle) setTitle.textContent = inputsMeta.length + (inputsMeta.length === 1 ? ' input' : ' inputs') + (n ? ' · ' + n + ' changed' : '');
+    if (setReset) setReset.hidden = n === 0;
+    setBody.scrollTop = keep;
+  };
+
+  /* A value changed: remember it, and — when this exact script is what the last Run put on the chart —
+     apply it. Otherwise say it is kept and what to press. */
+  const inputsChanged = () => {
+    paintGear();
+    const n = changedCount();
+    if (setTitle) setTitle.textContent = inputsMeta.length + (inputsMeta.length === 1 ? ' input' : ' inputs') + (n ? ' · ' + n + ' changed' : '');
+    if (setReset) setReset.hidden = n === 0;
+    saveDraft();
+    clearTimeout(applyTimer);
+    if (lastRunSource !== null && lastRunSource === srcBox.value) {
+      applyTimer = setTimeout(() => doRun(), 350);
+    } else {
+      setStatus('idle', 'Inputs kept · press Run to apply');
+    }
+  };
+  if (setReset) setReset.addEventListener('click', () => { inputStore = {}; inputsChanged(); renderSettings(); });
+  if (gearBtn) gearBtn.addEventListener('click', () => setSettingsOpen(!settingsOpen));
+
+  const applyMeta = (metas) => {
+    inputsMeta = metas;
+    const declared = ST.declaredName(srcBox.value);
+    if (declared !== storeFor) { inputStore = {}; storeFor = declared; }
+    inputStore = ST.reconcile(metas, inputStore);
+    paintGear();
+    if (settingsOpen) { if (!metas.length) setSettingsOpen(false); else renderSettings(); }
+  };
+  const scan = async () => {
+    clearTimeout(scanTimer);
+    const seq = ++scanSeq;
+    const src = srcBox.value;
+    const r = (src.trim() && window.PineTSRunner && window.PineTSRunner.scanInputs)
+      ? await window.PineTSRunner.scanInputs(src) : { ok: true, inputs: [] };
+    if (seq !== scanSeq) return;               // a newer edit superseded this scan
+    scanDirty = false;
+    /* A source that does not parse (mid-edit) has no inputs to offer, but it must not cost the operator
+       the values they set: the store is only reconciled by a scan that succeeded. */
+    if (r.ok) applyMeta(r.inputs || []); else { inputsMeta = []; paintGear(); if (settingsOpen) setSettingsOpen(false); }
+  };
+  const scheduleScan = (ms) => { scanDirty = true; clearTimeout(scanTimer); scanTimer = setTimeout(scan, ms == null ? 600 : ms); };
+
   if (gutter) {
     srcBox.addEventListener('input', paintGutter);
-    srcBox.addEventListener('scroll', () => { gutter.scrollTop = srcBox.scrollTop; });
+    srcBox.addEventListener('scroll', () => { gutter.scrollTop = srcBox.scrollTop; paintMarks(); });
     window.addEventListener('resize', paintGutter);
   }
-  srcBox.addEventListener('input', checkBreaks);
+  for (const ev of ['keyup', 'click', 'focus', 'blur', 'select']) srcBox.addEventListener(ev, () => { syncCaret(); paintMarks(); });
+  srcBox.addEventListener('input', () => { clearError(); syncCaret(); checkBreaks(); scheduleScan(); });
   try {
     const draft = JSON.parse(localStorage.getItem('luxalgo-web:script') || 'null');
     if (draft && typeof draft === 'object') {
       if (typeof draft.src === 'string') srcBox.value = draft.src;
       if (typeof draft.name === 'string' && draft.name.trim()) nameBox.value = draft.name;
+      if (draft.inputs && typeof draft.inputs === 'object') {
+        for (const k of Object.keys(draft.inputs)) {
+          const v = draft.inputs[k];
+          if (['string', 'number', 'boolean'].includes(typeof v)) inputStore[k] = v;
+        }
+        storeFor = typeof draft.inputsFor === 'string' ? draft.inputsFor : '';
+      }
     }
   } catch { /* private mode */ }
   paintGutter();
   checkBreaks();
+  if (srcBox.value.trim()) scheduleScan(400);
   let draftTimer;
-  const saveDraft = () => {
+  function saveDraft() {
     clearTimeout(draftTimer);
     draftTimer = setTimeout(() => {
-      try { localStorage.setItem('luxalgo-web:script', JSON.stringify({ src: srcBox.value, name: nameBox.value })); } catch { /* private mode */ }
+      try {
+        localStorage.setItem('luxalgo-web:script', JSON.stringify({ src: srcBox.value, name: nameBox.value, inputs: inputStore, inputsFor: storeFor }));
+      } catch { /* private mode */ }
     }, 400);
-  };
+  }
   srcBox.addEventListener('input', saveDraft);
   nameBox.addEventListener('input', saveDraft);
   $('#script-close').addEventListener('click', () => setPanel('script', false));
   /* Escape hides the right column again (operator's note in the app's chat, 25 Sep: "i got opened
      the PineTS but when i click escape, i want it to hide back"). It works from inside the editor
-     too — the draft is saved as you type (saveDraft), so hiding the pane loses nothing. */
+     too — the draft is saved as you type (saveDraft), so hiding the pane loses nothing. One Escape
+     closes ONE layer: the drawer first, then the Settings view (escapeKeydown asks
+     closeScriptLayerIfOpen), then the pane. */
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape' || ev.defaultPrevented) return;
-    /* The drawer is the topmost thing when it is up, so it takes the Escape first — one Escape
-       closes ONE surface (the F6 rule below). */
     if (typeof window.closeDrawerIfOpen === 'function' && window.closeDrawerIfOpen()) {
       ev.preventDefault();
       return;
@@ -1358,19 +1619,41 @@ async function main() {
     if (el.main.dataset.detail !== 'on') return;
     setPanel('script', false);
   });
-  runBtn.addEventListener('click', async () => {
+  window.closeScriptLayerIfOpen = () => { if (!settingsOpen) return false; setSettingsOpen(false); return true; };
+
+  /* ── Run ─────────────────────────────────────────────────────────────────────────────────────── */
+  let running = false, runQueued = false;
+  const doRun = async () => {
+    if (running) { runQueued = true; return; }          // a change made mid-run is applied once, after it
+    running = true;
     const source = srcBox.value;
     const label = nameBox.value.trim() || 'Untitled script';
     runBtn.disabled = true;
+    clearError();
     setStatus('busy', `Running “${label}”…`);
     try {
       await chartReady;
-      const r = await window.TraderRun.run(source, label);
+      /* The engine's input ids are positions, so a Run straight after an edit waits for the scan that
+         re-reads them (only when there are values to translate). */
+      if (Object.keys(inputStore).length && scanDirty) await scan();
+      const overrides = ST.overridesFor(inputsMeta, inputStore);
+      const changed = ST.changedNote(Object.keys(overrides).length);
+      const r = await window.TraderRun.run(source, label, { inputs: overrides });
       if (!r.ok) {
-        setStatus('fail', 'Failed · ' + r.reason);
-        addRun({ ok: false, label, facts: String(r.reason), detail: r.hint ? String(r.hint) : '' });
+        lastRunSource = null;
+        const err = r.error || null;
+        const loc = ST.locateError(source, err || r.reason);
+        const msg = ST.cleanMessage((err && err.message) || r.reason);
+        const where = loc ? (loc.approx ? `likely line ${loc.line}` : `line ${loc.line}${loc.col ? ', col ' + loc.col : ''}`) : '';
+        const what = err && err.code === 'SYNTAX_ERROR' ? 'Syntax error' : '';
+        if (loc) showErrorAt(loc.line);
+        setStatus('fail', 'Failed · ' + [where, msg].filter(Boolean).join(' · '));
+        addRun({ ok: false, label, line: loc ? loc.line : 0,
+                 facts: [what, where && where.charAt(0).toUpperCase() + where.slice(1), msg].filter(Boolean).join(' · '),
+                 detail: [r.reason !== msg ? String(r.reason) : '', err && err.hint ? String(err.hint) : ''].filter(Boolean).join('\n\n') });
         toast('Pine: ' + r.reason, true);
       } else {
+        lastRunSource = source;
         log(`“${label}” ran in ${r.ms} ms`);
         /* F3 (25 Sep): say where the paint went, and point at it — the operator's recording showed
            a run finishing with nothing visibly changing, because the chart behind the pane was
@@ -1379,7 +1662,7 @@ async function main() {
         toast(`“${label}” ran in ${r.ms} ms · ${n} series · the paint is on the chart`);
         noteActivity(`ran “${label}” · ${n} series · ${r.ms} ms`, 'chart_apply_pine');
         const drew = drewWords(r.drew);
-        const facts = `${n} series${drew ? ' · ' + drew : ''} · ${r.bars} bars · ${r.ms} ms`;
+        const facts = `${n} series${drew ? ' · ' + drew : ''} · ${r.bars} bars · ${r.ms} ms${changed ? ' · ' + changed : ''}`;
         const notes = Array.isArray(r.warnings) ? r.warnings.map(String) : [];
         setStatus(notes.length ? 'warn' : 'ok', `Ran · ${facts}${notes.length ? ' · ⚠ ' + notes.length : ''}`);
         addRun({ ok: true, label, facts, notes, detail: window.TraderRun.summarize(r) });
@@ -1387,11 +1670,27 @@ async function main() {
         flashChart();
       }
     } catch (err) {
+      lastRunSource = null;
       setStatus('fail', 'Failed · ' + err.message);
       addRun({ ok: false, label, facts: String(err.message) });
       toast('Run failed: ' + err.message, true);
-    } finally { runBtn.disabled = false; }
-  });
+    } finally {
+      running = false;
+      runBtn.disabled = false;
+      if (runQueued) { runQueued = false; doRun(); }
+    }
+  };
+  runBtn.addEventListener('click', () => doRun());
+  /* Ctrl/Cmd+Enter runs from anywhere in the pane: the editor, the name, a Settings control. */
+  if (paneEl) {
+    paneEl.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey) {
+        ev.preventDefault();
+        if (!runBtn.disabled) runBtn.click();
+      }
+    });
+    runBtn.title = 'Run this script on the chart (' + (/Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl+') + 'Enter)';
+  }
 
   // Theme: one button, two systems (our palette + the chart's own theme)
   $('#theme-toggle').addEventListener('click', () => {
