@@ -204,7 +204,14 @@ function setPaneTop() {
   const row = document.querySelector('.vela-widget-topbar');
   const h = row ? Math.ceil(row.getBoundingClientRect().height) : 0;
   /* No console first row any more (3 Oct): the pane's top is Vela's own row height, nothing else. */
-  document.documentElement.style.setProperty('--lx-pane-top', `${h > 0 ? h : 44}px`);
+  /* With no Vela row the fallback strip floats top-right at z above the pane, and on a docked pane it
+     covered the name field, ▶ Run and ✕ (the operator's screenshot at ~770 px, 5 Oct). Measure where the
+     strip ends so the pane can start below it. 0 when every button in it is hidden. */
+  const strip = document.getElementById('fallback-strip');
+  const sb = strip && strip.offsetHeight > 0 ? Math.ceil(strip.getBoundingClientRect().bottom) + 6 : 0;
+  document.documentElement.style.setProperty('--lx-strip-h', `${sb}px`);
+  /* An overlay pane (under 760 px) starts below the row — or, with no usable row, below the strip. */
+  document.documentElement.style.setProperty('--lx-pane-top', `${h > 0 ? h : Math.max(44, sb)}px`);
 }
 window.addEventListener('resize', setPaneTop);
 
@@ -1192,6 +1199,7 @@ async function main() {
     const row = document.querySelector('.vela-widget-topbar');
     const usable = !!(row && row.getBoundingClientRect().width > 0);
     for (const b of [el.scriptFallback, el.fullFallback]) if (b) b.hidden = usable;
+    setPaneTop();
     /* The status dot is a widget action in Vela's row; the statusbar copy is the fallback only. */
     if (el.dot) el.dot.hidden = usable;
   };
@@ -1205,40 +1213,118 @@ async function main() {
 
   // Script pane (restored 23 Sep) — Run goes through the one landasan; the draft survives reloads.
   const srcBox = $('#script-src'), outBox = $('#script-out'), nameBox = $('#script-name'), runBtn = $('#script-run');
-  const logsBtn = $('#script-logs'), statBox = $('#script-stat'), gutter = $('#script-gutter');
+  const statBox = $('#script-stat'), stateDot = $('#script-state'), statusBtn = $('#script-status');
+  const runsBox = $('#script-runs'), fixBox = $('#script-fix'), gutter = $('#script-gutter');
 
-  /* #3 — the status strip: Logs folds the output away, and the numbers stay visible either way, so
-     "did it run and how long" is answerable without reading the prose block. */
-  if (logsBtn) {
-    logsBtn.addEventListener('click', () => {
-      const on = logsBtn.getAttribute('aria-pressed') === 'true';
-      logsBtn.setAttribute('aria-pressed', String(!on));
-      // Fold when the click turned Logs ON. Toggling with the PREVIOUS state was inverted: the first
-      // click reported pressed and left the output open (caught by the live console check, 27 Sep).
-      outBox.classList.toggle('is-folded', !on);
-    });
+  /* The status line (5 Oct) replaces the Logs chip, the static "Pine v6" pill and the hint paragraph:
+     one line that always says what the last Run did, as a word first ("Ran", "Failed") so the dot is
+     never the only signal. Pressing it opens / folds the run list below. Stacked under the chart
+     (under 760 px, a 40dvh pane) the list starts folded, so the editor keeps the room. */
+  const setStatus = (state, text) => {
+    if (stateDot) stateDot.dataset.state = state;
+    if (statBox) { statBox.textContent = text; statBox.title = text; }
+  };
+  const setRunsOpen = (open) => {
+    if (!runsBox || !statusBtn) return;
+    runsBox.classList.toggle('is-folded', !open);
+    statusBtn.setAttribute('aria-expanded', String(open));
+  };
+  setRunsOpen(window.innerWidth >= DOCK_MIN);
+  if (statusBtn) {
+    statusBtn.addEventListener('click', () => setRunsOpen(statusBtn.getAttribute('aria-expanded') !== 'true'));
   }
 
-  /* #2 — line numbers. A textarea has no gutter of its own, so a sibling mirrors the count. Kept in
-     step on input, and on scroll so the numbers do not drift away from their lines. */
+  /* The run list: newest first, one entry per Run — when, which script, what it drew, its ⚠ notes,
+     and the full engine line behind a fold. Built with textContent only: the name is typed by the
+     operator and the reason is engine text, so neither ever reaches innerHTML. The engine has no
+     log.* output to show (searched the bundle, 5 Oct), so this is a run history, not a Pine console. */
+  const RUNS_MAX = 20;
+  const node = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  const drewWords = (d) => {
+    if (!d) return '';
+    const parts = [];
+    for (const [k, one, many] of [['boxes', 'box', 'boxes'], ['lines', 'line', 'lines'], ['labels', 'label', 'labels'], ['tables', 'table', 'tables']]) {
+      const v = d[k] || 0;
+      if (v) parts.push(v + ' ' + (v === 1 ? one : many));
+    }
+    return parts.join(' · ');
+  };
+  const addRun = ({ ok, label, facts, notes, detail }) => {
+    if (!outBox) return;
+    const li = node('li', 'run ' + (ok ? 'run--ok' : 'run--fail'));
+    const head = node('div', 'run__head');
+    head.appendChild(node('span', 'run__mark', ok ? '✓' : '✗'));
+    head.appendChild(node('span', 'run__name', label));
+    const t = node('time', 'run__time', new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    head.appendChild(t);
+    li.appendChild(head);
+    if (facts) li.appendChild(node('div', 'run__facts', facts));
+    for (const n of notes || []) li.appendChild(node('div', 'run__note', '⚠ ' + n));
+    if (detail) {
+      const d = node('details', 'run__more');
+      d.appendChild(node('summary', null, 'Engine detail'));
+      d.appendChild(node('pre', null, detail));
+      li.appendChild(d);
+    }
+    outBox.prepend(li);
+    while (outBox.childElementCount > RUNS_MAX) outBox.lastElementChild.remove();
+    outBox.scrollTop = 0;
+  };
+
+  /* Line numbers. A textarea has no gutter of its own, so a sibling mirrors the count. The editor no
+     longer wraps (wrap="off"), so one source line is one row and the numbers cannot drift. Once lines
+     scroll sideways the textarea grows a horizontal scrollbar its sibling does not have; without the
+     same room at the bottom the gutter could not scroll as far, and the last numbers slid off. */
   const paintGutter = () => {
     if (!gutter) return;
     const n = Math.max(1, srcBox.value.split('\n').length);
     if (gutter.childElementCount !== n) {
       gutter.textContent = '';
-      for (let i = 1; i <= n; i++) {
-        const s = document.createElement('span');
-        s.textContent = String(i);
-        gutter.appendChild(s);
-      }
+      for (let i = 1; i <= n; i++) gutter.appendChild(node('span', null, String(i)));
     }
+    const bar = Math.max(0, srcBox.offsetHeight - srcBox.clientHeight);
+    gutter.style.paddingBottom = `calc(var(--lx-space-2) + ${bar}px)`;
     gutter.scrollTop = srcBox.scrollTop;
   };
+
+  /* Lost line breaks (5 Oct). A script that arrives as ONE line — pasted from somewhere that ate the
+     newlines, or sent with a literal "\n" — is a silent failure in Pine: the first `//` comments out
+     everything after it, and Run draws nothing. Say so, and when the breaks are only escaped, offer to
+     put them back (the operator presses it; the source is never rewritten behind their back). */
+  const checkBreaks = () => {
+    if (!fixBox) return;
+    const src = srcBox.value;
+    const oneLine = src.length > 80 && !src.includes('\n');
+    const escaped = oneLine && /\\n/.test(src);
+    const swallowed = oneLine && /\S.*\/\/\s*@version|\S.*\b(indicator|strategy|library)\s*\(/.test(src) && src.trimStart().startsWith('//');
+    if (!escaped && !swallowed) { fixBox.hidden = true; fixBox.textContent = ''; return; }
+    fixBox.textContent = '';
+    fixBox.appendChild(node('span', null, escaped
+      ? 'This script is one line with "\\n" where the line breaks should be.'
+      : 'This script is one line, so the first // comment hides everything after it.'));
+    if (escaped) {
+      const b = node('button', 'btn btn--ghost', 'Restore line breaks');
+      b.type = 'button';
+      b.addEventListener('click', () => {
+        srcBox.value = srcBox.value.replace(/\\r\\n|\\n/g, '\n').replace(/\\t/g, '\t');
+        srcBox.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      fixBox.appendChild(b);
+    }
+    fixBox.hidden = false;
+  };
+
   if (gutter) {
-    paintGutter();
     srcBox.addEventListener('input', paintGutter);
     srcBox.addEventListener('scroll', () => { gutter.scrollTop = srcBox.scrollTop; });
+    window.addEventListener('resize', paintGutter);
   }
+  srcBox.addEventListener('input', checkBreaks);
   try {
     const draft = JSON.parse(localStorage.getItem('luxalgo-web:script') || 'null');
     if (draft && typeof draft === 'object') {
@@ -1246,6 +1332,8 @@ async function main() {
       if (typeof draft.name === 'string' && draft.name.trim()) nameBox.value = draft.name;
     }
   } catch { /* private mode */ }
+  paintGutter();
+  checkBreaks();
   let draftTimer;
   const saveDraft = () => {
     clearTimeout(draftTimer);
@@ -1274,33 +1362,33 @@ async function main() {
     const source = srcBox.value;
     const label = nameBox.value.trim() || 'Untitled script';
     runBtn.disabled = true;
-    outBox.textContent = `Running “${label}”…`;
+    setStatus('busy', `Running “${label}”…`);
     try {
       await chartReady;
       const r = await window.TraderRun.run(source, label);
       if (!r.ok) {
-        outBox.textContent = '✗ ' + r.reason;
-        if (statBox) statBox.textContent = 'failed · ' + String(r.reason).slice(0, 60);
+        setStatus('fail', 'Failed · ' + r.reason);
+        addRun({ ok: false, label, facts: String(r.reason), detail: r.hint ? String(r.hint) : '' });
         toast('Pine: ' + r.reason, true);
       } else {
-        outBox.textContent = window.TraderRun.summarize(r);
         log(`“${label}” ran in ${r.ms} ms`);
-              /* F3 (25 Sep): say where the paint went, and point at it — the operator's recording showed
+        /* F3 (25 Sep): say where the paint went, and point at it — the operator's recording showed
            a run finishing with nothing visibly changing, because the chart behind the pane was
            blank. A pulse on the chart closes that loop. */
         const n = Array.isArray(r.series) ? r.series.length : (r.series || 0);
         toast(`“${label}” ran in ${r.ms} ms · ${n} series · the paint is on the chart`);
         noteActivity(`ran “${label}” · ${n} series · ${r.ms} ms`, 'chart_apply_pine');
-        if (statBox) {
-          const drew = r.drew ? ` · ${r.drew.boxes || 0}b/${r.drew.lines || 0}l/${r.drew.labels || 0}lb` : '';
-          statBox.textContent = `${n} series · ${r.ms} ms · ${r.bars} bars${drew}`;
-        }
+        const drew = drewWords(r.drew);
+        const facts = `${n} series${drew ? ' · ' + drew : ''} · ${r.bars} bars · ${r.ms} ms`;
+        const notes = Array.isArray(r.warnings) ? r.warnings.map(String) : [];
+        setStatus(notes.length ? 'warn' : 'ok', `Ran · ${facts}${notes.length ? ' · ⚠ ' + notes.length : ''}`);
+        addRun({ ok: true, label, facts, notes, detail: window.TraderRun.summarize(r) });
         nudgeChart();
         flashChart();
       }
     } catch (err) {
-      outBox.textContent = '✗ ' + err.message;
-      if (statBox) statBox.textContent = 'failed';
+      setStatus('fail', 'Failed · ' + err.message);
+      addRun({ ok: false, label, facts: String(err.message) });
       toast('Run failed: ' + err.message, true);
     } finally { runBtn.disabled = false; }
   });

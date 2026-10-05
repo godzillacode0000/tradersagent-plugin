@@ -106,36 +106,36 @@
     <section class="panel panel--right">
       <!-- VIEW: the script editor (restored 23 Sep) — Run goes through window.TraderRun. -->
       <div class="view script view--hidden" id="view-script">
-        <!-- Two groups, LuxAlgo Quant's shape (27 Sep): the name on the left, the actions on the
-             right, Run the loudest thing in the row. Mixed into one run of three, the eye has to
-             read every control; split, it only has to read one. -->
+        <!-- One action bar (5 Oct): the name, ▶ Run, ✕ — nothing else competes with Run. The Logs
+             chip, the static "Pine v6" pill and the three-line hint paragraph are gone: the status
+             line under the editor says what happened, and the run list under it says it in full. -->
         <div class="script__bar">
           <input id="script-name" class="script__name" type="text" value="Untitled script"
                  aria-label="Script name" spellcheck="false" />
-          <div class="script__acts">
-            <button type="button" class="btn btn--run" id="script-run"
-                    title="Run this script on the chart">▶ Run</button>
-            <button type="button" class="btn btn--ghost" id="script-close"
-                    title="Close the script pane" aria-label="Close the script pane">✕</button>
-          </div>
+          <button type="button" class="btn btn--run" id="script-run"
+                  title="Run this script on the chart">▶ Run</button>
+          <button type="button" class="btn btn--ghost script__x" id="script-close"
+                  title="Close (Esc)" aria-label="Close the script pane">✕</button>
         </div>
+        <!-- wrap="off": a soft-wrapped line took several rows while the gutter numbered it once, so
+             the numbers drifted off their lines (measured 5 Oct). Long lines scroll sideways instead. -->
         <div class="script__edit">
           <div class="script__gutter" id="script-gutter" aria-hidden="true"></div>
-          <textarea id="script-src" class="script__src" spellcheck="false" autocapitalize="off"
-                    placeholder="// Paste LuxAlgo Pine here. Run paints whatever it builds:&#10;// boxes, lines and labels on the overlay; plot series as a native."></textarea>
+          <textarea id="script-src" class="script__src" wrap="off" spellcheck="false" autocapitalize="off"
+                    aria-label="Pine source"
+                    placeholder="// Paste Pine here, then press ▶ Run.&#10;// Plots become Vela series; boxes, lines and labels go on the chart."></textarea>
         </div>
-        <pre class="script__out" id="script-out" aria-live="polite">Ready — paste Pine and press Run.</pre>
-        <!-- The status strip: Quant answers "which Pine, did it run, how long" under the editor, so a
-             reader never has to guess whether a Run landed. Counts, not prose. -->
-        <div class="script__status">
-          <button type="button" class="script__logs" id="script-logs" aria-pressed="false"
-                  title="Show or hide the run output">Logs</button>
-          <span class="script__pill" id="script-pine">Pine v6</span>
-          <span class="script__stat" id="script-stat"></span>
+        <!-- The status line is the only thing always shown; it opens the run list. -->
+        <div class="script__runs" id="script-runs">
+          <button type="button" class="script__status" id="script-status" aria-expanded="true"
+                  aria-controls="script-out">
+            <span class="script__state" id="script-state" data-state="idle" aria-hidden="true"></span>
+            <span class="script__stat" id="script-stat">No runs yet</span>
+            <span class="script__chev" aria-hidden="true"></span>
+          </button>
+          <div class="script__fix" id="script-fix" hidden></div>
+          <ol class="script__out" id="script-out" aria-live="polite" aria-label="Runs, newest first"></ol>
         </div>
-        <p class="script__hint" id="script-hint">Run paints onto the chart <em>beside</em> this panel:
-        plots become Vela natives, boxes / lines / labels go on the overlay. Press
-        <kbd>&lt;&gt;</kbd> (or ✕) to close this pane and see the chart full width.</p>
       </div>
       <!-- The picked result / concept write-up is not a column view any more (3 Oct): Details became
            a view inside the drawer — one surface over the chart, no close-then-reopen. This column
