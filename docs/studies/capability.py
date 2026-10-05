@@ -33,7 +33,9 @@ CASES = [
     # CISD normalises by ATR.
     ("ta.atr", H + 'indicator("t10")\\nplot(0.3 * ta.atr(200))'),
     ("ta.highest", H + 'indicator("t11")\\nplot(ta.highest(high, 20))'),
-    # HTF context.
+    # HTF context. NOTE (4 Oct 2026, measured): this RUNS, but the engine ignores the timeframe —
+    # request.security(..., "D", close) returned the chart's own close — so a pass here is not proof of
+    # real multi-timeframe data.
     ("request.security", H + 'indicator("t12")\\nplot(request.security(syminfo.tickerid, "D", high))'),
     # The CISD trigger: a close crossing a remembered open.
     ("remembered open", H + 'indicator("t13")\\nvar float ref = na\\nif close >= close[1]\\n    ref := open\\nplot(ref)'),

@@ -71,6 +71,21 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Deeper history for Pine runs, and an honest note about multi-timeframe.** Every run was handed the
+  last 500 bars whatever the script asked for, and a lookback longer than that does not give a slightly
+  wrong number — it gives *nothing* (on a 4h chart `ta.highest(high, 2184)`, a 52-week high, was na on all
+  500 bars; a 500-bar lookback produced one point). The run now reads the longest lookback the script
+  states (length arguments, `x[N]`, input defaults), fetches that plus a warm-up — up to 5000 bars, with
+  500 as the floor so a heavy script is not slowed — and scales its deadline with the bars. `/api/bars`
+  pages back through Binance's 1000-per-request ceiling (partial results come back marked `partial`),
+  and the overlay maps drawing indices through the bars the script ran on instead of a fresh 500 (a
+  1000-bar run's boxes were measured sitting on the right pivots). Separately, `request.security`
+  *runs* in this engine but ignores the timeframe — `request.security(…, "D", close)` returned the chart's
+  own close (measured 4 Oct) — so a multi-timeframe indicator drew the chart's own levels in silence. The
+  run result and the on-chart legend now carry a `⚠` note whenever a script asks for a timeframe other than
+  the chart's, and two docs that called it a clean `RUN` are corrected. **Real multi-timeframe data is
+  still not implemented.**
+
 - **Edge Stats — how often did it actually happen?** LuxAlgo's open-source
   [Edge Stats](https://github.com/LuxAlgo/edge-stats) engine (MIT, pinned to a commit) runs beside the
   console as a lazily started sidecar, and the chart's `⋯` menu opens a sheet for it: ask in the

@@ -38,7 +38,8 @@ had reported nothing, the other two numbers would have meant nothing.
 | `array.get(a, array.size(a) - 1)` **inside `plot()`** | **CRASH** — `` Index -1 is out of bounds, array size is 0 ``. Plot arguments are evaluated before the first push, so the index is -1 while the array is empty. Track the value in its own `var float` instead. |
 | `for i = 0 to <negative>` | **CRASH** — same `Index -1` error. Compute the count first and guard the loop with an `if`. |
 | for-loop over an empty array | **CRASH** — guard with `if array.size(a) > 0`. |
-| 3-bar indexing `high[2]`, `var`, UDTs, arrays, `ta.pivothigh`, `hour`/`minute`, `box.new`/`line.new`/`label.new`/`table.new`, `ta.atr`, `request.security`, `for … in`, `strategy()` | **RUN** (200–430 ms over 500 bars) |
+| 3-bar indexing `high[2]`, `var`, UDTs, arrays, `ta.pivothigh`, `hour`/`minute`, `box.new`/`line.new`/`label.new`/`table.new`, `ta.atr`, `for … in`, `strategy()` | **RUN** (200–430 ms over 500 bars) |
+| `request.security(…, "D", …)` | **RUNS, BUT THE TIMEFRAME IS IGNORED** — measured 4 Oct 2026 on a 1h chart: the "D" close came back identical to the chart's own close and the "W" high to its high. It does not error, so a multi-timeframe script draws the chart's own levels. The console now says so in the run result and the legend (5 Oct). Real multi-timeframe data is not implemented. |
 
 An earlier probe of mine reported 1/18 constructs working. That was wrong, and the cause was the
 probe itself: its Pine templates began with a newline, so the engine saw an empty line 1 and refused
