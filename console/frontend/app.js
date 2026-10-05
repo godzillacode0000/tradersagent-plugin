@@ -204,7 +204,14 @@ function setPaneTop() {
   const row = document.querySelector('.vela-widget-topbar');
   const h = row ? Math.ceil(row.getBoundingClientRect().height) : 0;
   /* No console first row any more (3 Oct): the pane's top is Vela's own row height, nothing else. */
-  document.documentElement.style.setProperty('--lx-pane-top', `${h > 0 ? h : 44}px`);
+  /* With no Vela row the fallback strip floats top-right at z above the pane, and on a docked pane it
+     covered the name field, ▶ Run and ✕ (the operator's screenshot at ~770 px, 5 Oct). Measure where the
+     strip ends so the pane can start below it. 0 when every button in it is hidden. */
+  const strip = document.getElementById('fallback-strip');
+  const sb = strip && strip.offsetHeight > 0 ? Math.ceil(strip.getBoundingClientRect().bottom) + 6 : 0;
+  document.documentElement.style.setProperty('--lx-strip-h', `${sb}px`);
+  /* An overlay pane (under 760 px) starts below the row — or, with no usable row, below the strip. */
+  document.documentElement.style.setProperty('--lx-pane-top', `${h > 0 ? h : Math.max(44, sb)}px`);
 }
 window.addEventListener('resize', setPaneTop);
 
@@ -1192,6 +1199,7 @@ async function main() {
     const row = document.querySelector('.vela-widget-topbar');
     const usable = !!(row && row.getBoundingClientRect().width > 0);
     for (const b of [el.scriptFallback, el.fullFallback]) if (b) b.hidden = usable;
+    setPaneTop();
     /* The status dot is a widget action in Vela's row; the statusbar copy is the fallback only. */
     if (el.dot) el.dot.hidden = usable;
   };

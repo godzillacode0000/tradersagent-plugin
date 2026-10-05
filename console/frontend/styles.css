@@ -395,6 +395,12 @@ pre, .detail { overscroll-behavior: contain; }
 .main[data-dock="on"][data-detail="on"] .panel--right {
   position: static; width: auto; transform: none; box-shadow: none;
   border-left: 1px solid var(--lx-border);
+  /* A docked column is the full height of the chart. The narrow-width rule below caps a STACKED pane at
+     40dvh; at 760-1099 px the pane is docked beside the chart, and that cap left a 240px pane with an
+     empty grey slab under it and a 120px editor (the operator's screenshot, 5 Oct). */
+  max-height: none;
+  /* Clear the bare-chart fallback strip (set in app.js setPaneTop) so ▶ Run and ✕ stay reachable. */
+  padding-top: var(--lx-strip-h, 0px);
 }
 
 @media (max-width: 1099px) {
