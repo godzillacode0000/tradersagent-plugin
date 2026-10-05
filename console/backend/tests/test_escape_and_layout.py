@@ -40,7 +40,7 @@ class EscapeClosesThePane(unittest.TestCase):
         app = read(APP)
         self.assertIn("function escapeKeydown", app, "no document-level Escape handler exists")
         body = app.split("function escapeKeydown", 1)[1]
-        self.assertIn("e.key !== 'Escape'", body[:400], "the handler does not test for Escape")
+        self.assertIn("ev.key !== 'Escape'", body[:400], "the handler does not test for Escape")
         self.assertIn("el.main.dataset.detail === 'on'", body[:800],
                       "the handler does not ask whether the pane is open")
         self.assertIn("setPanel('detail', false)", body[:800],

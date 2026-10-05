@@ -145,5 +145,54 @@
     return count > 0 ? count + (count === 1 ? ' input' : ' inputs') + ' changed' : '';
   }
 
-  return { cleanMessage, codeOnly, locateError, inputKey, coerce, overridesFor, reconcile, groupInputs, declaredName, changedNote };
+  /* ── a script that lost its line breaks ───────────────────────────────────────────────────────────
+     A script pasted from somewhere that ate the newlines (or sent with a literal "\n") is ONE line, and in
+     Pine the first `//` then comments out everything after it: Run draws nothing and says nothing. */
+
+  /** Put back breaks that arrived as the two characters backslash-n (and \r\n, \t) — but only where Pine
+   *  cannot have meant them: outside a string literal, which keeps its escapes as written. A `//` comment ends
+   *  at the first one (that is what the line break was), so a quote mark inside a comment cannot swallow the
+   *  rest. -> { text, count }, count = how many breaks were restored. */
+  function restoreBreaks(source) {
+    const s = String(source == null ? '' : source);
+    let out = '';
+    let count = 0;
+    let quote = null;
+    let comment = false;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      const n = s[i + 1];
+      if (quote) {
+        out += c;
+        if (c === '\\' && n !== undefined) { out += n; i++; }
+        else if (c === quote) quote = null;
+        continue;
+      }
+      if (c === '\\' && n === 'r' && s[i + 2] === '\\' && s[i + 3] === 'n') { out += '\n'; count++; comment = false; i += 3; continue; }
+      if (c === '\\' && n === 'n') { out += '\n'; count++; comment = false; i++; continue; }
+      if (c === '\\' && n === 't') { out += '\t'; i++; continue; }
+      if (comment) { out += c; continue; }
+      if (c === '/' && n === '/') comment = true;
+      else if (c === '"' || c === "'") quote = c;
+      out += c;
+    }
+    return { text: out, count };
+  }
+
+  /** Is this source a script that lost its line breaks? -> { kind: 'escaped', fixed } when the breaks are
+   *  there as backslash-n and can be put back; { kind: 'swallowed' } when it is one real line whose first
+   *  `//` hides the rest; { kind: null } otherwise. Anything with a real line break is left alone. */
+  function diagnoseBreaks(source) {
+    const src = String(source == null ? '' : source);
+    if (!src.trim() || src.includes('\n')) return { kind: null };
+    const r = restoreBreaks(src);
+    if (r.count > 0) return { kind: 'escaped', fixed: r.text };
+    const head = src.trimStart();
+    if (src.length > 80 && head.startsWith('//') && /\/\/\s*@version|\b(?:indicator|strategy|library)\s*\(/.test(head.slice(2))) {
+      return { kind: 'swallowed' };
+    }
+    return { kind: null };
+  }
+
+  return { cleanMessage, codeOnly, locateError, inputKey, coerce, overridesFor, reconcile, groupInputs, declaredName, changedNote, restoreBreaks, diagnoseBreaks };
 }));

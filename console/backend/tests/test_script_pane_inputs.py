@@ -98,9 +98,13 @@ class Settings(unittest.TestCase):
         self.assertIn(".script.is-settings .script__edit { display: none; }", CSS)
         self.assertIn(".script.is-settings .script__out { display: none; }", CSS)
 
-    def test_one_escape_closes_one_layer_settings_before_the_pane(self):
-        esc = APP.split("function escapeKeydown(e) {", 1)[1].split("\n}\n", 1)[0]
+    def test_one_escape_closes_one_layer_drawer_then_settings_then_the_pane(self):
+        """The behaviour is run in test_escape_layers.py; this pins that the pane block adds no second
+        Escape handler (the one that used to hold the drawer check was never reached with the pane open)."""
+        esc = APP.split("function escapeKeydown(ev) {", 1)[1].split("\n}\n", 1)[0]
+        self.assertLess(esc.index("closeDrawerIfOpen"), esc.index("closeScriptLayerIfOpen"))
         self.assertLess(esc.index("closeScriptLayerIfOpen"), esc.index("setPanel('detail', false)"))
+        self.assertNotIn("'Escape'", BLOCK.replace("Escape: see escapeKeydown", ""))
         self.assertIn("window.closeScriptLayerIfOpen = () => { if (!settingsOpen) return false; setSettingsOpen(false); return true; };", BLOCK)
 
     def test_values_go_through_coerce_so_nothing_unchecked_reaches_the_engine(self):

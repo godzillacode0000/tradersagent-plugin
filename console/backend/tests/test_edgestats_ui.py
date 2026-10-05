@@ -143,8 +143,13 @@ class Doors(unittest.TestCase):
         self.assertIn("window.closeEdgeIfOpen", JS)
         self.assertIn("ev.preventDefault();\n      ev.stopPropagation();", JS)
         self.assertIn("}, true);", JS)                       # capture phase: before app.js's own handler
+        # A press the sheet handled never reaches app.js: its handler runs in the capture phase and stops it
+        # (asserted above). app.js's own handler must NOT skip a merely defaultPrevented press — after a
+        # click on the chart Vela marks Escape handled, and skipping then meant Escape stopped closing the
+        # pane (measured 5 Oct with an A/B run against the committed build).
         app = (FRONT / "app.js").read_text(encoding="utf-8")
-        self.assertIn("ev.defaultPrevented", app)
+        handler = app.split("function escapeKeydown(ev) {", 1)[1].split("\n}\n", 1)[0]
+        self.assertNotIn("defaultPrevented", handler)
 
     def test_the_agent_door_is_registered_everywhere_it_must_be(self):
         bridge = (FRONT / "chart-bridge.js").read_text(encoding="utf-8")

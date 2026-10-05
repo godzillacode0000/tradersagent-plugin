@@ -144,5 +144,57 @@ class Inputs(unittest.TestCase):
                          ["", "1 input changed", "3 inputs changed"])
 
 
+@unittest.skipUnless(NODE, "node is not installed")
+class LostLineBreaks(unittest.TestCase):
+    """A one-line script hides everything after its first `//`. The decision is made here, not in the pane."""
+
+    COLLAPSED = "// © LuxAlgo\\n//@version=6\\nindicator('x', overlay=true)\\nplot(close)"
+
+    def diagnose(self, src: str):
+        return run(f"T.diagnoseBreaks({json.dumps(src)})")
+
+    def test_the_documented_example_is_flagged_although_it_is_only_69_characters(self):
+        """The PR #3 hand-off gave this string as the check; a length gate of 80 meant it never fired."""
+        self.assertEqual(len(self.COLLAPSED), 69)
+        got = self.diagnose(self.COLLAPSED)
+        self.assertEqual(got["kind"], "escaped")
+        self.assertEqual(got["fixed"], "// © LuxAlgo\n//@version=6\nindicator('x', overlay=true)\nplot(close)")
+
+    def test_a_break_inside_a_string_literal_is_kept_as_written(self):
+        src = "indicator('x')\\nlabel.new(0, 0, \"a\\nb\")\\nplot(close)"
+        got = self.diagnose(src)
+        self.assertEqual(got["fixed"], "indicator('x')\nlabel.new(0, 0, \"a\\nb\")\nplot(close)")
+
+    def test_a_long_real_one_liner_with_a_newline_only_inside_a_string_is_not_flagged(self):
+        """The old check looked for a backslash-n anywhere, so this valid script was flagged and the restore
+        button would have broken its string."""
+        src = 'plot(close, "A title that runs well past eighty characters so that the old length gate would have passed it\\n")'
+        self.assertGreater(len(src), 80)
+        self.assertEqual(self.diagnose(src), {"kind": None})
+
+    def test_a_quote_mark_inside_the_collapsed_comment_does_not_swallow_the_rest(self):
+        src = "// Smart Money's thing\\n//@version=6\\nindicator('x')\\nplot(close)"
+        got = self.diagnose(src)
+        self.assertEqual(got["fixed"], "// Smart Money's thing\n//@version=6\nindicator('x')\nplot(close)")
+
+    def test_crlf_and_tab_escapes_are_restored_outside_strings_only(self):
+        got = run("T.restoreBreaks('a = 1\\\\r\\\\nb = \"x\\\\ty\"\\\\n\\\\tc = 2')")
+        self.assertEqual(got, {"text": "a = 1\nb = \"x\\ty\"\n\tc = 2", "count": 2})
+
+    def test_anything_with_a_real_line_break_is_left_alone(self):
+        self.assertEqual(self.diagnose("plot(close) // a\\nb\nplot(open)"), {"kind": None})
+
+    def test_an_ordinary_short_one_liner_is_not_flagged(self):
+        self.assertEqual(self.diagnose("plot(close)"), {"kind": None})
+        self.assertEqual(self.diagnose(""), {"kind": None})
+
+    def test_a_real_one_liner_whose_comment_swallows_the_declaration_is_flagged_but_has_no_fix(self):
+        src = "// header text that is long enough to pass the length gate //@version=6 indicator(\"x\") plot(close) more words here"
+        self.assertEqual(self.diagnose(src), {"kind": "swallowed"})
+
+    def test_a_short_commented_one_liner_is_not_flagged_as_swallowed(self):
+        self.assertEqual(self.diagnose("// just a note indicator(\"x\")"), {"kind": None})
+
+
 if __name__ == "__main__":
     unittest.main()

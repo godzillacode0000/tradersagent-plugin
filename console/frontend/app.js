@@ -1171,18 +1171,23 @@ window.scriptPane = {
 
 /* F6 (25 Sep): Escape closes whatever this pane opened. Only the family popover listened for it,
    so the script pane — the operator's "I opened PineTS, Escape should hide it" — could only be
-   closed with its ✕. The drawer answers first (window.closeDrawerIfOpen, bound in main), then this
-   hides the script pane. */
-function escapeKeydown(e) {
-  if (e.key !== 'Escape') return;
-  /* One Escape closes ONE layer: the script pane's Settings view (which takes the editor's place) goes
-     before the pane does. The pane block binds this when it is built. */
-  if (typeof window.closeScriptLayerIfOpen === 'function' && window.closeScriptLayerIfOpen()) {
-    e.preventDefault();
-    return;
-  }
+   closed with its ✕.
+
+   ONE handler, one layer per press, topmost first (5 Oct): the library drawer (it sits over the chart),
+   then the script pane's Settings view (it takes the editor's place), then the pane itself. The drawer
+   check used to live in a second handler bound after this one; with the pane open this one had already
+   closed the pane and prevented the event, so the drawer stayed open and the pane went first — the
+   reverse of the intent (measured in Hermes Desktop, 5 Oct). A press the Edge sheet handled never gets
+   here (its capture handler stops it). This handler must NOT skip a press that is merely
+   defaultPrevented: after a click on the chart Vela marks Escape handled (its own cancel / deselect), and
+   skipping then meant Escape no longer closed the pane (measured 5 Oct, caught by an A/B run). */
+function escapeKeydown(ev) {
+  if (ev.key !== 'Escape') return;
+  const closed = (typeof window.closeDrawerIfOpen === 'function' && window.closeDrawerIfOpen())
+    || (typeof window.closeScriptLayerIfOpen === 'function' && window.closeScriptLayerIfOpen());
+  if (closed) { ev.preventDefault(); return; }
   if (el.main && el.main.dataset.detail === 'on') {
-    e.preventDefault();
+    ev.preventDefault();
     setPanel('detail', false);
   }
 }
@@ -1361,23 +1366,23 @@ async function main() {
   /* Lost line breaks (5 Oct). A script that arrives as ONE line — pasted from somewhere that ate the
      newlines, or sent with a literal "\n" — is a silent failure in Pine: the first `//` comments out
      everything after it, and Run draws nothing. Say so, and when the breaks are only escaped, offer to
-     put them back (the operator presses it; the source is never rewritten behind their back). */
+     put them back (the operator presses it; the source is never rewritten behind their back). The
+     decision is ScriptTools.diagnoseBreaks: breaks inside a string literal are left as written, escaped
+     breaks are flagged at any length (a 69-character collapsed script is just as broken), and the length
+     gate stays only on the no-escape case, so an ordinary one-line `plot(close)` is never flagged. */
   const checkBreaks = () => {
     if (!fixBox) return;
-    const src = srcBox.value;
-    const oneLine = src.length > 80 && !src.includes('\n');
-    const escaped = oneLine && /\\n/.test(src);
-    const swallowed = oneLine && /\S.*\/\/\s*@version|\S.*\b(indicator|strategy|library)\s*\(/.test(src) && src.trimStart().startsWith('//');
-    if (!escaped && !swallowed) { fixBox.hidden = true; fixBox.textContent = ''; return; }
+    const d = ST.diagnoseBreaks(srcBox.value);
+    if (!d.kind) { fixBox.hidden = true; fixBox.textContent = ''; return; }
     fixBox.textContent = '';
-    fixBox.appendChild(node('span', null, escaped
+    fixBox.appendChild(node('span', null, d.kind === 'escaped'
       ? 'This script is one line with "\\n" where the line breaks should be.'
       : 'This script is one line, so the first // comment hides everything after it.'));
-    if (escaped) {
+    if (d.kind === 'escaped') {
       const b = node('button', 'btn btn--ghost', 'Restore line breaks');
       b.type = 'button';
       b.addEventListener('click', () => {
-        srcBox.value = srcBox.value.replace(/\\r\\n|\\n/g, '\n').replace(/\\t/g, '\t');
+        srcBox.value = d.fixed;
         srcBox.dispatchEvent(new Event('input', { bubbles: true }));
       });
       fixBox.appendChild(b);
@@ -1605,20 +1610,8 @@ async function main() {
   srcBox.addEventListener('input', saveDraft);
   nameBox.addEventListener('input', saveDraft);
   $('#script-close').addEventListener('click', () => setPanel('script', false));
-  /* Escape hides the right column again (operator's note in the app's chat, 25 Sep: "i got opened
-     the PineTS but when i click escape, i want it to hide back"). It works from inside the editor
-     too — the draft is saved as you type (saveDraft), so hiding the pane loses nothing. One Escape
-     closes ONE layer: the drawer first, then the Settings view (escapeKeydown asks
-     closeScriptLayerIfOpen), then the pane. */
-  document.addEventListener('keydown', (ev) => {
-    if (ev.key !== 'Escape' || ev.defaultPrevented) return;
-    if (typeof window.closeDrawerIfOpen === 'function' && window.closeDrawerIfOpen()) {
-      ev.preventDefault();
-      return;
-    }
-    if (el.main.dataset.detail !== 'on') return;
-    setPanel('script', false);
-  });
+  /* Escape: see escapeKeydown — the one handler. The draft is saved as you type (saveDraft), so hiding
+     the pane with Escape from inside the editor loses nothing. */
   window.closeScriptLayerIfOpen = () => { if (!settingsOpen) return false; setSettingsOpen(false); return true; };
 
   /* ── Run ─────────────────────────────────────────────────────────────────────────────────────── */
