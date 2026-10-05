@@ -31,10 +31,11 @@ def rule(selector: str) -> str:
 
 
 class ActionBar(unittest.TestCase):
-    def test_the_bar_holds_the_name_inputs_run_and_close_only(self):
-        """The inputs button is in the bar but hidden until the script declares input.*() values."""
+    def test_the_bar_holds_the_name_saved_scripts_inputs_run_and_close_only(self):
+        """The inputs button is in the bar but hidden until the script declares input.*() values; the saved-scripts
+        button is always there (5 Oct)."""
         bar = PANE.split('class="script__bar"', 1)[1].split("</div>", 1)[0]
-        self.assertEqual(re.findall(r'id="([\w-]+)"', bar), ["script-name", "script-gear", "script-run", "script-close"])
+        self.assertEqual(re.findall(r'id="([\w-]+)"', bar), ["script-name", "script-lib-btn", "script-gear", "script-run", "script-close"])
         self.assertRegex(bar, r'id="script-gear"[^>]*\bhidden\b')
 
     def test_the_old_noise_is_gone(self):

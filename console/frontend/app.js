@@ -883,9 +883,16 @@ async function openResult(row, button) {
         const box = document.getElementById('script-src');
         const name = document.getElementById('script-name');
         if (!box) { toast('No script pane on this page', true); return; }
-        box.value = source;
-        box.dispatchEvent(new Event('input', { bubbles: true }));
-        if (name) name.value = (data.name || row.slug) + ' (copy)';
+        /* Through the pane's own hands: it clears the old script's marks, values and attachment to a saved
+           script (so Save can never overwrite the one that was open), rescans the inputs and keeps the draft. */
+        const copyName = (data.name || row.slug) + ' (copy)';
+        if (window.scriptPane && typeof window.scriptPane.load === 'function') {
+          window.scriptPane.load({ source, name: copyName });
+        } else {
+          box.value = source;
+          box.dispatchEvent(new Event('input', { bubbles: true }));
+          if (name) name.value = copyName;
+        }
         if (window.libDrawer) window.libDrawer.open(false);
         setPanel('script', true);
         noteActivity(`copied “${data.name || row.slug}” into the Script pane`, 'edit_copy');
@@ -1356,7 +1363,7 @@ async function main() {
     const n = Math.min(Math.max(1, line), rows.length);
     let start = 0;
     for (let i = 0; i < n - 1; i++) start += rows[i].length + 1;
-    setSettingsOpen(false);
+    setView('editor');
     srcBox.focus();
     srcBox.setSelectionRange(start, start + rows[n - 1].length);
     revealLine(n);
@@ -1417,15 +1424,28 @@ async function main() {
     if (n) gearBtn.dataset.changed = '1'; else delete gearBtn.dataset.changed;
   };
 
-  const setSettingsOpen = (open) => {
-    open = Boolean(open) && inputsMeta.length > 0;
-    settingsOpen = open;
-    if (paneEl) paneEl.classList.toggle('is-settings', open);
-    if (setBox) setBox.hidden = !open;
-    if (gearBtn) gearBtn.setAttribute('aria-pressed', String(open));
-    if (open) renderSettings();
+  /* Three things can hold the editor's place in the pane: the editor itself, the Settings view and the saved
+     scripts (script-library.js). Opening one closes the other, and Escape steps back to the editor. */
+  const libBtn = $('#script-lib-btn'), libBox = $('#script-lib');
+  let view = 'editor';
+  const setView = (name) => {
+    if (name === 'settings' && !inputsMeta.length) name = 'editor';
+    if (name !== 'settings' && name !== 'scripts') name = 'editor';
+    view = name;
+    settingsOpen = name === 'settings';
+    if (paneEl) {
+      paneEl.classList.toggle('is-settings', name === 'settings');
+      paneEl.classList.toggle('is-scripts', name === 'scripts');
+    }
+    if (setBox) setBox.hidden = name !== 'settings';
+    if (libBox) libBox.hidden = name !== 'scripts';
+    if (gearBtn) gearBtn.setAttribute('aria-pressed', String(name === 'settings'));
+    if (libBtn) libBtn.setAttribute('aria-pressed', String(name === 'scripts'));
+    if (name === 'settings') renderSettings();
+    else if (name === 'scripts') window.dispatchEvent(new CustomEvent('scriptpane:view', { detail: { view: 'scripts' } }));
     else paintGutter();
   };
+  const setSettingsOpen = (open) => setView(open ? 'settings' : (view === 'settings' ? 'editor' : view));
 
   /* one control per input; every value goes through ScriptTools.coerce, so a number is clamped to its own
      min / max and a choice is always one of its options before it can reach the engine */
@@ -1631,6 +1651,7 @@ async function main() {
   if (srcBox.value.trim()) scheduleScan(400);
   let draftTimer;
   function saveDraft() {
+    window.dispatchEvent(new Event('scriptpane:changed'));      // the saved-scripts list keeps its "unsaved" dot true
     clearTimeout(draftTimer);
     draftTimer = setTimeout(() => {
       try {
@@ -1643,7 +1664,52 @@ async function main() {
   $('#script-close').addEventListener('click', () => setPanel('script', false));
   /* Escape: see escapeKeydown — the one handler. The draft is saved as you type (saveDraft), so hiding
      the pane with Escape from inside the editor loses nothing. */
-  window.closeScriptLayerIfOpen = () => { if (!settingsOpen) return false; setSettingsOpen(false); return true; };
+  window.closeScriptLayerIfOpen = () => { if (view === 'editor') return false; setView('editor'); return true; };
+
+  /* The pane's public hands — for the saved-scripts list (script-library.js) and for every door that puts a
+     script into the editor (the Library's "Edit a copy", the agent's `show`), so none of them writes into the
+     textarea and fires a synthetic event any more:
+       working()   what the editor holds right now: { name, source, inputs, inputsFor }
+       settled()   the same, after the scan that re-reads the inputs when an edit has just made them stale
+       load(spec, attachId)  replace it: { source, name?, inputs?, inputsFor? }; `attachId` says which saved
+                   script it is (none = a script from elsewhere, attached to nothing)
+       setName(name)  rename the working copy
+       view() / setView(name)  'editor' | 'settings' | 'scripts' */
+  const working = () => ({ name: nameBox.value, source: srcBox.value, inputs: { ...inputStore }, inputsFor: storeFor });
+  Object.assign(window.scriptPane, {
+    working,
+    settled: async () => { if (Object.keys(inputStore).length && scanDirty) await scan(); return working(); },
+    load: (spec, attachId) => {
+      const o = spec || {};
+      srcBox.value = String(o.source == null ? '' : o.source).replace(/\r\n?/g, '\n');
+      if (o.name != null) nameBox.value = String(o.name).trim() || 'Untitled script';
+      inputStore = {};
+      for (const k of Object.keys(o.inputs || {})) {
+        const v = o.inputs[k];
+        if (['string', 'number', 'boolean'].includes(typeof v)) inputStore[k] = v;
+      }
+      storeFor = typeof o.inputsFor === 'string' && o.inputsFor ? o.inputsFor : ST.declaredName(srcBox.value);
+      inputsMeta = [];
+      lastRunSource = null;
+      clearTimeout(applyTimer);
+      clearError();
+      srcBox.scrollTop = 0;
+      srcBox.setSelectionRange(0, 0);
+      curLine = 1;
+      setView('editor');
+      paintGear();
+      paintGutter();
+      checkBreaks();
+      if (srcBox.value.trim()) scheduleScan(200); else { scanSeq++; scanDirty = false; }
+      /* The status line described the LAST script's Run (or a hint about its inputs); this is another one. */
+      setStatus('idle', srcBox.value.trim() ? 'Loaded \u201c' + nameBox.value + '\u201d \u00b7 press Run' : 'New script \u00b7 paste Pine, then press Run');
+      saveDraft();
+      window.dispatchEvent(new CustomEvent('scriptpane:loaded', { detail: { attachId: attachId || null } }));
+    },
+    setName: (name) => { nameBox.value = String(name).trim() || 'Untitled script'; saveDraft(); },
+    view: () => view,
+    setView,
+  });
 
   /* ── Run ─────────────────────────────────────────────────────────────────────────────────────── */
   let running = false, runQueued = false;

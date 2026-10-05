@@ -1313,8 +1313,12 @@
               out.detail = 'no editor on this page — the script pane did not open';
               break;
             }
-            box.value = pine;
-            box.dispatchEvent(new Event('input', { bubbles: true }));
+            if (typeof sp.load === 'function') {
+              sp.load({ source: pine });         // the pane's own hands: marks, values and any saved-script attachment reset
+            } else {
+              box.value = pine;
+              box.dispatchEvent(new Event('input', { bubbles: true }));
+            }
             out.ok = true;
             out.lines = pine.split('\n').length;
             out.detail = 'loaded ' + out.lines + ' line(s) into the editor — press Run to execute';

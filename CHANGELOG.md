@@ -6,6 +6,22 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Saved scripts: Save, Open, Rename, Delete.** A list button in the script pane's action bar (a view in the
+  editor's place, like Settings — no new pane, nothing pushes the chart) keeps scripts on this machine
+  (localStorage): the name, the code **and the settings values you chose**, so "Hull Butterfly, tight" and
+  "…, loose" can be switched without re-pasting. Rows are hairlines with the length, how many settings are
+  set, and the day. Save is `Ctrl/Cmd+S` (`Ctrl/Cmd+Shift+S` saves a copy). The rules: Save overwrites the
+  script that is open **only while the name is still its name** — any other name is a new script and a taken
+  one becomes "Name (2)", so nothing is replaced by accident (a script loaded from elsewhere, like the
+  Library's "Edit a copy" or the agent's `show`, is attached to nothing); opening or starting another script
+  never throws work away — when the editor has changes saved nowhere the list asks first, in the list
+  (Save and open / Discard and open / Cancel); a delete asks first and names the script; a rename that
+  would reuse a name is refused. A dot on the button says the open script has unsaved changes. A write the
+  browser refuses (storage full or blocked) is reverted and said — never a list that looks saved and is not.
+  Up to 50 scripts, 400 000 characters each; another console view that saves is picked up. The pane gained
+  public hands for this (`working` / `settled` / `load` / `setName` / `setView`), and the Library's "Edit a
+  copy" and the agent's `show` now go through `load` instead of writing into the textarea.
+
 - **The agent can set a script's own settings.** `chart_apply_pine` and `chart_draw` take `inputs`, e.g.
   `{"Length": 50, "Show upper band": false}`, and a new read-only tool `chart_pine_inputs` lists what a
   script declares (label, type, default, range or options, group) without running it, opening the pane or

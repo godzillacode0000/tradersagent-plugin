@@ -721,6 +721,14 @@ pre {
 .btn--run:hover { background: var(--lx-fg); border-color: var(--lx-fg); color: var(--lx-canvas); opacity: .86; }
 .btn--run:disabled { opacity: .55; }
 .script__x { padding-inline: 10px; }
+/* Saved scripts: always there. A dot (amber — the gear's is blue) says the script opened from the list has
+   changes that are not saved yet. */
+.script__lib-btn { position: relative; padding-inline: 10px; }
+.script__lib-btn[aria-pressed="true"] { background: var(--lx-bg-hover-strong); }
+.script__lib-btn[data-dirty]::after {
+  content: ""; position: absolute; top: 5px; right: 5px; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--lx-warn);
+}
 /* The inputs button exists only for a script that declares input.*() values. A dot says some are changed. */
 .script__gear { position: relative; padding-inline: 10px; }
 .script__gear[hidden] { display: none; }
@@ -765,10 +773,13 @@ pre {
 .script__mark--err { background: var(--lx-loss-soft); box-shadow: inset 2px 0 0 var(--lx-danger); }
 
 /* ── Settings: the script's inputs, in the editor's place while open ─────────────────────────────── */
-.script.is-settings .script__edit { display: none; }
-/* While the inputs are open the run list steps aside (the status line stays, and says what each change
-   did), so the controls get the room. */
-.script.is-settings .script__out { display: none; }
+.script.is-settings .script__edit,
+.script.is-scripts .script__edit,
+.script.is-scripts .script__settings { display: none; }
+/* While the inputs or the saved scripts are open the run list steps aside (the status line stays, and says what
+   each change did), so they get the room. */
+.script.is-settings .script__out,
+.script.is-scripts .script__out { display: none; }
 .script__settings { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .script__settings[hidden] { display: none; }
 .set__head {
@@ -829,6 +840,60 @@ pre {
 @media (prefers-reduced-motion: reduce) {
   .set__switch, .set__knob { transition: none; }
 }
+
+/* ── Saved scripts: the list in the editor's place ───────────────────────────────────────────────── */
+.sv { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.sv[hidden] { display: none; }
+.sv__head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--lx-space-2); flex-wrap: wrap;
+  padding: var(--lx-space-2) var(--lx-space-3); border-bottom: 1px solid var(--lx-border);
+}
+.sv__title { font-family: var(--lx-font-mono); font-size: var(--lx-fs-xs); color: var(--lx-fg-faint); }
+.sv__acts { display: flex; align-items: center; gap: var(--lx-space-1); }
+.sv__btn { padding: 2px var(--lx-space-2); font-size: var(--lx-fs-xs); }
+.sv__btn[hidden] { display: none; }
+.sv__save { background: var(--lx-fg); color: var(--lx-canvas); border-color: var(--lx-fg); font-weight: 600; }
+.sv__save:hover { background: var(--lx-fg); border-color: var(--lx-fg); color: var(--lx-canvas); opacity: .86; }
+.sv__now {
+  margin: 0; padding: var(--lx-space-2) var(--lx-space-3); border-bottom: 1px solid var(--lx-border);
+  font: 12px/1.4 var(--lx-font-mono); color: var(--lx-fg-muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.sv__now[data-state="dirty"] { color: var(--lx-warn); }
+.sv__now:empty { display: none; }
+/* The unsaved-changes question and any refusal: a quiet band, not a dialog. */
+.sv__bar {
+  display: flex; align-items: center; gap: var(--lx-space-2); flex-wrap: wrap;
+  padding: var(--lx-space-2) var(--lx-space-3); background: var(--lx-warn-soft); font-size: var(--lx-fs-sm);
+}
+.sv__bar[hidden] { display: none; }
+.sv__bar[data-kind="error"] { background: var(--lx-loss-soft); }
+.sv__bar span { flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere; }
+.sv__list { flex: 1 1 auto; min-height: 0; margin: 0; padding: 0 var(--lx-space-3) var(--lx-space-3); list-style: none; overflow: auto; }
+.sv__empty { padding: var(--lx-space-3) 0; color: var(--lx-fg-faint); font-size: var(--lx-fs-sm); }
+.sv__row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--lx-space-1); min-height: 44px;
+  border-top: 1px solid var(--lx-border);
+}
+.sv__row:first-child { border-top: 0; }
+.sv__row[aria-current="true"] { box-shadow: inset 2px 0 0 var(--lx-accent); padding-left: var(--lx-space-2); margin-left: calc(var(--lx-space-2) * -1); }
+.sv__open {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; flex: 1 1 auto; min-width: 0;
+  padding: var(--lx-space-2) 0; background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.sv__open:hover .sv__name { text-decoration: underline; text-underline-offset: 2px; }
+.sv__open:focus-visible, .sv__act:focus-visible { outline: var(--lx-focus-ring); outline-offset: 2px; }
+.sv__name { max-width: 100%; color: var(--lx-fg); font-size: 12.5px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sv__row[aria-current="true"] .sv__name { color: var(--lx-fg-bright, var(--lx-fg)); }
+.sv__meta { max-width: 100%; color: var(--lx-fg-faint); font: 12px var(--lx-font-mono); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sv__act {
+  flex: 0 0 auto; width: 28px; height: 28px; padding: 0; display: grid; place-items: center; cursor: pointer;
+  background: none; border: 0; border-radius: var(--lx-radius-sm); color: var(--lx-fg-faint);
+}
+.sv__act:hover { color: var(--lx-fg); background: var(--lx-bg-hover); }
+.sv__rename { flex: 1 1 auto; min-width: 0; height: 28px; margin: var(--lx-space-2) 0; }
+.sv__ask { flex: 1 1 auto; min-width: 0; font-size: var(--lx-fs-sm); overflow-wrap: anywhere; }
+.sv__fix { flex: 1 1 100%; color: var(--lx-danger); font: 12px var(--lx-font-mono); }
+.sv__yes { color: var(--lx-danger); border-color: var(--lx-danger); }
 
 /* The runs block: one status line, always shown, and the run list it opens. */
 .script__runs {

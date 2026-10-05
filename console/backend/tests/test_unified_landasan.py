@@ -162,7 +162,7 @@ class TheScriptControlIsAVelaWidgetAction(unittest.TestCase):
     def test_the_control_surface_reads_the_column_not_only_the_view(self):
         """id428 reported "script pane opened" with the column shut: rightview pref left the view
         visible, so a view--hidden-only guard skipped the click. The state must see data-detail."""
-        i = APP.index("window.scriptPane")
+        i = APP.index("window.scriptPane = {")
         body = APP[i:i + 700]
         self.assertIn("dataset.detail", body)
         self.assertIn("rightViewIs('script')", body)

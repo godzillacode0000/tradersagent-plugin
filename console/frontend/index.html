@@ -112,6 +112,16 @@
         <div class="script__bar">
           <input id="script-name" class="script__name" type="text" value="Untitled script"
                  aria-label="Script name" spellcheck="false" />
+          <!-- Saved scripts: a view in the editor's place (like Settings), so the pane gains no height and the chart
+               no width. A dot says the script open from the list has changes that are not saved. -->
+          <button type="button" class="btn btn--ghost script__lib-btn" id="script-lib-btn"
+                  aria-pressed="false" aria-controls="script-lib" aria-label="Saved scripts"
+                  title="Saved scripts (Ctrl+S saves this one)">
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"
+                 stroke-linecap="round" aria-hidden="true"><path d="M6 4h8M6 8h8M6 12h8"/>
+              <circle cx="2.5" cy="4" r=".6" fill="currentColor"/><circle cx="2.5" cy="8" r=".6" fill="currentColor"/>
+              <circle cx="2.5" cy="12" r=".6" fill="currentColor"/></svg>
+          </button>
           <!-- Only present when the script declares input.*() values (app.js reveals it). Opens the
                Settings view in place of the editor — the pane gains no height and the chart no width. -->
           <button type="button" class="btn btn--ghost script__gear" id="script-gear" hidden
@@ -145,6 +155,21 @@
             <button type="button" class="btn btn--ghost set__reset" id="script-settings-reset" hidden>Reset all</button>
           </header>
           <div class="set__body" id="script-settings-body"></div>
+        </section>
+        <!-- Saved scripts (script-library.js): name, code and the settings values you chose, kept on this machine.
+             A view that takes the editor's place while it is open; rows are quiet hairlines, not cards. -->
+        <section class="sv" id="script-lib" aria-label="Saved scripts" hidden>
+          <header class="sv__head">
+            <span class="sv__title" id="script-lib-title">Saved scripts</span>
+            <span class="sv__acts">
+              <button type="button" class="btn btn--ghost sv__btn" id="script-lib-new">New</button>
+              <button type="button" class="btn btn--ghost sv__btn" id="script-lib-copy" hidden>Save a copy</button>
+              <button type="button" class="btn sv__btn sv__save" id="script-lib-save">Save</button>
+            </span>
+          </header>
+          <p class="sv__now" id="script-lib-now" aria-live="polite"></p>
+          <div class="sv__bar" id="script-lib-bar" role="alert" hidden></div>
+          <ul class="sv__list" id="script-lib-list"></ul>
         </section>
         <!-- The status line is the only thing always shown; it opens the run list. -->
         <div class="script__runs" id="script-runs">
@@ -206,6 +231,7 @@
      module builds a chart, because Vela reads its renderer-layer registry at
      construction. pinets itself is imported lazily, on the first Run PineTS. -->
 <script src="./script-tools.js"></script>
+<script src="./script-store.js"></script>
 <script src="./pinets-layer.js"></script>
 <script src="./pinets-runner.js"></script>
 <script src="./overlay.js"></script>
@@ -261,6 +287,7 @@
 </script>
 <script type="module" src="./workspace.js"></script>
 <script src="./app.js"></script>
+<script src="./script-library.js"></script>
 <script src="./drawer.js"></script>
 <script src="./broker.js"></script>
 <!-- The replay control strip (Phase 6, 3 Oct): started from the ⋯ menu, hidden until replay is on.
