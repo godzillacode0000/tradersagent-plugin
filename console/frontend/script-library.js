@@ -55,6 +55,14 @@
     }
   }
 
+  /** Take in what another tab saved before a change is worked out from this tab's copy: the `storage` event
+   *  usually has, but a write made in the same instant would otherwise replace theirs with a stale list. The
+   *  script this tab has open stays attached if it still exists. */
+  function fresh() {
+    const mine = store.activeId;
+    store = S.setActive(read(), mine);
+  }
+
   const isOpen = () => typeof sp().view === 'function' && sp().view() === 'scripts';
   const working = () => (typeof sp().working === 'function' ? sp().working() : null);
 
@@ -171,6 +179,7 @@
       const finish = (accept) => {
         if (done) return;
         if (!accept) { done = true; renaming = null; render(); return; }
+        fresh();
         const r = S.rename(store, item.id, input.value);
         if (!r.ok) { renaming.error = r.error; render(true); return; }
         done = true;
@@ -197,6 +206,7 @@
       const yes = node('button', 'btn btn--ghost sv__btn sv__yes', 'Delete script');
       yes.type = 'button';
       yes.addEventListener('click', () => {
+        fresh();
         const r = S.remove(store, item.id);
         const err = commit(r.store);
         deleting = null;
@@ -237,6 +247,7 @@
   async function saveWorking(asNew) {
     if (typeof sp().settled !== 'function') return { ok: false };
     const w = await sp().settled();
+    fresh();
     const r = S.save(store, w, { asNew });
     if (!r.ok) { message = { text: r.error, kind: 'error' }; render(); say(r.error, true); return r; }
     const err = commit(r.store);

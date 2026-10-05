@@ -154,3 +154,15 @@ class Styling(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConcurrentTabs(unittest.TestCase):
+    def test_every_change_is_worked_out_from_what_storage_holds_now(self):
+        """Another tab's save may not have reached this one's `storage` event yet; a change computed from the stale
+        list would write it back over theirs (PR Lens, 5 Oct). fresh() re-reads first, keeping the open script."""
+        src = (FRONT / "script-library.js").read_text()
+        self.assertRegex(src, r"function fresh\(\) \{\s*const mine = store\.activeId;\s*store = S\.setActive\(read\(\), mine\);")
+        for call in ("S.save(store, w, { asNew })", "S.rename(store, item.id, input.value)", "S.remove(store, item.id)"):
+            before = src.split(call, 1)[0]
+            self.assertRegex(before, r"fresh\(\);\s*const r = $", f"fresh() must run right before {call}")
+
