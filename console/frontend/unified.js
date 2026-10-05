@@ -201,7 +201,7 @@ window.TraderRun = (function () {
     return { n, empty };
   }
 
-  function record(name, drew) {
+  function record(name, drew, warnings) {
     if (!name || counts(drew) === 0) return;
     /* ChartOverlay.apply() clears the canvas, so a new script REPLACES the last: the legend and the chip
        name that one script, not every script ever run since the page loaded (4 Oct: "Object Flood ·
@@ -211,10 +211,92 @@ window.TraderRun = (function () {
     announce();
     const legend = document.getElementById('script-legend');
     if (legend) {
-      legend.textContent = applied.map((n) => n + ' · overlay').join('  ·  ');
-      legend.title = applied.join(' · ');
+      const warned = warnings && warnings.length;
+      legend.textContent = applied.map((n) => n + ' · overlay').join('  ·  ') + (warned ? '  \u00b7  \u26a0 see note' : '');
+      legend.title = applied.join(' \u00b7 ') + (warned ? '\n\u26a0 ' + warnings.join('\n\u26a0 ') : '');
       legend.hidden = false;
     }
+  }
+
+
+  /* ── how much history a script needs, and what this engine cannot give it ───────────────────────
+     Every run used to get the last 500 bars, whatever the script asked for. A lookback longer than the
+     window does not give a slightly-off number, it gives NOTHING: on a 4h chart `ta.highest(high, 2184)`
+     (a 52-week high) came back na on all 500 bars, and a 500-bar lookback produced one point (measured
+     4 Oct). So the window follows the script: a quick read of its own source for the longest lookback,
+     and the run fetches that much plus a warm-up. 500 stays the floor — a heavy script must not get
+     slower just because the cap went up. */
+  const BASE_BARS = 500;
+  const MAX_BARS = 5000;      // the console's /api/bars ceiling (5 pages of 1000)
+  const WARM_BARS = 300;
+
+  function stripComments(src) {
+    return String(src || '').replace(/\/\/[^\n]*/g, '').replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, '""');
+  }
+
+  /** The longest lookback the source states outright — length arguments, `x[N]` history reads, input
+   *  defaults, and variables named like a length. Heuristic and cheap; 0 when nothing is stated. */
+  function lookbackNeeded(source) {
+    const src = stripComments(source);
+    let need = 0;
+    const take = (n) => { n = Number(n); if (isFinite(n) && n >= 2 && n <= 20000 && n > need) need = n; };
+    for (const m of src.matchAll(/\bta\.[a-z_0-9]+\s*\(([^()]*(?:\([^()]*\)[^()]*)*)\)/g)) {
+      for (const a of m[1].split(',')) { const t = a.trim(); if (/^\d{1,5}$/.test(t)) take(t); }
+    }
+    for (const m of src.matchAll(/\[\s*(\d{2,5})\s*\]/g)) take(m[1]);
+    for (const m of src.matchAll(/\binput(?:\.int|\.float)?\s*\(\s*(?:defval\s*=\s*)?(\d{2,5})\b/g)) take(m[1]);
+    for (const m of src.matchAll(/\b(?:len|length|lookback|period|bars?|window|lb)\w*\s*=\s*(\d{2,5})\b/gi)) take(m[1]);
+    return need;
+  }
+
+  /** How many bars to fetch for a script: the floor, or what it needs plus a warm-up, up to the ceiling. */
+  function depthFor(source) {
+    const need = lookbackNeeded(source);
+    return { need, limit: need > 0 ? Math.min(MAX_BARS, Math.max(BASE_BARS, need + WARM_BARS)) : BASE_BARS };
+  }
+
+  /* Vela / TradingView / venue spellings of a timeframe, as one comparable string. */
+  function tfKey(tf) {
+    const s = String(tf == null ? '' : tf).trim();
+    if (/^\d+$/.test(s)) { const n = +s; return n % 1440 === 0 ? (n / 1440) + 'd' : n % 60 === 0 ? (n / 60) + 'h' : n + 'm'; }
+    const m = s.match(/^(\d*)([mhdwMHDW])$/);
+    if (!m) return s.toLowerCase();
+    return (m[1] || '1') + (m[2] === 'M' ? 'M' : m[2].toLowerCase());
+  }
+
+  /** Things the reader of a run's numbers must be told. The first: `request.security` RUNS in this engine
+   *  but ignores the timeframe — "D" close came back identical to the chart's own close and "W" high to
+   *  its high (measured 4 Oct) — so a multi-timeframe indicator draws the chart's own levels and nothing
+   *  says so. Only a request for the chart's own timeframe is honest. */
+  function scriptNotes(source, interval) {
+    const notes = [];
+    const code = String(source || '').replace(/\/\/[^\n]*/g, '');
+    const own = tfKey(interval);
+    let other = 0;
+    for (const m of code.matchAll(/\b(?:request\.)?security(?:_lower_tf)?\s*\(/g)) {
+      /* The call's second argument: walk to the next top-level comma, minding parentheses and strings. */
+      const args = [];
+      let depth = 0, quote = null, cur = '';
+      for (let i = m.index + m[0].length; i < code.length; i++) {
+        const c = code[i];
+        if (quote) { cur += c; if (c === quote && code[i - 1] !== '\\') quote = null; continue; }
+        if (c === '"' || c === "'") { quote = c; cur += c; continue; }
+        if (c === '(' || c === '[') depth++;
+        if (c === ')' || c === ']') { if (depth === 0) break; depth--; }
+        if (c === ',' && depth === 0) { args.push(cur.trim()); cur = ''; if (args.length >= 2) break; continue; }
+        cur += c;
+      }
+      if (cur) args.push(cur.trim());
+      const lit = (args[1] || '').match(/^["']([^"']*)["']$/);
+      if (lit && tfKey(lit[1]) === own) continue;          // the chart's own timeframe: honest
+      other++;
+    }
+    if (other > 0) {
+      notes.push('request.security: this engine returns the chart\u2019s OWN timeframe for every request, so the '
+        + 'higher-timeframe values from ' + other + ' call(s) equal this chart\u2019s bars, not the daily / weekly / '
+        + 'other bars the script asked for');
+    }
+    return notes;
   }
 
   async function run(pine, name, opts) {
@@ -223,8 +305,13 @@ window.TraderRun = (function () {
     if (typeof window.chartBars !== 'function') return { ok: false, reason: 'no chart on this page' };
     if (!window.PineTSRunner) return { ok: false, reason: 'Pine engine missing — indicators cannot be mounted' };
 
-    const bars = await window.chartBars();
-    let res = await window.PineTSRunner.run(String(pine), bars, { name });
+    /* The window follows the script (see lookbackNeeded): the floor is 500 bars, a stated long lookback
+       earns up to 5000. A deeper run gets a longer deadline in proportion — it is the same loops over
+       more bars — instead of timing out at the 20 s a 500-bar run is allowed. */
+    const depth = depthFor(pine);
+    const bars = await window.chartBars({ limit: depth.limit });
+    const runOpts = { name, timeoutMs: Math.min(90000, Math.round(20000 * Math.max(1, bars.length / BASE_BARS))) };
+    let res = await window.PineTSRunner.run(String(pine), bars, runOpts);
     if (!res.ok) {
       return { ok: false, name, reason: res.reason || 'not runnable: unknown', error: res.error || null, ms: res.ms || null };
     }
@@ -238,7 +325,7 @@ window.TraderRun = (function () {
     let retryFail = null;
     const guard = { ctor: res.ctor, seriesN: res.series.length, survivors: counts(flatten(res.raw)) };
     if (guard.ctor === 'provider' && guard.seriesN === 0 && guard.survivors === 0) {
-      const again = await window.PineTSRunner.run(String(pine), bars, { name: name + '\u00b7bars', forceBars: true });
+      const again = await window.PineTSRunner.run(String(pine), bars, Object.assign({}, runOpts, { name: name + '\u00b7bars', forceBars: true }));
       if (again.ok) {
         res = again;
         retried = true;
@@ -258,6 +345,11 @@ window.TraderRun = (function () {
     /* ── surface 1: geometry -> our overlay, read back after drawing ── */
     const geo = flatten(res.raw, bars);
     const stored = engineRows(res.raw);
+    const warnings = scriptNotes(pine, window.chartMarket ? (window.chartMarket() || {}).interval : '');
+    if (depth.need && bars.length < depth.need + 20) {
+      warnings.push('the script looks back about ' + depth.need + ' bars but only ' + bars.length + ' are available'
+        + (bars.length >= MAX_BARS ? ' (the ceiling is ' + MAX_BARS + ')' : ' on this market') + ' \u2014 its longest-lookback values will be empty');
+    }
     const engineN = stored.n;
     const containers = geometryOnly(geo) > 0;
     let drew = null;
@@ -271,9 +363,10 @@ window.TraderRun = (function () {
       if (!window.ChartOverlay) {
         drawFail = 'no overlay on this page — reload the console';
       } else {
+        /* the drawings' x is an index into the bars the script ran on — hand the overlay that list */
         const spec = await window.ChartOverlay.apply(
           { boxes: geo.boxes, lines: geo.lines, labels: geo.labels, polylines: geo.polylines,
-            tables: geo.tables }, opts || {});
+            tables: geo.tables }, Object.assign({}, opts || {}, { bars }));
         if (spec && spec.ok) {
           drew = {
             boxes: spec.boxes || 0, lines: spec.lines || 0, labels: spec.labels || 0,
@@ -281,7 +374,7 @@ window.TraderRun = (function () {
             tables: spec.tables || 0, reason: spec.reason || null, mapping: spec.mapping || null,
           };
           verified = window.ChartOverlay.state ? window.ChartOverlay.state() : null;
-          record(label, drew);
+          record(label, drew, warnings);
           if (!(opts && opts.restoring)) remember(pine, name, opts);
         } else {
           drawFail = (spec && spec.reason) || 'overlay refused';
@@ -304,7 +397,7 @@ window.TraderRun = (function () {
       series: res.series || [], strategy: res.strategy || null,
       ctor: res.ctor ? (retried ? res.ctor + '->chart-bars' : res.ctor) : null,
       context: res.context || null,
-      containers, drew, verified, drawFail, paint,
+      containers, drew, verified, drawFail, paint, warnings, depth,
       drawingKeys: res.drawings || [],   // which __*__ containers the engine declared at all
       rawRows: geo.rawRows, engineN, emptyN: stored.empty, retried, retryFail,
     };
@@ -383,6 +476,7 @@ window.TraderRun = (function () {
     }
 
     if (r.retryFail) s += ' \u00b7 chart-bars retry failed: ' + r.retryFail;
+    if (r.warnings && r.warnings.length) s += ' \u00b7 \u26a0 ' + r.warnings.join(' \u00b7 \u26a0 ');
     if (r.ctor) s += ' \u00b7 engine context: ' + r.ctor + (r.context ? ' (' + r.context + ')' : '');
     return s;
   }
@@ -467,5 +561,5 @@ window.TraderRun = (function () {
   }
   window.addEventListener('ws-ready', watchMarket, { once: true });
 
-  return { run, summarize, flatten, reset, restore, rerun, list: () => applied.slice() };
+  return { run, summarize, flatten, reset, restore, rerun, lookbackNeeded, depthFor, scriptNotes, list: () => applied.slice() };
 })();

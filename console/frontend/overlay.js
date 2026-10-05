@@ -355,7 +355,13 @@
      at the live edge cannot move a drawing. */
   const BARS_TTL_MS = 5000;
   let barsCache = { at: 0, bars: [] };
+  /* The bars the SCRIPT ran on. A drawing's x is an index into that list, and a run can be deeper than
+     the 500 bars barsNow() fetches (a long lookback asks for up to 5000) — mapping index 1200 through a
+     500-bar list put every box at the wrong time. apply() takes them from opts.bars; follow()'s repaints
+     reuse lastSpec.opts, so they stay for as long as the picture does. */
+  let runBars = null;
   async function barsNow() {
+    if (runBars) return runBars;
     const now = Date.now();
     if (barsCache.bars.length && (now - barsCache.at) < BARS_TTL_MS) return barsCache.bars;
     const fetched = (typeof window.chartBars === 'function') ? await window.chartBars() : [];
@@ -456,7 +462,7 @@
     const rect = plotRect();
     if (!rect) return null;
     const b = pane.bounds;
-    const ref = barsCache.bars;
+    const ref = runBars || barsCache.bars;
     const timeAt = (i) => (ref[i] ? (ref[i].openTime || ref[i].time) : null);
     const anchorL = ref.length ? co.timeToX(timeAt(0)) : -1;
     const anchorR = ref.length ? co.timeToX(timeAt(ref.length - 1)) : -1;
@@ -496,6 +502,7 @@
 
   function clear() {
     lastSpec = null;                               // state() reads this back as "nothing painted"
+    runBars = null;
     sweepStale(canvas);
     if (tablesHost) tablesHost.innerHTML = '';
     if (!canvas) return 0;
@@ -506,6 +513,7 @@
 
   /** Draw a spec of boxes/lines/labels given in bar-index + price space. */
   async function apply(spec, opts) {
+    runBars = (opts && Array.isArray(opts.bars) && opts.bars.length) ? opts.bars : null;
     const O2 = Object.assign({}, DEFAULTS, opts || {});
     const cv = ensureCanvas();
     if (!cv) return { ok: false, reason: 'no chart container to draw over' };
