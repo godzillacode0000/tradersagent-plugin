@@ -98,12 +98,24 @@ class StatusAndRuns(unittest.TestCase):
 
 
 class LostLineBreaks(unittest.TestCase):
-    def test_a_one_line_script_is_flagged_and_escaped_breaks_can_be_restored(self):
+    """The decision itself (which scripts, what the fix is) is executed in test_script_tools.py; these pin
+    that the pane asks it and only rewrites on a press."""
+
+    def test_the_pane_asks_diagnoseBreaks_and_rewrites_only_when_the_button_is_pressed(self):
         body = BLOCK.split("const checkBreaks = () => {", 1)[1].split("\n  };", 1)[0]
-        self.assertIn("!src.includes('\\n')", body)
+        self.assertIn("ST.diagnoseBreaks(srcBox.value)", body)
         self.assertIn("Restore line breaks", body)
+        self.assertIn("b.addEventListener('click'", body)
+        self.assertIn("srcBox.value = d.fixed;", body.split("b.addEventListener('click'", 1)[1])
         self.assertIn("srcBox.dispatchEvent(new Event('input'", body)   # the gutter and draft follow
         self.assertRegex(BLOCK, r"srcBox\.addEventListener\('input', \(\) => \{[^}]*checkBreaks\(\)")
+
+    def test_the_old_inline_heuristic_is_gone(self):
+        """It gated on length > 80 (so a 69-character collapsed script was never flagged) and looked for a
+        backslash-n anywhere, even inside a string."""
+        body = BLOCK.split("const checkBreaks = () => {", 1)[1].split("\n  };", 1)[0]
+        self.assertNotIn("length > 80", body)
+        self.assertNotIn("/\\\\n/.test(src)", body)
 
 
 if __name__ == "__main__":

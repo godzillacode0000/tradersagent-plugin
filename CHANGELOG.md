@@ -4,6 +4,25 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Fixed
+
+- **With the drawer open, one Escape closed the script pane and left the drawer open** — the reverse of
+  the intended order (found by Hermes in Desktop, 5 Oct; the bug dates from the drawer, 3 Oct). The drawer
+  check lived in a second Escape handler bound after `escapeKeydown`, which had already closed the pane and
+  prevented the event. There is one handler now and it closes one layer per press, topmost first: the
+  library drawer, then the script pane's Settings view, then the pane. The real handler is run under Node
+  against stand-ins for the three layers (`test_escape_layers.py`), and it fails against the old one. A first
+  attempt that also skipped already-`defaultPrevented` presses stopped Escape closing the pane after a click on
+  the chart (Vela marks it handled); an A/B run against the committed build caught it, and the guard is
+  pinned out.
+- **The lost-line-breaks warning missed short scripts and could break a valid one.** It only looked at
+  sources over 80 characters (a 69-character collapsed script was never flagged) and at any backslash-n,
+  even inside a string literal — so a valid one-line script with `"…\n"` in a title was flagged and
+  "Restore line breaks" would have rewritten its string. `ScriptTools.diagnoseBreaks` flags escaped breaks
+  at any length, ignores the ones inside strings, ends a `//` comment at its break (a quote mark in a header
+  cannot swallow the rest), and the restore keeps string contents as written. A restored script with a
+  `"a\nb"` label runs.
+
 ### Added
 
 - **Script inputs become a Settings view (5 Oct).** The engine reads a script's `input.*()` declarations

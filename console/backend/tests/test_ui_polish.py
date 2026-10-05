@@ -162,10 +162,12 @@ class EscapeHidesTheRightColumn(unittest.TestCase):
         # Operator's note in the app's chat (25 Sep): the PineTS pane opened, but Escape did not
         # hide it again. One document-level listener, guarded so it acts only while the column is
         # open — the draft is saved as you type, so hiding the pane loses nothing.
+        # (5 Oct: one handler now — escapeKeydown. It used to be a second one in the pane block, bound after
+        # escapeKeydown and so never reached while the pane was open; see test_escape_layers.py.)
         app = read(APP)
-        block = app.split("ev.key !== 'Escape'", 1)[1].split("});", 1)[0]
-        self.assertIn("el.main.dataset.detail !== 'on'", block)
-        self.assertIn("setPanel('script', false)", block)
+        block = app.split("function escapeKeydown(ev) {", 1)[1].split("\n}\n", 1)[0]
+        self.assertIn("el.main.dataset.detail === 'on'", block)
+        self.assertIn("setPanel('detail', false)", block)
 
 
 class ContrastClearsAA(unittest.TestCase):
