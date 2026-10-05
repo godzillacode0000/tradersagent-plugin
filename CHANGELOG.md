@@ -71,6 +71,25 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Edge Stats sheet redesigned for reading, not just correctness.** One hero per view: the rate at 56px (the
+  largest type in the sheet, plain proportional sans), its sample and 95% range on the next line, and two
+  verdict chips — *Stable over time* / *Matches recent sessions* (icon + words, never colour alone) — that
+  replace three full-width cards and their explanatory paragraphs. **Summary** (default) is the hero, the
+  breakdown when the question was split, and the days behind it; **Detailed** adds the halves, recent vs
+  all, year by year, timing and "what this measures". A chip jumps to its evidence; the choice is remembered.
+  Home gets a **Start here** row of six plain questions and a catalogue grouped under category headings
+  (the repeated tag column and the "outcome WHERE condition" explainer are gone); the data view shows one
+  source at a time behind a switch, with the sandbox-only archive option under *Advanced*. A real type scale
+  (56 / 20 / 14 / 12.5 / 11.5), flat hairline-separated sections instead of a box around everything, and a
+  **theme switch in the sheet's header** that presses the app's own theme button, so chart, chrome and sheet
+  change together (the toggle itself already existed in the Library drawer). The session chart no longer
+  draws a level far outside the day's candles — it stretched the price scale until the candles were a sliver
+  at the bottom — and lists it in the legend as off chart; the badge says what the number is ("filled in
+  15 min"). Cut as noise: the query-language explainer, the long per-card notes, and the engine's raw
+  bookkeeping chips ("session utc", "1m bars", now a caption under the chart). Honesty rules are unchanged
+  and pinned by 17 new tests: no percentage without its N, a refused answer shows none, the disclaimer and
+  the CC BY 4.0 attribution stay.
+
 - **`request.security` returns real higher-timeframe and other-symbol data.** PineTS builds a second engine
   for each `request.security` on the *same data source it was given*; the worker gave it a bare array of
   chart bars, which has one timeframe, so a "daily" close came back identical to the chart's close. The

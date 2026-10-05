@@ -169,20 +169,25 @@ Then open the chart's **⋯ menu → Edge Stats**. First run: one button loads *
 about 10 seconds, clearly labelled) or downloads **free history** from Binance (crypto) or Dukascopy
 (FX, metals, indices) for the symbols you choose. After that:
 
-- **Ask** in the engine's own query language, with suggestions as you type — `gapFill WHERE gapDirection = up`.
-- **Reports** — the 42-report catalogue, grouped by theme (gap fill, opening-range break, weekday effects, …).
-- **Read the answer honestly** — every rate is printed with **N**, its **95% Wilson interval**, whether the
-  two halves of history agree and whether recent sessions match all history. Fewer than 10 matching
-  sessions gives **no rate at all**, only the counts; fewer than 30 is flagged as thin.
-- **Group by** weekday, month, year or any registry field; **Refine** with conditions and parameters.
-- **Open a session** — any matching day on a chart with its prior high / low / close, open and gap drawn as levels.
+- **Start here** — six plain questions (does a gap fill? does the opening range break? which weekdays close
+  green?) over the engine's 42-report catalogue, which is grouped by theme below them. Or **ask** in the
+  engine's own query language, with suggestions as you type — `gapFill WHERE gapDirection = up`.
+- **Read the answer honestly** — one big number, with its **N**, its **95% range**, and two chips: is it
+  *stable over time* and does it *match recent sessions*. Fewer than 10 matching sessions gives **no rate at
+  all**, only the counts; fewer than 30 is flagged as thin. **Summary** (the default) stops there plus the
+  breakdown and the days behind it; **Detailed** adds the evidence — the two halves, recent vs all, year by
+  year, how long it took. Your choice is remembered.
+- **Group by** weekday, month, year or any registry field, under **Adjust**; or narrow by date or parameter.
+- **Open a day** — any matching session on a chart with its prior high / low / close, open and gap drawn as
+  levels (a level far outside the day's candles is listed as off-chart instead of squashing the chart).
+- **Dark or light** — the sun/moon in the sheet's header switches the whole console, chart included.
 
 | | |
 |---|---|
-| ![The answer: 85.0% — 421 of 495 sessions, 95% CI, stability checks](docs/shots/edge-stats-answer.png) | ![One session on a Vela chart with its levels](docs/shots/edge-stats-session.png) |
-| **The answer** — rate, N, interval, and whether it is stable | **One session** — the levels behind the number |
+| ![The answer: 85.0% — 421 of 495 sessions, 95% range, stable and matching recent sessions](docs/shots/edge-stats-answer.png) | ![One day on a Vela chart with its levels](docs/shots/edge-stats-session.png) |
+| **The answer** — one number, its N and range, and whether it holds up | **One day** — the levels behind the number |
 | ![Grouped by weekday, light theme](docs/shots/edge-stats-grouped-light.png) | |
-| **Group by** weekday, month or year — light theme | |
+| **Group by** weekday, month or year — shown in the light theme | |
 
 *(Shown on the demo data.)* The same questions are open to your agent: `edgestats_query`,
 `edgestats_report`, `edgestats_session`, `edgestats_show` (puts the answer on your screen) and friends

@@ -23,6 +23,7 @@
 
   const API = '/api/edgestats';
   const KEY_SYMBOL = 'luxalgo-web:edge-symbol';
+  const KEY_DETAIL = 'luxalgo-web:edge-detail';
   const FALLBACK_QUESTION = 'gapFill WHERE dayOfWeek = Tue';
 
   const $ = (id) => document.getElementById(id);
@@ -85,6 +86,7 @@
     warn: '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2 1.5 13.5h13L8 2Z"/><path d="M8 6.5v3.2"/><circle cx="8" cy="11.6" r=".4" fill="currentColor"/></svg>',
     info: '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.6"/><circle cx="8" cy="5.2" r=".4" fill="currentColor"/></svg>',
     check: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3.5 8.5 3 3 6-7"/></svg>',
+    edit: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="m11 2.5 2.5 2.5L5.5 13H3v-2.5L11 2.5Z"/></svg>',
     copy: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>',
   };
 
@@ -138,8 +140,11 @@
     registry: null, regLoading: false,
     result: null, abort: null,
     refine: false, filters: { since: '', until: '', groupBy: '', params: {} },
-    sess: { id: '', data: null, loading: false, error: null }, sessShown: 10,
-    setup: { bSymbol: 'BTCUSDT', bYears: 3, archive: false, dSymbol: 'XAUUSD', dYears: 1 },
+    /* Summary is the default: the rate, whether it holds up, the breakdown, the days behind it. Detailed adds
+       the evidence (halves, recent, years, timing) — a choice the trader makes once and keeps. */
+    detail: readStore(KEY_DETAIL) === 'detailed' ? 'detailed' : 'summary',
+    sess: { id: '', data: null, loading: false, error: null }, sessShown: 10, sessAll: false,
+    setup: { src: '', bSymbol: 'BTCUSDT', bYears: 3, archive: false, dSymbol: 'XAUUSD', dYears: 1 },
     job: null, logOpen: false, poll: null,
     sugg: { items: [], index: -1 },
     lastFocus: null,
@@ -220,7 +225,7 @@
       if (S.abort !== ctl) return null;
       S.result.data = data;
       S.result.loading = false;
-      S.sessShown = 10;
+      S.sessShown = 10; S.sessAll = false;
       render();
       return data;
     } catch (err) {
@@ -410,6 +415,11 @@
     try { if (k.start != null) n.setSelectionRange(k.start, k.end); } catch (e) { /* not a text field */ }
   }
 
+  function detailSwitch() {
+    const on = (v) => (S.detail === v ? 'true' : 'false');
+    return `<div class="e-seg" role="group" aria-label="How much detail"><button type="button" data-detail="summary" aria-pressed="${on('summary')}">Summary</button><button type="button" data-detail="detailed" aria-pressed="${on('detailed')}">Detailed</button></div>`;
+  }
+
   function renderBar() {
     const online = S.ov && S.ov.ready;
     let sub = '';
@@ -427,11 +437,14 @@
       const label = S.view === 'session' ? 'Results' : (S.view === 'result' ? 'Reports' : 'Back');
       html = atRoot() ? '' : `<button type="button" class="edge__back" data-act="back">${ICON.back}${label}</button>`;
       if (html) {
-        if (S.view === 'result') html += `<span class="edge__fresh">${esc(currentSymbol())}${S.result && S.result.data && S.result.data.query ? ' · ' + esc(S.result.data.query.sessionKey) + ' session' : ''}</span>`;
+        if (S.view === 'result') {
+          html += `<span class="edge__fresh">${esc(currentSymbol())}${S.result && S.result.data && S.result.data.query ? ' · ' + esc(S.result.data.query.sessionKey) + ' session' : ''}</span>`;
+          if (S.result && S.result.data && !S.result.error) html += detailSwitch();
+        }
         if (S.view === 'session') html += `<span class="edge__fresh">${esc(currentSymbol())}</span>`;
         if (S.view === 'data') html += `<span class="edge__fresh">Where the bars come from</span>`;
       }
-      sub = S.view === 'data' ? 'Data' : S.view === 'session' ? 'One session, with its levels' : 'The answer';
+      sub = S.view === 'data' ? 'Data' : S.view === 'session' ? 'One day, with its levels' : 'The answer';
     }
     bar.innerHTML = html;
     bar.hidden = !html;
@@ -486,10 +499,22 @@
     for (const e of reg) {
       const ex = (e.examples || []).find((x) => / WHERE /.test(x)) || (e.examples || [])[0];
       if (ex && !out.includes(ex)) out.push(ex);
-      if (out.length >= 4) break;
+      if (out.length >= 6) break;
     }
-    return out.length ? out : [FALLBACK_QUESTION];
+    /* two short ones: this is a hint that the language exists, not a menu */
+    return (out.length ? out : [FALLBACK_QUESTION]).sort((a, b) => a.length - b.length).slice(0, 2);
   }
+
+  /* What a trader asks first — plain questions over the engine's own reports (the engine's long
+     descriptions stay on the report itself). An id the engine does not have is simply skipped. */
+  const START_HERE = [
+    ['gap-fill', 'Does price come back to yesterday\u2019s close?'],
+    ['orb', 'Does the opening range break \u2014 and which way?'],
+    ['day-of-week', 'Which weekdays close green most often?'],
+    ['high-time', 'When does the day\u2019s high usually form?'],
+    ['inside-day', 'What happens the day after an inside day?'],
+    ['month-of-year', 'Which months are strongest?'],
+  ];
 
   function categories() {
     const map = new Map();
@@ -534,36 +559,47 @@
     const cats = categories();
     const list = filteredPresets();
     const total = presets().length;
-    return `<section class="edge-card" style="--i:0">
-        <p class="edge-cap">Ask a question</p>
+    const start = START_HERE.map(([id, q]) => ({ p: presets().find((x) => x.id === id), q })).filter((x) => x.p);
+    return `<section class="e-sec" style="--i:0">
         <form class="edge-ask" id="edge-form" autocomplete="off" novalidate>
           <input class="edge-ask__input${S.askErr ? ' is-bad' : ''}" id="edge-ask" type="text" spellcheck="false" autocapitalize="off" autocorrect="off"
                  role="combobox" aria-expanded="false" aria-controls="edge-sugg" aria-autocomplete="list"
-                 placeholder="${esc(chips.slice().sort((a, b) => a.length - b.length)[0])}" value="${esc(S.ask)}" aria-label="Question in the Edge Stats query language">
+                 placeholder="Ask, e.g. ${esc(chips[0])}" value="${esc(S.ask)}" aria-label="Question in the Edge Stats query language">
           <button type="submit" class="edge-btn" id="edge-run"${S.askBusy ? ' disabled' : ''}>${S.askBusy ? '<span class="edge-spin"></span>' : 'Ask'}</button>
           <ul class="edge-sugg" id="edge-sugg" role="listbox" hidden></ul>
         </form>
         <div id="edge-ask-err">${askErrorHtml(S.askErr, S.ask)}</div>
-        <div class="edge-chips" aria-label="Examples">${chips.map((c) => `<button type="button" class="edge-chip edge-chip--mono" data-example="${esc(c)}" title="${esc(c)}"><span class="t">${esc(c)}</span></button>`).join('')}</div>
-        <p class="edge-note">Any outcome combines with any conditions: <span class="edge-mono">outcome WHERE condition AND condition</span>. Start typing a name for suggestions.</p>
+        <p class="e-try">Try ${chips.map((c) => `<button type="button" class="edge-chip edge-chip--mono" data-example="${esc(c)}" title="${esc(c)}"><span class="t">${esc(c)}</span></button>`).join('')}</p>
       </section>
-      <section class="edge-card" style="--i:1">
-        <p class="edge-cap">Reports · ${num(total)}</p>
-        <input type="search" class="edge-search" id="edge-q" placeholder="Search reports — gap, opening range, FOMC…" value="${esc(S.q)}" aria-label="Search reports" autocomplete="off">
+      ${start.length && S.cat === 'all' ? `<section class="e-sec" style="--i:1"><h3 class="e-h3">Start here</h3>
+        <div class="e-tiles">${start.map(({ p, q }) => `<button type="button" class="e-tile" data-preset="${esc(p.id)}"><b>${esc(p.title)}</b><span>${esc(q)}</span></button>`).join('')}</div></section>` : ''}
+      <section class="e-sec" style="--i:2">
+        <h3 class="e-h3">All reports <span class="e-aside">${num(total)}</span></h3>
+        <input type="search" class="edge-search" id="edge-q" placeholder="Search — gap, opening range, FOMC…" value="${esc(S.q)}" aria-label="Search reports" autocomplete="off">
         <div class="edge-chips edge-chips--scroll" role="toolbar" aria-label="Report categories">
           <button type="button" class="edge-chip${S.cat === 'all' ? ' is-on' : ''}" data-cat="all" aria-pressed="${S.cat === 'all'}">All<span>${num(total)}</span></button>
           ${cats.map(([c, n]) => `<button type="button" class="edge-chip${S.cat === c ? ' is-on' : ''}" data-cat="${esc(c)}" aria-pressed="${S.cat === c}">${esc(catLabel(c))}<span>${n}</span></button>`).join('')}
         </div>
         <ul class="edge-reports" id="edge-reports">${reportRows(list)}</ul>
       </section>
-      <p class="edge-foot"><b>Historical conditional frequencies with sample sizes.</b> Not predictions, not advice. Engine: LuxAlgo/edge-stats (MIT), running on this machine. Calendar data from Edge Stats by LuxAlgo (github.com/LuxAlgo/edge-stats), CC BY 4.0.</p>`;
+      <p class="edge-foot"><b>Historical frequencies, not predictions or advice.</b><small>Engine: LuxAlgo/edge-stats (MIT), running on this machine. Calendar data from Edge Stats by LuxAlgo (github.com/LuxAlgo/edge-stats), CC BY 4.0.</small></p>`;
   }
 
+  /* One long flat list was a wall: with no search and no category chosen it is grouped under category
+     headings, so the heading carries what each row's tag used to repeat. */
   function reportRows(list) {
-    if (!list.length) return `<li class="edge-empty">No report matches “${esc(S.q)}”.</li>`;
-    return list.map((p) => `<li><button type="button" class="edge-report" data-preset="${esc(p.id)}">
+    if (!list.length) return `<li class="edge-empty">No report matches \u201c${esc(S.q)}\u201d.</li>`;
+    const grouped = S.cat === 'all' && !S.q.trim();
+    const tagged = S.cat === 'all' && !!S.q.trim();
+    let last = null;
+    let out = '';
+    for (const p of list) {
+      if (grouped && p.category !== last) { out += `<li class="e-grouphead">${esc(catLabel(p.category))}</li>`; last = p.category; }
+      out += `<li><button type="button" class="edge-report" data-preset="${esc(p.id)}" title="${esc(p.summary)}">
         <span class="edge-report__main"><span class="edge-report__name">${esc(p.title)}</span><span class="edge-report__sum">${esc(p.summary)}</span></span>
-        <span class="edge-report__tag">${esc(catLabel(p.category))}</span><span class="edge-report__go">${ICON.go}</span></button></li>`).join('');
+        ${tagged ? `<span class="edge-report__tag">${esc(catLabel(p.category))}</span>` : ''}<span class="edge-report__go">${ICON.go}</span></button></li>`;
+    }
+    return out;
   }
 
   /* — the answer — */
@@ -595,8 +631,8 @@
       const t = s.type === 'string' ? 'text' : 'number';
       return `<label>${label.replace('</span>', (s.type === 'duration' ? ' (min)' : '') + '</span>')}<input data-param="${esc(s.name)}" type="${t}" ${t === 'number' ? 'step="any"' : ''} value="${esc(v)}" placeholder="${s.default === undefined ? 'optional' : ''}"></label>`;
     };
-    return `<section class="edge-card" style="--i:6">
-      <button type="button" class="edge-disclose" data-act="refine" aria-expanded="${S.refine}"><span class="edge-cap">Refine</span>${ICON.down}</button>
+    return `<section class="e-sec" style="--i:6">
+      <button type="button" class="edge-disclose" data-act="refine" aria-expanded="${S.refine}"><span class="e-h3">Adjust<span class="e-aside">split by, dates, settings</span></span>${ICON.down}</button>
       ${S.refine ? `<div class="edge-refine">
         ${params.map(paramField).join('')}
         <div class="full edge-refine edge-refine--pair"><label>From<input id="edge-since" type="date" value="${esc(f.since)}"></label>
@@ -623,18 +659,22 @@
     return fields.map((e) => ({ name: e.name, title: e.title || e.name }));
   }
 
+  /* The answer, in the order a trader reads it. SUMMARY is the hero (the rate), the verdict chips, the
+     breakdown when there is one, and the days behind it. DETAILED adds the evidence behind the chips.
+     Nothing here computes a number: every figure is the engine's, and none is shown without its N. */
   function renderResult() {
     const r = S.result;
     if (!r) return renderHome();
     if (r.loading) {
-      return `<section class="edge-card"><div class="edge-skel" style="width:60%"></div><div class="edge-skel edge-skel--big"></div><div class="edge-skel edge-skel--bar"></div></section>
-        <section class="edge-card"><div class="edge-skel" style="width:35%"></div><div class="edge-skel" style="height:54px"></div></section>`;
+      return `<section class="e-hero"><div class="edge-skel" style="width:46%"></div><div class="edge-skel edge-skel--big"></div><div class="edge-skel edge-skel--bar"></div></section>
+        <section class="e-sec"><div class="edge-skel" style="width:30%"></div><div class="edge-skel" style="height:54px"></div></section>`;
     }
     if (r.error) {
       return `<section class="edge-card edge-hero"><p class="edge-cap">${esc(r.title || 'Result')}</p>${askErrorHtml(r.error, r.req && r.req.dsl)}
         <button type="button" class="edge-btn edge-btn--ghost" data-act="back">Back</button></section>`;
     }
     const d = r.data;
+    const detailed = S.detail === 'detailed';
     const refused = d.guards && d.guards.refused;
     const low = d.guards && d.guards.lowSample && !refused;
     const dsl = d.query && d.query.dsl;
@@ -642,87 +682,100 @@
     let i = 0;
     const out = [];
 
-    out.push(`<section class="edge-card" style="--i:${i++}">
-      <p class="edge-cap">${esc(r.title)}${r.preset ? ' · report' : ''}</p>
-      ${r.preset ? `<p class="edge-sub">${esc(r.preset.summary)}</p>` : ''}
-      <div class="edge-q"><code>${esc(dsl)}</code><button type="button" class="edge-btn edge-btn--ghost edge-btn--sm" data-copy="${esc(dsl)}" aria-label="Copy the question">${ICON.copy}</button></div>
-      ${r.kind === 'query' ? '<button type="button" class="edge-chip" data-act="edit" style="align-self:flex-start">Edit this question</button>' : ''}
-    </section>`);
-
+    /* — the hero: what was asked, the rate, how sure we are — */
+    const head = `<h2 class="e-title">${esc(r.title)}</h2>
+      ${r.preset ? `<p class="edge-note edge-clamp" title="${esc(r.preset.summary)}">${esc(r.preset.summary)}</p>` : ''}
+      <div class="e-qline"><code class="e-q" title="${esc(dsl)}">${esc(dsl)}</code>
+        <button type="button" class="e-iconbtn" data-copy="${esc(dsl)}" aria-label="Copy the question" title="Copy the question">${ICON.copy}</button>
+        ${r.kind === 'query' ? `<button type="button" class="e-iconbtn" data-act="edit" aria-label="Edit this question" title="Edit this question">${ICON.edit}</button>` : ''}</div>`;
     if (refused) {
-      out.push(`<section class="edge-card" style="--i:${i++}"><div class="edge-est edge-est--refused">
-        <div class="edge-est__pct">Not enough sessions to give a rate</div>
-        <div class="edge-est__facts"><span><b>${num(d.n)}</b> ${d.n === 1 ? 'session' : 'sessions'} matched</span><span><b>${num(d.successes)}</b> ${d.successes === 1 ? 'hit' : 'hits'}</span></div></div>
+      out.push(`<section class="e-hero" style="--i:${i++}">${head}
+        <div class="e-rate e-rate--none"><span class="e-rate__n">Not enough sessions to give a rate</span></div>
+        <p class="e-facts"><span><b>${num(d.n)}</b> ${d.n === 1 ? 'session' : 'sessions'} matched</span><span><b>${num(d.successes)}</b> ${d.successes === 1 ? 'hit' : 'hits'}</span></p>
         ${flag(`Below the engine’s minimum of <b>${num(d.guards.refuseFloor)}</b> sessions, so no estimate is shown — a percentage from this few cases would look precise and mean nothing. Loosen a condition, or widen the date range.`)}</section>`);
     } else if (isNum(d.estimate) && Array.isArray(d.ci95)) {
       const [lo, hi] = d.ci95;
-      out.push(`<section class="edge-card" style="--i:${i++}"><div class="edge-est">
-        <div class="edge-est__pct">${pctNum(d.estimate)}<small>%</small></div>
-        <div class="edge-est__facts"><span><b>${num(d.successes)}</b> of <b>${num(d.n)}</b> sessions</span><span>95% CI <b>${pct(lo)} – ${pct(hi)}</b></span></div></div>
+      const chips = [];
+      if (d.stability) {
+        chips.push(`<button type="button" class="e-verdict ${d.stability.agree ? 'e-verdict--ok' : 'e-verdict--warn'}${detailed ? ' is-static' : ''}" data-act="jump" data-target="e-stable" title="First half of history vs second half">${d.stability.agree ? ICON.check : ICON.warn}${d.stability.agree ? 'Stable over time' : 'Changed over time'}</button>`);
+      }
+      if (d.recency) {
+        chips.push(`<button type="button" class="e-verdict ${d.recency.diverges ? 'e-verdict--warn' : 'e-verdict--ok'}${detailed ? ' is-static' : ''}" data-act="jump" data-target="e-recent" title="Last ${num(d.recency.window)} sessions vs all of history">${d.recency.diverges ? ICON.warn : ICON.check}${d.recency.diverges ? 'Recent sessions differ' : 'Matches recent sessions'}</button>`);
+      }
+      out.push(`<section class="e-hero" style="--i:${i++}">${head}
+        <div class="e-rate" aria-label="${esc(pctNum(d.estimate) + ' percent')}"><span class="e-rate__n">${pctNum(d.estimate)}</span><span class="e-rate__u">%</span></div>
+        <p class="e-facts"><span><b>${num(d.successes)}</b> of <b>${num(d.n)}</b> sessions</span><span title="Where the true rate probably sits (Wilson 95% interval)">95% range <b>${pct(lo)} – ${pct(hi)}</b></span></p>
         ${ciBar(d.estimate, lo, hi)}
-        ${low ? flag(`<b>Low sample</b> — only ${num(d.n)} sessions (the engine warns below ${num(d.guards.warnFloor)}). Treat this as a hint, not a rate; the interval above is wide for a reason.`) : ''}
+        ${low ? flag(`<b>Low sample</b> — only ${num(d.n)} sessions (the engine warns below ${num(d.guards.warnFloor)}). Treat this as a hint, not a rate.`) : ''}
+        ${chips.length ? `<div class="e-verdicts">${chips.join('')}</div>` : ''}
       </section>`);
     }
 
+    /* — the breakdown: it IS the answer when the question was split, so it leads in both modes — */
     if (!refused && d.groups && d.groups.length) {
       const groups = d.groups.slice().sort(groupSort);
-      out.push(`<section class="edge-card" style="--i:${i++}"><p class="edge-cap">By ${esc(fieldTitle(S.filters.groupBy || 'group'))}</p><div class="edge-groups">${groups.map((g) => `
+      out.push(`<section class="e-sec" style="--i:${i++}"><h3 class="e-h3">By ${esc(fieldTitle(S.filters.groupBy || 'group').toLowerCase())}<span class="e-aside">bar = 95% range</span></h3><div class="edge-groups">${groups.map((g) => `
         <div class="edge-group${g.lowSample || !isNum(g.estimate) ? ' is-low' : ''}"><span class="edge-group__name" title="${esc(g.group)}">${esc(g.group)}</span>
           ${isNum(g.estimate) && Array.isArray(g.ci95) ? ciBar(g.estimate, g.ci95[0], g.ci95[1], true) : '<span class="edge-note">no estimate</span>'}
-          <span class="edge-group__num"><b>${pct(g.estimate)}</b><small>n ${num(g.n)}</small></span></div>`).join('')}</div>
-        <p class="edge-note">Bars show the 95% interval; a group with a wide bar is a group with few sessions.</p></section>`);
+          <span class="edge-group__num"><b>${pct(g.estimate)}</b><small>n ${num(g.n)}</small></span></div>`).join('')}</div></section>`);
     }
 
-    if (!refused && d.stability) {
-      const a = d.stability.firstHalf, b = d.stability.secondHalf;
-      const row = (label, h) => `<div class="edge-row"><div class="edge-row__lab">${label}<b>${pct(h.estimate)}</b><small>n ${num(h.n)}</small></div>${isNum(h.estimate) && h.ci95 ? ciBar(h.estimate, h.ci95[0], h.ci95[1], true) : ''}</div>`;
-      const agree = d.stability.agree;
-      out.push(`<section class="edge-card" style="--i:${i++}"><p class="edge-cap">Is it stable?</p><div class="edge-rows">${row('First half', a)}${row('Second half', b)}</div>
-        <span class="edge-verdict ${agree ? 'edge-verdict--ok' : 'edge-verdict--warn'}">${agree ? ICON.check : ICON.warn}${agree ? 'The two halves agree' : 'The two halves disagree'}</span>
-        <p class="edge-note">${agree ? 'The matching sessions, split in time, give overlapping intervals.' : 'The earlier and later sessions give clearly different rates — the pattern may have changed over time.'}</p></section>`);
+    /* — the evidence, only on request — */
+    if (detailed) {
+      if (!refused && d.stability) {
+        const a = d.stability.firstHalf, b = d.stability.secondHalf;
+        const row = (label, h) => `<div class="edge-row"><div class="edge-row__lab">${label}<b>${pct(h.estimate)}</b><small>n ${num(h.n)}</small></div>${isNum(h.estimate) && h.ci95 ? ciBar(h.estimate, h.ci95[0], h.ci95[1], true) : ''}</div>`;
+        const agree = d.stability.agree;
+        out.push(`<section class="e-sec" id="e-stable" style="--i:${i++}"><h3 class="e-h3">Is it stable?<span class="e-aside">${agree ? 'the halves agree' : 'the halves disagree'}</span></h3><div class="edge-rows">${row('First half', a)}${row('Second half', b)}</div>
+          ${agree ? '' : '<p class="edge-note">The earlier and later sessions give clearly different rates \u2014 the pattern may have changed over time.</p>'}</section>`);
+      }
+
+      if (!refused && d.recency) {
+        const rc = d.recency;
+        out.push(`<section class="e-sec" id="e-recent" style="--i:${i++}"><h3 class="e-h3">Recent vs all history<span class="e-aside">${rc.diverges ? 'recent differs' : 'recent matches'}</span></h3><div class="edge-rows">
+          <div class="edge-row"><div class="edge-row__lab">Last ${num(rc.window)}<b>${pct(rc.estimate)}</b><small>n ${num(rc.n)}</small></div>${isNum(rc.estimate) && rc.ci95 ? ciBar(rc.estimate, rc.ci95[0], rc.ci95[1], true) : ''}</div>
+          <div class="edge-row"><div class="edge-row__lab">All<b>${pct(d.estimate)}</b><small>n ${num(d.n)}</small></div>${isNum(d.estimate) && d.ci95 ? ciBar(d.estimate, d.ci95[0], d.ci95[1], true) : ''}</div></div></section>`);
+      }
+
+      if (!refused && d.perYear && d.perYear.length) {
+        out.push(`<section class="e-sec" style="--i:${i++}"><h3 class="e-h3">Year by year</h3><ul class="edge-years">${d.perYear.map((y) => `
+          <li><b>${pct(y.estimate, 0)}</b><div class="col" role="img" aria-label="${esc(y.year + ': ' + pct(y.estimate) + ' of ' + y.n + ' sessions')}"><i style="--v:${isNum(y.estimate) ? y.estimate.toFixed(3) : 0}"></i></div><span>${esc(y.year)}</span><small>n ${num(y.n)}</small></li>`).join('')}</ul></section>`);
+      }
+
+      if (!refused && d.distribution && d.distribution.count > 0) {
+        const ds = d.distribution;
+        const max = ds.max > ds.min ? ds.max : ds.min + 1;
+        const at = (v) => Math.max(0, Math.min(100, ((v - ds.min) / (max - ds.min)) * 100));
+        out.push(`<section class="e-sec" style="--i:${i++}"><h3 class="e-h3">How long it took<span class="e-aside">${esc(unit)} \u00b7 ${plural(ds.count, 'session')}</span></h3><div class="edge-dist">
+          <div class="edge-dist__axis" role="img" aria-label="Distribution: median ${esc(fmtValue(ds.median, unit))}, middle half ${esc(fmtValue(ds.p25, unit))} to ${esc(fmtValue(ds.p75, unit))}, 90th percentile ${esc(fmtValue(ds.p90, unit))}">
+            <div class="edge-dist__line"></div>
+            <div class="edge-dist__whisk" style="left:${at(ds.p75).toFixed(2)}%;width:${Math.max(0, at(ds.p90) - at(ds.p75)).toFixed(2)}%"></div>
+            <div class="edge-dist__box" style="left:${at(ds.p25).toFixed(2)}%;width:${Math.max(0.6, at(ds.p75) - at(ds.p25)).toFixed(2)}%"></div>
+            <div class="edge-dist__med" style="left:${at(ds.median).toFixed(2)}%"></div></div>
+          <div class="edge-dist__scale"><span>${esc(fmtValue(ds.min, unit))}</span><span>${esc(fmtValue(ds.max, unit))}</span></div>
+          <dl class="edge-facts"><div><dt>Median</dt><dd>${esc(fmtValue(ds.median, unit))}</dd></div><div><dt>Middle half</dt><dd>${esc(fmtValue(ds.p25, unit))} – ${esc(fmtValue(ds.p75, unit))}</dd></div><div><dt>90% by</dt><dd>${esc(fmtValue(ds.p90, unit))}</dd></div><div><dt>Mean</dt><dd>${esc(fmtValue(ds.mean, unit))}</dd></div></dl></div>
+          <p class="edge-note">Among the ${num(ds.count)} sessions where it happened: the box is the middle half, the bar reaches the 90th percentile.</p></section>`);
+      }
+
+      if (r.preset && r.preset.summary) {
+        out.push(`<section class="e-sec" style="--i:${i++}"><h3 class="e-h3">What this measures</h3><p class="e-disclose-body">${esc(r.preset.summary)}</p></section>`);
+      }
     }
 
-    if (!refused && d.recency) {
-      const rc = d.recency;
-      out.push(`<section class="edge-card" style="--i:${i++}"><p class="edge-cap">Recent vs all history</p><div class="edge-rows">
-        <div class="edge-row"><div class="edge-row__lab">Last ${num(rc.window)}<b>${pct(rc.estimate)}</b><small>n ${num(rc.n)}</small></div>${isNum(rc.estimate) && rc.ci95 ? ciBar(rc.estimate, rc.ci95[0], rc.ci95[1], true) : ''}</div>
-        <div class="edge-row"><div class="edge-row__lab">All<b>${pct(d.estimate)}</b><small>n ${num(d.n)}</small></div>${isNum(d.estimate) && d.ci95 ? ciBar(d.estimate, d.ci95[0], d.ci95[1], true) : ''}</div></div>
-        <span class="edge-verdict ${rc.diverges ? 'edge-verdict--warn' : 'edge-verdict--ok'}">${rc.diverges ? ICON.warn : ICON.check}${rc.diverges ? 'Recent sessions diverge from history' : 'Recent sessions match history'}</span></section>`);
-    }
-
-    if (!refused && d.perYear && d.perYear.length) {
-      out.push(`<section class="edge-card" style="--i:${i++}"><p class="edge-cap">Year by year</p><ul class="edge-years">${d.perYear.map((y) => `
-        <li><b>${pct(y.estimate, 0)}</b><div class="col" role="img" aria-label="${esc(y.year + ': ' + pct(y.estimate) + ' of ' + y.n + ' sessions')}"><i style="--v:${isNum(y.estimate) ? y.estimate.toFixed(3) : 0}"></i></div><span>${esc(y.year)}</span><small>n ${num(y.n)}</small></li>`).join('')}</ul></section>`);
-    }
-
-    if (!refused && d.distribution && d.distribution.count > 0) {
-      const ds = d.distribution;
-      const max = ds.max > ds.min ? ds.max : ds.min + 1;
-      const at = (v) => Math.max(0, Math.min(100, ((v - ds.min) / (max - ds.min)) * 100));
-      out.push(`<section class="edge-card" style="--i:${i++}"><p class="edge-cap">How long it took · ${esc(unit)} · ${plural(ds.count, 'session')}</p><div class="edge-dist">
-        <div class="edge-dist__axis" role="img" aria-label="Distribution: median ${esc(fmtValue(ds.median, unit))}, middle half ${esc(fmtValue(ds.p25, unit))} to ${esc(fmtValue(ds.p75, unit))}, 90th percentile ${esc(fmtValue(ds.p90, unit))}">
-          <div class="edge-dist__line"></div>
-          <div class="edge-dist__whisk" style="left:${at(ds.p75).toFixed(2)}%;width:${Math.max(0, at(ds.p90) - at(ds.p75)).toFixed(2)}%"></div>
-          <div class="edge-dist__box" style="left:${at(ds.p25).toFixed(2)}%;width:${Math.max(0.6, at(ds.p75) - at(ds.p25)).toFixed(2)}%"></div>
-          <div class="edge-dist__med" style="left:${at(ds.median).toFixed(2)}%"></div></div>
-        <div class="edge-dist__scale"><span>${esc(fmtValue(ds.min, unit))}</span><span>${esc(fmtValue(ds.max, unit))}</span></div>
-        <dl class="edge-facts"><div><dt>Median</dt><dd>${esc(fmtValue(ds.median, unit))}</dd></div><div><dt>Middle half</dt><dd>${esc(fmtValue(ds.p25, unit))} – ${esc(fmtValue(ds.p75, unit))}</dd></div><div><dt>90% by</dt><dd>${esc(fmtValue(ds.p90, unit))}</dd></div><div><dt>Mean</dt><dd>${esc(fmtValue(ds.mean, unit))}</dd></div></dl></div>
-        <p class="edge-note">Among the ${num(ds.count)} sessions where it happened. The box is the middle half; the bar to its right reaches the 90th percentile.</p></section>`);
+    /* — the days behind it: the way back to the chart, so it stays in the Summary — */
+    if (d.sessions && d.sessions.length) {
+      const cap = (detailed || S.sessAll) ? S.sessShown : Math.min(5, S.sessShown);
+      const shown = d.sessions.slice(0, cap);
+      out.push(`<section class="e-sec" style="--i:${i++}"><h3 class="e-h3">Days behind it<span class="e-aside">${num(shown.length)} of ${num(d.n)} \u00b7 newest first</span></h3>
+        <ul class="edge-sessions">${shown.map((s) => `<li><button type="button" class="edge-session" data-session="${esc(s.sessionId)}">
+          <span class="edge-session__date">${esc(fmtDate(s.tradeDate))}</span><span class="edge-session__val">${isNum(s.value) ? esc(fmtValue(s.value, unit)) : ''}</span>
+          <span class="${s.success ? 'edge-hit' : 'edge-miss'}">${s.success ? 'hit' : 'miss'}</span>${ICON.go}</button></li>`).join('')}</ul>
+        ${d.sessions.length > shown.length ? `<button type="button" class="edge-btn edge-btn--ghost edge-btn--sm" data-act="more" style="align-self:flex-start">Show more</button>` : ''}</section>`);
     }
 
     out.push(resultRefine(r, d));
 
-    if (d.sessions && d.sessions.length) {
-      const shown = d.sessions.slice(0, S.sessShown);
-      out.push(`<section class="edge-card" style="--i:${i++}"><p class="edge-cap">Latest sessions behind this · ${num(shown.length)} of ${num(d.n)}</p>
-        <ul class="edge-sessions">${shown.map((s) => `<li><button type="button" class="edge-session" data-session="${esc(s.sessionId)}">
-          <span class="edge-session__date">${esc(fmtDate(s.tradeDate))}</span><span class="edge-session__val">${isNum(s.value) ? esc(fmtValue(s.value, unit)) : ''}</span>
-          <span class="${s.success ? 'edge-hit' : 'edge-miss'}">${s.success ? 'hit' : 'miss'}</span>${ICON.go}</button></li>`).join('')}</ul>
-        ${d.sessions.length > shown.length ? `<button type="button" class="edge-btn edge-btn--ghost edge-btn--sm" data-act="more" style="align-self:flex-start">Show ${num(d.sessions.length - shown.length)} more</button>` : ''}
-        <p class="edge-note">Open any session to see its bars with the levels the engine measured.</p></section>`);
-    }
-
-    out.push(`<p class="edge-foot"><b>${esc(d.disclaimer || 'Historical conditional frequencies with sample sizes. Not predictions, not advice.')}</b><br>engine ${esc((d.engine && d.engine.version) || '')} · store ${esc(((d.engine && d.engine.storeFingerprint) || '').slice(0, 8))}</p>`);
+    out.push(`<p class="edge-foot"><b>${esc(d.disclaimer || 'Historical conditional frequencies with sample sizes. Not predictions, not advice.')}</b>${detailed ? `<small>engine ${esc((d.engine && d.engine.version) || '')} · store ${esc(((d.engine && d.engine.storeFingerprint) || '').slice(0, 8))}</small>` : ''}</p>`);
     return out.join('');
   }
 
@@ -743,41 +796,63 @@
     return { list, i };
   }
 
+  /* Which of the engine's levels sit within reach of the day's own candles. A level far outside (a prior
+     high 3% above a quiet day) stretches the chart's price scale until the candles are a sliver at the
+     bottom — it is listed in the legend as off-chart instead of drawn. */
+  function levelsInReach(view) {
+    const bars = [...((view.context && view.context.bars) || []), ...(view.bars || [])];
+    const lv = view.levels || {};
+    if (!bars.length) return () => true;
+    let lo = Infinity, hi = -Infinity;
+    for (const b of bars) { if (b.low < lo) lo = b.low; if (b.high > hi) hi = b.high; }
+    const pad = Math.max((hi - lo) * 0.6, Math.abs(hi) * 0.0005);
+    const ok = (v) => isNum(v) && v >= lo - pad && v <= hi + pad;
+    return ok;
+  }
+
   function renderSession() {
     const s = S.sess;
     const { list, i } = sessionPosition();
     const ref = i >= 0 ? list[i] : null;
     const unit = (S.result && S.result.data && S.result.data.distribution && S.result.data.distribution.unit) || '';
-    const head = (title, badges) => `<section class="edge-card" style="--i:0"><p class="edge-cap">Session view</p><h2 class="edge-h">${esc(title)}</h2>${badges}</section>`;
+    const head = (title, sub, badges) => `<section class="e-sesshead" style="--i:0"><div><h2 class="e-title">${esc(title)}</h2>${sub ? `<p class="e-sub">${esc(sub)}</p>` : ''}</div>${badges || ''}</section>`;
     if (s.loading) {
-      return head(s.id.split('|')[0] + ' · …', '') + `<div class="edge-chart"><div class="edge-chart__msg"><span class="edge-spin"></span></div></div>`;
+      return head(s.id.split('|')[0], 'Loading the day…', '') + `<div class="edge-chart"><div class="edge-chart__msg"><span class="edge-spin"></span></div></div>`;
     }
     if (s.error) {
-      return head(s.id, '') + `<p class="edge-err" role="alert">${esc(s.error.message)}${s.error.hint ? `<small>${esc(s.error.hint)}</small>` : ''}</p>`;
+      return head(s.id, '', '') + `<p class="edge-err" role="alert">${esc(s.error.message)}${s.error.hint ? `<small>${esc(s.error.hint)}</small>` : ''}</p>`;
     }
     const d = s.data;
     const lv = d.levels || {};
-    const badges = [`<span class="edge-badge">session ${esc(d.sessionKey)}</span>`, `<span class="edge-badge">${esc(d.tf)} bars</span>`];
-    if (isNum(lv.gapPct) && lv.gapDir && lv.gapDir !== 'none') badges.push(`<span class="edge-badge">gap ${lv.gapPct > 0 ? '+' : ''}${lv.gapPct.toFixed(2)}%</span>`);
+    /* the outcome and the numbers a trader checks first; the engine's bookkeeping goes under the chart */
+    const badges = [];
     if (ref) badges.push(`<span class="${ref.success ? 'edge-hit' : 'edge-miss'}">${ref.success ? 'hit' : 'miss'}</span>`);
-    if (ref && isNum(ref.value)) badges.push(`<span class="edge-badge">${esc(fmtValue(ref.value, unit))}</span>`);
+    if (ref && isNum(ref.value)) {
+      /* "filled in 15 min" says what the number is; a bare "15 min" made the reader guess */
+      const what = outcomeInfo(S.result, d);
+      const shown = fmtValue(ref.value, unit);
+      badges.push(`<span class="edge-badge">${esc(what && what.verb && unit === 'minutes' ? `${what.verb} in ${shown}` : shown)}</span>`);
+    }
+    if (isNum(lv.gapPct) && lv.gapDir && lv.gapDir !== 'none') badges.push(`<span class="edge-badge">gap ${lv.gapPct > 0 ? '+' : ''}${lv.gapPct.toFixed(2)}%</span>`);
     if (d.isHalfDay) badges.push('<span class="edge-badge edge-badge--warn">half day</span>');
     if (d.isRollDay) badges.push('<span class="edge-badge edge-badge--warn">roll day</span>');
     if (!d.complete) badges.push('<span class="edge-badge edge-badge--warn">incomplete session</span>');
     const older = i >= 0 ? list[i + 1] : null, newer = i > 0 ? list[i - 1] : null;
     const legend = legendItems(d);
-    return `${head(d.symbol + ' · ' + fmtDate(d.tradeDate), `<div class="edge-badges">${badges.join('')}</div>`)}
+    const fine = [`${esc(String(d.sessionKey || '').toUpperCase())} session`, `${esc(d.tf)} bars`, (d.context && d.context.bars && d.context.bars.length) ? `${num(d.context.bars.length)} bars of context before the open` : ''].filter(Boolean).join(' \u00b7 ');
+    return `${head(fmtDate(d.tradeDate), d.symbol, `<div class="edge-badges">${badges.join('')}</div>`)}
       <div class="edge-chart" id="edge-chart" role="img" aria-label="${esc(d.symbol + ' ' + d.tradeDate + ' session bars with the query’s levels')}"><div class="edge-chart__msg"><span class="edge-spin"></span></div></div>
       ${i >= 0 ? `<div class="edge-nav"><button type="button" class="edge-btn edge-btn--ghost edge-btn--sm" data-session="${esc(older ? older.sessionId : '')}"${older ? '' : ' disabled'} title="Older matched session (←)">${ICON.back}Older</button>
         <span class="edge-nav__pos">${i + 1} of ${num(list.length)} listed</span>
         <button type="button" class="edge-btn edge-btn--ghost edge-btn--sm" data-session="${esc(newer ? newer.sessionId : '')}"${newer ? '' : ' disabled'} title="Newer matched session (→)">Newer<span style="display:inline-flex;transform:scaleX(-1)">${ICON.back}</span></button></div>` : ''}
       ${legend}
-      <p class="edge-foot">${esc((d.context && d.context.note) || '')} The levels are the engine’s own derived numbers for this one session — a way to check a statistic against a real day, not a signal. Chart drawn by <b>Vela</b>.<br>${esc(d.disclaimer || '')}</p>`;
+      <p class="edge-foot">${esc((d.context && d.context.note) ? d.context.note + ' ' : '')}These are the engine\u2019s own measurements for this one day \u2014 a way to check a statistic against a real session, not a signal.<small>${fine} \u00b7 chart by Vela</small></p>`;
   }
 
   function legendItems(d) {
     const lv = d.levels || {};
-    const p = (v) => (isNum(v) ? `<b>${esc(v.toFixed(2))}</b>` : '');
+    const reach = levelsInReach(d);
+    const p = (v) => (isNum(v) ? `<b>${esc(v.toFixed(2))}</b>${reach(v) ? '' : ` <small>${v > (d.levels.open || v) ? '\u2191' : '\u2193'} off chart</small>`}` : '');
     const items = [];
     if (isNum(lv.prevHigh)) items.push(`<li style="color:var(--lx-fg-faint)"><i class="dashed"></i><span>Prior high ${p(lv.prevHigh)}</span></li>`);
     if (isNum(lv.prevLow)) items.push(`<li style="color:var(--lx-fg-faint)"><i class="dashed"></i><span>Prior low ${p(lv.prevLow)}</span></li>`);
@@ -788,32 +863,46 @@
   }
 
   /* — data — */
-  function sourceCard(src, i) {
-    const free = src.free ? '<span class="edge-pill edge-pill--free">Free · no key</span>' : '';
+  /* The three sources behind one switch: a trader adds data once, so the page shows the one source being
+     added rather than three forms stacked. The server's long notes stay one tap away. */
+  const SOURCE_BLURB = {
+    binance: 'Crypto \u00b7 free, no key \u00b7 1-minute history',
+    dukascopy: 'Forex, metals, indices \u00b7 free, no key \u00b7 the first download is slow',
+    demo: 'Synthetic bars to try everything in seconds \u2014 not market data',
+  };
+  const SOURCE_NAME = { binance: 'Binance', dukascopy: 'Dukascopy', demo: 'Demo' };
+
+  function sourceCard(sources, i) {
     const busy = jobRunning() || (S.ov && S.ov.install && S.ov.install.external);
-    const have = new Set(symbols().map((s) => s.symbol));
-    if (src.id === 'demo') {
-      const both = src.symbols.every((s) => have.has(s));
-      return `<section class="edge-card edge-src" style="--i:${i}"><div class="edge-src__head"><strong>${esc(src.title)}</strong>${free}<span class="edge-pill">${esc(src.market)}</span></div>
-        <p class="edge-note">${esc(src.note)}</p>
-        <div class="edge-src__row"><button type="button" class="edge-btn edge-btn--sm" data-setup="demo"${busy || both ? ' disabled' : ''}>${both ? 'Demo data loaded' : 'Load the demo data'}</button><span class="edge-note">${both ? '' : 'about 10 seconds'}</span></div></section>`;
-    }
-    if (src.id === 'binance') {
+    const have = new Set(symbols().map((x) => x.symbol));
+    const byId = Object.fromEntries(sources.map((x) => [x.id, x]));
+    const ids = ['binance', 'dukascopy', 'demo'].filter((id) => byId[id]);
+    if (!ids.length) return '';
+    const cur = ids.includes(S.setup.src) ? S.setup.src : (symbols().length ? ids[0] : (ids.includes('demo') ? 'demo' : ids[0]));
+    const src = byId[cur];
+    let panel = '';
+    if (cur === 'demo') {
+      const both = src.symbols.every((x) => have.has(x));
+      panel = `<div class="edge-src__row"><button type="button" class="edge-btn edge-btn--sm" data-setup="demo"${busy || both ? ' disabled' : ''}>${both ? 'Demo data loaded' : 'Load the demo data'}</button><span class="edge-note">${both ? '' : 'about 10 seconds'}</span></div>`;
+    } else if (cur === 'binance') {
       const yrs = [1, 2, 3, 5, 10];
-      return `<section class="edge-card edge-src" style="--i:${i}"><div class="edge-src__head"><strong>${esc(src.title)}</strong>${free}<span class="edge-pill">${esc(src.market)}</span></div>
-        <p class="edge-note">${esc(src.note)}</p>
-        <div class="edge-chips">${src.symbols.map((s) => `<button type="button" class="edge-chip${S.setup.bSymbol === s ? ' is-on' : ''}" data-bsym="${esc(s)}">${esc(s)}${have.has(s) ? '<span>✓</span>' : ''}</button>`).join('')}</div>
+      panel = `<div class="edge-chips">${src.symbols.map((x) => `<button type="button" class="edge-chip${S.setup.bSymbol === x ? ' is-on' : ''}" data-bsym="${esc(x)}">${esc(x)}${have.has(x) ? '<span>\u2713</span>' : ''}</button>`).join('')}</div>
         <div class="edge-src__row"><input class="edge-field grow" id="edge-bsym" value="${esc(S.setup.bSymbol)}" aria-label="Binance spot symbol" spellcheck="false" autocapitalize="characters" placeholder="BTCUSDT">
           <select class="edge-field" id="edge-byears" aria-label="How far back">${yrs.map((y) => `<option value="${y}"${S.setup.bYears === y ? ' selected' : ''}>${y} ${y === 1 ? 'year' : 'years'}</option>`).join('')}</select>
           <button type="button" class="edge-btn edge-btn--sm" data-setup="binance"${busy ? ' disabled' : ''}>${have.has(S.setup.bSymbol) ? 'Update' : 'Download'}</button></div>
-        <label class="edge-check"><input type="checkbox" id="edge-archive"${S.setup.archive ? ' checked' : ''}><span>Binance’s live API is blocked where I am — use the public archive only (history ends about a day behind).</span></label></section>`;
-    }
-    const yrs = [1, 2, 3, 5];
-    return `<section class="edge-card edge-src" style="--i:${i}"><div class="edge-src__head"><strong>${esc(src.title)}</strong>${free}<span class="edge-pill">${esc(src.market)}</span></div>
-      <p class="edge-note">${esc(src.note)}</p>
-      <div class="edge-src__row"><select class="edge-field grow" id="edge-dsym" aria-label="Instrument">${src.symbols.map((s) => `<option value="${esc(s)}"${S.setup.dSymbol === s ? ' selected' : ''}>${esc(s)}${have.has(s) ? ' ✓' : ''}</option>`).join('')}</select>
+        <details class="e-adv"><summary>Advanced</summary>
+          <label class="edge-check"><input type="checkbox" id="edge-archive"${S.setup.archive ? ' checked' : ''}><span>Use the public archive only \u2014 for when Binance\u2019s live API is blocked on this network (history then ends about a day behind).</span></label></details>`;
+    } else {
+      const yrs = [1, 2, 3, 5];
+      panel = `<div class="edge-src__row"><select class="edge-field grow" id="edge-dsym" aria-label="Instrument">${src.symbols.map((x) => `<option value="${esc(x)}"${S.setup.dSymbol === x ? ' selected' : ''}>${esc(x)}${have.has(x) ? ' \u2713' : ''}</option>`).join('')}</select>
         <select class="edge-field" id="edge-dyears" aria-label="How far back">${yrs.map((y) => `<option value="${y}"${S.setup.dYears === y ? ' selected' : ''}>${y} ${y === 1 ? 'year' : 'years'}</option>`).join('')}</select>
-        <button type="button" class="edge-btn edge-btn--sm" data-setup="dukascopy"${busy ? ' disabled' : ''}>${have.has(S.setup.dSymbol) ? 'Update' : 'Download'}</button></div></section>`;
+        <button type="button" class="edge-btn edge-btn--sm" data-setup="dukascopy"${busy ? ' disabled' : ''}>${have.has(S.setup.dSymbol) ? 'Update' : 'Download'}</button></div>`;
+    }
+    return `<section class="e-sec edge-src" style="--i:${i}"><h3 class="e-h3">Add data</h3>
+      <div class="e-seg" role="group" aria-label="Data source">${ids.map((id) => `<button type="button" data-src="${id}" aria-pressed="${id === cur}">${SOURCE_NAME[id]}</button>`).join('')}</div>
+      <p class="edge-note">${esc(SOURCE_BLURB[cur] || src.note || '')}</p>
+      ${panel}
+      <details class="e-adv"><summary>About this source</summary><p class="e-disclose-body">${esc(src.note || '')}</p></details></section>`;
   }
 
   function jobCard(job) {
@@ -849,18 +938,18 @@
     let i = 0;
     if (jobShown()) out.push(jobCard(jobShown()));
     if (!symbols().length && !jobShown()) {
-      out.push(`<section class="edge-card edge-hero" style="--i:${i++}"><p class="edge-cap">Nothing to measure yet</p><h2>Add some bars</h2>
-        <p class="edge-note">Edge Stats needs 1-minute bars on your own disk. The quickest way to see everything working is the demo data (synthetic, ten seconds). For real data, download from a free source below — the first download takes a few minutes.</p></section>`);
+      out.push(`<section class="edge-card edge-hero" style="--i:${i++}"><h2>Add some bars to start</h2>
+        <p class="edge-note">Edge Stats measures 1-minute bars stored on your own disk. Try the demo data first (synthetic, about ten seconds), or download real history from a free source below.</p></section>`);
     }
     if (symbols().length) {
-      out.push(`<section class="edge-card" style="--i:${i++}"><p class="edge-cap">In your store${ov.store_mb ? ' · ' + num(ov.store_mb, 1) + ' MB' : ''}</p>
+      out.push(`<section class="e-sec" style="--i:${i++}"><h3 class="e-h3">In your store<span class="e-aside">${ov.store_mb ? num(ov.store_mb, 1) + ' MB' : ''}</span></h3>
         <table class="edge-table"><thead><tr><th>Symbol</th><th>Source</th><th class="r">Data to</th></tr></thead><tbody>${symbols().map((s) =>
-          `<tr><td>${esc(s.symbol)}</td><td>${esc(s.adapter)}</td><td class="r">${s.lastBar ? esc(fmtDate(s.lastBar)) : '–'}</td></tr>`).join('')}</tbody></table>
+          `<tr><td>${esc(s.symbol)}</td><td>${esc(s.adapter)}</td><td class="r">${s.lastBar ? esc(fmtDate(s.lastBar)) : '\u2013'}</td></tr>`).join('')}</tbody></table>
         <div class="edge-src__row"><button type="button" class="edge-btn edge-btn--ghost edge-btn--sm" data-setup="refresh"${jobRunning() || (ov.install && ov.install.external) ? ' disabled' : ''}>Update all</button>
           <span class="edge-note">${ov.install && ov.install.external ? 'This console uses an engine it did not start, so it cannot download.' : 'Fetches everything new since the last bar.'}</span></div></section>`);
     }
-    out.push(...(ov.sources || []).map((src) => sourceCard(src, i++)));
-    out.push(`<p class="edge-foot"><b>Your data stays on this machine.</b> Free sources are public archives (Binance, Dukascopy) fetched with no account or key. Provider terms still apply to what you download — don’t redistribute it.<br>Engine: LuxAlgo/edge-stats (MIT). Calendar data from Edge Stats by LuxAlgo (github.com/LuxAlgo/edge-stats), CC BY 4.0.</p>`);
+    out.push(sourceCard(ov.sources || [], i++));
+    out.push(`<p class="edge-foot"><b>Your data stays on this machine.</b> Free sources are public archives (Binance, Dukascopy) fetched with no account or key; their terms still apply \u2014 don\u2019t redistribute what you download.<small>Engine: LuxAlgo/edge-stats (MIT). Calendar data from Edge Stats by LuxAlgo (github.com/LuxAlgo/edge-stats), CC BY 4.0.</small></p>`);
     return out.join('');
   }
 
@@ -940,23 +1029,24 @@
     const line = (id, y, color, style, width = 1) => ({ id, paneId: PANE, xloc: 'bar_time', x1: startTs, y1: y, x2: lastTs, y2: y, extend: 'none', color, invisible: false, width, style, arrowLeft: false, arrowRight: false, overlay: true });
     const tag = (id, x, y, text, style, color, textColor) => ({ id, paneId: PANE, xloc: 'bar_time', x, y, yloc: 'price', text, style, color, textColor: textColor || C.fg, size: 'small', textAlign: 'left', fontFamily: 'default', overlay: true });
     const px = (v) => v.toFixed(2);
+    const reach = levelsInReach(view);
     const ctxFirst = view.context && view.context.bars && view.context.bars[0];
     if (ctxFirst) backgrounds.push({ id: 'context', paneId: PANE, from: ctxFirst.ts, to: startTs, color: 'rgba(128,128,140,0.10)', overlay: true });
     for (const [name, y] of [['prior high', lv.prevHigh], ['prior low', lv.prevLow]]) {
-      if (!isNum(y)) continue;
+      if (!isNum(y) || !reach(y)) continue;
       const id = name.replace(' ', '-');
       lines.push(line(id, y, C.faint, 'dashed'));
       labels.push(tag(id + '-label', edgeTs, y, `${name} ${px(y)}`, 'label_right', C.plate, C.muted));
     }
-    if (isNum(lv.prevClose)) {
+    if (isNum(lv.prevClose) && reach(lv.prevClose)) {
       lines.push(line('prior-close', lv.prevClose, C.muted, 'solid'));
       labels.push(tag('prior-close-label', edgeTs, lv.prevClose, `prior close ${px(lv.prevClose)}`, 'label_right', C.plate, C.fg));
     }
-    if (isNum(lv.open)) {
+    if (isNum(lv.open) && reach(lv.open)) {
       lines.push(line('open', lv.open, C.fg, 'dotted'));
       labels.push(tag('open-label', ctxFirst ? ctxFirst.ts : startTs, lv.open, `open ${px(lv.open)}`, 'label_left', C.plate));
     }
-    if (isNum(lv.prevClose) && isNum(lv.open) && lv.open !== lv.prevClose) {
+    if (isNum(lv.prevClose) && isNum(lv.open) && lv.open !== lv.prevClose && reach(lv.prevClose) && reach(lv.open)) {
       const fill = view.times && isNum(view.times.gapFillMin) ? Math.min(lastTs, startTs + view.times.gapFillMin * 60000) : lastTs;
       boxes.push({ id: 'gap', paneId: PANE, xloc: 'bar_time', left: startTs, top: Math.max(lv.prevClose, lv.open), right: Math.max(fill, startTs + ms),
         bottom: Math.min(lv.prevClose, lv.open), extend: 'none', bgColor: 'rgba(128,128,140,0.22)', borderWidth: 0, borderStyle: 'solid', textSize: 'small',
@@ -971,7 +1061,7 @@
       lines.push(line('or-high', or.high, C.accent, 'dashed'), line('or-low', or.low, C.accent, 'dashed'));
       labels.push(tag('or-high-label', edgeTs, or.high, `OR high ${px(or.high)}`, 'label_right', C.plate, C.accent), tag('or-low-label', edgeTs, or.low, `OR low ${px(or.low)}`, 'label_right', C.plate, C.accent));
     }
-    if (info) {
+    if (info && reach(info.level)) {
       if (isNum(info.min)) {
         const x = Math.min(lastTs, startTs + info.min * 60000);
         labels.push(tag('outcome', x, info.level, `${info.verb} ${clockAt(x, view.tz)}`, info.side === 'above' ? 'label_down' : 'label_up', C.accent, '#ffffff'));
@@ -1149,6 +1239,8 @@
     if (t.dataset.cat) { S.cat = t.dataset.cat; render({ keepFocus: true }); return; }
     if (t.dataset.session) { if (t.dataset.session) openSession(t.dataset.session); return; }
     if (t.dataset.bsym) { S.setup.bSymbol = t.dataset.bsym; render({ keepFocus: true }); return; }
+    if (t.dataset.src) { S.setup.src = t.dataset.src; render({ keepFocus: true }); return; }
+    if (t.dataset.detail) { setDetail(t.dataset.detail); return; }
     if (t.dataset.copy) {
       try { await navigator.clipboard.writeText(t.dataset.copy); say('Copied'); } catch (e) { say('Could not copy — select it and press Ctrl+C', true); }
       return;
@@ -1159,7 +1251,18 @@
       case 'home': S.back = []; S.view = 'home'; S.job = null; render(); setTimeout(() => { const i = $('edge-ask'); if (i) i.focus({ preventScroll: true }); }, 30); break;
       case 'recheck': S.ov = null; S.ovError = null; loadOverview(); break;
       case 'refine': S.refine = !S.refine; render(); break;
-      case 'more': S.sessShown += 15; render({ keepFocus: true }); break;
+      case 'more':
+        /* the Summary lists five days; the first tap opens the full list, later taps add more */
+        if (S.detail !== 'detailed' && !S.sessAll) S.sessAll = true; else S.sessShown += 15;
+        render({ keepFocus: true }); break;
+      case 'jump': {
+        /* a verdict chip is a door to its evidence: Summary opens the Detailed view and scrolls to it */
+        const target = t.dataset.target;
+        if (S.detail !== 'detailed') setDetail('detailed');
+        const el = target && document.getElementById(target);
+        if (el) el.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        break;
+      }
       case 'apply': rerunWithFilters(); break;
       case 'edit': S.ask = (S.result && S.result.req && S.result.req.dsl) || S.ask; S.back = []; S.view = 'home'; render(); setTimeout(() => { const i = $('edge-ask'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 30); break;
       case 'log': S.logOpen = !S.logOpen; paintJob(); break;
@@ -1168,9 +1271,16 @@
     }
   });
 
+  function setDetail(v) {
+    S.detail = v === 'detailed' ? 'detailed' : 'summary';
+    writeStore(KEY_DETAIL, S.detail);
+    render();
+  }
   bar.addEventListener('click', (ev) => {
     const b = ev.target.closest && ev.target.closest('[data-act="back"]');
-    if (b) goBack();
+    if (b) { goBack(); return; }
+    const d = ev.target.closest && ev.target.closest('[data-detail]');
+    if (d) setDetail(d.dataset.detail);
   });
   bar.addEventListener('change', (ev) => {
     if (ev.target.id === 'edge-symbol') {
@@ -1180,6 +1290,28 @@
     }
   });
 
+  /* Theme: the sheet's own switch presses the app's one theme button, so the chart, the console chrome
+     and this sheet always change together (one code path: app.js applyTheme). */
+  const themeBtn = $('edge-theme');
+  function paintTheme() {
+    if (!themeBtn) return;
+    const light = document.documentElement.dataset.theme === 'light';
+    const label = light ? 'Switch to the dark theme' : 'Switch to the light theme';
+    themeBtn.setAttribute('aria-label', label);
+    themeBtn.title = label;
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener('click', () => {
+      const app = $('theme-toggle');
+      if (app) app.click();
+      else { /* a page without the drawer's button: set the attribute and remember it, as app.js does */
+        const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+        document.documentElement.dataset.theme = next;
+        writeStore('luxalgo-web:theme', next);
+      }
+    });
+    paintTheme();
+  }
   if (dataBtn) dataBtn.addEventListener('click', () => { if (S.view === 'data') goBack(); else setView('data'); });
   $('edge-close').addEventListener('click', () => close());
   scrim.addEventListener('click', () => close());
@@ -1204,7 +1336,7 @@
   window.closeEdgeIfOpen = () => close();
 
   /* A theme switch while a session is on screen: the chart's colours were read at mount. */
-  new MutationObserver(() => { if (S.open && S.view === 'session') mountChart(); })
+  new MutationObserver(() => { paintTheme(); if (S.open && S.view === 'session') mountChart(); })
     .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
   /* ── data jobs ─────────────────────────────────────────────────────────────────────────────── */
