@@ -77,7 +77,7 @@ class HonestNumbers(unittest.TestCase):
 
     def test_the_headline_names_its_sample_next_to_the_rate(self):
         body = function_body("renderResult")
-        self.assertRegex(body, r"edge-est__facts.*sessions.*95% CI", )
+        self.assertRegex(body, r"e-facts.*sessions.*95% range", )
 
     def test_the_sheet_never_computes_a_statistic(self):
         """The numbers are the engine's. A Wilson interval or a division of hits by N written here would be a
