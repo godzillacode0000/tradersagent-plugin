@@ -1574,6 +1574,37 @@ async function main() {
   };
   const scheduleScan = (ms) => { scanDirty = true; clearTimeout(scanTimer); scanTimer = setTimeout(scan, ms == null ? 600 : ms); };
 
+  /* The agent's door (chart-bridge: apply / draw / script with `inputs`). When the editor holds that very
+     script, its Settings take the agent's values — the operator opens Settings and sees what the agent
+     chose — and, because it was run, a change there re-runs it like any other. `keyed` is
+     { inputKey: value } and `metas` the scan the bridge already made of this source, so nothing is read
+     twice. Resolves whether the editor held the script: an agent run never overwrites the operator's
+     draft, and never touches the pane when it is some other script. */
+  window.scriptPane.adoptInputs = async (source, keyed, opts) => {
+    const want = String(source == null ? '' : source).replace(/\r\n?/g, '\n');
+    if (srcBox.value !== want) return false;
+    const o = opts || {};
+    storeFor = ST.declaredName(want);
+    inputStore = {};
+    for (const k of Object.keys(keyed || {})) {
+      const v = keyed[k];
+      if (['string', 'number', 'boolean'].includes(typeof v)) inputStore[k] = v;
+    }
+    if (Array.isArray(o.metas)) {
+      clearTimeout(scanTimer);
+      scanSeq++;                     // the bridge's scan is of this very source: it supersedes any pending one
+      scanDirty = false;
+      applyMeta(o.metas);
+    } else {
+      inputStore = ST.reconcile(inputsMeta, inputStore);
+      paintGear();
+      if (settingsOpen) renderSettings();
+    }
+    if (o.ran) lastRunSource = want;
+    saveDraft();
+    return true;
+  };
+
   if (gutter) {
     srcBox.addEventListener('input', paintGutter);
     srcBox.addEventListener('scroll', () => { gutter.scrollTop = srcBox.scrollTop; paintMarks(); });

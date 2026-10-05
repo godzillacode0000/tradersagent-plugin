@@ -37,12 +37,14 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import os
 import shutil
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import Any
 
 try:
     from fastmcp import FastMCP
@@ -469,8 +471,37 @@ def chart_shot(name: str = ""):
     return [text, MCPImage(path=path)]
 
 
+MAX_INPUTS = 64
+_INPUTS_SHAPE = 'inputs must be an object that maps an input\u2019s label to its value, e.g. {"Length": 50}'
+
+
+def _clean_inputs(inputs: Any) -> tuple[dict | None, str]:
+    """`inputs` as the page wants it — { label: number | bool | text | null } — or the sentence that says
+    what is wrong. Checked here so a malformed call is refused in milliseconds, before anything is queued;
+    whether a LABEL exists is the page's to say (it reads the script), and it answers with the ones that do."""
+    if inputs is None:
+        return None, ""
+    if not isinstance(inputs, dict):
+        return None, f"✗ {_INPUTS_SHAPE}"
+    if len(inputs) > MAX_INPUTS:
+        return None, f"✗ {len(inputs)} inputs given; the most one call takes is {MAX_INPUTS}"
+    clean: dict[str, Any] = {}
+    for key, value in inputs.items():
+        label = str(key).strip()
+        if not label or len(label) > 200:
+            return None, f"✗ an input label must be 1-200 characters, got {str(key)[:40]!r}"
+        if value is not None and not isinstance(value, (bool, int, float, str)):
+            return None, f"✗ the value for {label!r} must be a number, true/false, text or null"
+        if isinstance(value, float) and not math.isfinite(value):
+            return None, f"✗ the value for {label!r} is not a finite number"
+        if isinstance(value, str) and len(value) > 500:
+            return None, f"✗ the value for {label!r} is too long ({len(value)} characters; 500 at most)"
+        clean[label] = value
+    return clean, ""
+
+
 @mcp.tool(annotations=_ann("Run Pine on the chart", destructive=True))
-def chart_apply_pine(pine: str) -> str:
+def chart_apply_pine(pine: str, inputs: dict[str, Any] | None = None) -> str:
     """Run Pine source over the chart's live bars (LuxAlgo PineTS) and paint what it makes.
 
     One landasan for every door (chat, script pane, Library): geometry (boxes/lines/labels/tables)
@@ -478,21 +509,51 @@ def chart_apply_pine(pine: str) -> str:
     Vela native — only when the script actually plots. PineTS implements a subset: `import`, `while`
     and `for…in` are not available — the answer says so rather than pretending. Sizes it can do:
     studies with plot/hline/fill/bgcolor and simple ta.* calls.
+
+    `inputs` sets the script's own settings (its `input.*()` values) by label, e.g.
+    {"Length": 50, "Show upper band": false}; anything you leave out keeps the script's default, and
+    null puts one back to its default. Colours are "#RRGGBB" or "#RRGGBBAA"; a choice must be one of its
+    options; a number outside the input's range is limited to it and the answer says so. A label the
+    script does not have is reported together with the labels it does have (chart_pine_inputs lists them
+    without running anything). The values also show in the script pane's Settings when the pane holds
+    this script, so the operator can see and change them.
     """
     if not pine.strip():
         return "✗ no Pine source given"
-    return _command("apply", pine=pine)
+    clean, problem = _clean_inputs(inputs)
+    if problem:
+        return problem
+    return _command("apply", pine=pine, **({} if clean is None else {"inputs": clean}))
 
 
 @mcp.tool(annotations=_ann("Draw a script's levels", destructive=True))
-def chart_draw(pine: str) -> str:
+def chart_draw(pine: str, inputs: dict[str, Any] | None = None) -> str:
     """Run Pine source and paint the geometry it BUILDS — boxes, lines and labels — on the chart.
 
     Use this for the scripts that compute levels instead of plotting a line (most Smart-Money /
     liquidity models): the console runs them and paints their objects on its own overlay, because
     the charting engine has no drawing surface of its own.
+
+    `inputs` works as in chart_apply_pine: the script's own settings by label, e.g. {"Swing length": 10}.
     """
-    return _command("draw", pine=pine)
+    clean, problem = _clean_inputs(inputs)
+    if problem:
+        return problem
+    return _command("draw", pine=pine, **({} if clean is None else {"inputs": clean}))
+
+
+@mcp.tool(annotations=_ann("List a script's settings", read_only=True))
+def chart_pine_inputs(pine: str) -> str:
+    """List the settings a Pine script declares (its `input.*()` values): label, type, default, range or
+    options, group. Runs nothing and changes nothing — the chart and the script pane are left as they are.
+
+    Call this before chart_apply_pine / chart_draw with `inputs` when you do not know the labels. The
+    labels are matched as written (ignoring case and spacing); the script's variable name or the id
+    (`in_0`) work too.
+    """
+    if not pine.strip():
+        return "✗ no Pine source given"
+    return _command("script", mode="inputs", pine=pine)
 
 
 @mcp.tool(annotations=_ann("Clear drawings and painted indicators", destructive=True))

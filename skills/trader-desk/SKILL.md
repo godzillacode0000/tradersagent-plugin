@@ -87,6 +87,7 @@ change — report that, never "done".
 | add EMA / MACD / supertrend | `chart_add_indicator` |
 | remove indicators / clear studies | `chart_remove_indicator(all=True)` |
 | draw PDH/PDL / lines / boxes | `chart_draw` (overlay). Not `chart_apply_pine` for a plain price level. |
+| set / change a script's setting ("length 50", "hide the signals", "make the band wider") | `chart_pine_inputs` for the labels, then `chart_apply_pine` / `chart_draw` with `inputs={"Length": 50}` — do **not** edit the Pine source to change a default |
 | screenshot | `chart_shot` |
 | give the chart the whole screen / come back | `chart_fullscreen` (`on=False` to return) — the console's chrome steps aside and the page asks the browser for fullscreen |
 | chart looks stale / old JS | `chart_reload` |

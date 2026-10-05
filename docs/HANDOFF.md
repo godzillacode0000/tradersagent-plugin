@@ -49,7 +49,7 @@ Versions: Hermes Desktop 0.21.5, console `SERVER_VERSION = 1.0.0`. CI was red fr
 green on every ship below. **868 backend tests** (+67 skipped without `fastmcp` / a real Edge Stats engine), 8 plugin contributions across 5 areas.
 Shipped since this file was written: the paper broker (Phase 5), replay (6/6b), the top-bar one-door
 consolidation, the drawer as the single Library surface, and Phase 7 — three agent doors into Vela
-(`chart_drawing` 76 types / `chart_view` settings / `chart_marks`), 53 MCP tools (8 of them `edgestats_*`). 4 Oct: Edge Stats — the optional local engine, the sheet behind the `⋯` menu, the eight tools (see CHANGELOG; real Binance / Dukascopy downloads were never run from the build machine). Also 4 Oct: the top row
+(`chart_drawing` 76 types / `chart_view` settings / `chart_marks`), 54 MCP tools (8 of them `edgestats_*`). 4 Oct: Edge Stats — the optional local engine, the sheet behind the `⋯` menu, the eight tools (see CHANGELOG; real Binance / Dukascopy downloads were never run from the build machine). Also 4 Oct: the top row
 now rebuilds only when a visible label changes (a replay tick used to rebuild it ~8×/s, which strobed
 the row and ate clicks mid-press — measured 46→1 rebuilds, one-click drawer opens 4/6→6/6), and the
 replay strip wears Vela's v0.8.0 Bar-replay composition (⏮ Start bar · ▶ · ⏭ | 1× ⌄ | cursor time |
@@ -86,7 +86,7 @@ flowchart TB
   subgraph AGENTS["Agent side"]
     ME["Hermes agent"]
     CLI["CLI · bin/trader-chart<br/>state · shot · apply · add · remove<br/>market · draw · reload · caps"]
-    MCP["MCP · traders-chart<br/>53 tools"]
+    MCP["MCP · traders-chart<br/>54 tools"]
     LUX["LuxAlgo MCP<br/>library · edge · prop-firm"]
   end
 
@@ -209,7 +209,7 @@ short note with the way out instead of failing silently.
 | `pinets-runner.js`, `pinets-layer.js` | PineTS execution + the native paint layer |
 | `styles.css` | console chrome, responsive top row (clip-proof from ~500 px to 1280 px pane width) |
 
-**MCP server (`console/mcp/server.py`)** — 53 tools (`chart_views`, `chart_caps`, `chart_state`,
+**MCP server (`console/mcp/server.py`)** — 54 tools (`chart_views`, `chart_caps`, `chart_state`,
 `chart_shot`, `chart_apply_pine`, `chart_draw`, `chart_clear`, `chart_add_indicator`,
 `chart_remove_indicator`, `chart_set_market`, `chart_reload`, `chart_palette`, `chart_replay`,
 `chart_drawing`, `chart_view`, `chart_marks`, `library_search`,

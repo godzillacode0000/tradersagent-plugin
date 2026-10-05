@@ -219,7 +219,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_studies` | everything **on** the chart, each row labelled with the reader that saw it — ask this before calling a chart clean |
 | `chart_state` | symbol, timeframe, last price, bars, indicators on the chart |
 | `chart_shot` | one PNG of the chart (returned as an image, plus the path) |
-| `chart_apply_pine` | run Pine over the chart's live bars and paint a matching native |
+| `chart_apply_pine` | run Pine over the chart's live bars and paint a matching native; optional `inputs` sets the script's own settings by label (`{"Length": 50}`) |
 | `chart_add_indicator` | add a Vela native (`ema`, `supertrend`, `donchian-channels`, …) |
 | `chart_remove_indicator` | take indicators **off** the chart — one by name, or `all` for every study (reports the chart's before → after list) |
 | `chart_set_market` | switch symbol / timeframe |
@@ -236,7 +236,8 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_browse` | open the Library concept list in the pane (optional `family`) |
 | `broker_state` | the paper (simulated Binance) account: cash, equity, positions, orders waiting for you |
 | `broker_propose` | propose a paper order — it only puts an Approve/Reject card on the chart; the agent cannot approve it |
-| `chart_draw` | run Pine and paint the boxes/lines/labels it builds on the chart overlay |
+| `chart_draw` | run Pine and paint the boxes/lines/labels it builds on the chart overlay (optional `inputs`, as above) |
+| `chart_pine_inputs` | list a Pine script's settings — label, type, default, range/options — without running it or touching the chart |
 | `chart_clear` | clear the overlay and the indicators our paint layer added (then report what is left) |
 | `chart_batch` | run several chart actions in ONE call, in order (`[{"action": "market", …}, …]`), stopping at the first failure unless told otherwise |
 | `chart_snapshot` | remember the chart's market + indicators as a restore point |

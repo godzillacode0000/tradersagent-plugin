@@ -28,6 +28,7 @@ capabilities:
     - chart_shot
     - chart_apply_pine
     - chart_draw
+    - chart_pine_inputs
     - chart_clear
     - chart_add_indicator
     - chart_remove_indicator

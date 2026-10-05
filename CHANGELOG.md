@@ -4,6 +4,24 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- **The agent can set a script's own settings.** `chart_apply_pine` and `chart_draw` take `inputs`, e.g.
+  `{"Length": 50, "Show upper band": false}`, and a new read-only tool `chart_pine_inputs` lists what a
+  script declares (label, type, default, range or options, group) without running it, opening the pane or
+  touching the chart (MCP tools 53 → 54). The same on the CLI: `trader-chart draw FILE --input Length=50`,
+  `trader-chart script inputs --pine FILE`, and `inputs` on the raw `apply` / `draw` / `script` actions.
+  Labels are matched exactly, then ignoring case and spacing, then by variable name, then by engine id; a
+  value goes through the same checks as the Settings panel (a number is limited to the input's own range, a
+  choice must be one of its options, a boolean is `true` / `false` — not "yes"). Nothing is guessed: the
+  reply says what was used (with a note when a number was limited or rounded), what was refused and why — a
+  mistyped label gets a *did you mean* — and which inputs the script does have. The run happens either way.
+  `null` puts an input back to its default; an explicit `{}` means all defaults. When the script pane holds
+  this very script, its Settings show the agent's values and a change there re-runs it; an agent run never
+  overwrites the operator's draft and stays out of the pane's run list. `mode: show` with `inputs` loads the
+  editor with the values and waits for Run. The values are saved with the last run, so a reload or a market
+  change keeps them.
+
 ### Fixed
 
 - **With the drawer open, one Escape closed the script pane and left the drawer open** — the reverse of
