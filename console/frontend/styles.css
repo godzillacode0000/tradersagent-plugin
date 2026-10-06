@@ -764,7 +764,8 @@ pre {
   min-width: 2.6em; box-sizing: border-box;
   text-align: right; color: var(--lx-fg-faint);
   font-family: var(--lx-font-mono);
-  font-size: 12.5px; line-height: 1.55;
+  /* Operator override (6 Oct): half the doc's 12.5px — code + gutter only. */
+  font-size: 6.25px; line-height: 1.55;
   border-right: 1px solid var(--lx-border);
   scrollbar-width: none;
 }
@@ -785,7 +786,7 @@ pre {
    render): if the script is huge, or anything fails, the plain text simply shows. */
 .script__code { position: relative; flex: 1; min-width: 0; overflow: hidden; }
 .script__hl, .script__src {
-  font-family: var(--lx-font-mono); font-size: 12.5px; line-height: 1.55; tab-size: 2;
+  font-family: var(--lx-font-mono); font-size: 6.25px; line-height: 1.55; tab-size: 2;
   font-variant-ligatures: none; font-kerning: none; letter-spacing: 0; white-space: pre; overflow-wrap: normal;
   text-rendering: geometricPrecision;      /* fractional advances on both, so a run split into spans lands where one run does */
 }

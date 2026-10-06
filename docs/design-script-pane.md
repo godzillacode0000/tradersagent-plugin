@@ -59,7 +59,8 @@ by hand into our CSS. Relevant items from `obsidianui.dev/r/registry.json` (73 i
 6. **Motion** — 120–160ms, ease-out, `transform`/`opacity` only. The fold = 140ms height/opacity. No hover
    scale, no extra shadows.
 7. **Type** — Inter for names/labels (12.5px), mono 12.5px for code + meta, 11.5px meta floor. **No new
-   fonts** (offline rule; no downloads).
+   fonts** (offline rule; no downloads). *Operator override (6 Oct): the script editor + gutter run at
+   **6.25px** (half) — meta stays 12.5px.*
 
 ## Do-not (operator's taste — decided)
 
