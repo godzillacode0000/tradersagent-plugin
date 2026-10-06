@@ -430,9 +430,11 @@ class Styles(unittest.TestCase):
 
     def test_both_layers_set_every_glyph_property_alike(self):
         shared = rule(CSS, ".script__hl, .script__src")
-        for decl in ("font-family: var(--lx-font-mono)", "font-size: 12.5px", "line-height: 1.55", "tab-size: 2",
+        for decl in ("font-family: var(--lx-font-mono)", "line-height: 1.55", "tab-size: 2",
                      "font-variant-ligatures: none", "letter-spacing: 0", "white-space: pre", "text-rendering: geometricPrecision"):
             self.assertIn(decl, shared)
+        # the size is the operator's to set (6 Oct: 6.25px); what matters is that ONE rule sets it for both layers
+        self.assertRegex(shared, r"font-size: [\d.]+px")
 
     def test_the_textarea_keeps_the_caret_and_the_selection_and_loses_only_its_ink(self):
         self.assertRegex(CSS, r"\.script__edit\.is-hl \.script__src \{ color: transparent; -webkit-text-fill-color: transparent; caret-color: var\(--lx-fg\); \}")
