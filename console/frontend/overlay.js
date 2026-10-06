@@ -106,15 +106,20 @@
   /** Put the host exactly over the price pane, so "top_left" means the pane's top-left corner. */
   function placeTablesHost() {
     const hostEl = ensureTables();
-    const target = chartEl();
     const pane = paneCanvas();
-    if (!hostEl || !target || !pane) return hostEl;
+    if (!hostEl || !pane) return hostEl;
     try {
-      const t = target.getBoundingClientRect();
+      /* Offset relative to the host's OWN PARENT, not the chart element. The host lives in the
+         candle canvas's parent (see ensureTables) — subtracting the chart-relative offset from a
+         parent-relative `left` counted the pane's position TWICE (measured 6 Oct: pane at 44,39;
+         host landed at 88,78, so a `middle_right` table's right edge sat past the page and the
+         page clipped the label column mid-word — the operator's "the table reaches the edge"). */
+      const parent = hostEl.parentElement || chartEl();
       const p = pane.getBoundingClientRect();
+      const pr = parent.getBoundingClientRect();
       if (p.width < 2 || p.height < 2) return hostEl;
       Object.assign(hostEl.style, {
-        left: Math.round(p.x - t.x) + 'px', top: Math.round(p.y - t.y) + 'px',
+        left: Math.round(p.x - pr.x) + 'px', top: Math.round(p.y - pr.y) + 'px',
         width: Math.round(p.width) + 'px', height: Math.round(p.height) + 'px',
         right: 'auto', bottom: 'auto'
       });
@@ -172,7 +177,7 @@
           // let it collapse to its content. Without this, a colspan header splits its width evenly
           // and the icon column eats ~100px the labels need — measured 6 Oct on the TET checklist:
           // the ○ column was 116px wide while the label column clipped "CONFIRMATION" to "CONFIRMAT".
-          if (txt.trim().length > 0 && txt.trim().length <= 2) td.style.width = '1%';
+          if (txt.trim().length > 0 && txt.trim().length <= 2) td.style.width = '1px';
           td.textContent = txt;
           tr.appendChild(td);
         }
