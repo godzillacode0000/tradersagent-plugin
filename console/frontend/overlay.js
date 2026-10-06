@@ -167,7 +167,13 @@
             padding: '3px 6px', whiteSpace: 'nowrap', lineHeight: '1.25',
             border: Math.max(0, Number(t.border_width) || 0) + 'px solid ' + (t.border_color || 'transparent')
           });
-          td.textContent = String(cell.text == null ? '' : cell.text);
+          const txt = String(cell.text == null ? '' : cell.text);
+          // A cell holding one or two characters is an icon column (○ / ✔ / ƒ in these dashboards):
+          // let it collapse to its content. Without this, a colspan header splits its width evenly
+          // and the icon column eats ~100px the labels need — measured 6 Oct on the TET checklist:
+          // the ○ column was 116px wide while the label column clipped "CONFIRMATION" to "CONFIRMAT".
+          if (txt.trim().length > 0 && txt.trim().length <= 2) td.style.width = '1%';
+          td.textContent = txt;
           tr.appendChild(td);
         }
         tbl.appendChild(tr);
