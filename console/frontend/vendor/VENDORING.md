@@ -58,3 +58,12 @@ Two gotchas, both learned the hard way:
 The pane answers that question itself now: the heartbeat carries
 `diag: {wsReady, wsError, cells, activeChart, consoleChart}` (`frontend/chart-bridge.js` →
 `backend/chart_bridge.py`), which is exactly how the missing `@zag-js/vanilla` specifier was found.
+
+## After a vendor upgrade
+
+`index.html` lists the page's whole ES-module graph as `<link rel="modulepreload">` so the browser fetches it in
+parallel (see CHANGELOG, 6 Oct). When a vendored family changes its files, regenerate the list:
+
+    python3 tools/modulepreload.py --write
+
+`test_boot_speed.py` runs `--check`, so a stale list fails the suite instead of quietly slowing the boot.
