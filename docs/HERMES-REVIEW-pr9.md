@@ -12,7 +12,7 @@
   322 bars, studies = Simple Moving Average (study) + agent-draw (overlay) + sma (native). In a
   cold Chromium: `hasApp: true`, title "🐴 LuxAlgo Library × Vela — MVP".
 - **Suite**: `python3 -m unittest discover -s console/backend/tests -t console/backend/tests -q`
-  → result appended below / see `suite_pr9.txt` on the box.
+  → **Ran 1039 tests in 129.3s — OK (skipped=68)**, exit 0 (`suite_pr9.txt` on the box).
 - **Server memo**: `/api/bars?symbol=BTCUSDT&interval=1d&limit=322` — cold after TTL 0.142 s /
   0.231 s; warm 0.003 s. Memo works; failures are not served twice (held by the new tests).
 
