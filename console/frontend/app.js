@@ -683,6 +683,32 @@ function marketFromDom() {
   };
 }
 
+/* The console's bars for one market, shared. The heartbeat (every 4 s), the overlay and a Pine run each asked for
+   them, and each ask was a live round trip to the venue — 16 in 30 idle seconds with one tab open (measured 6 Oct).
+   Asks within BARS_SHARE_MS of each other, and asks that arrive while one is in flight, share ONE fetch; an empty or
+   failed answer is never kept; every caller gets its own array. */
+const BARS_SHARE_MS = 3000;
+const sharedBars = new Map();
+function consoleBars(symbol, interval, want) {
+  const key = symbol + '|' + interval + '|' + want;
+  const now = Date.now();
+  const hit = sharedBars.get(key);
+  if (hit && now - hit.at < BARS_SHARE_MS) return hit.promise.then((rows) => rows.slice());
+  for (const [k, v] of sharedBars) if (now - v.at >= BARS_SHARE_MS) sharedBars.delete(k);
+  const promise = (async () => {
+    const res = await fetch(`/api/bars?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${want}`);
+    const payload = await res.json();
+    // The console wraps every endpoint the same way: { ok, data: { bars, count, ... } }.
+    const rows = payload && payload.ok && payload.data && Array.isArray(payload.data.bars) ? payload.data.bars : [];
+    return rows.map((r) => ({ time: r.time, open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume }));
+  })();
+  const entry = { at: now, promise };
+  sharedBars.set(key, entry);
+  const forget = () => { if (sharedBars.get(key) === entry) sharedBars.delete(key); };
+  promise.then((rows) => { if (!rows.length) forget(); }, forget);
+  return promise.then((rows) => rows.slice());
+}
+
 /**
  * The bars PineTS runs over. Vela does not document one public bars getter across
  * builds, so try each accessor that exists and fall back to the venue's own public
@@ -719,17 +745,8 @@ async function chartBars(opts) {
     // Access-Control-Allow-Origin for http://127.0.0.1:8787, so the browser blocked this fetch and
     // every run reported "0 bars available". Same origin, and the console normalises the chart's
     // display timeframe ("30M") to the lowercase interval the venue accepts.
-    const res = await fetch(`/api/bars?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${want}`);
-    const payload = await res.json();
-    // The console wraps every endpoint the same way: { ok, data: { bars, count, ... } }.
-    const rows = payload && payload.ok && payload.data && Array.isArray(payload.data.bars)
-      ? payload.data.bars
-      : null;
-    if (rows && rows.length) {
-      return rows.map((r) => ({
-        time: r.time, open: r.open, high: r.high, low: r.low, close: r.close, volume: r.volume
-      }));
-    }
+    const rows = await consoleBars(symbol, interval, want);
+    if (rows.length) return rows;
   } catch {}
   return [];
 }

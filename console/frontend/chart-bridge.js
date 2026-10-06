@@ -227,14 +227,11 @@
     try {
       const c = chart();
       const market = marketFromDom();
-      let last = null;
-      if (typeof window.chartBars === 'function') {
-        const bars = await window.chartBars();
-        if (bars && bars.length) last = bars[bars.length - 1].close;
-      }
+      // One read of the bars per beat (it used to be two, each a live fetch when the chart hands none over).
       // chart.market.timeframe is stale in this build (says 4h on a 15m chart), so the heartbeat
       // reports the timeframe the bars actually have; the raw field rides along for diagnostics.
-      const barsList = typeof window.chartBars === 'function' ? await window.chartBars() : [];
+      const barsList = typeof window.chartBars === 'function' ? ((await window.chartBars()) || []) : [];
+      const last = barsList.length ? barsList[barsList.length - 1].close : null;
       const inferred = (window.PineTSRunner && window.PineTSRunner.marketContext)
         ? window.PineTSRunner.marketContext(barsList) : null;
       await api('/api/chart/state', {

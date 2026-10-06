@@ -1137,10 +1137,37 @@ def _fetch_klines(symbol: str, interval: str, limit: int, end_time: int | None =
         return json.load(res)
 
 
+# The same (symbol, interval, limit) asked for again within this many seconds is answered from memory. The page's
+# heartbeat, the overlay, the agent and a Pine run all ask for the chart's bars, and each used to be a live round
+# trip to the venue (measured 6 Oct: 16 in 30 idle seconds with one tab open). Only a clean answer is kept — a
+# failed or partial one is never served twice.
+BARS_TTL_S = 1.5
+_BARS_MEMO: dict = {}
+_BARS_MEMO_LOCK = threading.Lock()
+
+
 def fetch_bars(symbol: str, interval: str, limit: int) -> dict:
-    """`limit` most recent bars, oldest first, paged back from now. Never raises: a failed page is an
-    answer — the bars gathered so far come back with `partial: true` and the reason in `error`."""
+    """`limit` most recent bars, oldest first, paged back from now (the same ask within BARS_TTL_S is answered
+    from memory). Never raises: a failed page is an answer — the bars gathered so far come back with
+    `partial: true` and the reason in `error`."""
     limit = max(1, min(BARS_MAX, int(limit)))
+    key = (symbol, interval, limit)
+    now = time.monotonic()
+    with _BARS_MEMO_LOCK:
+        hit = _BARS_MEMO.get(key)
+        if hit and now - hit[0] < BARS_TTL_S:
+            return json.loads(hit[1])
+    out = _fetch_bars_uncached(symbol, interval, limit)
+    if not out.get("error") and out.get("bars"):
+        with _BARS_MEMO_LOCK:
+            if len(_BARS_MEMO) > 64:
+                for k in [k for k, v in _BARS_MEMO.items() if now - v[0] >= BARS_TTL_S] or list(_BARS_MEMO)[:32]:
+                    _BARS_MEMO.pop(k, None)
+            _BARS_MEMO[key] = (time.monotonic(), json.dumps(out))
+    return out
+
+
+def _fetch_bars_uncached(symbol: str, interval: str, limit: int) -> dict:
     rows: list = []
     error = None
     end_time = None
