@@ -1099,7 +1099,8 @@ pre {
 }
 .last-action:empty { display: none; }
 /* The footer only showed while a toast was live, so the activity line vanished with it. A mutation
-   now keeps the bar up on its own: the spec wants this line ALWAYS on (audit, not workspace). */
+   keeps the bar up on its own; a success fades after ~6 s and a failure stays (operator, 6 Oct —
+   the always-on audit line read as noise beside the chart). */
 .statusbar.has-activity { display: flex; }
 .toast:not(:empty) { flex: 0 1 auto; }
 

@@ -231,14 +231,28 @@ function flashChart() {
 /* The activity line (26 Sep, spec §5): "Last: drew 12-bar high/low", tool in the title. Only real
    mutations call this — searches and "loading…" are not "what the agent did to my chart". */
 const ACTIVITY_MAX = 140;   // one sentence the eye can take in; the whole thing stays in the tooltip
+/* Operator, 6 Oct: a success fades after ~6 s (chart-first), a failure keeps the bar up until the
+   next mutation. The line was made always-on for the audit; beside the chart it read as noise. */
+const ACTIVITY_HOLD_MS = 6000;
+const ACTIVITY_STICKY = /⚠|\b(fail|failed|error|cannot|not runnable|refused)\b/i;
+let activityTimer = 0;
 function noteActivity(text, tool) {
   const line = document.getElementById('last-action');
   if (!line) return;
   const full = String(text == null ? '' : text);
-  line.textContent = full.length > ACTIVITY_MAX ? full.slice(0, ACTIVITY_MAX - 1).trimEnd() + '…' : full;
+  const shown = full.length > ACTIVITY_MAX ? full.slice(0, ACTIVITY_MAX - 1).trimEnd() + '…' : full;
+  line.textContent = shown;
   line.title = tool ? tool + ' · ' + full : full;
   const bar = line.closest('.statusbar');
   if (bar) bar.classList.add('has-activity');
+  clearTimeout(activityTimer);
+  if (ACTIVITY_STICKY.test(full)) return;   // failures keep the bar until something else says otherwise
+  activityTimer = setTimeout(() => {
+    if (line.textContent !== shown) return; // a newer note owns the line now
+    line.textContent = '';
+    line.title = '';
+    if (bar) bar.classList.remove('has-activity');
+  }, ACTIVITY_HOLD_MS);
 }
 
 window.taToast = (m, b) => toast(m, b);          // broker.js speaks through the footer slip
