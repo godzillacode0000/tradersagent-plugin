@@ -33,6 +33,12 @@ for fam in pinets vela vela-pinets zag; do
   mkdir -p "$LIVE/frontend/vendor/$fam"
   cp -r "$HERE/console/frontend/vendor/$fam/." "$LIVE/frontend/vendor/$fam/"
 done
+# The bundled extra indicator scripts (licence-gated: MIT/MPL-2.0 only — see THIRD-PARTY.md and
+# test_extra_scripts.py) live in their own directory for the same reason the vendor families do:
+# the *.js glob above does not descend. Mirrored, not merged, so a removed script cannot linger.
+rm -rf "$LIVE/frontend/extra"
+mkdir -p "$LIVE/frontend/extra"
+cp -r "$HERE/console/frontend/extra/." "$LIVE/frontend/extra/"
 cp "$HERE"/console/backend/{server.py,chart_bridge.py,chart_stream.py,agents_store.py,chat.py,backtest_service.py,library_thumbs.py,broker.py,edgestats.py} \
   "$LIVE/backend/"
 cp "$HERE"/console/bin/trader-chart "$LIVE/bin/trader-chart"

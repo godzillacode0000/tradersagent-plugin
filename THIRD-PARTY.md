@@ -194,3 +194,23 @@ third-party browser builds, each beside its licence:
 
 `console/frontend/vendor/VENDORING.md` records versions, the exact commands that produced the copies,
 the two gotchas (`process.env.NODE_ENV`, `.mjs` MIME) and how to update them.
+
+## Extra indicator scripts (`console/frontend/extra/`)
+
+Community indicator scripts bundled with the console (offered beside the LuxAlgo catalogue). The
+gate: **MIT / MPL-2.0 only** — never GPL, never an unlicensed source (`test_extra_scripts.py`
+enforces it, and `tools/sync-live.sh` mirrors the directory).
+
+- **`openSourceFractal.pine` — Open Source Fractal** (slug `open-source-fractal`).
+  **Licence: MIT** — <https://github.com/cantolab/open-source-fractal>. Bundled with the MIT notice
+  prepended (the source file carried none); the licence text travels as `LICENSE-cantolab-MIT.txt`.
+- **`unicorn-model.pine` — Unicorn Model** (slug `unicorn-model`).
+  **Licence: MPL-2.0** — <https://github.com/fxraptor-alpha/pinescript-indicators>. Its own MPL
+  header is kept; the licence text travels as `LICENSE-fxraptor-MPL-2.0.txt`.
+
+Both were run through the vendored engine before bundling: `openSourceFractal` 1029 ms / 4 box /
+31 line / 14 label / 1 table; `unicorn-model` 2594 ms / 2 box / 1 line / 2 label / 1 table (with
+its exotic 15d/45d/15w higher-timeframe fetches falling back to the chart's bars, as the run
+reported). Scripts from the same four source repos that are GPL-3.0 or unlicensed (JustExecution's
+HTF suite, ict2023trader's set, fxraptor's `fractal-model`) are **not** bundled — concepts only, and
+any reimplementation is our own Pine (see `docs/PLAN-pinets-bump-and-indicator-pack.md`).

@@ -1,0 +1,21 @@
+{
+  "note": "Extra indicator scripts bundled with the console and offered beside the LuxAlgo catalogue. Licences allowed here: MIT / MPL-2.0 only — never GPL, never an unlicensed source (see THIRD-PARTY.md and test_extra_scripts.py).",
+  "scripts": [
+    {
+      "slug": "open-source-fractal",
+      "name": "Open Source Fractal",
+      "family": "Structure",
+      "licence": "MIT",
+      "source": "https://github.com/cantolab/open-source-fractal",
+      "file": "openSourceFractal.pine"
+    },
+    {
+      "slug": "unicorn-model",
+      "name": "Unicorn Model",
+      "family": "SMC / ICT",
+      "licence": "MPL-2.0",
+      "source": "https://github.com/fxraptor-alpha/pinescript-indicators",
+      "file": "unicorn-model.pine"
+    }
+  ]
+}
