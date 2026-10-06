@@ -299,6 +299,25 @@ window.TraderRun = (function () {
     return notes;
   }
 
+  /** Plot lines that came back with no value on any bar — a lookback longer than the history (an input set
+   *  higher than the bars allow), or a condition that never held. Boolean and object points count as values. */
+  function emptyPlots(raw) {
+    const plots = raw && raw.plots;
+    if (!plots || typeof plots !== 'object') return [];
+    const out = [];
+    for (const [name, plot] of Object.entries(plots)) {
+      if (name.startsWith('__')) continue;                         // drawing containers are not lines
+      const data = Array.isArray(plot) ? plot : (plot && Array.isArray(plot.data) ? plot.data : null);
+      if (!data || !data.length) continue;
+      const has = data.some((p) => {
+        const v = p && typeof p === 'object' && !Array.isArray(p) && 'value' in p ? p.value : p;
+        return v !== null && v !== undefined && !(typeof v === 'number' && !Number.isFinite(v));
+      });
+      if (!has) out.push(name);
+    }
+    return out;
+  }
+
   async function run(pine, name, opts) {
     name = name || 'agent';
     if (!pine || !String(pine).trim()) return { ok: false, reason: 'no Pine source in the command' };
@@ -367,6 +386,13 @@ window.TraderRun = (function () {
      * series. Those are paths now, so gate on both — gating on `containers` alone meant every
      * series-only indicator computed correctly and painted nothing. */
     const hasPaths = !!(geo.polylines && geo.polylines.length);
+    /* A run whose every line is empty and which drew nothing else looks like a normal "Ran · 0 series". Say why. */
+    const empties = emptyPlots(res.raw);
+    if (!containers && !hasPaths && !(res.series && res.series.length) && empties.length) {
+      const shown = empties.slice(0, 3).map((n) => '\u201c' + n + '\u201d').join(', ') + (empties.length > 3 ? ' and ' + (empties.length - 3) + ' more' : '');
+      warnings.push('nothing was plotted: ' + shown + (empties.length === 1 ? ' has' : ' have') + ' no value on any of these ' + bars.length
+        + ' bars \u2014 a lookback longer than the history (an input set higher than the bars allow), or a condition that never held');
+    }
     if (containers || hasPaths) {
       if (!window.ChartOverlay) {
         drawFail = 'no overlay on this page — reload the console';
@@ -572,5 +598,5 @@ window.TraderRun = (function () {
   }
   window.addEventListener('ws-ready', watchMarket, { once: true });
 
-  return { run, summarize, flatten, reset, restore, rerun, lookbackNeeded, depthFor, scriptNotes, list: () => applied.slice() };
+  return { run, summarize, flatten, reset, restore, rerun, lookbackNeeded, depthFor, scriptNotes, emptyPlots, list: () => applied.slice() };
 })();

@@ -67,6 +67,9 @@
   }
 
   const NUMERIC = new Set(['int', 'float', 'price']);
+  /* A timeframe as Pine spells it: "" (the chart's own), minutes as a number ("15", "240"), or a count and a unit
+     ("1D", "4H", "3M", "30S"), or a bare unit ("D", "W", "M"). */
+  const TIMEFRAME = /^(?:\d+[sSdDwWmMhH]?|[dDwWmM])?$/;
 
   /** The operator's raw value -> what the engine should get, or { ok:false } when it is not usable (the
    *  caller then falls back to the default). Numbers are clamped to the input's own min / max and an
@@ -87,6 +90,7 @@
     if (raw == null) return { ok: false };
     const s = String(raw);
     if (t === 'color') return /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(s) ? { ok: true, value: s.toUpperCase() } : { ok: false };
+    if (t === 'timeframe') return TIMEFRAME.test(s.trim()) ? { ok: true, value: s.trim() } : { ok: false };
     if (Array.isArray(meta.options) && meta.options.length && !meta.options.includes(s)) return { ok: false };
     return { ok: true, value: s };
   }
@@ -230,6 +234,7 @@
     if (Array.isArray(meta.options) && meta.options.length) return 'must be one of: ' + meta.options.join(', ');
     if (NUMERIC.has(t) || t === 'time') return 'must be a number' + (t === 'int' ? ' (whole)' : '');
     if (t === 'color') return 'must be a colour like #2962FF or #2962FF80';
+    if (t === 'timeframe') return 'must be a timeframe like 15, 60, 240, D, W or M (or empty for the chart\u2019s own)';
     return 'is not a usable value (' + JSON.stringify(raw) + ')';
   }
 

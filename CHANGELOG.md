@@ -56,6 +56,23 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Fixed
 
+- **Audit round 4, phase C: the four findings that were ours** (about 900 engine runs under Node; the engine-side
+  findings are in the audit report, not here).
+  - `docs/studies/pine/fvg-mitigation.pine` failed at its default inputs on any data without a gap yet
+    (`Index 0 is out of bounds [array.get]`): a Pine `for` whose upper bound is below its start counts down, so
+    `for i = 0 to shown - 1` with `shown == 0` still ran. The draw block is now guarded by
+    `array.size(gaps) > 0`; its comment that PineTS refuses `while` is gone (`while` runs).
+  - A run whose every plot line is empty — a lookback longer than the history set through an input, or a
+    condition that never held — and which drew nothing else read as a normal "Ran · 0 series". It now says
+    "nothing was plotted: “s” has no value on any of these N bars …" (a ⚠ note on the status line, the run list
+    and the agent's reply).
+  - An `input.timeframe` override of "banana" was accepted. Pine's spellings ("", "15", "240", "D", "1D", "4H",
+    "W", "3M", "30S") are; anything else is refused with a sentence, in the pane and for the agent.
+  - Higher-timeframe rows are used oldest-first, one per bar time: a source that sent them newest-first made
+    `request.security` return NaN on every bar. `/api/bars` was already ascending, so for it nothing changes.
+  - Held by `test_audit_round4_fixes.py` (study scripts run on flat, trending and sine data; the unguarded script
+    is the control that fails; each fix mutation-checked).
+
 - **With the drawer open, one Escape closed the script pane and left the drawer open** — the reverse of
   the intended order (found by Hermes in Desktop, 5 Oct; the bug dates from the drawer, 3 Oct). The drawer
   check lived in a second Escape handler bound after `escapeKeydown`, which had already closed the pane and

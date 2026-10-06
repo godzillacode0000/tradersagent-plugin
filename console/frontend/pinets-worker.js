@@ -147,6 +147,17 @@ function venueInterval(tf) {
   return { interval: n + u, ms: MS[u] * n };
 }
 
+/** Higher-timeframe rows as the engine needs them: oldest first, one row per bar time. A source that sends them
+ *  newest-first, or repeats a bar, made request.security return NaN for every bar (measured 6 Oct); /api/bars
+ *  is ascending, so for it this is a single pass that changes nothing. A repeated time keeps the later row. */
+function tidyRows(candles) {
+  let ascending = true;
+  for (let i = 1; i < candles.length; i++) if (!(candles[i].openTime > candles[i - 1].openTime)) { ascending = false; break; }
+  if (ascending) return candles;
+  const byTime = new Map();
+  for (const c of candles) if (Number.isFinite(c.openTime)) byTime.set(c.openTime, c);
+  return [...byTime.values()].sort((a, b) => a.openTime - b.openTime);
+}
 function makeSource(bars, msg, report) {
   const own = venueInterval(msg.timeframe).interval;
   const ownSym = String(msg.symbol || '').toUpperCase();
@@ -168,8 +179,8 @@ function makeSource(bars, msg, report) {
           const body = await res.json();
           const rows = body && body.ok && body.data && Array.isArray(body.data.bars) ? body.data.bars : [];
           if (!rows.length) throw new Error((body && body.data && body.data.error) || 'no bars');
-          return rows.map((r) => ({ openTime: r.time, closeTime: r.time + iv.ms - 1, open: r.open, high: r.high,
-                                    low: r.low, close: r.close, volume: r.volume }));
+          return tidyRows(rows.map((r) => ({ openTime: r.time, closeTime: r.time + iv.ms - 1, open: r.open, high: r.high,
+                                            low: r.low, close: r.close, volume: r.volume })));
         })());
       }
       try {
