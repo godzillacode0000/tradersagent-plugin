@@ -50,10 +50,11 @@ if bearGap
     array.push(gaps, Gap.new(top = low[2], btm = high, left = bar_index - 2, isbull = false))
 
 // The list cannot grow forever: on a busy chart every other bar opens a gap.
-// Measured: PineTS refuses `while` outright ("`while` loops are unimplemented"), so trimming is a
-// counted `for` with a shift — the same result, built from a construct the engine actually runs.
-// The count is computed first and the loop only runs when there is something to trim; a `for` whose
-// upper bound is negative crashes the engine ("Index -1 is out of bounds, array size is 0").
+// Trimming is a counted `for` with a shift. (An earlier PineTS refused `while`; it runs now — measured
+// 6 Oct — but the counted form is just as clear and does not depend on that.)
+// The count is computed first and the loop only runs when there is something to trim: a Pine `for`
+// whose upper bound is below its start counts DOWN, so `for i = 1 to excess` with excess <= 0 would
+// still run — and read index -1 of an array that may be empty.
 int excess = array.size(gaps) - maxKeep
 if excess > 0
     for i = 1 to excess
@@ -73,7 +74,9 @@ if array.size(gaps) > 0
 // Drawing
 // Boxes are redrawn from the remembered list rather than mutated, so what is on screen is always a
 // statement about the current list. Only the tail of the list is drawn — older gaps are history.
-if barstate.islast
+// `array.size(gaps) > 0` matters: with no gap yet, `shown - 1` is -1 and `for i = 0 to -1` runs (it
+// counts down, in Pine as in PineTS), so the first array.get would read an empty list.
+if barstate.islast and array.size(gaps) > 0
     int shown = math.min(array.size(gaps), maxKeep)
     for i = 0 to shown - 1
         Gap g = array.get(gaps, i)

@@ -39,7 +39,7 @@ def top_level(src, name):
 def worker_pieces():
     src = read("console", "frontend", "pinets-worker.js")
     ms = re.search(r"^const MS = \{[^}]*\};", src, re.M).group(0)
-    return ms + "\n" + "\n".join(top_level(src, n) for n in ("attachSymbolInfo", "venueInterval", "makeSource"))
+    return ms + "\n" + "\n".join(top_level(src, n) for n in ("attachSymbolInfo", "venueInterval", "tidyRows", "makeSource"))
 
 
 def run_node(script, module=True):
