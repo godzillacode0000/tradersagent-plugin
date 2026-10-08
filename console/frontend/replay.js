@@ -110,7 +110,9 @@
      {active:false} clears whatever was left over (a reload mid-replay, a killed page). */
   async function push(px) {
     if (state.active && px == null) return;              // nothing to price the fills with yet
-    const body = { active: !!state.active, price: state.active ? px : null, time: state.active ? state.cursorTime : null };
+    let sym = null;
+    try { const m = typeof window.chartMarket === 'function' ? window.chartMarket() : null; sym = (m && m.symbol) || null; } catch (err) { sym = null; }
+    const body = { active: !!state.active, price: state.active ? px : null, time: state.active ? state.cursorTime : null, symbol: state.active ? sym : null };
     const key = JSON.stringify(body);
     if (key === lastPush) return;
     try { await post('/api/broker/replay', body); lastPush = key; }

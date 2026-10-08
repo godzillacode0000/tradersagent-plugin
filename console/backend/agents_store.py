@@ -39,6 +39,17 @@ def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%S%z")
 
 
+NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$")
+SESSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+
+
+def _count(v) -> int:
+    try:
+        return max(0, int(v or 0))
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("counters must be whole numbers") from None
+
+
 def validate(record: dict) -> dict:
     """Normalise a record or raise ValueError. Never trust the browser."""
     if not isinstance(record, dict):
@@ -57,6 +68,16 @@ def validate(record: dict) -> dict:
     if not isinstance(skills, list) or not isinstance(toolsets, list):
         raise ValueError("skills and toolsets must be lists of strings")
     counters = record.get("counters") or {}
+    if not isinstance(counters, dict):
+        raise ValueError("counters must be an object")
+    # These become argv for the agent CLI (`-s`, `-t`, `--resume`). A value that begins with "-" would be read there
+    # as another option (`-t --yolo`), so each must look like a name (audit SEC-2).
+    for label, values in (("skills", skills), ("toolsets", toolsets)):
+        for v in values[:8]:
+            if not isinstance(v, str) or not NAME_RE.match(v):
+                raise ValueError(f"each of {label} must be a plain name (letters, digits, . _ : / -, no leading dash), got {v!r}")
+    if record.get("session_id") and not SESSION_RE.match(str(record["session_id"])):
+        raise ValueError("session_id must be a plain token (letters, digits, . _ : -, no leading dash)")
     return {
         "id": sid,
         "name": name[:64],
@@ -67,8 +88,8 @@ def validate(record: dict) -> dict:
         "session_id": (str(record["session_id"]) if record.get("session_id") else None),
         "created_at": str(record.get("created_at") or _now()),
         "last_active": record.get("last_active"),
-        "counters": {"runs": int(counters.get("runs", 0)),
-                     "backtests": int(counters.get("backtests", 0))},
+        "counters": {"runs": _count(counters.get("runs")),
+                     "backtests": _count(counters.get("backtests"))},
     }
 
 

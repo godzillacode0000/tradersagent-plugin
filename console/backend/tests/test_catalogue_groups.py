@@ -39,7 +39,7 @@ class TheCatalogueComesInOnePiece(unittest.TestCase):
     def test_the_endpoint_walks_the_pages_once_and_keeps_them(self):
         src = read(SERVER)
         self.assertIn('"/api/catalogue"', src)
-        body = src.split("def ep_catalogue(", 1)[1].split("\ndef ", 1)[0]
+        body = src.split("def _ep_catalogue(", 1)[1].split("\ndef ", 1)[0]
         self.assertIn('"sort": ["family"]', body,
                       "the server's own grouping means the rows arrive clustered and the page can walk them")
         self.assertIn("CATALOGUE_PAGE", body, "the MCP caps a page at 100 rows; the walk has to loop")
@@ -51,7 +51,7 @@ class TheCatalogueComesInOnePiece(unittest.TestCase):
         """Half the catalogue carries no family; its CONCEPTS do. Walk them and 390 of 414 rows land
         in a real group (measured 27 Sep) — otherwise the rail opens with a 414-row "Unfiled"."""
         src = read(SERVER)
-        body = src.split("def ep_catalogue(", 1)[1].split("\ndef ", 1)[0]
+        body = src.split("def _ep_catalogue(", 1)[1].split("\ndef ", 1)[0]
         self.assertIn("ep_concepts(", body, "the concept walk shares the catalogue's cache and TTL")
         self.assertIn('concept = concepts.get(row.get("slug") or "")', body)
         self.assertIn('row["family"] = concept.get("family")', body)

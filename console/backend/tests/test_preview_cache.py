@@ -78,7 +78,7 @@ class TheSyncListCoversEveryModule(unittest.TestCase):
         """The console's rule: no third-party imports (the resizer is a CLI, not a Python dep)."""
         src = read(THUMBS)
         allowed = {"__future__", "hashlib", "os", "re", "shutil", "subprocess", "threading", "time",
-                   "urllib", "concurrent", "pathlib"}
+                   "urllib", "concurrent", "pathlib", "tempfile"}
         for line in src.splitlines():
             match = re.match(r"^(?:import|from)\s+([a-zA-Z_][\w.]*)", line)
             if match:
@@ -112,7 +112,18 @@ class TheEndpointIsLocalAndCheap(unittest.TestCase):
         self.assertIn("def _allowed(", src)
         body = src.split("def thumb(", 1)[1]
         self.assertIn("if not _allowed(url):", body, "thumb() must refuse a foreign URL, not fetch it")
-        self.assertIn('if not url.startswith("https://"):', src, "https only, even for a friendly host")
+        # behaviour, not a string: https only, exact hosts only (a "contains luxalgo" rule let other buckets in)
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("library_thumbs_allow", THUMBS)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertTrue(mod._allowed("https://luxalgo-production.s3.amazonaws.com/a.png"))
+        for url in ("http://luxalgo-production.s3.amazonaws.com/a.png",
+                    "https://luxalgo-evil.s3.amazonaws.com/a.png",
+                    "https://attacker-luxalgo.s3.eu-west-1.amazonaws.com/a.svg",
+                    "https://luxalgo.s3-website-us-east-1.amazonaws.com/a",
+                    "https://evil.com/luxalgo-production.s3.amazonaws.com/", "", None):
+            self.assertFalse(mod._allowed(url), url)
 
     def test_the_second_bucket_is_actually_fetched(self):
         """Refusing it was a live bug: four cards on page one had no picture (measured 27 Sep)."""
@@ -145,14 +156,14 @@ class TheEndpointIsLocalAndCheap(unittest.TestCase):
         self.assertIn("def warm_catalogue_thumbs(pages: int = 0) -> None:", src)
         self.assertIn("limit = pages or MAX_WARM_PAGES", src)
         self.assertIn("MAX_WARM_PAGES = 40", src, "a runaway page walk needs a guard rail")
-        self.assertIn('os.environ.get("TRADERS_AGENT_THUMB_WARM_PAGES", "0")', src)
+        self.assertIn('_env_int("TRADERS_AGENT_THUMB_WARM_PAGES", 0)', src)
         self.assertIn('out["warmer"] = dict(_WARM)', src, "progress must be observable, not guessed")
 
     def test_the_resizer_is_a_cli_with_a_honest_fallback(self):
         src = read(THUMBS)
         for tool in ("vips", "magick", "convert", "ffmpeg"):
             self.assertIn(f'"{tool}"', src, f"{tool} is part of the fallback chain")
-        self.assertIn('return raw, "image/png"', src,
+        self.assertIn('return raw, ("image/"', src,
                       "no converter on a machine must serve the real picture, not a blank tile")
 
     def test_a_missing_preview_is_a_404_not_a_placeholder(self):
