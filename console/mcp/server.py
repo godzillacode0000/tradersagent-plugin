@@ -78,7 +78,7 @@ except ImportError:  # pragma: no cover - running as a path, not a package
     import sys as _sys
 
     _sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from freshness import DEAD_AFTER_S, STALE_AFTER_S, _command_gate, _freshness
+    from freshness import DEAD_AFTER_S, STALE_AFTER_S, _command_gate, _freshness  # noqa: F401 (re-exported for callers)
 
 try:
     import edge_text

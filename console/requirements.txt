@@ -1,0 +1,3 @@
+# The console itself is stdlib-only. This is its one optional library: the MCP client used for the LuxAlgo Library proxy.
+# Tested against 1.x and 2.x (CI runs both).
+mcp>=1,<3

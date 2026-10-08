@@ -12,7 +12,6 @@ Requires `fastmcp` (the MCP wrapper's own dependency, not the console's).
 
 import importlib.util
 import os
-import sys
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))

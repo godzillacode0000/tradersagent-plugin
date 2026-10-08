@@ -257,7 +257,7 @@ def run_signals(spec: dict) -> dict:
     summary cannot carry. Entries and exits are matched onto the chart's own bar timestamps, and
     timestamps that land on no bar are reported rather than silently dropped.
     """
-    import numpy as _np
+    import numpy as _np  # noqa: F401
     import pandas as _pd
     import vectorbt as _vbt
     fee = float(spec.get("fee", 0.001))

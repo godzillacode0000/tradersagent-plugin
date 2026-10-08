@@ -21,7 +21,6 @@ Each pin below corresponds to a defect or a claim, and each would come back sile
     the fix, its review, and the same door in `script` are pinned here.
 """
 
-import io
 import os
 import socket
 import sys

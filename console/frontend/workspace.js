@@ -192,13 +192,20 @@ state.ready = (async () => {
     const menu = document.createElement('div');
     menu.className = 'ta-more';
     menu.setAttribute('role', 'menu');
-    const close = () => {
+    const opener = document.activeElement;
+    const close = (restore) => {
+      const inside = menu.contains(document.activeElement);
       menu.remove();
       document.removeEventListener('pointerdown', away, true);
       document.removeEventListener('keydown', key, true);
+      /* Esc used to drop focus on <body>: a keyboard user lost their place in the toolbar (audit 8 Oct, G6). */
+      if (restore && inside) {
+        const back = (opener && opener !== document.body && document.contains(opener)) ? opener : anchor;
+        try { if (back && back.focus) back.focus({ preventScroll: true }); } catch (err) { /* nothing to focus */ }
+      }
     };
     const away = (ev) => { if (!menu.contains(ev.target) && !(anchor && anchor.contains(ev.target))) close(); };
-    const key = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); close(); } };
+    const key = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); close(true); } };
     for (const [label, go] of items) {
       const b = document.createElement('button');
       b.type = 'button';

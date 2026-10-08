@@ -40,7 +40,7 @@ class Markup(unittest.TestCase):
     def test_the_sheet_and_its_scrim_exist_and_start_hidden(self):
         for ident in ("edge-sheet", "edge-scrim", "edge-bar", "edge-body", "edge-close", "edge-data", "edge-sub"):
             self.assertIn(f'id="{ident}"', HTML)
-        self.assertIn('id="edge-sheet" aria-hidden="true"', HTML)
+        self.assertIn('id="edge-sheet" role="dialog" aria-modal="true" aria-hidden="true"', HTML)
         self.assertIn('href="./edge.css"', HTML)
         self.assertIn('src="./edge.js"', HTML)
 

@@ -42,7 +42,6 @@ import json
 import secrets
 import os
 import re
-import socketserver
 import sys
 import threading
 import time
@@ -1299,7 +1298,10 @@ def frontend_build() -> str:
     from hours ago and no amount of reloading from the page side reaches it. With the stamp in the
     heartbeat, "this view is running build X while the server serves Y" is a fact, not a guess.
     """
-    frontend = Path(DEFAULT_FRONTEND)
+    # The folder actually being served (--frontend), not the default relative path: from another working directory the
+    # default matched nothing and the stamp was always "0", which defeats the stale-frame check (audit BE-21).
+    served = getattr(getattr(Handler, "static", None), "root", None)
+    frontend = Path(served) if served else Path(DEFAULT_FRONTEND)
     try:
         js_files = list(frontend.glob("*.js"))
         newest = max((f.stat().st_mtime for f in js_files), default=0.0)
@@ -1843,7 +1845,7 @@ CSP = ("default-src 'self'; "
        "img-src 'self' data: blob: https://crypto-icons.ledger.com; "
        "font-src 'self' data:; "
        "connect-src 'self' https://api.binance.com https://api.binance.us https://fapi.binance.com https://dapi.binance.com "
-       "wss://stream.binance.com wss://stream.binance.us wss://fstream.binance.com https://crypto-icons.ledger.com; "
+       "wss://stream.binance.com:* wss://stream.binance.us:* wss://fstream.binance.com:* https://crypto-icons.ledger.com; "
        "object-src 'none'; base-uri 'none'; form-action 'self'")
 
 

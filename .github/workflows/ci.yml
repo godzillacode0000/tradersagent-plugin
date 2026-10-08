@@ -1,13 +1,24 @@
 name: ci
 
+# Pull requests run on the PR; a push runs only on main. (Both triggers on every branch ran everything twice per PR push.)
 on:
   push:
+    branches: [main]
   pull_request:
+
+# The workflow reads the repository and nothing else: no secrets, no writes.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   plugin:
     name: plugin (harness)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,9 +31,32 @@ jobs:
       # The harness's crafted-copy battery: every evasion must fail, every lookalike must pass.
       - run: node tools/verify-plugin-selftest.mjs
 
-  tests:
-    name: tests (unit suite, py${{ matrix.python }})
+  lint:
+    name: lint (names, syntax)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      # Undefined and unused names, and syntax errors: the class of defect that needs no test to find.
+      - run: pip install ruff && ruff check --select F,E9 console tools
+      # Every first-party script must at least parse.
+      - run: for f in console/frontend/*.js plugin/plugin.js; do node --check "$f"; done
+      - run: for f in install.sh console/start.sh tools/sync-live.sh bin/is-enabled.sh; do bash -n "$f"; done
+      # The vendored bundles are what was recorded (a hand edit or a half-applied upgrade fails here), and the
+      # generated preload list follows the module graph.
+      - run: python tools/vendor-sums.py --check
+      - run: python tools/modulepreload.py --check
+
+  tests:
+    name: tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       # 3.14 is the interpreter the operator actually runs: argparse there rejects a bare `%` in a help
@@ -34,46 +68,64 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      # The suite is stdlib-only by design: the study store, the chat bridge, the chart bridge and
-      # the push channel are all covered without a browser, a network, or the app — so this step
-      # installs nothing at all.
-      - name: unit suite (no dependencies)
-        run: python -m unittest discover -s console/backend/tests -t console/backend/tests -v
-      # The MCP wrapper is the one piece that needs a library (fastmcp). REQUIRE_MCP makes a missing
-      # fastmcp a failure instead of a silent skip, so the layer can never go untested by accident.
-      - name: MCP tool layer, against a stub console
+          cache: pip
+          cache-dependency-path: console/requirements-test.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: pip install -r console/requirements-test.txt
+      # ONE run of the whole suite with everything it can use. REQUIRE_* turn a missing fastmcp or node into a
+      # failure instead of 155 + 77 silent skips (the suite used to end OK with 164 tests skipped).
+      - name: unit suite
         env:
           TRADER_CHART_REQUIRE_MCP: '1'
+          TRADER_CHART_REQUIRE_NODE: '1'
+          TRADER_CONSOLE_TOKEN_FILE: /tmp/ci-console.token       # the suite starts servers: keep their token off $HOME
         run: |
-          pip install fastmcp
-          python -m unittest discover -s console/backend/tests -t console/backend/tests \
-            -p 'test_mcp_server.py' -v
-          # The tool contract (annotations) and the Edge Stats tools, end to end: tool -> console -> a fake
-          # engine speaking the real engine's responses. Both skip without fastmcp, so they live here.
-          python -m unittest discover -s console/backend/tests -t console/backend/tests \
-            -p 'test_mcp_tool_annotations.py' -v
-          python -m unittest discover -s console/backend/tests -t console/backend/tests \
-            -p 'test_edgestats_mcp.py' -v
+          python -m unittest discover -s console/backend/tests -t console/backend/tests 2>&1 | tee /tmp/suite.log
+          tail -3 /tmp/suite.log
+          # With fastmcp and node present only the real-engine tests (needs `--with-edge`) and the live-tree test skip.
+          # A larger number means a tool went missing.
+          skipped=$(grep -Eo 'skipped=[0-9]+' /tmp/suite.log | tail -1 | cut -d= -f2)
+          if [ "${skipped:-0}" -gt 12 ]; then echo "too many skipped tests: $skipped (expected <= 12)"; exit 1; fi
+      - name: stdlib only (the console's own promise)
+        if: matrix.python == '3.11'
+        run: |
+          python -m venv /tmp/bare
+          /tmp/bare/bin/python -m unittest discover -s console/backend/tests -t console/backend/tests 2>&1 | tail -3
 
   backend:
-    name: backend (compile + boot)
+    name: backend (compile + boot, mcp ${{ matrix.mcp }})
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        mcp: ['>=1,<2', '>=2,<3']      # users get whatever pip resolves today: test both majors
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: the one non-stdlib dependency
-        run: pip install 'mcp>=1,<2'
+        run: pip install "mcp${{ matrix.mcp }}"
       - name: syntax
         run: python -m compileall -q console/backend console/mcp
       - name: boots and answers /api/health without an MCP session
         run: |
           cd console/backend
-          python server.py --port 8899 --frontend ../frontend --no-mcp &
-          for i in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:8899/api/health > /tmp/health.json; then break; fi
+          python server.py --port 8899 --frontend ../frontend --no-mcp > /tmp/console.log 2>&1 &
+          pid=$!
+          ready=0
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8899/api/health > /tmp/health.json; then ready=1; break; fi
+            kill -0 "$pid" 2>/dev/null || break      # the server died: stop waiting
             sleep 0.5
           done
-          cat /tmp/health.json
-          kill %1
+          cat /tmp/health.json 2>/dev/null || true
+          if [ "$ready" != 1 ]; then echo "the console never answered /api/health"; cat /tmp/console.log; exit 1; fi
+          python -c "import json; d = json.load(open('/tmp/health.json')); assert d['ok'] is True, d"
+          # the page itself, with its security headers
+          curl -fsS -D - -o /dev/null http://127.0.0.1:8899/ | tee /tmp/headers.txt
+          grep -qi '^content-security-policy:' /tmp/headers.txt
+          kill "$pid"

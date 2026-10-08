@@ -145,12 +145,12 @@
 .edge-ask__input.is-bad { border-color: var(--lx-loss); }
 .edge-btn {
   flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  height: 44px; padding: 0 20px; border-radius: var(--lx-radius-xl); border: 1px solid var(--lx-accent);
-  background: var(--lx-accent); color: var(--lx-fg-on-fill); font: inherit; font-size: var(--e-body);
+  height: 44px; padding: 0 20px; border-radius: var(--lx-radius-xl); border: 1px solid var(--lx-accent-fill);
+  background: var(--lx-accent-fill); color: var(--lx-fg-on-fill); font: inherit; font-size: var(--e-body);
   font-weight: var(--lx-fw-medium); cursor: pointer;
   transition: background var(--lx-dur-120) var(--lx-ease), transform var(--lx-dur-120) var(--lx-ease);
 }
-.edge-btn:hover { background: var(--lx-accent-hover); }
+.edge-btn:hover { background: var(--lx-accent-fill-hover); }
 .edge-btn:active { transform: scale(.97); }
 .edge-btn:disabled { opacity: .55; cursor: progress; }
 .edge-btn--ghost { background: var(--lx-surface-2); border-color: var(--lx-border); color: var(--lx-fg); }

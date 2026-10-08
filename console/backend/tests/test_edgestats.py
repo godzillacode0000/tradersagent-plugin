@@ -165,7 +165,7 @@ class SidecarLifecycle(unittest.TestCase):
         self.assertEqual((cm.exception.status, cm.exception.code), (409, "edge_no_data"))
 
     def test_it_starts_lazily_once_and_stays_up(self):
-        with FakeEdgeHome(with_config=True) as fake:
+        with FakeEdgeHome(with_config=True):
             self.assertEqual(edgestats.SIDECAR.state()["state"], "stopped")
             edgestats.SIDECAR.ensure()
             self.assertEqual(edgestats.SIDECAR.state()["state"], "ready")

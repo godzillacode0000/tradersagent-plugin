@@ -15,7 +15,6 @@ So these pins hold three properties:
 """
 
 import os
-import re
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))

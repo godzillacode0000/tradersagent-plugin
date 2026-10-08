@@ -1,7 +1,7 @@
 # HANDOFF — Trader's Agent (Hermes Desktop plugin + local Vela console)
 
 **Written for:** an outside agent/model picking this up cold (no access to the chat that built it).
-**Written by:** the previous agent session, 20 Sep 2026; **updated 4 Oct 2026**, repo `godzillacode0000/tradersagent-plugin` @ `568ea9f` (this file lives at `docs/HANDOFF.md`; bump the SHA when you ship).
+**Written by:** the previous agent session, 20 Sep 2026; **updated 4 Oct 2026**, repo `godzillacode0000/tradersagent-plugin` (this file lives at `docs/HANDOFF.md`; the exact commit is `git log -1`: a SHA typed here is stale the moment it is committed. Last full audit: 8 Oct 2026 over `3c2ad34`, see `CHANGELOG.md`).
 **Operator:** one user, Malay/English speaker, runs a single laptop (Omarchy/Arch, 8 GB RAM), drives it
 mostly from his phone over Telegram, wants short answers with commands explained plainly.
 
@@ -276,6 +276,25 @@ Current live state (transient): chart on **BTCUSDT 1m** (dark), the Breakout Det
 from the last session, replay off; the docked pane may be hidden — check the heartbeat, not the screen.
 
 ---
+
+## 6b. Audit of 8 Oct 2026: what is still open
+
+Seven read-only lanes (security, backend, frontend, agent surface and docs, tests and CI, the Pine engine, UI and accessibility)
+audited `3c2ad34`; the fixes are in `CHANGELOG.md` under *Fixed*. What the fixes did **not** do, so it is not mistaken for done:
+
+- **Pine runs as JavaScript in the console's page** (PineTS compiles Pine to JS). A Content-Security-Policy now stops the page
+  sending anything to an unlisted host, but it cannot stop script injection by itself. The real fix is running PineTS in a
+  sandboxed frame; until then, treat Pine from an untrusted source (a prompt-injected agent, a pasted script) as code.
+- **The paper broker's approval gate is "a request that looks like our page"**, not a credential: a caller that holds the
+  console token can imitate it. It is paper money and it is documented so; a real-order tier needs a real approval factor first.
+- **Two consoles on one machine share one paper account file** with no cross-process lock.
+- `/api/bars` still answers a venue failure as `ok: true` with an `error` field, and has no negative cache.
+- Installer downloads (`pip install vectorbt`, `npx pnpm`, `uvx fastmcp`) are not version-pinned or hash-checked.
+- No browser test runs in CI (the focus ring, the ⋯ button at 1024 px and the 200 % zoom layout were verified in Chromium by hand);
+  there is no performance budget test; about half the UI tests are still source-string pins.
+- `request.security` reached only under a last-bar guard is wrong in the vendored engine (upstream); a minimal repro exists.
+- The two bundled "extra" Pine scripts (`console/frontend/extra/`) are read by nothing: the picker was never built.
+- The editor font is 6.25 px by the operator's choice (6 Oct); a setting that honours browser text size would be kinder.
 
 ## 7. Open problems — what to settle next (ranked)
 

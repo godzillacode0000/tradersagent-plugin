@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>LuxAlgo Library × Vela — MVP</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 16%27%3E%3Crect width=%2716%27 height=%2716%27 rx=%273%27 fill=%27%231197e2%27/%3E%3Cpath d=%27M3 11l3-4 3 2 4-5%27 stroke=%27white%27 stroke-width=%271.6%27 fill=%27none%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E">
+  <title>Trader's Agent</title>
 <!-- One system-first stack (Inter / IBM Plex Sans → system-ui). No webfont is
      fetched: this box is a 2016 Pavilion, and the brief's stack is deliberately
      system-first so first paint never waits on a font request. -->
@@ -29,7 +30,7 @@
 
   <!-- The drawer slides over the chart from the left; the scrim catches the click-away. -->
   <div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
-  <aside class="lib-drawer" id="lib-drawer" aria-hidden="true" aria-label="LuxAlgo scripts">
+  <aside class="lib-drawer" id="lib-drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-label="LuxAlgo scripts">
     <div class="drawer__head">
       <div class="drawer__title">
         <strong>LuxAlgo scripts</strong>
@@ -67,7 +68,7 @@
        drawer owns the left), so opening it never resizes Vela. Its door is the ⋯ menu, with a plain
        button on the bare-chart path; edge.js fills the three regions below. -->
   <div class="edge-scrim" id="edge-scrim" aria-hidden="true"></div>
-  <aside class="edge-sheet" id="edge-sheet" aria-hidden="true" aria-label="Edge Stats">
+  <aside class="edge-sheet" id="edge-sheet" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Edge Stats">
     <header class="edge__head">
       <div class="edge__title"><strong>Edge Stats</strong><span id="edge-sub">How often did it actually happen?</span></div>
       <button type="button" class="edge__icon" id="edge-theme" aria-label="Switch to the light theme" title="Switch theme">
@@ -151,7 +152,7 @@
           <!-- The coloured copy of the text lives under the textarea (script-highlight.js): the textarea keeps the
                caret, the selection and every key; its text is transparent only while the copy is on screen. -->
           <div class="script__code" id="script-code">
-            <div class="script__clip" aria-hidden="true"><pre class="script__hl" id="script-hl"></pre></div>
+            <div class="script__clip" aria-hidden="true" tabindex="-1" inert><pre class="script__hl" id="script-hl"></pre></div>
             <textarea id="script-src" class="script__src" wrap="off" spellcheck="false" autocapitalize="off"
                       aria-label="Pine source"
                       placeholder="// Paste Pine here, then press ▶ Run.&#10;// Plots become Vela series; boxes, lines and labels go on the chart."></textarea>

@@ -153,6 +153,7 @@ function unmountPane() {
   persistOpen(false)
 }
 let autoRevealOn = false      /* off by default: the pane opens on a click, not at boot */
+let autoRevealReady = Promise.resolve()   /* resolves once the stored choice is read, so the launch reveal never decides on a guess */
 let reveal_attempted = false
 
 /* ONE console, ONE view — and it lives in the PAGE.
@@ -588,11 +589,15 @@ function DeskChip() {
   useEffect(() => {
     if (reveal_attempted) return undefined
     reveal_attempted = true
-    if (!autoRevealOn) return undefined
-    const timer = setTimeout(() => {
-      if (autoRevealOn && openConsole()) setFronted(true)
-    }, REVEAL_DELAY_MS)
-    return () => clearTimeout(timer)
+    let timer = null
+    let cancelled = false
+    autoRevealReady.then(() => {
+      if (cancelled || !autoRevealOn) return
+      timer = setTimeout(() => {
+        if (autoRevealOn && openConsole()) setFronted(true)
+      }, REVEAL_DELAY_MS)
+    })
+    return () => { cancelled = true; if (timer) clearTimeout(timer) }
   }, [])
 
   return jsx('button', {
@@ -613,9 +618,9 @@ export default {
   register(ctx) {
     if (ctx.storage) {
       ctx_storage = ctx.storage
-      Promise.resolve(ctx.storage.get('autoReveal'))
+      autoRevealReady = Promise.resolve(ctx.storage.get('autoReveal'))
         .then((value) => {
-          autoRevealOn = value !== false
+          autoRevealOn = value === true      /* only an explicit yes: a missing value is "off", as the README says */
         })
         .catch(() => {})
     }

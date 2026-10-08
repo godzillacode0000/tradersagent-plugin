@@ -1,0 +1,3 @@
+# What CI installs on top of the stdlib for the MCP tool layer. Pinned to the versions the suite was last green on.
+-r requirements.txt
+fastmcp==4.0.10

@@ -14,12 +14,14 @@ from pathlib import Path
 
 VENDOR = Path(__file__).resolve().parent.parent / "console" / "frontend" / "vendor"
 SUMS = VENDOR / "SHA256SUMS"
+# Our own notes about the vendored files are not vendored files: editing them must not need a re-sum.
+OURS = {"SHA256SUMS", "VENDORING.md", "PROVENANCE.md", "THIRD-PARTY-LICENSES.md"}
 
 
 def current() -> dict:
     out = {}
     for f in sorted(VENDOR.rglob("*")):
-        if f.is_file() and f != SUMS and "__pycache__" not in f.parts:
+        if f.is_file() and f.name not in OURS and "__pycache__" not in f.parts:
             out[f.relative_to(VENDOR).as_posix()] = hashlib.sha256(f.read_bytes()).hexdigest()
     return out
 

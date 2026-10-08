@@ -119,6 +119,9 @@ def cached(key: str, producer):
     value = producer()
     with CACHE_LOCK:
         CACHE[key] = (now, value)
+        if len(CACHE) > 256:                       # bounded: every distinct query used to stay in memory for good
+            for old in sorted(CACHE, key=lambda k: CACHE[k][0])[:len(CACHE) - 192]:
+                CACHE.pop(old, None)
     return value
 
 
@@ -133,6 +136,13 @@ def _as_list(payload, *keys):
     return []
 
 
+def _int(value, default: int, lo: int, hi: int) -> int:
+    try:
+        return max(lo, min(hi, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
 def build_router(frontend: Path):
     """Return a handler class bound to the given frontend directory."""
 
@@ -145,7 +155,6 @@ def build_router(frontend: Path):
             self.send_response(status)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             if self.command != "HEAD":
@@ -165,6 +174,12 @@ def build_router(frontend: Path):
 
         # ---------- routing ----------
         def do_GET(self) -> None:  # noqa: N802
+            # The same Host gate as the main console: a DNS-rebinding page reaches 127.0.0.1 with its own name as Host.
+            host = (self.headers.get("Host") or "").strip().lower()
+            name = host.split("]")[0].lstrip("[") if host.startswith("[") else host.rsplit(":", 1)[0]
+            if name not in ("127.0.0.1", "localhost", "::1"):
+                self.json_err("refused: non-local Host", 403)
+                return
             parsed = urllib.parse.urlparse(self.path)
             path = parsed.path
             query = {k: v[0] for k, v in urllib.parse.parse_qs(parsed.query).items()}
@@ -196,7 +211,7 @@ def build_router(frontend: Path):
                 if not term:
                     self.json_err("q is required", 400)
                     return
-                args = {"query": term, "limit": int(q.get("limit", 12))}
+                args = {"query": term, "limit": _int(q.get("limit"), 12, 1, 50)}
                 if q.get("type") in {"all", "concepts", "indicators"}:
                     args["type"] = q["type"]
                 if q.get("family"):
@@ -206,7 +221,7 @@ def build_router(frontend: Path):
                 return
 
             if path == "/api/indicators":
-                args = {"page_size": min(int(q.get("page_size", 24)), 100)}
+                args = {"page_size": _int(q.get("page_size"), 24, 1, 100)}
                 if q.get("family"):
                     args["family"] = q["family"]
                 if q.get("text"):

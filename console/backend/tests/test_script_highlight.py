@@ -112,6 +112,9 @@ class Tokenizer(unittest.TestCase):
         pine = sorted(ROOT.glob("docs/studies/**/*.pine"))
         self.assertTrue(pine, "no Pine in the repo to read")
         corpus = [line for f in pine for line in f.read_text().split("\n")]
+        # The repo's own studies are few now (the committed LuxAlgo script was removed, 8 Oct): every line is also cut at
+        # several points, which is how a half-typed line reaches the tokenizer in the editor.
+        corpus += [line[:k] for line in list(corpus) for k in (1, len(line) // 3, len(line) // 2, len(line) - 1) if 0 < k < len(line)]
         corpus += ["", " ", "\t\t", " ", "é = 1 // ünï", "emoji 😀 \"😀\" // 😀", "nul \u0000 byte", "cr \r in the line",
                    '"', "'", "\\", "//", "///", "#", "#fff", "#12345", "#2157f3ff1", "@", "@@", "..", ".5.5", "1.2.3", "1e", "1e+",
                    '"\\', '"\\"', "'\\'", "x" * 5000, "ta." * 2000]
@@ -385,7 +388,7 @@ class Layer(unittest.TestCase):
         order = [HTML.index(f'src="./{name}"') for name in ("app.js", "script-library.js", "script-highlight.js")]
         self.assertEqual(order, sorted(order))
         m = re.search(r'<div class="script__code" id="script-code">\s*'
-                      r'<div class="script__clip" aria-hidden="true"><pre class="script__hl" id="script-hl"></pre></div>\s*'
+                      r'<div class="script__clip" aria-hidden="true" tabindex="-1" inert><pre class="script__hl" id="script-hl"></pre></div>\s*'
                       r'<textarea id="script-src"', HTML)
         self.assertTrue(m, "the textarea sits after its coloured copy, inside .script__code")
 

@@ -335,6 +335,7 @@
       scrim.classList.add('is-open');
       sheet.setAttribute('aria-hidden', 'false');
       scrim.setAttribute('aria-hidden', 'true');
+      if (window.taModal) window.taModal.enter(sheet);
     }
     if (view && view !== S.view) { if (view === 'home') S.back = []; S.view = view; }
     render();
@@ -352,6 +353,7 @@
     sheet.classList.remove('is-open');
     scrim.classList.remove('is-open');
     sheet.setAttribute('aria-hidden', 'true');
+    if (window.taModal) window.taModal.leave(sheet);
     destroyChart();
     stopPolling();
     const back = S.lastFocus;
@@ -399,7 +401,7 @@
 
   function focusSelector(a) {
     if (a.id) return '#' + a.id;
-    for (const attr of ['data-cat', 'data-bsym']) if (a.hasAttribute(attr)) return `[${attr}="${a.getAttribute(attr)}"]`;
+    for (const attr of ['data-cat', 'data-bsym']) if (a.hasAttribute(attr)) return `[${attr}="${CSS.escape(a.getAttribute(attr))}"]`;
     return '';
   }
   function captureFocus() {
