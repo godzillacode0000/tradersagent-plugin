@@ -67,3 +67,10 @@ parallel (see CHANGELOG, 6 Oct). When a vendored family changes its files, regen
     python3 tools/modulepreload.py --write
 
 `test_boot_speed.py` runs `--check`, so a stale list fails the suite instead of quietly slowing the boot.
+
+## After a vendor change: refresh the checksums
+
+`console/frontend/vendor/SHA256SUMS` lists every vendored file. The test suite (and CI) run `tools/vendor-sums.py --check`, so a
+hand edit or a half-applied upgrade fails there. After a deliberate change: `tools/vendor-sums.py --write`, then
+`tools/modulepreload.py --write` (the preload list follows the module graph), and review the diff of both. The `zag/`
+licence texts are in `zag/THIRD-PARTY-LICENSES.md`; re-copy each package's LICENSE into it when the versions change.

@@ -4,7 +4,7 @@
 
 **A Hermes Desktop plugin that opens a chart-first trading console: Vela-rendered candlesticks, and the LuxAlgo Library on top of them.**
 
-![licence: MIT](https://img.shields.io/badge/licence-MIT-3da639?style=flat-square)
+![licence: MIT + vendored AGPL-3.0](https://img.shields.io/badge/licence-MIT%20%2B%20vendored%20AGPL--3.0-3da639?style=flat-square)
 ![python: 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white)
 ![hermes desktop: 0.21.3+](https://img.shields.io/badge/hermes%20desktop-%E2%89%A50.21.3-6b6b74?style=flat-square)
 ![kind: desktop plugin](https://img.shields.io/badge/hermes%20plugin-desktop-f2a83b?style=flat-square)
@@ -37,7 +37,8 @@ MCP server) in one local web app — your chat session is left exactly where it 
 
 > **Unofficial.** This project is not affiliated with, endorsed by, or sponsored by LuxAlgo. It uses
 > the LuxAlgo name descriptively ("compatible with LuxAlgo MCP") and ships no LuxAlgo logo. See
-> [`THIRD-PARTY.md`](THIRD-PARTY.md) for the licences and the attribution each piece requires.
+> [`THIRD-PARTY.md`](THIRD-PARTY.md) and [`NOTICE`](NOTICE) for the licences, the attribution each piece requires and the
+> source offer for the patched engine (the distribution as a whole carries AGPL-3.0 parts).
 
 ## Requirements
 
@@ -45,7 +46,7 @@ MCP server) in one local web app — your chat session is left exactly where it 
 |---|---|
 | **Hermes Desktop** | v0.21.3 or newer (the plugin uses the `sidebar.nav` + `routes` contribution areas) |
 | **Python** | 3.11+ with the `mcp` client: `pip install mcp` (a venv is fine — point `PY=` at it) |
-| **Network** | for LuxAlgo's MCP endpoint and the Binance data feed; the chart falls back to synthetic bars when the provider is unreachable. The chart engine and Pine runtime are served locally |
+| **Network** | for LuxAlgo's MCP endpoint and the Binance data feed; with no market feed the chart stays empty (`chart_state` says `bars None`). The chart engine and Pine runtime are served locally |
 | **Node 20+** *(optional)* | only for [Edge Stats](#edge-stats--how-often-did-it-actually-happen) — `./install.sh --with-edge` installs LuxAlgo's engine (~300 MB with its dependencies) next to the console. Without it everything else works and the sheet explains what is missing |
 | **Preview resizer** *(optional)* | `libvips` (or ImageMagick, or `ffmpeg`) — see [Catalogue previews](#catalogue-previews-are-kept-on-your-machine). With none of them the console still shows every preview, just at the catalogue's original size |
 | **OS** | Linux — built and verified on Omarchy (Arch + Hyprland). macOS and Windows are out of scope. |
@@ -80,14 +81,14 @@ If the pane is enabled but still does not dock, that is a different, app-side in
 see [`docs/INSTALL-ENABLE.md`](docs/INSTALL-ENABLE.md) for both failure modes side by side.
 
 The browser builds are committed under `console/frontend/vendor/` — the console loads them from there.
-`./install.sh --vendor` refreshes those exact files from the pinned CDN versions (see the licence note
-in `THIRD-PARTY.md`).
+Their checksums are in `console/frontend/vendor/SHA256SUMS` (`tools/vendor-sums.py --check`; the test suite runs it), and
+`console/frontend/vendor/VENDORING.md` says how to refresh them (see the licence note in `THIRD-PARTY.md`).
 
 ### Verify it worked
 
 ```bash
 curl -s localhost:8787/api/health                    # {"ok": true, "data": {"status": "ok", ...}}
-node tools/verify-plugin.mjs plugin/plugin.js        # OK — 7 contributions
+node tools/verify-plugin.mjs plugin/plugin.js        # OK — 8 contributions
 console/bin/trader-chart state                       # symbol, timeframe, price, bars, indicators on
 ```
 
@@ -124,10 +125,9 @@ systemctl --user enable --now traders-agent.service
 | Status bar → **Trader's Agent** chip | same, from anywhere in the app |
 | `Ctrl+K` → **Trading: open Trader's Agent** | same, from the palette |
 | `Ctrl+K` → **Trading: toggle chart reveal on launch** | stop the console opening by itself at app start |
-| Top bar → `☰ Library` | the Library panel: search 800+ concepts and indicators |
-| Top bar → `▤ Details` | the selected item: write-up, **full Pine source**, licence badge, **Run PineTS** |
+| Chart top bar → **⌗ Indicators** | opens the **drawer**: search the 806-row LuxAlgo catalogue, star favourites, mount Vela's built-ins, or open a Library row's Details (write-up, **full Pine source**, licence badge, **Run PineTS** / Add to chart) |
 | Chart top bar → **Layout** | Vela's own grid picker — presets and custom `g<cols>x<rows>` grids. The console boots at `2h` (two side by side); the same door is `chart_set_layout` / `trader-chart layout` |
-| Chart top bar → **⌗ Indicators** | One surface for both halves: **Favourites** (your own ☆), **BUILT-INS** (Vela's natives for this market, read live from the frame) and **LIBRARY** (the 806-row LuxAlgo catalogue). Every LIBRARY card carries the catalogue's own **chart preview** above its name — and the Details pane shows it full size — so "how does this look applied?" is answered before running anything. The LIBRARY arrives **grouped into families** (SMC / ICT 74, Trend 108, Volume & Flow 96, …) with a rail down the left to jump between them, and each family opens into its own **clusters** ("Moving-average lineage", "Candlestick catalog"); every card has a **Reading** button that unfolds what the indicator is and how it is read, in place. Star the ones you reach for; clicking a built-in mounts it, a Library row opens the Details pane with its Run PineTS / Add to chart. The same door is `chart_indicators` / `trader-chart indicators` (`--family trend --reading mlma --fold trend:on`) |
+| Chart top bar → **<> Script** | the Pine script pane: write or paste Pine, **Run**, tweak the script's own **Settings**, save and reopen scripts |
 | Chart top bar → **⛶ Full screen** | Gives the chart the whole pane — and the whole display: the console's chrome, panels and statusbar step aside and the page asks the browser for fullscreen. `Esc` (or the floating `✕`, or the same button) comes back. Docked on Vela's own toolbar row beside `<> Script` and `☰ catalogue`; the door is `chart_fullscreen` / `trader-chart fullscreen [--off]` |
 | Chart ⋯ menu → **Edge Stats** | the Edge Stats sheet: ask a question, run one of the 42 catalogue reports, group by weekday / month / year, open any historical session on a chart. [Details below](#edge-stats--how-often-did-it-actually-happen) |
 | The chart's own bottom bar | Vela's range buttons, timezone clock and settings (not ours) |
@@ -224,7 +224,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_remove_indicator` | take indicators **off** the chart — one by name, or `all` for every study (reports the chart's before → after list) |
 | `chart_set_market` | switch symbol / timeframe |
 | `chart_set_layout` | read or set the workspace **grid** — `1`, `2h`, `2v`, `4`, `8`, or `g<cols>x<rows>` (no argument reads it) |
-| `chart_indicators` | the **Indicators** surface — sections `favorites`/`builtins`/`library`, `q` for the search box, `family` to open one group of the catalogue, `reading SLUG` to unfold a card's write-up, `fold FAMILY[:on]` to fold a group, `star`/`unstar KIND:ID`, `mount` a built-in; answers with the rows it painted, the groups it drew and the reading it left open |
+| `chart_indicators` | the **Indicators** drawer — sections `favorites`/`builtins`/`library`, `q` for the search box, `family` to open one group of the catalogue, `star`/`unstar KIND:ID`, `mount` a built-in; answers with the rows it painted |
 | `chart_fullscreen` | give the chart the whole pane / the whole screen (`on=False` comes back) — hides the console chrome and asks the browser for fullscreen; the answer says whether the display was taken or only the page |
 | `chart_reload` | remount every attached console (picks up new frontend files) |
 | `chart_palette` | what colours the chart is wearing (`try_apply` asserts the console theme) |
@@ -233,7 +233,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_drawing` | draw with Vela's own **drawing tools** — 76 types (trend line, channel, fib, Gann, Elliott, XABCD …), placed by `bars_ago` + price, real objects the operator can drag; a wrong anchor count is refused before drawing |
 | `chart_view` | read or set a **view setting** — chart type, log / invert / percent scale, countdown, time zone, session, watermark, status line, grid sync, the `?` shortcuts panel; every write is read back. Vela cannot *create* a price alert, so `alerts` only reads / clears the indicator-alert inbox |
 | `chart_marks` | event **marks** on the time axis, in one "Trader's Agent" group (`clear` only touches its own) |
-| `chart_browse` | open the Library concept list in the pane (optional `family`) |
+| `chart_browse` | open the catalogue in the drawer (optional `family`) |
 | `broker_state` | the paper (simulated Binance) account: cash, equity, positions, orders waiting for you |
 | `broker_propose` | propose a paper order — it only puts an Approve/Reject card on the chart; the agent cannot approve it |
 | `chart_draw` | run Pine and paint the boxes/lines/labels it builds on the chart overlay (optional `inputs`, as above) |
@@ -276,7 +276,7 @@ and which calls return cleanly while doing nothing — is written down in
 Every tool carries MCP annotations (title, `readOnlyHint`, `destructiveHint`, `openWorldHint`), and the
 mutating ones answer with what the chart looks like *after* the call — a request echoed back is not a
 painted pane. Failures come back as a code beside the prose
-(`NOT_RUNNABLE[while]`, `RUNTIME_CRASH[pinets-get_v]`, `TOO_FEW_BARS`, `ENGINE_UNAVAILABLE`, `TIMEOUT`),
+(`NOT_RUNNABLE[import]`, `RUNTIME_CRASH[pinets-get_v]`, `TOO_FEW_BARS`, `ENGINE_UNAVAILABLE`, `TIMEOUT`),
 so a caller can branch without regex-matching a sentence.
 
 **Or the CLIs**, if you would rather shell out:
@@ -316,7 +316,10 @@ systemctl --user restart traders-agent.service   # only if you run the console a
 
 Uninstall: delete `~/.hermes/desktop-plugins/traders-desk/` in Hermes Desktop (**Capabilities →
 Plugins**), then remove the console's service (`systemctl --user disable --now traders-agent.service`).
-Nothing else is written outside the repo; `console/agents/` holds the runtime state you can delete.
+Outside the repo the console writes: `~/.local/state/traders-agent/` (`console.token`, the paper account `paper.json`),
+`~/.local/share/traders-agent/` (preview cache `thumbs/`, Edge Stats `edge/`, the optional backtest venv `bt/`),
+`~/.hermes/skills/trading/trader-desk/` (the skill, copied by `install.sh`) and, for shots the MCP server saves,
+`/tmp`. `console/agents/` holds the runtime state. Delete those to remove every trace.
 
 ## Repository layout
 
@@ -338,7 +341,12 @@ install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/
 | Env | Default | Meaning |
 |---|---|---|
 | `PY` | `python3` | the interpreter for `console/start.sh` (must have `mcp`) |
-| `PORT` | `8787` | console port — the plugin's frame points at `http://127.0.0.1:8787/` |
+| `PORT` | `8787` | console port. `./install.sh` bakes `PORT` into the installed plugin's frame (re-run it after changing); the MCP server and `trader-chart` follow `LUXALGO_CONSOLE` |
+| `LUXALGO_CONSOLE` | `http://127.0.0.1:8787` | where the MCP server, `trader-chart` and `library-indicator` find the console (set it with `hermes mcp add … --env LUXALGO_CONSOLE=http://127.0.0.1:9000` when `PORT` is not 8787) |
+| `TRADER_CONSOLE_TOKEN_FILE` | `~/.local/state/traders-agent/console.token` | the POST token the console mints and the MCP server and CLI read |
+| `TRADERS_AGENT_WORKDIR` | `~/Projects/luxalgo-web` if it exists, else `console/agents` | the folder the in-app study bridge runs the agent CLI in (never taken from a request) |
+| `TRADERS_AGENT_ALLOW_LAN` | unset | with `--host 0.0.0.0`, let LAN peers receive the POST token; without it they get a read-only console |
+| `TRADER_PAPER_FILE` | `~/.local/state/traders-agent/paper.json` | the paper account (use another path for a second test console) |
 | `LUXALGO_AGENTS_DIR` | `console/agents` | runtime state: chart bridge files, study threads, shots |
 | `HERMES_CLI` | `hermes` on `PATH` | CLI the in-app study bridge shells out to |
 | `LUXALGO_CHART_INLINE_WAIT` | `8` | seconds a command holds its request open waiting for the chart's pushed answer |
@@ -353,7 +361,7 @@ install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/
 
 ## Catalogue previews are kept on your machine
 
-The Indicators modal shows each card the way LuxAlgo's own library does, with a chart preview. Those
+The Indicators drawer shows each card the way LuxAlgo's own library does, with a chart preview. Those
 pictures are 1600×1000 PNGs on LuxAlgo's S3 (~29 KB each) and they are **slow to fetch one by one** —
 about 1–2 s each from a home connection, and a browser only opens six connections per host, so sixty
 cards used to fill in while you watched. The console therefore fetches each picture **once**, shrinks
@@ -381,8 +389,9 @@ it from `http://127.0.0.1:8787/api/library/thumb`: **~5 ms warm instead of ~2 s*
 - **The bridge is not a headless renderer.** `trader-chart` and the MCP tools only take effect while
   a chart view is mounted (the Hermes pane or a browser tab); with none attached they fail fast with
   "no chart view attached" rather than hanging. Commands are pushed, so a view answers in tens of ms.
-- **One console per machine** on one port. No order placement, no account, no positions — it is
-  read-only market data plus rendering.
+- **One console per machine** on one port. No real orders and no brokerage account exist: the only trading is a
+  **simulated Binance spot paper account** (`broker_*`), where the agent can only propose and you approve. The rest is
+  market data plus rendering.
 - **The Library is non-commercial.** Its content is CC BY-NC-SA 4.0 — fine to read and cite here, not
   to resell or ship inside a paid product.
 - **Linux only, on purpose.** Built and verified on Omarchy (Arch + Hyprland) with Hermes Desktop.
@@ -403,7 +412,7 @@ python3 -m compileall console/backend                                           
 
 The suite is stdlib-only on purpose — the study store, the chat bridge, the chart bridge and the push
 channel are covered without a browser, a network, or the app — and the MCP tool layer runs against a
-stub console. ≈700 tests; the MCP ones skip themselves when `fastmcp` is absent (CI sets
+stub console. about 1,050 tests; the MCP ones skip themselves when `fastmcp` is absent (CI sets
 `TRADER_CHART_REQUIRE_MCP=1` so they cannot silently skip there).
 
 CI (`.github/workflows/ci.yml`) has three jobs: the plugin harness (Node 20 — the real plugin first,
@@ -421,9 +430,10 @@ frame remounted (switch session and back).
 - **The plugin never appears in Capabilities → Plugins.** `Ctrl+K` → *Reload desktop plugins*; if it
   still does not show up, the folder was dropped after a failed load — rename
   `~/.hermes/desktop-plugins/traders-desk` and set `id:` inside `plugin.js` to the same new name.
-- **The chart is empty and the log says `provider: synthetic`.** Binance's data provider was
-  unreachable; the chart still renders deterministic bars so the page never comes up blank.
-- **Port 8787 busy.** `PORT=9000 ./console/start.sh`, then point the plugin's `CONSOLE_ORIGIN` at it.
+- **The chart is empty.** Binance's data feed was unreachable (`chart_state` says `bars None`); the console does not
+  invent bars. Check the network, then `chart_reload`.
+- **Port 8787 busy.** `PORT=9000 ./console/start.sh`, then `PORT=9000 ./install.sh` (it points the installed plugin at that
+  port) and set `LUXALGO_CONSOLE=http://127.0.0.1:9000` for the MCP server and CLI.
 
 ## Licence & credits
 
@@ -454,8 +464,7 @@ pane beside the chat as intended.
 
 The plugin handles it as far as it can: the page asks for adoption and reveal, retries once a beat
 later (the app may still be rebuilding the tree when a page mounts), and when the pane is still not
-visible it renders the console itself under a short note that says why — with *Ask again* and *Open in
-a browser* in reach. The note only appears when the pane API exists and reports the pane hidden, so a
+visible it renders the console itself under a short note that says why — with *Ask again* in reach. The note only appears when the pane API exists and reports the pane hidden, so a
 build without panes gets the plain console and no nagging.
 
 Recovery for a user who hits it: un-minimize the pane's group in `hermes.desktop.layoutTree.v2`

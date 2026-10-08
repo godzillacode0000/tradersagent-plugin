@@ -25,7 +25,7 @@ venv/
 /tmp/
 # local test screenshots (grim captures from UI verification runs)
 /shots/
-docs/shots/
+# docs/shots/ holds the README's images: they ARE tracked (ignoring the folder left three of them out of every clone)
 
 # PR Lens writes its previews here. They are rebuilt on demand.
 .pr-lens/

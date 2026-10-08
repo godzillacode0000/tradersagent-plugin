@@ -24,10 +24,24 @@ from pathlib import Path
 CONSOLE = os.environ.get("LUXALGO_CONSOLE", "http://127.0.0.1:8787").rstrip("/")
 
 
+_LOCAL = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # loopback: never through http_proxy
+
+
 def api(path: str) -> dict:
     try:
-        with urllib.request.urlopen(CONSOLE + path, timeout=60) as res:
+        with _LOCAL.open(CONSOLE + path, timeout=60) as res:
             body = json.loads(res.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        # An HTTP answer (503 "no MCP session", 404 …) is not "cannot reach the console": read what it said.
+        try:
+            said = json.loads(exc.read().decode("utf-8")).get("error")
+        except (ValueError, OSError, AttributeError):
+            said = None
+        print(f"library-indicator: the console answered {exc.code}: {said or exc.reason}", file=sys.stderr)
+        raise SystemExit(1)
+    except TimeoutError:
+        print(f"library-indicator: the console at {CONSOLE} did not answer in time", file=sys.stderr)
+        raise SystemExit(2)
     except urllib.error.URLError as exc:
         print(f"library-indicator: cannot reach the console at {CONSOLE} ({exc.reason})", file=sys.stderr)
         raise SystemExit(2)
@@ -67,7 +81,9 @@ def main(argv=None) -> int:
         print(f"library-indicator: '{title}' publishes no source", file=sys.stderr)
         return 1
 
-    out = Path(args.out) if args.out else Path(f"/tmp/library-{slug}.pine")
+    import re as _re
+    safe = _re.sub(r"[^A-Za-z0-9._-]+", "-", str(slug)).strip("-.") or "script"      # a slug from the network is not a path
+    out = Path(args.out) if args.out else Path(f"/tmp/library-{safe}.pine")
     out.write_text(source, "utf-8")
     lines = source.count("\n") + 1
 

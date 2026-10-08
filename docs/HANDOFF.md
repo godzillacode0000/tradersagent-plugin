@@ -19,8 +19,9 @@ the agent (and the user) read and drive that chart with low latency. It is delib
   `console/frontend/vendor/pinets/PROVENANCE.md`); Library Pine source is CC BY-NC-SA 4.0 and must
   **never** be committed (it may be fetched at runtime and drawn, with attribution).
 - **MIT** for this plugin's own code.
-- **private repo**, personal use. Grok cannot clone it; the operator will paste this file (and file
-  contents) instead.
+- **public repo** (checked 8 Oct 2026; earlier versions of this file said private). That is why nothing from the Library may be
+  committed and why the licence notices matter: anything committed is already redistributed. Grok-style agents that cannot
+  clone get this file pasted by the operator.
 
 Goal in the operator's words: *"chart ni yang connect, communicate, see and understand the chart with the
 lowest latency possible"* — chat on the left, chart docked on the right, agent drives the chart through
@@ -46,7 +47,7 @@ native tools.
 
 Versions: Hermes Desktop 0.21.5, console `SERVER_VERSION = 1.0.0`. CI was red from
 28 Sep (`1f9d340`) to 2 Oct (`8df6e2e` — a stale MCP test only CI could see); green since `ab3708b`, and
-green on every ship below. **1034 backend tests** (+77 skipped without `fastmcp` / a real Edge Stats engine), 8 plugin contributions across 5 areas.
+green on every ship below. **about 1,090 backend tests** (77+ skipped without `fastmcp` / a real Edge Stats engine; run the suite for the exact count), 8 plugin contributions across 5 areas.
 Shipped since this file was written: the paper broker (Phase 5), replay (6/6b), the top-bar one-door
 consolidation, the drawer as the single Library surface, and Phase 7 — three agent doors into Vela
 (`chart_drawing` 76 types / `chart_view` settings / `chart_marks`), 54 MCP tools (8 of them `edgestats_*`). 4 Oct: Edge Stats — the optional local engine, the sheet behind the `⋯` menu, the eight tools (see CHANGELOG; real Binance / Dukascopy downloads were never run from the build machine). Also 4 Oct: the top row
@@ -268,7 +269,7 @@ Working, with evidence:
 - Latency: symbol switch **686–698 ms** end to end, screenshot **35 ms**, `clear` **7 ms**, SSE push
   single-digit ms (transport is not the bottleneck; the chart engine fetch+render is).
 - Console health: `/api/health` ok, LuxAlgo MCP connected, 29 endpoints.
-- 1034 backend tests (77 skipped bare; 1 with fastmcp + a real engine), plugin harness OK (8 contributions / 5 areas), CI green since `ab3708b`
+- ~1,090 backend tests (see the suite's own count; skips depend on `fastmcp`, node and a real engine), plugin harness OK (8 contributions / 5 areas), CI green since `ab3708b`
   (see the correction above — earlier runs were red for a week and nobody looked).
 
 Current live state (transient): chart on **BTCUSDT 1m** (dark), the Breakout Detector overlay restored
@@ -279,7 +280,7 @@ from the last session, replay off; the docked pane may be hidden — check the h
 ## 7. Open problems — what to settle next (ranked)
 
 1. **Real LuxAlgo indicators cannot run.** The catalogue's indicators (what the operator actually wants:
-   "the LuxAlgo indicators I see on their site") are full Pine v6 scripts; PineTS rejects `for … in` and
+   "the LuxAlgo indicators I see on their site") are full Pine v6 scripts; PineTS runs `for … in` (only `import` is refused) and
    friends. Options to investigate, in order of user value:
    (a) a PineTS-compatible **port** of the specific indicators he names (subset-safe, no MTF calls);
    (b) compute-from-data drawings (the PDH/PDL pattern) for level-type indicators;

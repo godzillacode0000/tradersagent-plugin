@@ -268,9 +268,9 @@ class LiveConsole(unittest.TestCase):
         agents_store.ensure_seed(self.tmp.name)
         with mock.patch.object(srv, "run_agent", fake_run):
             self.post("/api/chat", {"agent_id": "desk", "message": "hi", "workdir": "/etc", "timeout": 99999})
-        if seen:                                          # the seed study id may differ; only assert when it ran
-            self.assertNotEqual(seen["workdir"], "/etc")
-            self.assertLessEqual(seen["timeout"], 600)
+        self.assertTrue(seen, "the chat call must have reached run_agent")
+        self.assertNotEqual(seen["workdir"], "/etc")
+        self.assertLessEqual(seen["timeout"], 600)
         self.assertEqual(self.post("/api/chat", {"agent_id": "desk", "message": "hi", "timeout": "abc"})[0], 400)
 
     # SEC-10 ---------------------------------------------------------------------------------------------
@@ -589,3 +589,100 @@ class BacktestService(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ── the agent-facing layer (needs fastmcp; CI's second step has it) ────────────────────────────────────
+
+from http.server import ThreadingHTTPServer  # noqa: E402
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))      # a sibling test module, whichever way the suite is started
+from test_mcp_server import HAVE_FASTMCP, _Stub, load_mcp, text_of  # noqa: E402
+
+
+@unittest.skipUnless(HAVE_FASTMCP, "fastmcp is not installed")
+class AgentSurface(unittest.TestCase):
+    def setUp(self):
+        self.shots = tempfile.mkdtemp()
+        _Stub.routes = {}
+        _Stub.posts = []
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), _Stub)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.mcp = load_mcp(self.base, self.shots)
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+    def test_a_long_library_script_is_cut_and_says_so_and_the_rest_can_be_read(self):
+        pine = "//@version=6\n" + "x = 1\n" * 14000                                  # ~84,000 characters
+        _Stub.routes = {"/api/source": {"ok": True, "data": {"source": pine}}}
+        first = text_of(self.mcp.library_source("big-one"))
+        self.assertIn("truncated: showing characters 0-60000 of", first)
+        self.assertIn("offset=60000", first)
+        self.assertIn("Do NOT run or port this fragment", first)
+        rest = text_of(self.mcp.library_source("big-one", offset=60000))
+        self.assertNotIn("truncated", rest)
+        self.assertIn("characters 60000-", rest)
+
+    def test_a_script_that_fits_comes_back_whole_with_no_notice(self):
+        pine = "//@version=6\nplot(close)\n" * 600                                   # ~15,000 characters, over the old 8,000 cap
+        _Stub.routes = {"/api/source": {"ok": True, "data": {"source": pine}}}
+        out = text_of(self.mcp.library_source("mid-one"))
+        self.assertNotIn("truncated", out)
+        self.assertEqual(out.count("plot(close)"), 600)
+
+    def test_a_cut_list_says_how_many_there_were(self):
+        _Stub.routes = {"/api/edge/presets": {"ok": True, "data": {"count": 40, "presets": [{"name": f"p{i}"} for i in range(40)]}}}
+        out = text_of(self.mcp.edge_presets())
+        self.assertIn("30 of 40 preset(s) shown", out)
+
+    def test_a_one_word_name_that_is_not_a_slug_falls_back_to_a_search(self):
+        calls = []
+
+        class Routes(dict):
+            def get(self, key, default=None):
+                calls.append(key)
+                if key == "/api/indicator":
+                    return {"ok": False, "error": "not found"} if len([c for c in calls if c == key]) == 1 else {"ok": True, "data": {"title": "Killzones"}}
+                if key == "/api/search":
+                    return {"ok": True, "data": {"results": [{"slug": "killzones-ict"}]}}
+                if key == "/api/source":
+                    return {"ok": True, "data": {"source": "plot(1)"}}
+                return default
+        _Stub.routes = Routes()
+        out = text_of(self.mcp.library_indicator("killzone"))
+        self.assertIn("killzones-ict", out)
+        self.assertIn("plot(1)", out)
+
+    def test_the_backtest_tools_answer_with_a_sentence_when_the_tier_is_down(self):
+        _Stub.routes = {"/api/backtest": {"ok": False, "error": "backtest service unreachable (URLError)"},
+                        "/api/backtest/sweep": {"ok": False, "error": "backtest service unreachable (URLError)"},
+                        "/api/backtest/results": {"ok": False, "error": "backtest service unreachable (URLError)"}}
+        for out in (self.mcp.bt_run(), self.mcp.bt_optimize(), self.mcp.bt_status()):
+            self.assertIsInstance(out, str)
+            self.assertIn("unreachable", out)
+            self.assertIn("optional", out)
+
+    def test_chart_batch_takes_a_list_as_documented(self):
+        _Stub.routes = {"/api/chart/state": {"ok": True, "data": {"open": True, "age_s": 1.0}},
+                        "/api/chart/command": {"ok": True, "data": {"pushed": 1, "command": {"id": 1}, "result": {"ok": True, "detail": "cleared"}}}}
+        out = text_of(self.mcp.chart_batch([{"action": "clear"}]))
+        self.assertNotIn("not valid JSON", out)
+        self.assertIn("clear", out.lower())
+
+    def test_chart_shot_says_when_no_view_is_attached(self):
+        _Stub.routes = {"/api/chart/state": {"ok": True, "data": {"open": True, "age_s": 1.0}},
+                        "/api/chart/command": {"ok": True, "data": {"pushed": 0, "command": {"id": 1}, "result": None}}}
+        out = text_of(self.mcp.chart_shot())
+        self.assertIn("no chart view is attached", out)
+
+    def test_an_empty_chart_is_called_empty(self):
+        _Stub.routes = {"/api/chart/state": {"ok": True, "data": {"open": True, "age_s": 1.0, "symbol": "BTCUSDT", "timeframe": "1h",
+                                                                   "bars": None, "last": None, "studies": []}}}
+        self.assertIn("holds no bars", text_of(self.mcp.chart_state()))
+
+    def test_calls_to_the_console_do_not_go_through_a_proxy(self):
+        _Stub.routes = {"/api/chart/stream/status": {"ok": True, "data": {"views": 1, "pushes": 0, "keepalive_s": 8.0}}}
+        with mock.patch.dict(os.environ, {"http_proxy": "http://127.0.0.1:9", "HTTP_PROXY": "http://127.0.0.1:9"}):
+            self.assertIn("1 view(s) attached", text_of(self.mcp.chart_views()))

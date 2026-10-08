@@ -21,12 +21,10 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | `chart_studies` | — | Everything **on** the chart right now, each row labelled with the reader that saw it: `study` (what the console's own chip counts), `cell` (the workspace cell's on-chart rows), `overlay` (a script run through the console's landasan), `paint` (the PineTS paint layer), `native` (Vela's own names). Ask it before calling a chart clean: `chart_state`'s `natives` list is Vela's names only, and a script mounted from the Library is not one of them. |
 | `chart_state` | — | Symbol, timeframe, last price, bars, indicators on the chart, plus `build`/`viewer` when the page publishes them (stale-frame check). |
 | `chart_shot` | `name: str = ""` | One PNG of the chart. Returned as an image when the client takes images, plus the path on disk. |
-| `chart_palette` | `try_apply: bool = false` | What colours the chart is actually wearing (background, candles, console theme). `try_apply=true` asserts the console's palette and reports what landed 300 ms later. |
-| `chart_browse` | `family: str = ""`, `show: bool = true` | Open the Library's concept-family list in the pane, optionally narrowed to one family slug. Family bubbles expose Library **concepts** (not indicator scripts); the empty family opens all concepts. Answers with the rows actually painted. The catalogue itself is `library_list`; this one is the *surface*. |
 | `broker_state` | — | The **paper** (simulated Binance spot) account: cash, equity, positions with live P&L, and the orders waiting for the operator. Read-only. |
-| `broker_propose` | `symbol: str`, `side: str` (`buy`/`sell`), `qty: float`, `note: str = ""` | Propose a paper order. It does **not** trade: it puts an Approve/Reject card on the chart and waits. There is deliberately **no approve tool** — only the operator, on the card. Fills at the live price at approval — or the replay cursor price while replay is on (see `chart_replay`). |
-| `library_search` | `query: str`, `kind: str = ""` (`concept`/`indicator`), `limit: int = 8` | Search the LuxAlgo Library (concepts + indicators). See the Library section below for the other nine. |
-| `library_indicator` | `query: str` | One indicator by name or slug: summary, licence, and its full Pine source. |
+| `chart_pine_inputs` | `pine: str` | List the settings a script declares — label, type, default, range or options, group — without running it, opening the pane or touching the chart. Call it before `chart_apply_pine` / `chart_draw` with `inputs` when you do not know the labels. |
+| `chart_watch` | `seconds: int = 15`, `timeout_s` | Watch for a spell (blocks up to 120 s) and answer with a **diff** (what changed) rather than a second snapshot. |
+| `chart_alert` | `seconds: int = 30`, `move_pct: float = 0.0`, `timeout_s` | Wait (up to 300 s) for the **market** to move. Reuses the heartbeat's own `last`, reports the move (from → to, percent and absolute) as soon as price travels `move_pct` percent from the first reading — `0` means any change. Where `chart_watch` answers "did the chart change", this answers "did price do something", and reports the largest excursion it saw when the threshold is never met. |
 
 ## Mutating tools
 
@@ -45,27 +43,27 @@ Verify: `hermes mcp test traders-chart` · **new tools need a new session** (or 
 | `chart_remove_indicator` | `native: str = ""`, `all: bool = false` | Take studies **off** the chart — one by name, or every study with `all=true`. Reports `removed X · chart now carries: Y`. |
 | `chart_apply_pine` | `pine: str`, `inputs: dict = {}` | Run Pine over the chart's live bars and paint what it makes: geometry (boxes/lines/labels/tables) on the console's overlay, plot series as a **matching Vela native** — the same landasan as `chart_draw`, the script pane and the Library. PineTS is a measured subset: `import` is refused outright, while `while`, `for … in`, `request.security`, tuple returns, `box/line/label/table` and `strategy()` all run. `inputs` sets the script's own settings (its `input.*()` values) **by label** — `{"Length": 50, "Show upper band": false}`; the label is matched ignoring case and spacing, and the variable name or `in_0` id work too. What you leave out keeps its default, `null` resets one, a number outside the input's range is limited to it, and the answer says what was used, what was refused and why (with a *did you mean* for a near miss), and which inputs the script does have. When the script pane holds this very script, its Settings show the values. |
 | `chart_draw` | `pine: str`, `inputs: dict = {}` | Run Pine and paint the geometry it **builds** (boxes/lines/labels/tables) on the console's overlay; any plot series lands as a native — one landasan with `chart_apply_pine`. The explicit route for level-type scripts (SMC/liquidity models, PDH/PDL). |
-| `chart_pine_inputs` | `pine: str` | **Read-only.** List the settings a script declares — label, type, default, range or options, group — without running it, opening the pane or touching the chart. Call it before `chart_apply_pine` / `chart_draw` with `inputs` when you do not know the labels. |
 | `chart_clear` | — | Clear our overlay drawings and the natives our paint layer added, then report what is left. **Does not remove studies added with `chart_add_indicator`** — use `chart_remove_indicator`. |
 | `chart_reload` | — | Reload every attached console page (picks up new frontend files). Once-per-view. |
-| `chart_batch` | `commands: str` (JSON array) | Several actions in one call, in order. Each step is `{"action": "...", ...fields}`; stops at the first failure unless `stop_on_error=false`. One round trip instead of five. |
+| `chart_batch` | `commands: str` (JSON array, or a list), `stop_on_error: bool = true` | Several actions in one call, in order. Each step is `{"action": "...", ...fields}`; stops at the first failure unless `stop_on_error=false`. One round trip instead of five. |
 | `chart_snapshot` | — | Remember the market + indicator set as a restore point for `chart_undo`. |
 | `chart_undo` | — | Put the chart back to the last snapshot: market first, then the indicator set, reporting the chart's own before → after lists. **Drawings are not restored** — `chart_clear`, then re-draw. |
-| `chart_watch` | `seconds: int = 15`, `timeout_s` | Watch for a spell and answer with a **diff** (what changed) rather than a second snapshot. |
-| `chart_alert` | `seconds: int = 30, move_pct: float = 0.0` | Wait for the **market** to move. Reuses the heartbeat's own `last`, reports the move (from → to, percent and absolute) as soon as price travels `move_pct` percent from the first reading — `0` means any change. Where `chart_watch` answers "did the chart change", this answers "did price do something", and reports the largest excursion it saw when the threshold is never met. |
+| `chart_palette` | `try_apply: bool = false` | What colours the chart is actually wearing (background, candles, console theme). `try_apply=true` asserts the console's palette and reports what landed 300 ms later. |
+| `chart_browse` | `family: str = ""`, `show: bool = true` | Open the catalogue in the drawer, optionally narrowed to one family slug (`trend`, `smc-ict`, …). The answer reports the rows the list holds, its family filter and whether the drawer is open; it never applies an indicator. |
+| `broker_propose` | `symbol: str`, `side: str` (`buy`/`sell`), `qty: float`, `note: str = ""` | Propose a paper order. It does **not** trade: it puts an Approve/Reject card on the chart and waits. There is deliberately **no approve tool** — only the operator, on the card. Fills at the live price at approval — or the replay cursor price while replay is on (see `chart_replay`). |
 
 ## Library / research tools
 
-Read-only, and every one leaves this machine (they reach LuxAlgo's hosted MCP).
+Read-only. The `library_*`, `edge_*`, `propfirm*` tools reach LuxAlgo's hosted MCP, so they leave this machine; the `edgestats_*` tools run LuxAlgo's open-source engine **locally** (only `edgestats_setup` downloads, from Binance or Dukascopy). `edgestats_show` and `edgestats_setup` are not read-only: they open a view / start a download.
 
 | Tool | Arguments | What it does |
 |---|---|---|
 | `library_search` | `query: str`, `kind: str = ""` (`concept`/`indicator`), `limit: int = 8` | Search the Library (concepts + indicators). |
-| `library_indicator` | `query: str` | One indicator by name or slug: summary, licence, full Pine source. |
+| `library_indicator` | `query: str`, `offset: int = 0` | One indicator by name or slug: summary, licence, Pine source. A source over 60,000 characters is cut **and says so** (`… truncated … offset=N`); a one-word name that is not a slug falls back to a search. |
 | `library_list` | `family`, `text`, `concept`, `tier`, `sort`, `direction`, `page`, `page_size` | Browse with the same filters and paging the console's own list uses. |
 | `library_taxonomy` | `what: str = "families"` | The Library's own families (17 measured) or its concept graph — so a filter value is the Library's, not a guess. |
 | `library_concept` | `slug: str` | One concept by slug, with the indicators that implement it. |
-| `library_source` | `slug: str` | Pine source by **exact** slug — no name resolution to get wrong. |
+| `library_source` | `slug: str`, `offset: int = 0` | Pine source by **exact** slug — no name resolution to get wrong. Long sources are cut **and say so**; pass `offset` for the rest. |
 | `edge_presets` | `category: str = ""` | LuxAlgo's measured edge presets (42 measured). |
 | `edge_report` | `preset: str`, `symbol: str` | One preset's measured performance on one symbol. |
 | `edge_symbols` | — | The symbols the edge dataset covers. |
@@ -96,11 +94,11 @@ Read-only, and every one leaves this machine (they reach LuxAlgo's hosted MCP).
 | Code | Meaning |
 |---|---|
 | `SYMBOL_NOT_SERVED[XAUUSD]` | This console's workspace provider is Binance only, and it never answered for that symbol. The chart is unchanged — use a crypto pair (the op has a 6 s deadline so it refuses instead of hanging). |
-| `NOT_RUNNABLE[import/for-in]` | PineTS cannot execute that construct — the script needs a full TradingView engine. Measured: `import` is the real one; `for … in` actually runs. |
+| `NOT_RUNNABLE[import]` | The script imports a library, which PineTS cannot do. `while` and `for … in` run (measured 28 Sep). |
 | `SYNTAX_ERROR` | Pine could not parse the script. The error carries `line` and `col` (1-based) — fix that line; an unclosed bracket is often reported at the end of the file. |
 | `RUNTIME_CRASH[…]` | The engine threw mid-run (engine bug, not the caller's). |
 | `TOO_FEW_BARS` | Not enough history loaded — widen the range, retry once. |
-| `ENGINE_UNAVAILABLE` | The PineTS module could not be fetched (network). |
+| `ENGINE_UNAVAILABLE` | The vendored PineTS engine did not load (nothing is fetched from the network); `chart_reload`, and report it if it persists. |
 | `TIMEOUT` | The run exceeded its budget. |
 
 When no view is attached the command tools answer `✗ no chart view is attached …` instead of hanging.
@@ -109,7 +107,7 @@ When no view is attached the command tools answer `✗ no chart view is attached
 
 `state` · `shot` · `apply` · `add` · `remove` · `market` · `draw` · `clear` · `script` · `browse` ·
 `open` · `mode` · `reload` · `caps` · `layout` · `studies` · `natives` · `indicators` ·
-`fullscreen` · `theme` · `replay` · `wait`
+`fullscreen` · `theme` · `replay` · `wait` · `drawing` · `view` · `marks` · `edge`
 
 ## Notes
 

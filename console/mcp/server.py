@@ -123,6 +123,11 @@ def _console_token() -> str:
         return ""
 
 
+# Calls to the console are loopback: an `http_proxy` in the environment must not get them (it would be sent the console
+# token and every Pine script), so this opener has no proxy handler (audit SEC-13).
+_LOCAL = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
 def _call(path: str, payload: dict | None = None, timeout: float = 20.0) -> dict:
     """One console request. Returns the unwrapped `data`, or raises RuntimeError with the console's
     own message — the tools below turn that into a sentence rather than a traceback."""
@@ -137,7 +142,7 @@ def _call(path: str, payload: dict | None = None, timeout: float = 20.0) -> dict
         method="POST" if payload is not None else "GET",
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as res:
+        with _LOCAL.open(req, timeout=timeout) as res:
             body = json.loads(res.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         # The console answers refusals with a JSON body (401 no token, 400 a bad query, 409 busy…).
@@ -247,6 +252,30 @@ def _command(action: str, timeout: float = INLINE_WAIT + 8.0, **fields) -> str:
     return line
 
 
+MAX_PINE_CHARS = 60000      # one answer; a longer script is read in slices with `offset`
+
+
+def _pine_slice(pine: str, offset: int = 0) -> str:
+    """A fenced Pine block that never cuts silently. The tools used to stop at 6000 / 8000 characters with no word, while
+    saying "full source": an agent ran or ported a fragment as if it were the script (audit 8 Oct, AS-1)."""
+    text = pine.strip()
+    total = len(text)
+    start = max(0, min(int(offset or 0), total))
+    end = min(total, start + MAX_PINE_CHARS)
+    block = "```pine\n" + text[start:end] + "\n```"
+    if end < total:
+        block += (f"\n… truncated: showing characters {start}-{end} of {total} — call again with offset={end} "
+                  "for the rest. Do NOT run or port this fragment as the whole script.")
+    elif start:
+        block += f"\n(characters {start}-{total} of {total})"
+    return block
+
+
+def _more(shown: int, total: int, what: str) -> str:
+    """One line saying a list was cut, or nothing when it was not."""
+    return f"… {shown} of {total} {what} shown — narrow the query to see the rest" if total > shown else ""
+
+
 # ── chart tools ─────────────────────────────────────────────────────────────────────────────────
 # ── vectorbt backtesting (the tier in console/backend/backtest_service.py, own venv, :8788) ──
 # These are thin HTTP clients like every other tool here: the console proxies, the service computes.
@@ -254,10 +283,16 @@ def _command(action: str, timeout: float = INLINE_WAIT + 8.0, **fields) -> str:
 # _chart/backtest/ (their own namespace) and never touch the live chart's state.
 
 def _bt(path: str, payload: dict | None = None, timeout: float = 240.0) -> dict:
-    return _call(path, payload, timeout=timeout)
+    """The backtest tier, or an answer that says why not. Every other tool turns a refusal into a sentence; these four
+    raised, and the agent saw a traceback (audit AS-5)."""
+    try:
+        return _call(path, payload, timeout=timeout)
+    except RuntimeError as exc:
+        return {"ok": False, "error": f"{exc} — the vectorbt tier is optional: install it with ./install.sh --with-backtest and "
+                                      "start console/backend/backtest_service.py in its own venv"}
 
 
-@mcp.tool(annotations=_ann("Backtest a strategy with vectorbt", read_only=False))
+@mcp.tool(annotations=_ann("Backtest a strategy with vectorbt", read_only=False, open_world=True, destructive=False))
 def bt_run(source: str = "binance:BTCUSDT:30m", fast: int = 20, slow: int = 50,
            fee: float = 0.001, bars: int = 1000) -> str:
     """Run one MA-cross backtest and return its metrics (return, Sharpe, drawdown, trades).
@@ -278,7 +313,7 @@ def bt_run(source: str = "binance:BTCUSDT:30m", fast: int = 20, slow: int = 50,
             f"expectancy {m['expectancy']:.2f}\nrun_id {r['run_id']} (trades saved; use bt_status)")
 
 
-@mcp.tool(annotations=_ann("Sweep MA parameters with vectorbt", read_only=False))
+@mcp.tool(annotations=_ann("Sweep MA parameters with vectorbt", read_only=False, open_world=True, destructive=False))
 def bt_optimize(source: str = "binance:BTCUSDT:30m", lo: int = 5, hi: int = 60,
                 fee: float = 0.001, bars: int = 1000, top: int = 10) -> str:
     """Sweep every MA pair in [lo, hi] at once (vectorbt's real strength) and rank by return.
@@ -431,17 +466,29 @@ def chart_state() -> str:
     warning = _freshness(state.get("age_s"))
     if warning:
         lines.append(warning.lstrip("\n"))
+    if not state.get("bars"):
+        lines.append(_NO_BARS)
     return "\n".join(lines)
+
+
+_NO_BARS = ("⚠ the chart holds no bars (the market feed may be unreachable): an empty chart is what any picture or "
+            "indicator result will show.")
 
 
 @mcp.tool(annotations=_ann("Capture the chart", read_only=True))
 def chart_shot(name: str = ""):
     """Capture the chart as a PNG. Returns the image (when the client takes images) and its path."""
+    blocked = _command_gate(_page_age())          # the same preflight every other chart tool runs
+    if blocked:
+        return f"✗ {blocked}"
     try:
         queued = _call("/api/chart/command", {"action": "shot", "wait": INLINE_WAIT + 10.0},
                        timeout=INLINE_WAIT + 14.0)
     except RuntimeError as exc:
         return f"✗ {exc}"
+    if not queued.get("pushed"):
+        return ("✗ no chart view is attached — open the Trader's Agent row in Hermes Desktop (or "
+                f"{BASE} in a browser) and call this tool again.")
     result = queued.get("result") or {}
     shot = result.get("shot") or ""
     if not result:
@@ -466,6 +513,11 @@ def chart_shot(name: str = ""):
         return f"✗ captured the chart but could not write {path}: {exc}"
     size_kb = round(os.path.getsize(path) / 1024, 1)
     text = f"✓ chart captured ({size_kb} KB) → {path}"
+    try:
+        if not (_call("/api/chart/state", timeout=5.0).get("bars")):
+            text += "\n" + _NO_BARS
+    except RuntimeError:
+        pass
     if MCPImage is None:
         return text
     return [text, MCPImage(path=path)]
@@ -506,9 +558,11 @@ def chart_apply_pine(pine: str, inputs: dict[str, Any] | None = None) -> str:
 
     One landasan for every door (chat, script pane, Library): geometry (boxes/lines/labels/tables)
     lands on the console's overlay and is read back after drawing; plot series lands as a matching
-    Vela native — only when the script actually plots. PineTS implements a subset: `import`, `while`
-    and `for…in` are not available — the answer says so rather than pretending. Sizes it can do:
-    studies with plot/hline/fill/bgcolor and simple ta.* calls.
+    Vela native — only when the script actually plots. PineTS implements most of Pine v6: `while`,
+    `for…in`, tuples, `request.security` (higher timeframes are fetched), box/line/label/table and
+    strategy() all run. The one thing refused outright is `import` (answer `NOT_RUNNABLE[import]`; the
+    answer says so rather than pretending). `request.security` reached only under a last-bar condition
+    (`barstate.islast` and the like) is an open engine bug and comes back empty.
 
     `inputs` sets the script's own settings (its `input.*()` values) by label, e.g.
     {"Length": 50, "Show upper band": false}; anything you leave out keeps the script's default, and
@@ -565,7 +619,7 @@ def chart_clear() -> str:
     return _command("clear")
 
 
-@mcp.tool(annotations=_ann("Add a Vela indicator", destructive=True))
+@mcp.tool(annotations=_ann("Add a Vela indicator", destructive=False))
 def chart_add_indicator(native: str) -> str:
     """Add a Vela native indicator to the chart, by name (ema, supertrend, donchian-channels, …)."""
     if not native.strip():
@@ -646,7 +700,7 @@ def chart_natives() -> str:
     return _command("natives")
 
 
-@mcp.tool(annotations=_ann("Open the Indicators surface", read_only=False))
+@mcp.tool(annotations=_ann("Open the Indicators surface", read_only=False, destructive=False))
 def chart_indicators(section: str = "", q: str = "", family: str = "",
                      star: str = "", unstar: str = "",
                      mount: str = "", show: bool = True) -> str:
@@ -680,7 +734,7 @@ def chart_indicators(section: str = "", q: str = "", family: str = "",
     return _command("indicators", **fields)
 
 
-@mcp.tool(annotations=_ann("Full screen for the chart", read_only=False))
+@mcp.tool(annotations=_ann("Full screen for the chart", read_only=False, destructive=False))
 def chart_fullscreen(on: bool = True) -> str:
     """Give the chart the whole pane — and the whole screen, where the host allows it.
 
@@ -695,7 +749,7 @@ def chart_fullscreen(on: bool = True) -> str:
     return _command("fullscreen", on=bool(on))
 
 
-@mcp.tool(annotations=_ann("Replay the chart", read_only=False))
+@mcp.tool(annotations=_ann("Replay the chart", read_only=False, destructive=False))
 def chart_replay(op: str = "state", bars: int = 100, from_ms: int = 0, interval_ms: int = 0) -> str:
     """Drive Vela's own replay engine — the operator's replay button, from the agent's side.
 
@@ -715,7 +769,7 @@ def chart_replay(op: str = "state", bars: int = 100, from_ms: int = 0, interval_
     return _command("replay", **fields)
 
 
-@mcp.tool(annotations=_ann("Draw on the chart with Vela's drawing tools", read_only=False))
+@mcp.tool(annotations=_ann("Draw on the chart with Vela's drawing tools", read_only=False, destructive=True))
 def chart_drawing(op: str = "list", type: str = "", anchors: list[dict] | None = None, id: str = "",
                   ids: list[str] | None = None, style: dict | None = None, text: str = "",
                   props: dict | None = None, locked: bool | None = None, visible: bool | None = None,
@@ -758,7 +812,7 @@ def chart_drawing(op: str = "list", type: str = "", anchors: list[dict] | None =
     return _command("drawing", **fields)
 
 
-@mcp.tool(annotations=_ann("Chart view settings (type, scale, time zone, status line …)", read_only=False))
+@mcp.tool(annotations=_ann("Chart view settings (type, scale, time zone, status line …)", read_only=False, destructive=False))
 def chart_view(setting: str = "state", value: str = "") -> str:
     """Read or set one chart view setting — the things the operator would click in Vela's menus.
 
@@ -780,7 +834,7 @@ def chart_view(setting: str = "state", value: str = "") -> str:
     return _command("view", **fields)
 
 
-@mcp.tool(annotations=_ann("Event marks on the chart's time axis", read_only=False))
+@mcp.tool(annotations=_ann("Event marks on the chart's time axis", read_only=False, destructive=True))
 def chart_marks(op: str = "list", time: str = "", bars_ago: int = -1, title: str = "", content: str = "",
                 color: str = "", shape: str = "", letter: str = "", id: str = "") -> str:
     """Place small event marks on the chart's time axis (news, a trade idea, "I entered here").
@@ -804,7 +858,7 @@ def chart_marks(op: str = "list", time: str = "", bars_ago: int = -1, title: str
     return _command("marks", **fields)
 
 
-@mcp.tool(annotations=_ann("Console theme (light / dark)", read_only=False))
+@mcp.tool(annotations=_ann("Console theme (light / dark)", read_only=False, destructive=False))
 def chart_theme(theme: str = "") -> str:
     """Read or set the console's theme: 'light', 'dark', or '' to report what is worn now.
 
@@ -829,7 +883,7 @@ def chart_reload() -> str:
     return _command("reload", once_per_view=True)
 
 
-@mcp.tool(annotations=_ann("Chart palette"))
+@mcp.tool(annotations=_ann("Chart palette", destructive=False))
 def chart_palette(try_apply: bool = False) -> str:
     """What colours the chart is actually wearing (background, candle up/down, console theme).
 
@@ -843,7 +897,7 @@ def chart_palette(try_apply: bool = False) -> str:
     return _command("palette", **fields)
 
 
-@mcp.tool(annotations=_ann("Open the script catalogue in the drawer"))
+@mcp.tool(annotations=_ann("Open the script catalogue in the drawer", destructive=False))
 def chart_browse(family: str = "", show: bool = True) -> str:
     """Open the catalogue in the drawer — the one surface (the Library panel is deleted, 3 Oct).
 
@@ -888,20 +942,35 @@ def library_search(query: str, kind: str = "", limit: int = 8) -> str:
 
 
 @mcp.tool(annotations=_ann("Read one Library indicator", read_only=True, open_world=True))
-def library_indicator(query: str) -> str:
-    """One Library indicator by name or slug: what it is, its licence, and its full Pine source."""
+def library_indicator(query: str, offset: int = 0) -> str:
+    """One Library indicator by name or slug: what it is, its licence, and its Pine source.
+
+    The source comes whole up to 60,000 characters. A longer one is cut AND SAID so (`… truncated: …`), with the `offset`
+    to ask for next; never run or port a script that was reported truncated.
+    """
     if not query.strip():
         return "✗ empty query"
     slug = query.strip()
     try:
-        if " " in slug or slug.lower() != slug:  # a name, not a slug: resolve it first
-            found = _call("/api/search?" + urllib.parse.urlencode({"q": slug, "type": "indicators", "limit": 1}),
+        def search_first():
+            found = _call("/api/search?" + urllib.parse.urlencode({"q": query.strip(), "type": "indicators", "limit": 1}),
                           timeout=25.0)
             rows = found.get("results") or []
-            if not rows:
+            return rows[0].get("slug") if rows else None
+
+        if " " in slug or slug.lower() != slug:  # a name, not a slug: resolve it first
+            slug = search_first()
+            if not slug:
                 return f"✗ nothing in the Library matches {query!r}"
-            slug = rows[0].get("slug") or slug
-        meta = _call("/api/indicator?" + urllib.parse.urlencode({"slug": slug}), timeout=25.0)
+        try:
+            meta = _call("/api/indicator?" + urllib.parse.urlencode({"slug": slug}), timeout=25.0)
+        except RuntimeError:
+            # A one-word lower-case name ("killzone") looks like a slug but may not be one: search before giving up.
+            found_slug = search_first()
+            if not found_slug or found_slug == slug:
+                raise
+            slug = found_slug
+            meta = _call("/api/indicator?" + urllib.parse.urlencode({"slug": slug}), timeout=25.0)
     except RuntimeError as exc:
         return f"✗ {exc}"
     item = meta.get("indicator") or meta
@@ -915,7 +984,7 @@ def library_indicator(query: str) -> str:
         pine = src.get("source") or src.get("pine") or ""
         if pine:
             head.append("Pine source (LuxAlgo Library — CC BY-NC-SA 4.0, not redistributable):")
-            head.append("```pine\n" + pine.strip()[:6000] + "\n```")
+            head.append(_pine_slice(pine, offset))
         else:
             head.append("(no Pine source on this entry)")
     except RuntimeError as exc:
@@ -1007,15 +1076,17 @@ def library_concept(slug: str) -> str:
         lines.append("indicators:")
         lines += [f"- {r.get('title') or r.get('slug')} ({r.get('slug')})" if isinstance(r, dict) else f"- {r}"
                   for r in related[:20]]
+    if _more(20, len(related), "related indicator(s)"):
+        lines.append(_more(20, len(related), "related indicator(s)"))
     return "\n".join(lines)
 
 
 @mcp.tool(annotations=_ann("Library source by slug", read_only=True, open_world=True))
-def library_source(slug: str) -> str:
+def library_source(slug: str, offset: int = 0) -> str:
     """The Pine source of one Library entry, by EXACT slug — no name resolution, no guessing.
 
     Same rule as library_indicator: LuxAlgo Library source is CC BY-NC-SA 4.0, fine to run locally,
-    never to redistribute.
+    never to redistribute. A source over 60,000 characters is cut AND SAID so; pass `offset` for the rest.
     """
     if not slug.strip():
         return "✗ empty slug"
@@ -1026,9 +1097,8 @@ def library_source(slug: str) -> str:
     pine = data.get("source") or data.get("pine") or ""
     if not pine:
         return f"✗ no source stored for {slug!r} — check the slug with library_search"
-    return (f"# {slug.strip()} — {len(pine.splitlines())} line(s)\n"
-            "Pine source (LuxAlgo Library — CC BY-NC-SA 4.0, not redistributable):\n"
-            "```pine\n" + pine.strip()[:8000] + "\n```")
+    return (f"# {slug.strip()} — {len(pine.splitlines())} line(s), {len(pine.strip())} characters\n"
+            "Pine source (LuxAlgo Library — CC BY-NC-SA 4.0, not redistributable):\n" + _pine_slice(pine, offset))
 
 
 @mcp.tool(annotations=_ann("LuxAlgo edge presets", read_only=True, open_world=True))
@@ -1048,6 +1118,8 @@ def edge_presets(category: str = "") -> str:
     for row in rows[:30]:
         label = row.get("name") or row.get("id") or row
         out.append(f"- {label}")
+    if _more(30, len(rows), "preset(s)"):
+        out.append(_more(30, len(rows), "preset(s)"))
     if data.get("categories"):
         out.append("categories: " + ", ".join(map(str, data["categories"])))
     return "\n".join(out)
@@ -1065,12 +1137,14 @@ def edge_report(preset: str, symbol: str) -> str:
         return f"✗ {exc}"
     report = data.get("report") or {}
     lines = [f"{preset} on {symbol.upper()}:"]
-    for key, value in list(report.items())[:20]:
+    for key, value in list(report.items())[:40]:
         if isinstance(value, (str, int, float, bool)) or value is None:
             lines.append(f"- {key}: {value}")
         elif isinstance(value, list):
             lines.append(f"- {key}: {len(value)} row(s)")
                 # nested structures are summarised: the raw report can be large
+    if _more(40, len(report), "field(s)"):
+        lines.append(_more(40, len(report), "field(s)"))
     return "\n".join(lines) if len(lines) > 1 else f"no report fields came back for {preset} / {symbol}"
 
 
@@ -1085,7 +1159,8 @@ def edge_symbols() -> str:
     head = f"{data.get('count', len(rows))} symbol(s)"
     if data.get("note"):
         head += f" · {data['note']}"
-    return head + "\n" + ", ".join(map(str, rows[:60]))
+    more = _more(60, len(rows), "symbol(s)")
+    return head + "\n" + ", ".join(map(str, rows[:60])) + (("\n" + more) if more else "")
 
 
 # ── Edge Stats: LuxAlgo's open-source engine, run locally (console/backend/edgestats.py) ──────────────
@@ -1273,6 +1348,8 @@ def propfirms(query: str = "") -> str:
             out.append(f"- {name}" + (f" — {', '.join(extra)}" if extra else ""))
         else:
             out.append(f"- {row}")
+    if _more(30, len(firms), "firm(s)"):
+        out.append(_more(30, len(firms), "firm(s)"))
     return "\n".join(out)
 
 
@@ -1294,6 +1371,8 @@ def propfirm_offers(query: str = "") -> str:
                 row.get("discount") or row.get("price"), row.get("ends") or row.get("expires")) if v))
         else:
             out.append(f"- {row}")
+    if _more(30, len(rows), "offer(s)"):
+        out.append(_more(30, len(rows), "offer(s)"))
     return "\n".join(out)
 
 
@@ -1355,7 +1434,7 @@ def _natives(live: bool = False) -> list:
 
 
 @mcp.tool(annotations=_ann("Run several chart commands", destructive=True))
-def chart_batch(commands: str, stop_on_error: bool = True) -> str:
+def chart_batch(commands: str | list[dict[str, Any]], stop_on_error: bool = True) -> str:
     """Run several chart actions in ONE call, in order.
 
     `commands` is JSON: a list of objects, each `{"action": "market", "symbol": "BTCUSDT",
@@ -1392,7 +1471,7 @@ def chart_batch(commands: str, stop_on_error: bool = True) -> str:
     return "\n".join(lines)
 
 
-@mcp.tool(annotations=_ann("Remember the chart's state"))
+@mcp.tool(annotations=_ann("Remember the chart's state", destructive=False))
 def chart_snapshot() -> str:
     """Remember the chart's indicators plus its symbol/timeframe as a restore point for chart_undo.
 

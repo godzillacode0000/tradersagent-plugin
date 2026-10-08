@@ -214,3 +214,26 @@ its exotic 15d/45d/15w higher-timeframe fetches falling back to the chart's bars
 reported). Scripts from the same four source repos that are GPL-3.0 or unlicensed (JustExecution's
 HTF suite, ict2023trader's set, fxraptor's `fractal-model`) are **not** bundled — concepts only, and
 any reimplementation is our own Pine (see `docs/PLAN-pinets-bump-and-indicator-pack.md`).
+
+## Network: every host this software contacts
+
+No account, no key and no telemetry. These are all the hosts, and what each sees.
+
+| Host | Who contacts it | What it sees |
+|---|---|---|
+| `127.0.0.1:8787` (console), `:8788` (optional backtest tier), `:8789` (optional Edge Stats engine) | plugin, console, MCP server, CLIs | local only |
+| `mcp.luxalgo.com` | the console's MCP client (keyless) | Library searches and source requests |
+| `api.binance.com` (and `api.binance.us` as Vela's fallback, `fapi`/`dapi` for futures) | the console's `/api/bars` and paper-broker price; also Vela and PineTS **from the browser** | the symbols and intervals you view, from your IP |
+| `stream.binance.com`, `fstream.binance.com`, `stream.binance.us` | Vela, from the browser (live candles) | the symbols you view |
+| `crypto-icons.ledger.com` | Vela, from the browser (symbol logos; also pre-connected by `index.html`) | the ticker you view |
+| `luxalgo-production.s3.amazonaws.com`, `luxalgo-images-production.s3.us-east-1.amazonaws.com` | the console's preview cache | catalogue picture URLs |
+| `data.binance.vision`, Dukascopy | the optional Edge Stats engine, only when you start a download | the symbol and range you ask for |
+| GitHub, npm, PyPI | `install.sh` flags (`--with-edge`, `--with-backtest`) at install time | an ordinary download |
+
+The vendored bundles also contain code for Alpaca, Coinbase, Hyperliquid and Financial Modeling Prep providers. This console
+registers none of them and none needs a key here, so they are never contacted. The console's page carries a
+`Content-Security-Policy` whose `connect-src` lists exactly the hosts above that the browser itself contacts.
+
+## Vendored Zag packages: licence texts
+
+`console/frontend/vendor/zag/THIRD-PARTY-LICENSES.md` reproduces the MIT notice each package ships with.
