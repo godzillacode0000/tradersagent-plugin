@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Changed
+
+- **Vela 0.8.1 → 0.8.3** (`@luxalgo/vela`, published 5 and 7 Oct; vela-pinets 0.2.15 already accepts it and is unchanged). The
+  files are LuxAlgo's, byte for byte (nothing in `vendor/vela/` is patched); only the vendored set moved: the ES modules, the
+  Binance / Coinbase / Hyperliquid providers and the global build (`chunk-*.js` names changed; the preload list, the vendor
+  checksums and the docs follow). What 0.8.2/0.8.3 bring arrives with it: the maximise / restore control on Vela's panels, the
+  price-axis tick hook and price-style change events in the renderer API, surface open / close events, a "Reverse" action, touch-only
+  pan inertia (a mouse release now stops dead). **Nothing of ours was touched to take it**, and it was held to that: the same 56
+  agent actions (add / remove studies, layouts, 10 drawing types, marks, view settings, themes, replay, fullscreen, a Pine run
+  with inputs, the drawer, a screenshot) answer identically on both versions; the keyboard focus ring, the ⋯ menu band, the 200 % zoom
+  layout, the drawer and Edge sheet focus handling all pass unchanged; the CSP blocks nothing; first canvas is 1,544 ms against
+  1,549 ms (median of six, alternating runs) for +58 KB. `test_vela_doors` now finds Vela's drawings chunk by content, because its
+  hashed file name changes with every release.
+
 ### Fixed (the 8 Oct 2026 full audit: seven read-only lanes over `3c2ad34`, handed to Hermes as a report)
 
 - **The chart bridge no longer loses or duplicates commands.** Its three files were read-modify-written with no lock and one

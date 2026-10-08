@@ -21,7 +21,18 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 ROOT = BACKEND.parents[1]
 FRONT = ROOT / "console" / "frontend"
-VELA_DRAWINGS = FRONT / "vendor" / "vela" / "dist" / "chunk-EZ5FWVLA.js"
+def _drawings_chunk():
+    """The chunk that defines Vela's drawing classes. Its name is a content hash that changes with every release (vela
+    0.8.1 -> 0.8.3 renamed it), so find it by what it holds."""
+    dist = FRONT / "vendor" / "vela" / "dist"
+    for f in sorted(dist.glob("chunk-*.js")):
+        text = f.read_text(encoding="utf-8")
+        if text.count("anchorSchema()") >= 20 and '"parallelchannel"' in text:
+            return f
+    raise AssertionError("no Vela chunk defines the drawing classes any more")
+
+
+VELA_DRAWINGS = _drawings_chunk()
 
 
 def _read(path) -> str:
@@ -76,7 +87,7 @@ class TheDrawingDoor(unittest.TestCase):
                 want = (int(schema.group(1)), int(schema.group(2)))
                 self.assertEqual(table[kind.group(1)], want, f"{kind.group(1)} drifted from Vela")
                 checked += 1
-        # Measured on Vela 0.8.1: 30 classes state their schema directly; the other 46 types inherit it
+        # Measured on Vela 0.8.1 (unchanged on 0.8.3): 30 classes state their schema directly; the other 46 types inherit it
         # from a shared base (the live probe covered all 76). Fewer than 30 means this regex rotted.
         self.assertGreaterEqual(checked, 30, "the guard matched too few classes to mean anything")
 

@@ -1,4 +1,4 @@
-import { overlayScrollbarCss, isDarkColor, mix, HIGHLIGHT, ACCENT_BRIGHT, ACCENT, withAlpha, injectStyles, iconAt, iconEl, BULLISH, BEARISH, WARNING, NEUTRAL } from './chunk-BZQM2XO7.js';
+import { overlayScrollbarCss, isDarkColor, mix, HIGHLIGHT, ACCENT_BRIGHT, ACCENT, withAlpha, injectStyles, announceSurface, holdForExit, iconAt, iconEl, BULLISH, BEARISH, WARNING, NEUTRAL } from './chunk-VHGACEHO.js';
 import { VanillaMachine, normalizeProps, spreadProps } from '@zag-js/vanilla';
 export { normalizeProps, spreadProps } from '@zag-js/vanilla';
 import * as menu from '@zag-js/menu';
@@ -226,6 +226,35 @@ var MENU_CSS = `
     color: var(--vela-fg-bright);
 }
 .vela-menu-item[data-checkmark] { color: var(--vela-fg-bright); }
+/* Badge mode (iconBadges): the row icon sits in a rounded tile and the row grows to fit
+   it. An icon-less row of the same level keeps an invisible slot, so labels align. */
+.vela-menu[data-badges] > .vela-menu-item { padding: 5px 10px 5px 6px; }
+.vela-menu-item .vela-menu-badge {
+    width: 24px;
+    height: 24px;
+    padding: 3px;
+    flex: none;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--vela-radius-md);
+    background: var(--vela-hover);
+    border: 1px solid var(--vela-border);
+    color: var(--vela-fg-muted);
+    transition: background var(--vela-dur-fast) var(--vela-ease), border-color var(--vela-dur-fast) var(--vela-ease), color var(--vela-dur-fast) var(--vela-ease);
+}
+.vela-menu-item .vela-menu-badge:empty { background: transparent; border-color: transparent; }
+.vela-menu-item .vela-menu-badge .vela-icon { color: inherit; }
+.vela-menu-item[data-highlighted] .vela-menu-badge:not(:empty) { color: var(--vela-fg-bright); }
+/* The selected tile inverts: a bright fill under the surface-colored glyph. After the
+   hover rule, so a selected row keeps its tile while highlighted. */
+.vela-menu-item[data-checked] .vela-menu-badge:not(:empty),
+.vela-menu-item[data-checkmark] .vela-menu-badge:not(:empty) {
+    background: color-mix(in srgb, var(--vela-fg-bright) 83%, var(--vela-surface));
+    border-color: color-mix(in srgb, var(--vela-fg-bright) 40%, transparent);
+    color: var(--vela-surface);
+}
 /* Switch rows (boolean settings in a dropdown): a right-aligned toggle pill \u2014 the
    same control language as the settings dialog's toggles. */
 .vela-menu-switch {
@@ -290,11 +319,16 @@ var Surface = class _Surface {
     /** Trigger rect captured when this level opened — the list stays put if the
      *  trigger then moves (favorite chips shifting the caret). */
     this.pinnedAnchor = null;
+    /** The open state last announced — see {@link announce}. */
+    this.shown = false;
+    /** The list's exit animation after a close; a reopen cancels it. */
+    this.exit = null;
     this.doc = doc;
     this.host = opts.host;
     this.onSelect = opts.onSelect;
     this.onFavorite = opts.onFavorite;
     this.checkmarks = opts.checkmarks === true;
+    this.iconBadges = opts.iconBadges === true;
     this.positioner = doc.createElement("div");
     this.positioner.className = "vela-ui-layer";
     this.list = doc.createElement("ul");
@@ -303,6 +337,7 @@ var Surface = class _Surface {
     this.positioner.appendChild(this.list);
     this.host.appendChild(this.positioner);
     const trigger = opts.trigger;
+    this.opener = trigger ?? opts.opener ?? null;
     this.ctrl = menuController({
       items: [],
       id: opts.id,
@@ -324,14 +359,36 @@ var Surface = class _Surface {
     if (opts.triggerId && trigger) trigger.id = opts.triggerId;
     this.handle = runMachine(this.ctrl.machine, this.ctrl.props, (service) => {
       const api = this.ctrl.connect(service);
+      const closing = this.shown && !api.open;
+      if (closing) this.announce(false);
+      if (api.open && this.exit) {
+        this.exit.cancel();
+        this.exit = null;
+      }
       if (trigger) spreadProps(trigger, api.getTriggerProps(), this.mid);
       spreadProps(this.positioner, api.getPositionerProps(), this.mid);
       spreadProps(this.list, api.getContentProps(), this.mid);
       this.project(api);
+      if (closing) this.holdExit();
+      if (api.open && !this.shown) this.announce(true);
+    });
+  }
+  /** Keep the just-closed list up through its exit animation. `spreadProps` re-applies
+   *  `hidden` only when the machine's value for it changes, so the list stays shown until
+   *  the exit ends — or until a reopen, which projects `hidden: false` itself. */
+  holdExit() {
+    this.list.hidden = false;
+    this.exit = holdForExit(this.list, () => {
+      this.exit = null;
+      if (!this.shown) this.list.hidden = true;
     });
   }
   get api() {
     return this.ctrl.connect(this.handle.service);
+  }
+  announce(open2) {
+    this.shown = open2;
+    announceSurface(this.list, open2, "menu", this.opener);
   }
   setItems(items) {
     this.items = items;
@@ -349,7 +406,9 @@ var Surface = class _Surface {
   destroy() {
     for (const sub of this.subs.values()) sub.destroy();
     this.subs.clear();
+    this.exit?.finish();
     this.handle.stop();
+    if (this.shown) this.announce(false);
     this.positioner.remove();
   }
   byId(id) {
@@ -374,6 +433,10 @@ var Surface = class _Surface {
     const doc = this.doc;
     this.list.replaceChildren();
     const markable = this.checkmarks && this.items.some((i) => !(i.submenu && i.submenu.length > 0) && !i.toggle && i.checked !== void 0);
+    const iconic = this.items.some((i) => !!i.icon);
+    const badged = this.iconBadges && iconic;
+    if (badged) this.list.dataset.badges = "1";
+    else delete this.list.dataset.badges;
     for (const item of this.items) {
       if (item.separatorBefore) {
         const sep = doc.createElement("li");
@@ -399,7 +462,16 @@ var Surface = class _Surface {
       } else if (!branch && !item.toggle && item.checked) {
         li.dataset.checked = "1";
       }
-      if (item.icon) li.appendChild(iconEl(item.icon, doc));
+      if (badged) {
+        const badge = doc.createElement("span");
+        badge.className = "vela-menu-badge";
+        if (item.icon) badge.appendChild(iconEl(item.icon, doc));
+        li.appendChild(badge);
+      } else if (item.icon) {
+        li.appendChild(iconEl(item.icon, doc));
+      } else if (iconic) {
+        li.appendChild(iconEl("", doc));
+      }
       const label = doc.createElement("span");
       label.className = "vela-menu-label";
       label.textContent = item.label;
@@ -443,9 +515,11 @@ var Surface = class _Surface {
         const sub = new _Surface(doc, {
           host: this.host,
           placement: "right-start",
+          opener: li,
           onSelect: this.onSelect,
           onFavorite: this.onFavorite,
           checkmarks: this.checkmarks,
+          iconBadges: this.iconBadges,
           id: `${this.mid}--${item.id}`
         });
         sub.setItems(item.submenu ?? []);
@@ -471,7 +545,8 @@ var Menu = class {
       id: opts.id,
       minWidth: opts.minWidth,
       onFavorite: opts.onFavorite,
-      checkmarks: opts.checkmarks
+      checkmarks: opts.checkmarks,
+      iconBadges: opts.iconBadges
     });
     this.root.setItems(opts.items);
   }
@@ -575,6 +650,7 @@ var POPOVER_CSS = `
 
 // src/ui/components/popover/view.ts
 var open = null;
+var leaving = /* @__PURE__ */ new Set();
 function closeOpenPopovers() {
   open?.hide();
 }
@@ -602,6 +678,8 @@ var Popover = class {
     this.shown = false;
     /** The pending removal of a fading-out shell; a show() that reuses the shell cancels it. */
     this.leaveTimer = null;
+    /** The shell's exit animation before it leaves the DOM; a show() that reuses the shell cancels it. */
+    this.exit = null;
     const doc = opts.trigger.ownerDocument;
     injectStyles(POPOVER_STYLE_ID, POPOVER_CSS, doc);
     this.trigger = opts.trigger;
@@ -638,6 +716,10 @@ var Popover = class {
       clearTimeout(this.leaveTimer);
       this.leaveTimer = null;
     }
+    this.exit?.cancel();
+    this.exit = null;
+    leaving.delete(this);
+    for (const p of [...leaving]) if (p.trigger === this.trigger) p.exit?.finish();
     ensureUIHost(this.el, this.inheritsTokens ? void 0 : this.theme);
     if (this.fadeMs > 0) {
       this.el.style.transition = `opacity ${this.fadeMs}ms ease`;
@@ -662,16 +744,21 @@ var Popover = class {
       this.hide();
     };
     const onReflow = () => this.place();
-    setTimeout(() => document.addEventListener("pointerdown", onOutside, true), 0);
+    setTimeout(() => {
+      if (this.onOutside === onOutside) document.addEventListener("pointerdown", onOutside, true);
+    }, 0);
     document.addEventListener("keydown", onKey, true);
     window.addEventListener("resize", onReflow, true);
     document.addEventListener("scroll", onReflow, true);
     this.onOutside = onOutside;
     this.onKey = onKey;
     this.onReflow = onReflow;
+    announceSurface(this.el, true, "popover", this.trigger);
   }
   hide() {
     if (!this.shown) return;
+    this.shown = false;
+    announceSurface(this.el, false, "popover", this.trigger);
     if (this.onOutside) document.removeEventListener("pointerdown", this.onOutside, true);
     if (this.onKey) document.removeEventListener("keydown", this.onKey, true);
     if (this.onReflow) {
@@ -689,9 +776,13 @@ var Popover = class {
         this.el.remove();
       }, this.fadeMs);
     } else {
-      this.el.remove();
+      this.exit = holdForExit(this.el, () => {
+        this.exit = null;
+        leaving.delete(this);
+        this.el.remove();
+      });
+      if (this.exit) leaving.add(this);
     }
-    this.shown = false;
     if (open === this) open = null;
     this.ctrl.onClose?.();
   }
@@ -702,6 +793,7 @@ var Popover = class {
   }
   destroy() {
     this.hide();
+    this.exit?.finish();
   }
   reposition() {
     if (this.shown) this.place();
@@ -1377,6 +1469,11 @@ ${overlayScrollbarCss(".vela-dialog *")}
 `;
 var Dialog = class {
   constructor(opts = {}) {
+    this.opener = null;
+    this.wasOpen = false;
+    /** The panel and scrim's exit animation after a close; a reopen cancels it. */
+    this.exit = null;
+    this.destroyed = false;
     const doc = (opts.host ?? document.body).ownerDocument;
     injectStyles(DIALOG_STYLE_ID, DIALOG_CSS, doc);
     const host = opts.host ?? doc.body;
@@ -1473,19 +1570,73 @@ var Dialog = class {
     const mid = String(this.ctrl.props.id);
     this.handle = runMachine(this.ctrl.machine, this.ctrl.props, (service) => {
       const api = this.ctrl.connect(service);
+      const closing = this.wasOpen && !api.open;
+      if (closing) this.announce(false);
       spreadProps(this.backdrop, api.getBackdropProps(), mid);
       spreadProps(this.positioner, api.getPositionerProps(), mid);
       spreadProps(this.panel, api.getContentProps(), mid);
       spreadProps(title, api.getTitleProps(), mid);
       spreadProps(close, api.getCloseTriggerProps(), mid);
-      this.backdrop.style.display = api.open ? "" : "none";
-      this.positioner.style.display = api.open ? "" : "none";
+      if (api.open) {
+        this.exit?.cancel();
+        this.exit = null;
+        this.setShown(true);
+      } else if (closing) {
+        this.holdExit();
+      } else if (!this.exit) {
+        this.setShown(false);
+      }
+      if (api.open && !this.wasOpen) this.announce(true);
+      if (this.wasOpen && !api.open) this.restoreOpener();
+      this.wasOpen = api.open;
     });
+  }
+  setShown(shown) {
+    this.backdrop.style.display = shown ? "" : "none";
+    this.positioner.style.display = shown ? "" : "none";
+  }
+  /** Keep the just-closed dialog up through its exit animation, then hide it — or
+   *  remove it, when it was destroyed meanwhile. `spreadProps` re-applies the close
+   *  props' `hidden` only when its value changes, so lifting it keeps the panel and
+   *  scrim up until the exit ends. The positioner spans the viewport: inert, it lets
+   *  clicks through to the page while the panel animates out. */
+  holdExit() {
+    const held = [this.panel, this.backdrop];
+    for (const el of held) el.hidden = false;
+    this.exit = holdForExit(
+      held,
+      () => {
+        this.exit = null;
+        if (this.destroyed) {
+          this.detach();
+        } else if (!this.open) {
+          for (const el of held) el.hidden = true;
+          this.setShown(false);
+        }
+      },
+      { inert: [this.positioner] }
+    );
+  }
+  detach() {
+    this.backdrop.remove();
+    this.positioner.remove();
+  }
+  /** Closing hands focus back to whatever opened it (Escape, the ✕, hide(), or a
+   *  teardown that outruns the machine's close notification). */
+  restoreOpener() {
+    const opener = this.opener;
+    this.opener = null;
+    if (opener?.isConnected) opener.focus({ preventScroll: true });
+  }
+  announce(open2) {
+    const opener = this.opener === this.panel.ownerDocument.body ? null : this.opener;
+    announceSurface(this.panel, open2, "dialog", opener);
   }
   get open() {
     return this.ctrl.connect(this.handle.service).open;
   }
   show() {
+    this.opener = this.panel.ownerDocument.activeElement;
     this.ctrl.connect(this.handle.service).setOpen(true);
   }
   hide() {
@@ -1498,10 +1649,16 @@ var Dialog = class {
     return el?.closest(".vela-popover, .vela-menu") != null;
   }
   destroy() {
+    if (this.wasOpen && !this.open) this.handle.flush();
     if (this.open) this.hide();
     this.handle.stop();
-    this.backdrop.remove();
-    this.positioner.remove();
+    this.destroyed = true;
+    if (this.wasOpen) {
+      this.wasOpen = false;
+      this.announce(false);
+    }
+    this.restoreOpener();
+    if (!this.exit) this.detach();
   }
 };
 

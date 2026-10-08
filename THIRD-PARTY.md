@@ -176,7 +176,7 @@ The pane's chart surface is not fetched from a CDN — the page has to boot iden
 CDN failure used to look exactly like a broken chart. The vendor directory therefore carries the
 third-party browser builds, each beside its licence:
 
-- **`vela/` — `@luxalgo/vela` 0.8.1** (chart, workspace, plugin SDK, Binance provider).
+- **`vela/` — `@luxalgo/vela` 0.8.3** (chart, workspace, plugin SDK, Binance provider).
   **Licence: Apache-2.0** — commercial use included, attribution kept (`vela/LICENSE`,
   `vela/NOTICE`; 0.8.1 moves the NOTICE's attribution URL `luxalgo.com/vela` → `velacharts.dev`); LuxAlgo's Vela page states the invitation in its own words ("Ship it in an
   afternoon"; "Free, open source" — luxalgo.com/vela, read 2 Oct 2026). *(A "Fork it, vendor it,

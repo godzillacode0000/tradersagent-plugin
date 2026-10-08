@@ -1,8 +1,8 @@
-import { parseSymbol, priceStyleIds, BUILTIN_PRICE_STYLES, tzButtonLabel, SecondClock, resolveTimezone, timezoneMenuRows, isGroupRow, defaultMemberOf, groupKeyOf, groupMembers, LEGEND_AT_TOP_ATTR, normalizeSession, Vela, normalizeTimezone, isExchangeTimezone, TypedEventBus, timeframeToMs, MultiProviderFeed, registerBuiltinChartTypes, resolveTheme, buildToolbar, createCustomMark, createAttributionMark, DrawingToolbar, applyAttributionMarkTheme, sharedBarStore } from './chunk-ATGTCWHJ.js';
-import { chartType, resolveTopbarComposition, topbarActionOverride, TOPBAR_BUILTIN_IDS, widgetActions, SidePanel, sidePanels, DEFAULT_PANEL_ORDER, symbolRanking, resolveEngines, legendActionsProviderFor, legendCalloutsProviderFor, statePersistenceHandlers, topbarHas, rendererDefaults, mobilePlacement, widgetAttachments, getDrawingType, inputDeltas } from './chunk-EZ5FWVLA.js';
-import { Tooltip, KeymapManager, isEditableTarget, Drawer } from './chunk-LMBYEGUR.js';
-import { Menu, Dialog, CalloutBubble, applyPlotOverlayTokens, ensureUIHost } from './chunk-NELQJCGK.js';
-import { registerIcon, svg16, injectStyles, iconEl, iconMarkup, iconAt, SESSION_OFF, SESSION_POST, SESSION_PRE, icon, categoricalColor } from './chunk-BZQM2XO7.js';
+import { parseSymbol, priceStyleIds, BUILTIN_PRICE_STYLES, SecondClock, isGroupRow, defaultMemberOf, groupKeyOf, groupMembers, LEGEND_AT_TOP_ATTR, normalizeSession, Vela, TypedEventBus, timeframeToMs, MultiProviderFeed, registerBuiltinChartTypes, resolveTheme, buildToolbar, createCustomMark, createAttributionMark, DrawingToolbar, applyAttributionMarkTheme, sharedBarStore, CANDLE_OVERRIDE_KEYS } from './chunk-HMHA733L.js';
+import { chartType, resolveTopbarComposition, topbarActionOverride, TOPBAR_BUILTIN_IDS, widgetActions, tzButtonLabel, resolveTimezone, timezoneMenuRows, SidePanel, sidePanels, DEFAULT_PANEL_ORDER, symbolRanking, paneScaleAt, composeMenu, priceAxisItems, scaleChoiceOf, timeAxisItems, bodyItems, scaleWrites, invertWrite, settingsSectionOf, resolveEngines, legendActionsProviderFor, legendCalloutsProviderFor, normalizeTimezone, isExchangeTimezone, statePersistenceHandlers, topbarHas, rendererDefaults, mobilePlacement, widgetAttachments, getDrawingType, inputDeltas } from './chunk-KWI3YDBW.js';
+import { Tooltip, KeymapManager, isEditableTarget, Drawer } from './chunk-TO3GIK7Z.js';
+import { Menu, Dialog, CalloutBubble, applyPlotOverlayTokens, ensureUIHost } from './chunk-G7B7ZCBF.js';
+import { registerIcon, svg16, injectStyles, iconEl, iconMarkup, iconAt, SESSION_OFF, SESSION_POST, SESSION_PRE, announceSurface, holdForExit, icon, categoricalColor } from './chunk-VHGACEHO.js';
 import { baseOf } from './chunk-W4EJWLEO.js';
 
 // src/widget/timeframe.ts
@@ -108,11 +108,11 @@ function timeframeLabel(value) {
 }
 
 // src/widget/layout-picker.ts
-var STYLE_ID = "vela-widget-layout-picker-v14";
+var STYLE_ID = "vela-widget-layout-picker-v15";
 var CSS = `
 .vela-lp-layer { position: absolute; z-index: var(--vela-z-menu); }
 .vela-lp {
-    background: var(--vela-surface-elev);
+    background: var(--vela-surface);
     color: var(--vela-fg);
     border: 1px solid var(--vela-border-strong);
     border-radius: 8px;
@@ -241,6 +241,8 @@ var LayoutPicker = class {
   constructor(opts) {
     this.squares = [];
     this.isOpen = false;
+    /** The card's exit animation after a close; a reopen cancels it. */
+    this.exit = null;
     /** Hover preview (1-based rows/cols), null = show current shape. */
     this.hover = null;
     this.onDocPointerDown = (e) => {
@@ -261,6 +263,7 @@ var LayoutPicker = class {
     const panel = doc.createElement("div");
     panel.className = "vela-lp";
     this.layer.appendChild(panel);
+    this.panel = panel;
     const cols = doc.createElement("div");
     cols.className = "vela-lp-cols";
     panel.appendChild(cols);
@@ -334,6 +337,8 @@ var LayoutPicker = class {
   open() {
     if (this.isOpen) return;
     this.isOpen = true;
+    this.exit?.cancel();
+    this.exit = null;
     this.hover = null;
     this.refresh();
     this.layer.style.display = "";
@@ -342,11 +347,16 @@ var LayoutPicker = class {
     this.doc.addEventListener("pointerdown", this.onDocPointerDown, true);
     this.doc.addEventListener("keydown", this.onDocKeydown, true);
     this.opts.onOpenChange?.(true);
+    if (this.isOpen) announceSurface(this.panel, true, "popover", this.opts.trigger);
   }
   close() {
     if (!this.isOpen) return;
     this.isOpen = false;
-    this.layer.style.display = "none";
+    announceSurface(this.panel, false, "popover", this.opts.trigger);
+    this.exit = holdForExit(this.panel, () => {
+      this.exit = null;
+      if (!this.isOpen) this.layer.style.display = "none";
+    });
     this.opts.trigger.setAttribute("aria-expanded", "false");
     this.doc.removeEventListener("pointerdown", this.onDocPointerDown, true);
     this.doc.removeEventListener("keydown", this.onDocKeydown, true);
@@ -361,6 +371,7 @@ var LayoutPicker = class {
   }
   destroy() {
     this.close();
+    this.exit?.finish();
     this.infoTip.destroy();
     this.layer.remove();
   }
@@ -427,7 +438,7 @@ var LayoutPicker = class {
     const hostRect = this.opts.host.getBoundingClientRect();
     const trigRect = this.opts.trigger.getBoundingClientRect();
     let left = trigRect.left - hostRect.left;
-    const top = trigRect.bottom - hostRect.top + 4;
+    const top = trigRect.bottom - hostRect.top + 8;
     const width = this.layer.offsetWidth;
     if (left + width > hostRect.width - 8) left = Math.max(8, hostRect.width - 8 - width);
     this.layer.style.left = `${left}px`;
@@ -780,7 +791,8 @@ var Topbar = class {
       triggerId: "vela-topbar-style",
       host,
       items: this.styleItems(),
-      onSelect: (id) => opts.onPriceStyle(id)
+      onSelect: (id) => opts.onPriceStyle(id),
+      iconBadges: true
     });
   }
   setSymbol(symbol) {
@@ -846,8 +858,14 @@ var Topbar = class {
   renderLayoutButton(doc) {
     if (!this.layoutButton) return;
     this.layoutButton.replaceChildren();
-    if (iconMarkup("layout")) this.layoutButton.appendChild(iconEl("layout", doc));
-    else this.layoutButton.appendChild(doc.createTextNode(this.layoutId ?? ""));
+    const glyph = this.opts.layout?.glyph?.();
+    if (glyph || iconMarkup("layout")) {
+      const icon2 = iconEl("layout", doc);
+      if (glyph) icon2.innerHTML = glyph;
+      this.layoutButton.appendChild(icon2);
+    } else {
+      this.layoutButton.appendChild(doc.createTextNode(this.layoutId ?? ""));
+    }
     this.layoutButton.setAttribute("aria-label", `Layout \u2014 ${this.layoutId ?? ""}`);
   }
   renderStyleButton(doc) {
@@ -1701,8 +1719,8 @@ var ObjectTree = class extends SidePanel {
   set groups(next) {
     if (this.chart) this.groupsPerChart.set(this.chart, next);
   }
-  toggle(open = this.el.hidden) {
-    super.toggle(open);
+  toggle(open = !this.open, instant = false) {
+    super.toggle(open, instant);
     if (open) this.refresh();
   }
   setSymbol(symbol) {
@@ -2736,8 +2754,8 @@ var DataWindow = class extends SidePanel {
     this.unsubs = [];
     injectStyles(STYLE_ID5, CSS5, host.ownerDocument);
   }
-  toggle(open = this.el.hidden) {
-    super.toggle(open);
+  toggle(open = !this.open, instant = false) {
+    super.toggle(open, instant);
     if (open) this.refresh();
   }
   /** (Re)bind to a chart instance — called after every widget rebuild. */
@@ -2813,19 +2831,22 @@ var PanelDock = class {
   /**
    * (Re)build the CONTRIBUTED panels from the registry — call once after the built-ins, and
    * again on `refreshActions()` so a late registration appears. Contributed panels that are
-   * gone from the registry are dropped; the ones still there are rebuilt, so a replaced
-   * descriptor takes effect.
+   * gone from the registry are dropped and a REPLACED descriptor is rebuilt; a panel whose
+   * descriptor is unchanged stays mounted as it is, so its content and state survive.
    */
   refresh() {
     const openBefore = this.openId;
-    for (const entry of [...this.entries]) if (entry.contributed) this.drop(entry);
-    for (const desc of sidePanels()) {
+    const registered = sidePanels();
+    for (const entry of [...this.entries]) if (entry.contributed && !registered.includes(entry.desc)) this.drop(entry);
+    for (const desc of registered) {
+      if (this.entries.some((e) => e.desc === desc)) continue;
       const panel = new SidePanel(this.host, desc.title, `vela-panel-${desc.id}`, {
         width: desc.width,
         resizable: desc.resizable,
         minWidth: desc.minWidth,
         maxWidth: desc.maxWidth,
-        overlay: desc.overlay
+        overlay: desc.overlay,
+        maximizable: desc.maximizable
       });
       const entry = {
         id: desc.id,
@@ -2833,10 +2854,19 @@ var PanelDock = class {
         icon: desc.icon,
         order: desc.order ?? DEFAULT_PANEL_ORDER,
         panel,
-        contributed: true
+        contributed: true,
+        desc
       };
       try {
-        entry.handle = desc.mount(this.deps.context(), panel.content, { slot: panel.headerSlot, setTitle: (t) => panel.setTitle(t) }) ?? void 0;
+        const header = {
+          slot: panel.headerSlot,
+          setTitle: (t) => panel.setTitle(t),
+          get maximized() {
+            return panel.maximized;
+          },
+          setMaximized: (on) => panel.setMaximized(on)
+        };
+        entry.handle = desc.mount(this.deps.context(), panel.content, header) ?? void 0;
         if (this.chart) entry.handle?.onChart?.(this.chart);
       } catch (err) {
         console.warn(`[vela] side panel "${desc.id}" failed to mount`, err);
@@ -2895,7 +2925,7 @@ var PanelDock = class {
     }
     this.pinned = new Set(state.pinned ?? []);
     for (const entry of this.entries) entry.panel.setOverlay(!this.pinned.has(entry.id));
-    for (const entry of this.entries) entry.panel.toggle(entry.id === state.open);
+    for (const entry of this.entries) entry.panel.toggle(entry.id === state.open, true);
     this.pendingOpen = state.open && !this.entries.some((e) => e.id === state.open) ? state.open : null;
   }
   /** Drop the contributed panels (the shell destroys its own). */
@@ -2911,7 +2941,7 @@ var PanelDock = class {
     if (this.pinned.has(entry.id)) entry.panel.setOverlay(false);
     entry.panel.onOpenChange = (open) => {
       if (open) {
-        for (const other of this.entries) if (other !== entry) other.panel.toggle(false);
+        for (const other of this.entries) if (other !== entry) other.panel.toggle(false, true);
         this.pendingOpen = null;
       }
       this.deps.chrome.setPanelActive(entry.id, open);
@@ -4027,15 +4057,48 @@ function syncTargets(originId, setting, cellIds) {
 function rangesWithin(a, b, epsMs) {
   return Math.abs(a.from - b.from) <= epsMs && Math.abs(a.to - b.to) <= epsMs;
 }
-var STYLE_SYNC_CONFIG_KEYS = ["layout", "panes", "grid", "priceScale", "crosshair"];
-function styleConfigSlice(config) {
-  if (config == null || typeof config !== "object") return null;
-  const doc = config;
-  const out = {};
+var STYLE_SYNC_CONFIG_KEYS = [
+  "layout",
+  "panes",
+  "grid",
+  "margins",
+  "priceScale",
+  "crosshair",
+  "animations",
+  "candles",
+  "bars",
+  "line",
+  "area",
+  "baseline",
+  "sessions"
+];
+function styleConfigPatch(origin, follower) {
+  const from = asRecord(origin);
+  const to = asRecord(follower);
+  if (!from || !to) return null;
+  const patch = {};
   for (const key of STYLE_SYNC_CONFIG_KEYS) {
-    if (doc[key] != null && typeof doc[key] === "object") out[key] = doc[key];
+    const block = asRecord(from[key]);
+    if (block && JSON.stringify(block) !== JSON.stringify(to[key])) patch[key] = block;
   }
-  return Object.keys(out).length > 0 ? out : null;
+  const spacing = asRecord(from.series)?.spacing;
+  if (typeof spacing === "number" && spacing !== asRecord(to.series)?.spacing) patch.series = { spacing };
+  const fromTypes = asRecord(from.chartTypes) ?? {};
+  const toTypes = asRecord(to.chartTypes) ?? {};
+  const types = {};
+  for (const typeId of /* @__PURE__ */ new Set([...Object.keys(fromTypes), ...Object.keys(toTypes)])) {
+    const src = asRecord(fromTypes[typeId]) ?? {};
+    const dst = asRecord(toTypes[typeId]) ?? {};
+    for (const key of CANDLE_OVERRIDE_KEYS) {
+      const value = src[key] ?? null;
+      if (value !== (dst[key] ?? null)) (types[typeId] ?? (types[typeId] = {}))[key] = value;
+    }
+  }
+  if (Object.keys(types).length > 0) patch.chartTypes = types;
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+function asRecord(v) {
+  return v != null && typeof v === "object" ? v : null;
 }
 
 // src/workspace/persist.ts
@@ -4223,6 +4286,9 @@ var CSS10 = `
 .vela-statusline .vela-sl-market { align-self: center; display: inline-flex; }
 .vela-statusline .vela-sl-market > [hidden] { display: none !important; }
 .vela-statusline .vela-sl-replay-badge, .vela-statusline .vela-sl-replay-badge svg { display: block; width: 16px; height: 16px; }
+/* Tabular figures: every digit has one advance, so a readout whose text changes only in
+ * its digits keeps its width \u2014 render() skips the ladder for those (see widthKey). */
+.vela-statusline .vela-sl-values { font-variant-numeric: tabular-nums; }
 .vela-statusline .vela-sl-ohlc { display: flex; gap: var(--vela-space-1); color: var(--vela-fg-muted); }
 .vela-statusline .vela-sl-ohlc b { color: var(--vela-fg); font-weight: 500; }
 /* The change value wears the SAME ink as the OHLC values (set inline per render) \u2014
@@ -4340,6 +4406,10 @@ var Statusline = class {
     this.fitRO = null;
     /** The ladder rung currently applied — see {@link fit}. */
     this.layout = { stacked: false, level: "full" };
+    /** The readout {@link widthKey} the applied rung was fitted to. */
+    this.fitKey = null;
+    /** Web fonts landing after the last fit change every width without a resize. */
+    this.onFontsLoaded = () => this.fit();
     this.onContextMenu = (e) => {
       if (!this.menu || !this.menuHooks) return;
       e.preventDefault();
@@ -4403,6 +4473,7 @@ var Statusline = class {
       this.fitRO = new ResizeObserver(() => this.fit());
       this.fitRO.observe(host);
     }
+    doc.fonts?.addEventListener("loadingdone", this.onFontsLoaded);
     this.marketTip = new Tooltip(this.marketEl, { content: MARKET_LABELS.open, placement: "bottom" });
     this.eyeTip = new Tooltip(this.eyeEl, { content: "Show chart", placement: "bottom" });
     this.setMarketStatus("open");
@@ -4455,6 +4526,7 @@ var Statusline = class {
    * (detached host, node tests) nothing overflows, so the widest rung stays.
    */
   fit() {
+    this.fitKey = this.widthKey();
     this.syncParts();
     const seg = segmentVisibility(this.parts, this.chartHidden);
     const overflows = () => this.el.scrollWidth > this.el.clientWidth;
@@ -4611,6 +4683,7 @@ var Statusline = class {
     this.detach();
     this.fitRO?.disconnect();
     this.fitRO = null;
+    this.el.ownerDocument.fonts?.removeEventListener("loadingdone", this.onFontsLoaded);
     this.el.removeEventListener("contextmenu", this.onContextMenu);
     this.menu?.destroy();
     this.menu = null;
@@ -4626,7 +4699,22 @@ var Statusline = class {
   }
   render() {
     if (this.menuHooks) this.setChartHidden(!this.menuHooks.chartVisible());
-    this.fit();
+    if (this.widthKey() === this.fitKey) this.renderValues();
+    else this.fit();
+  }
+  /** Everything the readout's width depends on, at every rung: its shape, and each
+   *  value's sign, digit count and decimals (the digits themselves are tabular — see
+   *  the CSS; the grouping commas follow from the digit count). `toFixed` carries all
+   *  three at a fraction of the locale formatter's cost — this runs per pointer move.
+   *  The parts, the host's size and the fonts re-fit through their own paths. */
+  widthKey() {
+    const bar = this.hoverBar ?? this.lastBar;
+    if (!bar) return this.readout;
+    const dp = decimalsFor(bar.close);
+    const diff = bar.close - bar.open;
+    const text = [bar.open, bar.high, bar.low, bar.close, diff].map((v) => v.toFixed(dp));
+    text.push((diff / bar.open * 100).toFixed(2));
+    return `${this.readout} ${text.join(" ")}`.replace(/\d/g, "0");
   }
   /** Write the value readout for the current bar at the current ladder level. */
   renderValues() {
@@ -4772,113 +4860,28 @@ var Watermark = class {
   }
 };
 
-// src/widget/context-menu-model.ts
-var SETTINGS_SECTION = {
-  body: "Canvas",
-  "price-axis": "Scales and lines",
-  "time-axis": "Scales and lines"
-};
-function settingsItem(zone, label) {
-  return { id: `settings:${SETTINGS_SECTION[zone]}`, label, separatorBefore: true };
-}
-function settingsSectionOf(id) {
-  return id.slice("settings:".length) || void 0;
-}
-var SCALE_CHOICES = [
-  ["regular", "Regular"],
-  ["percent", "Percent"],
-  ["indexed", "Indexed to 100"],
-  ["log", "Logarithmic"]
-];
-function paneScaleAt(panes, y) {
-  return panes.find((p) => y >= p.top && y < p.top + p.height) ?? panes[0] ?? null;
-}
-function scaleChoiceOf(scale) {
-  if (scale.log) return "log";
-  if (scale.mode === "percent") return "percent";
-  if (scale.mode === "indexed") return "indexed";
-  return "regular";
-}
-function mainScale(pane) {
-  return pane === null || pane.kind === "price";
-}
-function scaleWrites(choice, pane) {
-  const mode = choice === "percent" ? "percent" : choice === "indexed" ? "indexed" : "price";
-  const log = choice === "log";
-  if (mainScale(pane)) {
-    return [
-      ["scaleMode", mode],
-      ["logScale", log]
-    ];
-  }
-  return [
-    ["scaleMode", { pane: pane.id, mode }],
-    ["logScale", { pane: pane.id, value: log }]
-  ];
-}
-function invertWrite(next, pane) {
-  return mainScale(pane) ? ["invertScale", next] : ["invertScale", { pane: pane.id, value: next }];
-}
-function priceAxisItems(s) {
-  return [
-    { id: "auto", label: "Auto (fits data to screen)", checked: s.auto },
-    { id: "invert", label: "Invert scale", checked: s.invert },
-    ...SCALE_CHOICES.map(([choice, label], i) => ({
-      id: `scale:${choice}`,
-      label,
-      checked: s.choice === choice,
-      separatorBefore: i === 0
-    })),
-    {
-      id: "labels",
-      label: "Labels",
-      separatorBefore: true,
-      submenu: [
-        { id: "toggle:axisLabels", label: "Price axis labels", checked: s.axisLabels },
-        { id: "toggle:priceLabel", label: "Last price label", checked: s.priceLabel },
-        { id: "toggle:countdown", label: "Countdown to bar close", checked: s.countdown }
-      ]
-    },
-    {
-      id: "levels",
-      label: "Levels",
-      submenu: [{ id: "toggle:currentPriceLine", label: "Last Price Line", checked: s.priceLine }]
-    },
-    settingsItem("price-axis", "More settings\u2026")
-  ];
-}
-function timeAxisItems(timezone) {
-  return [
-    {
-      id: "timezone",
-      label: "Time zone",
-      submenu: timezoneMenuRows(timezone).map((r) => ({ id: `tz:${r.value}`, label: r.label, checked: r.checked }))
-    },
-    settingsItem("time-axis", "More settings\u2026")
-  ];
-}
-function bodyItems(counts) {
-  return [
-    { id: "reset-view", label: "Reset chart view" },
-    { id: "remove-drawings", label: "Remove drawings", disabled: counts.drawings === 0, separatorBefore: true },
-    { id: "remove-indicators", label: "Remove indicators", disabled: counts.indicators === 0 },
-    settingsItem("body", "Settings\u2026")
-  ];
-}
-
 // src/widget/context-menu.ts
 var PRICE_AXIS_W = 60;
 var TIME_AXIS_H = 26;
+var OFF_PLOT = { price: null, time: null, paneKind: null };
 var ChartContextMenu = class {
   constructor(host, cbs) {
     this.cbs = cbs;
     this.chart = null;
+    this.offCrosshair = null;
+    /** The bound chart's latest crosshair report — a right-click always follows a pointer
+     *  move to its spot, so this is where it landed. */
+    this.crosshair = OFF_PLOT;
+    /** {@link crosshair} as it stood when the menu opened: the pointer moves on through the
+     *  menu before a row is picked, and `run` must see the right-clicked spot. */
+    this.pointer = OFF_PLOT;
     this.lastZone = "body";
     /** The pane whose scale the open price-axis menu targets (null ⇒ the main scale). */
     this.lastPane = null;
     this.onContextMenu = (e) => {
       e.preventDefault();
       if (!this.chart) return;
+      this.pointer = this.crosshair;
       this.lastZone = this.zoneOf(e);
       this.lastPane = this.lastZone === "price-axis" ? this.paneAt(e) : null;
       this.menu.setItems(this.itemsFor(this.lastZone));
@@ -4892,15 +4895,23 @@ var ChartContextMenu = class {
       // Pointer-anchored action menu: checked state reads as a leading ✓, not a
       // washed row (which would read as hover in a menu with no trigger button).
       checkmarks: true,
+      iconBadges: true,
       onSelect: (id) => this.run(id)
     });
     host.addEventListener("contextmenu", this.onContextMenu);
   }
   /** (Re)bind to a chart instance — called after every widget rebuild. */
   onChart(chart) {
+    this.offCrosshair?.();
     this.chart = chart;
+    this.crosshair = OFF_PLOT;
+    this.offCrosshair = chart.renderer.onCrosshairMove((e) => {
+      this.crosshair = { price: e.price, time: e.time, paneKind: e.paneKind ?? null };
+    });
   }
   destroy() {
+    this.offCrosshair?.();
+    this.offCrosshair = null;
     this.host.removeEventListener("contextmenu", this.onContextMenu);
     this.menu.destroy();
   }
@@ -4919,49 +4930,52 @@ var ChartContextMenu = class {
   flag(feature) {
     return Boolean(this.chart?.renderer.get(feature));
   }
-  contributed(zone) {
+  /** A fresh widget context carrying the pointer captured at open. Copied by property
+   *  descriptor: the context's getters must stay LIVE, and a spread would freeze them. */
+  context() {
     const ctx = this.cbs.getContext?.();
-    return widgetActions(`context:${zone}`, ctx).map((a, i) => ({
-      id: `action:${a.id}`,
-      label: a.label,
-      icon: a.icon,
-      separatorBefore: i === 0
+    if (!ctx) return void 0;
+    return Object.create(Object.getPrototypeOf(ctx), {
+      ...Object.getOwnPropertyDescriptors(ctx),
+      pointer: { value: this.pointer, enumerable: true }
+    });
+  }
+  contributed(zone) {
+    return widgetActions(`context:${zone}`, this.context()).map((a) => ({
+      item: { id: `action:${a.id}`, label: a.label, icon: a.icon },
+      order: a.order
     }));
   }
   itemsFor(zone) {
+    return composeMenu(zone, this.builtinItems(zone), this.contributed(zone));
+  }
+  builtinItems(zone) {
     if (zone === "price-axis") {
       const pane = this.lastPane;
-      return [
-        ...priceAxisItems({
-          auto: this.chart?.renderer.get("autoScale") !== false,
-          invert: pane ? pane.invert : this.flag("invertScale"),
-          choice: scaleChoiceOf(pane ?? { mode: String(this.chart?.renderer.get("scaleMode") ?? "price"), log: this.flag("logScale") }),
-          axisLabels: this.flag("axisLabels"),
-          priceLabel: this.flag("priceLabel"),
-          countdown: this.flag("countdown"),
-          priceLine: this.flag("currentPriceLine")
-        }),
-        ...this.contributed(zone)
-      ];
+      return priceAxisItems({
+        auto: this.chart?.renderer.get("autoScale") !== false,
+        invert: pane ? pane.invert : this.flag("invertScale"),
+        choice: scaleChoiceOf(pane ?? { mode: String(this.chart?.renderer.get("scaleMode") ?? "price"), log: this.flag("logScale") }),
+        axisLabels: this.flag("axisLabels"),
+        priceLabel: this.flag("priceLabel"),
+        countdown: this.flag("countdown"),
+        priceLine: this.flag("currentPriceLine")
+      });
     }
     if (zone === "time-axis") {
-      const tz = this.cbs.timezone?.() ?? String(this.chart?.renderer.get("timezone") ?? "Etc/UTC");
-      return [...timeAxisItems(tz), ...this.contributed("time-axis")];
+      return timeAxisItems(this.cbs.timezone?.() ?? String(this.chart?.renderer.get("timezone") ?? "Etc/UTC"));
     }
     const chart = this.chart;
-    return [
-      ...bodyItems({
-        drawings: chart?.drawings.supported ? chart.drawings.all().length : 0,
-        indicators: chart?.indicators().length ?? 0
-      }),
-      ...this.contributed("body")
-    ];
+    return bodyItems({
+      drawings: chart?.drawings.supported ? chart.drawings.all().length : 0,
+      indicators: chart?.indicators().length ?? 0
+    });
   }
   run(id) {
     const chart = this.chart;
     if (!chart) return;
     if (id.startsWith("action:")) {
-      const ctx = this.cbs.getContext?.();
+      const ctx = this.context();
       if (ctx) widgetActions(`context:${this.lastZone}`, ctx).find((a) => a.id === id.slice("action:".length))?.run(ctx);
       return;
     }
@@ -5611,8 +5625,8 @@ function seedDefaults(opts) {
   };
 }
 function cellChartDefaults(opts) {
-  const { renderer, defaultLanguage, currentPriceLine, logScale, animations, glow, upColor, downColor, drawings, settings } = opts;
-  return { renderer, defaultLanguage, currentPriceLine, logScale, animations, glow, upColor, downColor, drawings, settings };
+  const { renderer, defaultLanguage, currentPriceLine, logScale, animations, glow, upColor, downColor, drawings, settings, priceAxis } = opts;
+  return { renderer, defaultLanguage, currentPriceLine, logScale, animations, glow, upColor, downColor, drawings, settings, priceAxis };
 }
 function cellDrawings(opt) {
   if (opt === false) return false;
@@ -6182,12 +6196,14 @@ var ChartCell = class {
     this.watermarkOn = visible;
     this.watermark?.setVisible(visible);
     this.deps.onStateDirty();
+    this.deps.onStatusPrefsChanged(this.id);
   }
   /** Show/hide the "Replay" line under this cell's watermark while it replays (persisted per cell). */
   setReplayWatermarkVisible(visible) {
     this.replayWatermarkOn = visible;
     this.watermark?.setReplayVisible(visible);
     this.deps.onStateDirty();
+    this.deps.onStatusPrefsChanged(this.id);
   }
   /** Show/hide this cell's indicator titles — the in-chart legend rows (persisted per cell). */
   setIndicatorTitlesVisible(visible) {
@@ -6208,18 +6224,20 @@ var ChartCell = class {
     this.statusline?.setPartVisible(part, visible);
     this.deps.onStatusPrefsChanged(this.id);
   }
-  /** This cell's Status line tab prefs as one bundle (see {@link CellStatusPrefs}). */
+  /** This cell's Status line tab and watermark prefs as one bundle (see {@link CellStatusPrefs}). */
   statusPrefs() {
     const sl = this.statusline;
     return {
       parts: sl ? { logo: sl.partVisible("logo"), name: sl.partVisible("name"), market: sl.partVisible("market"), ohlc: sl.partVisible("ohlc"), change: sl.partVisible("change") } : null,
       indicatorTitles: this.indicatorTitlesOn,
-      indicatorValues: this.indicatorValuesOn
+      indicatorValues: this.indicatorValuesOn,
+      watermark: this.watermarkOn,
+      replayWatermark: this.replayWatermarkOn
     };
   }
-  /** Converge this cell's Status line tab prefs to `prefs` — the follower half of
-   *  the workspace's style link. Idempotent: matching values change nothing, so a
-   *  propagated echo dies on its own. */
+  /** Converge this cell's Status line tab and watermark prefs to `prefs` — the
+   *  follower half of the workspace's style link. Idempotent: matching values change
+   *  nothing, so a propagated echo dies on its own. */
   applyStatusPrefs(prefs) {
     if (prefs.parts && this.statusline) {
       for (const part of Object.keys(prefs.parts)) {
@@ -6228,6 +6246,8 @@ var ChartCell = class {
     }
     if (prefs.indicatorTitles !== this.indicatorTitlesOn) this.setIndicatorTitlesVisible(prefs.indicatorTitles);
     if (prefs.indicatorValues !== this.indicatorValuesOn) this.setIndicatorValuesVisible(prefs.indicatorValues);
+    if (prefs.watermark !== this.watermarkOn) this.setWatermarkVisible(prefs.watermark);
+    if (prefs.replayWatermark !== this.replayWatermarkOn) this.setReplayWatermarkVisible(prefs.replayWatermark);
   }
   /** The LIVE chart of this cell — never cache it across a layout change (the cell's
    *  identity is what endures; the chart dies with the cell). */
@@ -7098,6 +7118,55 @@ function occupancyGrid(def) {
   if (def.areas) return def.areas.map((row) => row.trim().split(/\s+/));
   const cols = def.cols.length;
   return def.rows.map((_, r) => def.cols.map((_2, c) => def.cells[r * cols + c]?.id ?? `\xB7${r}x${c}`));
+}
+var GLYPH_MIN = 1.5;
+var GLYPH_SPAN = 13;
+function glyphStops(weights, n) {
+  const w = Array.from({ length: n }, (_, i) => {
+    const v = weights[i];
+    return v !== void 0 && Number.isFinite(v) && v > 0 ? v : 1;
+  });
+  const total = w.reduce((a, b) => a + b, 0);
+  const stops = [GLYPH_MIN];
+  let acc = 0;
+  for (const v of w) {
+    acc += v;
+    stops.push(Math.round((GLYPH_MIN + GLYPH_SPAN * acc / total) * 100) / 100);
+  }
+  return stops;
+}
+function layoutGlyph(def) {
+  const grid = occupancyGrid(def);
+  const rows = grid.length;
+  const cols = grid.reduce((n, row) => Math.max(n, row.length), 0);
+  const xs = glyphStops(def.cols, cols);
+  const ys = glyphStops(def.rows, rows);
+  const at = (r, c) => grid[r]?.[c];
+  const seams = [];
+  for (let c = 1; c < cols; c += 1) {
+    let start = -1;
+    for (let r = 0; r <= rows; r += 1) {
+      const split = r < rows && at(r, c - 1) !== at(r, c);
+      if (split && start < 0) start = r;
+      if (!split && start >= 0) {
+        seams.push(`M${xs[c]} ${ys[start]}V${ys[r]}`);
+        start = -1;
+      }
+    }
+  }
+  for (let r = 1; r < rows; r += 1) {
+    let start = -1;
+    for (let c = 0; c <= cols; c += 1) {
+      const split = c < cols && at(r - 1, c) !== at(r, c);
+      if (split && start < 0) start = c;
+      if (!split && start >= 0) {
+        seams.push(`M${xs[start]} ${ys[r]}H${xs[c]}`);
+        start = -1;
+      }
+    }
+  }
+  const frame = `<rect x="${GLYPH_MIN}" y="${GLYPH_MIN}" width="${GLYPH_SPAN}" height="${GLYPH_SPAN}" rx="1.5"/>`;
+  return svg16(seams.length > 0 ? `${frame}<path d="${seams.join("")}"/>` : frame);
 }
 function gridStyles(def, trackSizes) {
   const cols = trackSizes?.cols?.length === def.cols.length ? trackSizes.cols : def.cols;
@@ -8009,7 +8078,11 @@ var MoreDrawer = class {
   row(doc, label, opts) {
     const el = doc.createElement("div");
     el.className = "vela-md-row";
-    if (opts.icon) el.appendChild(iconEl(opts.icon, doc));
+    if (opts.icon) {
+      const icon2 = iconEl(opts.icon, doc);
+      if (opts.glyph) icon2.innerHTML = opts.glyph;
+      el.appendChild(icon2);
+    }
     const text = doc.createElement("span");
     text.className = "vela-md-row-label";
     text.textContent = label;
@@ -8051,7 +8124,7 @@ var MoreDrawer = class {
     if (this.opts.layout) {
       const shape = this.opts.layout.shape();
       const value = shape ? `${shape.cols} \xD7 ${shape.rows}` : this.opts.layout.presets().find((p) => p.checked)?.label;
-      list.appendChild(this.row(doc, "Layout", { icon: "layout", value, chevron: true, onClick: () => this.show("layout") }));
+      list.appendChild(this.row(doc, "Layout", { icon: "layout", glyph: this.opts.layout.glyph?.(), value, chevron: true, onClick: () => this.show("layout") }));
     }
     for (const act of this.opts.primaryActions?.() ?? []) list.appendChild(this.actionRow(doc, act));
     for (const panel of this.opts.panels()) {
@@ -8915,7 +8988,8 @@ var VelaWorkspace = class {
         onToggleSync: (id) => {
           const kind = id;
           this.sync.set(kind, this.syncOpts[kind] ? false : true);
-        }
+        },
+        glyph: () => layoutGlyph(this.def)
       },
       getContext: () => this.context()
     });
@@ -9414,6 +9488,7 @@ var VelaWorkspace = class {
     this.applyGrid();
     this.buildCells();
     this.alignNewCellStyles(preexisting);
+    this.alignNewCellDrawings(preexisting);
     this.syncCellPresentation();
     this.refreshCellControls();
     this.topbar.setLayout(next.id);
@@ -9830,6 +9905,7 @@ var VelaWorkspace = class {
     const chart = cell.chart;
     chart.on("indicator:error", ({ error }) => this.toastHost.show(`[${cell.id}] ${error.message}`, "error", 5e3));
     chart.on("script:run", (run) => this.events.emit("script:run", { ...run, cell: cell.id }));
+    chart.on("priceStyle:change", ({ from, to }) => this.events.emit("cell:priceStyle", { id: cell.id, from, to }));
     chart.on("alert", (alert) => {
       const source = [parseSymbol(cell.symbol).ticker || cell.symbol, timeframeLabel(cell.timeframe), alert.indicator].filter(Boolean).join(" ");
       this.alerts.unshift({ cellId: cell.id, source, title: alert.title ?? "Alert", message: alert.message, time: alert.time });
@@ -9947,12 +10023,66 @@ var VelaWorkspace = class {
     }
   }
   /**
-   * Mirror an origin cell's presentation — the Canvas + Scales-and-lines slice of
-   * its renderer config plus its Status line tab prefs — onto its same-group
-   * followers (the style link). Loop-safe two ways: the busy guard eats the
-   * followers' SYNCHRONOUS echoes (their `applyConfig` re-fires `onConfigChanged`
-   * in the same tick), and the equality short-circuits leave already-converged
-   * followers untouched, so nothing re-emits once the group agrees.
+   * Bring cells minted by a layout change into their drawings group: with the link
+   * on, a NEW cell (fresh slot, or one returning from the pool that missed edits
+   * while dormant) receives the drawings of a pre-existing group peer — the active
+   * cell when it is one. A drawing the arriving cell already holds a linked copy of
+   * is refreshed in place; any other is copied and linked like a freshly synced
+   * drawing, so later edits and removals follow both ways. The arrival is the cell's
+   * starting state, not an edit: it stays out of the cell's undo timeline, and the
+   * busy guard keeps the copies' own events from fanning back out.
+   */
+  alignNewCellDrawings(preexisting) {
+    const setting = this.syncOpts.drawings;
+    if (!setting) return;
+    const ids = [...this.cellsById.keys()];
+    for (const id of ids) {
+      if (preexisting.has(id)) continue;
+      const cell = this.cellsById.get(id);
+      if (!cell?.chart.drawings.supported) continue;
+      const peers = syncTargets(id, setting, ids).filter((p) => preexisting.has(p));
+      if (peers.length === 0) continue;
+      const sourceId = this.activeId && peers.includes(this.activeId) ? this.activeId : peers[0];
+      const source = this.cellsById.get(sourceId);
+      if (!source) continue;
+      const drawings = cell.chart.drawings;
+      this.drawingSyncBusy = true;
+      try {
+        cell.history.silently(() => {
+          const held = new Set(drawings.all().map((d) => d.id));
+          for (const doc of source.chart.drawings.all()) {
+            const group = this.drawingLinks.get(`${sourceId}\0${doc.id}`) ?? /* @__PURE__ */ new Map([[sourceId, doc.id]]);
+            const peerId = group.get(id);
+            if (peerId != null && held.has(peerId)) {
+              drawings.update(peerId, { anchors: doc.anchors, style: doc.style, text: doc.text, props: doc.props });
+              continue;
+            }
+            const copy = drawings.add(doc.type, {
+              paneId: doc.paneId,
+              anchors: doc.anchors,
+              style: doc.style,
+              text: doc.text,
+              props: doc.props,
+              zIndex: doc.zIndex
+            });
+            if (!copy) continue;
+            if (peerId != null) this.drawingLinks.delete(`${id}\0${peerId}`);
+            group.set(id, copy.id);
+            for (const [cellId, dId] of group) this.drawingLinks.set(`${cellId}\0${dId}`, group);
+          }
+        });
+      } finally {
+        this.drawingSyncBusy = false;
+      }
+    }
+  }
+  /**
+   * Mirror an origin cell's presentation — the style-link slice of its renderer
+   * config ({@link styleConfigPatch}) plus its Status line and watermark prefs —
+   * onto its same-group followers (the style link). Loop-safe two ways: the busy
+   * guard eats the followers' SYNCHRONOUS echoes (their `applyConfig` re-fires
+   * `onConfigChanged` in the same tick), and the equality short-circuits leave
+   * already-converged followers untouched, so nothing re-emits once the group agrees.
    */
   propagateStylePrefs(originId) {
     if (this.styleSyncBusy || this.destroyed) return;
@@ -9960,17 +10090,15 @@ var VelaWorkspace = class {
     if (targets.length === 0) return;
     const origin = this.cellsById.get(originId);
     if (!origin) return;
-    const slice = styleConfigSlice(origin.chart.renderer.getConfig());
-    const sliceJson = slice ? JSON.stringify(slice) : null;
+    const config = origin.chart.renderer.getConfig();
     const prefs = origin.statusPrefs();
     this.styleSyncBusy = true;
     try {
       for (const id of targets) {
         const cell = this.cellsById.get(id);
         if (!cell) continue;
-        if (slice && sliceJson !== JSON.stringify(styleConfigSlice(cell.chart.renderer.getConfig()))) {
-          cell.chart.renderer.applyConfig(slice);
-        }
+        const patch = styleConfigPatch(config, cell.chart.renderer.getConfig());
+        if (patch) cell.chart.renderer.applyConfig(patch);
         cell.applyStatusPrefs(prefs);
       }
     } finally {
@@ -10291,7 +10419,8 @@ var VelaWorkspace = class {
         onToggleSync: (id) => {
           const kind = id;
           this.sync.set(kind, this.syncOpts[kind] ? false : true);
-        }
+        },
+        glyph: () => layoutGlyph(this.def)
       },
       onOpenChange: (open) => this.trackDialog(open)
     }));
