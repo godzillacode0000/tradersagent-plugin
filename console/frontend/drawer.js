@@ -146,13 +146,40 @@
       : `<li class="drawer__empty">${st.family === '__fav' ? 'No favourites yet — tap ☆ on a script.' : 'Nothing matches “' + esc(st.q) + '”.'}</li>`;
   }
 
-  function setOpen(on) {
+    /* One small helper for both slide-over sheets (this drawer and the Edge Stats sheet). They look modal (a scrim covers the
+     chart) but were not: Tab walked into the toolbar behind the scrim and a screen reader could browse the chart while the
+     sheet was "open". While one is open everything else in the app is inert; closing restores exactly what it changed. */
+  if (!window.taModal) {
+    const MODAL_IDS = ['lib-drawer', 'drawer-scrim', 'edge-sheet', 'edge-scrim', 'toast'];
+    const changed = new Map();               // panel -> elements this call made inert
+    window.taModal = {
+      enter(panel) {
+        const root = document.querySelector('.app');
+        if (!root || changed.has(panel)) return;
+        const mine = [];
+        for (const child of Array.from(root.children)) {
+          if (MODAL_IDS.includes(child.id) || child.contains(panel) || child.inert) continue;
+          child.inert = true;
+          mine.push(child);
+        }
+        changed.set(panel, mine);
+      },
+      leave(panel) {
+        for (const n of changed.get(panel) || []) n.inert = false;
+        changed.delete(panel);
+      },
+    };
+  }
+
+function setOpen(on) {
     st.open = Boolean(on);
     drawer.classList.toggle('is-open', st.open);
     scrim.classList.toggle('is-open', st.open);
     drawer.setAttribute('aria-hidden', String(!st.open));
     if (fallback) { fallback.setAttribute('aria-expanded', String(st.open)); fallback.classList.toggle('is-on', st.open); }
     if (st.open) {
+      st.opener = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+      if (window.taModal) window.taModal.enter(drawer);
       if (indState.cat.state === 'idle' || indState.cat.state === 'error') {
         loadCatalogue().then(paint);
       }
@@ -161,9 +188,16 @@
       setTimeout(() => { if (!st.detail) box.focus({ preventScroll: true }); }, 180);
     } else {
       showDetail(false);                       /* reopening shows the catalogue, not a stale pick */
-      if (drawer.contains(document.activeElement)) {
-        (document.querySelector('.vela-widget-indicators, .vela-widget-action') || fallback || document.body).focus?.({ preventScroll: true });
+      const hadFocus = drawer.contains(document.activeElement);
+      if (window.taModal) window.taModal.leave(drawer);
+      if (hadFocus) {
+        /* Back to whatever opened the drawer (it used to be the Agent button: the selector's fallback matched the wrong
+           widget). Falls back to Vela's Indicators button, then the plain-chart button. */
+        const back = (st.opener && document.contains(st.opener) ? st.opener : null)
+          || document.querySelector('.vela-widget-action-left') || fallback || document.body;
+        back.focus?.({ preventScroll: true });
       }
+      st.opener = null;
     }
   }
 

@@ -1,5 +1,5 @@
-import { normalizeProps, nextUid, runMachine, spreadProps } from './chunk-NELQJCGK.js';
-import { injectStyles } from './chunk-BZQM2XO7.js';
+import { normalizeProps, nextUid, runMachine, spreadProps } from './chunk-G7B7ZCBF.js';
+import { injectStyles, holdForExit, announceSurface } from './chunk-VHGACEHO.js';
 import * as tooltip from '@zag-js/tooltip';
 import * as dialog from '@zag-js/dialog';
 
@@ -343,6 +343,11 @@ function swipeDirection(dx, dy) {
 }
 var Drawer = class {
   constructor(opts = {}) {
+    this.opener = null;
+    this.wasOpen = false;
+    /** The sheet and scrim's exit animation after a close; a reopen cancels it. */
+    this.exit = null;
+    this.destroyed = false;
     const doc = (opts.host ?? document.body).ownerDocument;
     injectStyles(DRAWER_STYLE_ID, DRAWER_CSS, doc);
     const host = opts.host ?? doc.body;
@@ -370,12 +375,24 @@ var Drawer = class {
     const mid = String(this.ctrl.props.id);
     this.handle = runMachine(this.ctrl.machine, this.ctrl.props, (service) => {
       const api = this.ctrl.connect(service);
+      const closing = this.wasOpen && !api.open;
+      if (closing) this.announce(false);
       spreadProps(this.backdrop, api.getBackdropProps(), mid);
       spreadProps(this.positioner, api.getPositionerProps(), mid);
       spreadProps(this.panel, api.getContentProps(), mid);
       spreadProps(this.titleEl, api.getTitleProps(), mid);
-      this.backdrop.style.display = api.open ? "" : "none";
-      this.positioner.style.display = api.open ? "" : "none";
+      if (api.open) {
+        this.exit?.cancel();
+        this.exit = null;
+        this.setShown(true);
+      } else if (closing) {
+        this.holdExit();
+      } else if (!this.exit) {
+        this.setShown(false);
+      }
+      if (api.open && !this.wasOpen) this.announce(true);
+      if (this.wasOpen && !api.open) this.restoreOpener();
+      this.wasOpen = api.open;
     });
   }
   /** Any element between `from` and the panel that has already been scrolled down —
@@ -484,19 +501,67 @@ var Drawer = class {
   setTitle(title) {
     this.titleEl.textContent = title;
   }
+  setShown(shown) {
+    this.backdrop.style.display = shown ? "" : "none";
+    this.positioner.style.display = shown ? "" : "none";
+  }
+  /** Keep the just-closed sheet up through its exit animation, then hide it — or
+   *  remove it, when it was destroyed meanwhile. `spreadProps` re-applies the close
+   *  props' `hidden` only when its value changes, so lifting it keeps the sheet and
+   *  scrim up until the exit ends. The positioner spans the host: inert, it lets
+   *  clicks through to the page while the sheet animates out. */
+  holdExit() {
+    const held = [this.panel, this.backdrop];
+    for (const el of held) el.hidden = false;
+    this.exit = holdForExit(
+      held,
+      () => {
+        this.exit = null;
+        if (this.destroyed) {
+          this.detach();
+        } else if (!this.open) {
+          for (const el of held) el.hidden = true;
+          this.setShown(false);
+        }
+      },
+      { inert: [this.positioner] }
+    );
+  }
+  detach() {
+    this.backdrop.remove();
+    this.positioner.remove();
+  }
+  /** Closing hands focus back to whatever opened it (Escape, the ✕, hide(), or a
+   *  teardown that outruns the machine's close notification). */
+  restoreOpener() {
+    const opener = this.opener;
+    this.opener = null;
+    if (opener?.isConnected) opener.focus({ preventScroll: true });
+  }
+  announce(open) {
+    const opener = this.opener === this.panel.ownerDocument.body ? null : this.opener;
+    announceSurface(this.panel, open, "drawer", opener);
+  }
   get open() {
     return this.ctrl.connect(this.handle.service).open;
   }
   show() {
+    this.opener = this.panel.ownerDocument.activeElement;
     this.ctrl.connect(this.handle.service).setOpen(true);
   }
   hide() {
     this.ctrl.connect(this.handle.service).setOpen(false);
   }
   destroy() {
+    if (this.wasOpen && !this.open) this.handle.flush();
     this.handle.stop();
-    this.backdrop.remove();
-    this.positioner.remove();
+    this.destroyed = true;
+    if (this.wasOpen) {
+      this.wasOpen = false;
+      this.announce(false);
+    }
+    this.restoreOpener();
+    if (!this.exit) this.detach();
   }
 };
 

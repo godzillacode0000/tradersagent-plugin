@@ -17,7 +17,10 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
+import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -25,6 +28,11 @@ from typing import Any
 STATE_FILE = "state.json"
 COMMANDS_FILE = "commands.json"
 RESULTS_FILE = "results.json"
+NEXT_ID_FILE = "next_id.json"
+# Every read-modify-write below runs under this lock: ThreadingHTTPServer gives each request its own thread, and
+# two agent calls in parallel used to share one fixed temp name (HTTP 500s), read the same last id (duplicate
+# ids, so the page dropped the second command) and overwrite each other's list (lost commands). Audit 8 Oct, BE-1.
+_LOCK = threading.RLock()
 MAX_SHOTS = 12          # keep the last handful of pictures; this box has a small disk
 MAX_RESULTS = 60        # the agent only ever reads the newest results
 STALE_AFTER = 30.0      # a state older than this means "no chart is open"
@@ -50,9 +58,18 @@ def _read(path: Path, default: Any) -> Any:
 
 
 def _write(path: Path, value: Any) -> None:
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(value, ensure_ascii=False), "utf-8")
-    tmp.replace(path)
+    """Atomic: a temp file of its OWN name (never shared between two writers), then a rename."""
+    fd, name = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(value, ensure_ascii=False))
+        os.replace(name, path)
+    except BaseException:
+        try:
+            os.unlink(name)
+        except OSError:
+            pass
+        raise
 
 
 def _decode_shot(root: str | Path, name: str, data_url: str) -> str | None:
@@ -101,6 +118,11 @@ def _shot_mtime(path: Path) -> float:
 
 def save_state(root: str | Path, payload: dict) -> dict:
     """The page's heartbeat: what the chart is showing. Never raises on odd input."""
+    with _LOCK:
+        return _save_state(root, payload)
+
+
+def _save_state(root: str | Path, payload: dict) -> dict:
     d = _chart_dir(root)
     prev = _read(d / STATE_FILE, {}) or {}
     state = {
@@ -164,13 +186,33 @@ def load_state(root: str | Path, max_age: float = STALE_AFTER) -> dict:
 
 def enqueue(root: str | Path, command: dict) -> dict:
     """Queue one action for the live chart. Returns the command with the id the page will report back."""
-    d = _chart_dir(root)
-    cmds = _read(d / COMMANDS_FILE, []) or []
-    cid = int(cmds[-1]["id"]) + 1 if cmds else 1
-    entry = {"id": cid, "at": time.time(), **{k: v for k, v in command.items() if k != "id"}}
-    cmds.append(entry)
-    _write(d / COMMANDS_FILE, cmds[-MAX_RESULTS:])
-    return entry
+    with _LOCK:
+        d = _chart_dir(root)
+        cmds = _read(d / COMMANDS_FILE, []) or []
+        cid = _next_id(d, cmds)
+        entry = {"id": cid, "at": time.time(), **{k: v for k, v in command.items() if k != "id"}}
+        cmds.append(entry)
+        _write(d / COMMANDS_FILE, cmds[-MAX_RESULTS:])
+        return entry
+
+
+def _next_id(d: Path, cmds: list) -> int:
+    """The next command id. It lives in its own file and only ever grows: derived from the (capped, and
+    recreated-empty-on-a-parse-error) command list, ids restarted at 1 and an old result answered for a new
+    command (BE-16)."""
+    last = 0
+    try:
+        last = int((_read(d / NEXT_ID_FILE, {}) or {}).get("last") or 0)
+    except (TypeError, ValueError):
+        last = 0
+    for c in cmds:
+        try:
+            last = max(last, int(c.get("id") or 0))
+        except (TypeError, ValueError):
+            continue
+    cid = last + 1
+    _write(d / NEXT_ID_FILE, {"last": cid})
+    return cid
 
 
 def commands_since(root: str | Path, since: int = 0) -> list[dict]:
@@ -181,8 +223,18 @@ def commands_since(root: str | Path, since: int = 0) -> list[dict]:
 
 def record_result(root: str | Path, payload: dict) -> dict:
     """The page's report for one command. A picture in the payload is decoded and replaced by its path."""
+    try:
+        rid = int(payload.get("id"))
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("a result needs the integer id of the command it answers") from None
+    if rid <= 0:
+        raise ValueError("a result needs the id of the command it answers (a positive integer)")
+    with _LOCK:
+        return _record_result(root, payload, rid)
+
+
+def _record_result(root: str | Path, payload: dict, rid: int) -> dict:
     d = _chart_dir(root)
-    rid = int(payload.get("id") or 0)
     result = {
         "id": rid,
         "at": time.time(),
@@ -238,6 +290,20 @@ def record_result(root: str | Path, payload: dict) -> dict:
         # why, and the settings the script does declare. Named here because the store whitelists — without
         # it the agent is told "ok" and never that a label it sent was ignored.
         "inputs": payload.get("inputs"),
+        # Reported by the page, dropped by this whitelist until the 8 Oct audit (BE-15): `trades` is the whole
+        # point of the `signals` op (the trades the backtester prices), the rest are the after-state of their doors.
+        "count": payload.get("count"),
+        "trades": payload.get("trades"),
+        "theme": payload.get("theme"),
+        "replay": payload.get("replay"),
+        "reloading": payload.get("reloading"),
+        "rect": payload.get("rect"),
+        "palette": payload.get("palette"),
+        "overlay": payload.get("overlay"),
+        "opened": payload.get("opened"),
+        "lines": payload.get("lines"),
+        "drawer": payload.get("drawer"),
+        "alreadyPresent": payload.get("alreadyPresent"),
     }
     if payload.get("shot"):
         path = _decode_shot(root, f"shot-{rid}", str(payload["shot"]))

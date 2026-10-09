@@ -11,6 +11,7 @@ No secrets live here and no network call is made by the engine itself: the price
 (ccxt + vault keys) are a later step and would sit behind this same propose → approve gate.
 """
 
+import copy
 import json
 import math
 import os
@@ -54,17 +55,27 @@ class PaperBroker:
             with open(self.path, encoding="utf-8") as fh:
                 s = json.load(fh)
             if not isinstance(s, dict) or not isinstance(s.get("orders"), list) \
-                    or not isinstance(s.get("positions"), dict) or not isinstance(s.get("cash"), (int, float)):
+                    or not isinstance(s.get("positions"), dict) or not isinstance(s.get("cash"), (int, float)) \
+                    or not math.isfinite(s["cash"]):
                 raise ValueError("shape")
+            # A hand-edited or older file may miss keys; fill them instead of answering 500 later (audit BE-12).
+            s.setdefault("start_cash", self.start_cash)
+            s.setdefault("realized", 0.0)
+            ids = [o.get("id", 0) for o in s["orders"] if isinstance(o, dict) and isinstance(o.get("id"), int)]
+            s["next_id"] = max(int(s.get("next_id") or 1), (max(ids) + 1) if ids else 1)
             return s
         except FileNotFoundError:
             return _fresh(self.start_cash)
-        except (ValueError, OSError):
-            try:                                              # keep the broken file for inspection
+        except ValueError:                                    # really unparsable: keep the broken file for inspection
+            try:
                 os.replace(self.path, f"{self.path}.bad{int(time.time())}")
             except OSError:
                 pass
             return _fresh(self.start_cash)
+        except OSError as exc:
+            # A transient read error (EIO, EACCES) is NOT corruption: starting a fresh 10,000 account over a good
+            # file would silently throw the real one away. Refuse instead (audit BE-12).
+            raise BrokerError("broker_unavailable", f"cannot read the paper account at {self.path}: {exc}")
 
     def _save(self) -> None:
         d = os.path.dirname(self.path) or "."
@@ -73,6 +84,8 @@ class PaperBroker:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 json.dump(self._s, fh, separators=(",", ":"))
+                fh.flush()
+                os.fsync(fh.fileno())
             os.chmod(tmp, 0o600)
             os.replace(tmp, self.path)
         except BaseException:
@@ -81,6 +94,21 @@ class PaperBroker:
             except OSError:
                 pass
             raise
+
+    def _commit(self, before: dict) -> None:
+        """Save, or put the account back exactly as it was. A failed write used to leave the fill in memory (and a
+        retry answering "already filled") while the file still showed the order pending (audit BE-8)."""
+        try:
+            self._save()
+        except BaseException:
+            self._s = before
+            raise
+
+    @staticmethod
+    def _dust(qty: float) -> float:
+        """Float error grows with the size: 1e-12 absolute left ghost positions and refused legitimate sells for
+        quantities in the millions (audit BE-13)."""
+        return max(1e-12, 1e-9 * abs(qty))
 
     def _trim(self) -> None:
         done = [o for o in self._s["orders"] if o["status"] != "pending"]
@@ -105,24 +133,27 @@ class PaperBroker:
         with self._lock:
             if sum(1 for o in self._s["orders"] if o["status"] == "pending") >= self.max_pending:
                 raise BrokerError("too_many_pending", f"{self.max_pending} proposals are waiting — approve or reject some first")
+            before = copy.deepcopy(self._s)
             o = {"id": self._s["next_id"], "symbol": sym, "side": sd, "qty": q,
                  "note": str(note or "")[:200], "status": "pending", "ts": time.time()}
             self._s["next_id"] += 1
             self._s["orders"].append(o)
-            self._save()
+            self._commit(before)
             return dict(o)
 
     def reject(self, order_id) -> dict:
         with self._lock:
+            before = copy.deepcopy(self._s)
             o = self._pending(order_id)
             o["status"] = "rejected"
             o["closed"] = time.time()
             self._trim()
-            self._save()
+            self._commit(before)
             return dict(o)
 
     def approve(self, order_id) -> dict:
         with self._lock:
+            before = copy.deepcopy(self._s)
             o = self._pending(order_id)
             px = float(self.price_of(o["symbol"]))            # may raise no_price → the card stays
             if not math.isfinite(px) or px <= 0:
@@ -135,6 +166,9 @@ class PaperBroker:
                     raise BrokerError("insufficient_cash",
                                       f"needs {gross + fee:,.2f} but cash is {self._s['cash']:,.2f}")
                 self._s["cash"] -= gross + fee
+                # The entry fee is a cost the moment it is paid. It used to appear nowhere in P&L, so `realized`
+                # understated a round trip by it and never reconciled with equity (audit BE-3).
+                self._s["realized"] -= fee
                 if pos:
                     tot = pos["qty"] + o["qty"]
                     pos["avg"] = (pos["avg"] * pos["qty"] + px * o["qty"]) / tot
@@ -142,17 +176,17 @@ class PaperBroker:
                 else:
                     self._s["positions"][o["symbol"]] = {"qty": o["qty"], "avg": px}
             else:
-                if not pos or pos["qty"] + 1e-12 < o["qty"]:
+                if not pos or pos["qty"] + self._dust(pos["qty"]) < o["qty"]:
                     have = pos["qty"] if pos else 0
                     raise BrokerError("insufficient_position", f"cannot sell {o['qty']} — holding {have} (spot, no shorting)")
                 self._s["cash"] += gross - fee
                 self._s["realized"] += (px - pos["avg"]) * o["qty"] - fee
                 pos["qty"] -= o["qty"]
-                if pos["qty"] <= 1e-12:
+                if pos["qty"] <= self._dust(o["qty"]):
                     del self._s["positions"][o["symbol"]]
             o.update(status="filled", price=px, fee=fee, closed=time.time())
             self._trim()
-            self._save()
+            self._commit(before)
             return dict(o)
 
     def _pending(self, order_id) -> dict:
@@ -176,13 +210,20 @@ class PaperBroker:
         raise BrokerError("unknown_order", f"no order {order_id}")
 
     def state(self) -> dict:
+        # Prices are read OUTSIDE the lock: one blocking ticker call per position under it made propose / approve
+        # wait behind a slow exchange (audit BE-7).
+        with self._lock:
+            held = {sym: dict(p) for sym, p in self._s["positions"].items()}
+        marks = {}
+        for sym, p in sorted(held.items()):
+            try:
+                marks[sym] = float(self.price_of(sym))
+            except BrokerError:
+                marks[sym] = p["avg"]                        # no price: show cost, not a made-up number
         with self._lock:
             positions, equity = [], self._s["cash"]
             for sym, p in sorted(self._s["positions"].items()):
-                try:
-                    mark = float(self.price_of(sym))
-                except BrokerError:
-                    mark = p["avg"]                          # no price: show cost, not a made-up number
+                mark = marks.get(sym, p["avg"])
                 positions.append({"symbol": sym, "qty": p["qty"], "avg": p["avg"], "mark": mark,
                                   "unrealized": (mark - p["avg"]) * p["qty"]})
                 equity += mark * p["qty"]
@@ -195,5 +236,7 @@ class PaperBroker:
 
     def reset(self) -> None:
         with self._lock:
+            nxt = self._s.get("next_id", 1)
             self._s = _fresh(self.start_cash)
+            self._s["next_id"] = nxt              # ids never restart: a stale card for old #1 must not approve a new #1
             self._save()

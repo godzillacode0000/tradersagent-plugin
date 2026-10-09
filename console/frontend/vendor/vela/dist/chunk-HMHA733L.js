@@ -1,6 +1,6 @@
-import { deserializeDrawing, chartTypes, rendererLayers, isLineLikeSeries, seriesShownOn, foldBaseModulation, registerChartType, rendererDefaults, getDrawingType, settingsRowVisible, normalizeSettingsRow, Magnifier, TextLabel, Callout, resetDrawingSettings, registerNativeIndicator, chartType, getNativeIndicator, nativeIndicatorDescriptors, nativeInstanceChannel, drawingTypes, settingsRowValueKeys, formatDuration, RegressionChannel, FixedRangeVolumeProfile, DEFAULT_DRAWING_COLOR, SegmentDrawing, ArrowMark, GlyphStamp, RadialFib, FibSpiral, DedekindTessellation, MachFigure, GannSquare, FibRatios, MeasureBox, PositionTool, AnchoredVwap, PatternDrawing, Comment, PriceNote, Signpost, Note, PriceLabel, GANN_SQUARE_ARCS, magnifierTimeframeLabel, lineSegmentIntersection, MAGNIFIER_TIMEFRAME_OPTIONS, GLYPH_OPTIONS, STAMP_SIZE_OPTIONS, LINE_STYLE_OPTIONS, DEDEKIND_CURVATURE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, TEXT_SIZE_OPTIONS, createDrawing, inputVisible, seriesInScale, tickerModifierIds, CalloutBase, DIRECTION_OPTIONS, stableSeriesId } from './chunk-EZ5FWVLA.js';
-import { themeTokens, Dialog, closeOpenPopovers, closeWidthPopover, fieldSection, buildFieldControl, fieldSeparator, fieldGrid, fieldRow, CALLOUT_STYLE_ID, CALLOUT_CSS, Popover, blendOver, splitColor, CalloutBubble, Menu, TextArea, NumberInput, buildColorPicker, isPopoverOpen, DatePicker, eventDismissedPopover, toggleSelectList, normalizeDateInput, openPopoverTrigger, fieldGridColumns, FIELD_GAP_PX, STATIC_TOKENS } from './chunk-NELQJCGK.js';
-import { icon, iconAt, withAlpha, WARNING, ACCENT, NEUTRAL, INFO, BULLISH, BEARISH, isDarkColor, injectStyles, SERIES_LINE, CHIP_PLATE, CROSSHAIR, TRADE_EXIT, TRADE_SHORT, TRADE_LONG, iconMarkup, overlayScrollbarCss, SLATE_DEEP, VALID, INVALID, SLATE, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, svg24, svg24Solid } from './chunk-BZQM2XO7.js';
+import { deserializeDrawing, chartTypes, rendererLayers, isLineLikeSeries, seriesShownOn, foldBaseModulation, registerChartType, rendererDefaults, getDrawingType, normalizeTimezone, settingsRowVisible, normalizeSettingsRow, Magnifier, TextLabel, Callout, resetDrawingSettings, registerNativeIndicator, chartType, getNativeIndicator, nativeIndicatorDescriptors, nativeInstanceChannel, drawingTypes, settingsRowValueKeys, TIMEZONES, tzMenuLabel, formatDuration, RegressionChannel, FixedRangeVolumeProfile, DEFAULT_DRAWING_COLOR, SegmentDrawing, ArrowMark, GlyphStamp, RadialFib, FibSpiral, DedekindTessellation, MachFigure, GannSquare, FibRatios, MeasureBox, PositionTool, AnchoredVwap, PatternDrawing, Comment, PriceNote, Signpost, Note, PriceLabel, GANN_SQUARE_ARCS, magnifierTimeframeLabel, lineSegmentIntersection, MAGNIFIER_TIMEFRAME_OPTIONS, GLYPH_OPTIONS, STAMP_SIZE_OPTIONS, LINE_STYLE_OPTIONS, DEDEKIND_CURVATURE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, TEXT_SIZE_OPTIONS, createDrawing, inputVisible, seriesInScale, tickerModifierIds, CalloutBase, DIRECTION_OPTIONS, FibRetracement, stableSeriesId } from './chunk-KWI3YDBW.js';
+import { themeTokens, Dialog, closeOpenPopovers, closeWidthPopover, fieldSection, buildFieldControl, fieldSeparator, fieldGrid, fieldRow, CALLOUT_STYLE_ID, CALLOUT_CSS, Popover, blendOver, splitColor, CalloutBubble, Menu, TextArea, NumberInput, buildColorPicker, isPopoverOpen, DatePicker, eventDismissedPopover, toggleSelectList, normalizeDateInput, openPopoverTrigger, fieldGridColumns, FIELD_GAP_PX, STATIC_TOKENS } from './chunk-G7B7ZCBF.js';
+import { icon, iconAt, withAlpha, WARNING, ACCENT, NEUTRAL, INFO, BULLISH, BEARISH, announceSurface, holdForExit, isDarkColor, injectStyles, SERIES_LINE, CHIP_PLATE, CROSSHAIR, TRADE_EXIT, TRADE_SHORT, TRADE_LONG, iconMarkup, overlayScrollbarCss, SLATE_DEEP, VALID, INVALID, SLATE, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, svg24, svg24Solid } from './chunk-VHGACEHO.js';
 
 // src/core/events/EventBus.ts
 var TypedEventBus = class {
@@ -1885,100 +1885,6 @@ var SecondClock = class _SecondClock {
   }
 };
 
-// src/core/timezones.ts
-var TIMEZONES = [
-  { value: "Etc/UTC", label: "UTC" },
-  { value: "Etc/GMT+12", label: "International Date Line West" },
-  { value: "Pacific/Pago_Pago", label: "Pago Pago" },
-  { value: "Pacific/Honolulu", label: "Honolulu" },
-  { value: "Pacific/Marquesas", label: "Marquesas Islands" },
-  { value: "America/Anchorage", label: "Anchorage" },
-  { value: "America/Los_Angeles", label: "Los Angeles" },
-  { value: "America/Phoenix", label: "Phoenix" },
-  { value: "America/Denver", label: "Denver" },
-  { value: "America/Chicago", label: "Chicago" },
-  { value: "America/Mexico_City", label: "Mexico City" },
-  { value: "America/New_York", label: "New York" },
-  { value: "America/Bogota", label: "Bogot\xE1" },
-  { value: "America/Caracas", label: "Caracas" },
-  { value: "America/Santiago", label: "Santiago" },
-  { value: "America/St_Johns", label: "St. John's" },
-  { value: "America/Sao_Paulo", label: "S\xE3o Paulo" },
-  { value: "America/Argentina/Buenos_Aires", label: "Buenos Aires" },
-  { value: "America/Noronha", label: "Fernando de Noronha" },
-  { value: "Atlantic/Azores", label: "Azores" },
-  { value: "Atlantic/Reykjavik", label: "Reykjavik" },
-  { value: "Europe/London", label: "London" },
-  { value: "Europe/Paris", label: "Paris" },
-  { value: "Europe/Berlin", label: "Berlin" },
-  { value: "Europe/Athens", label: "Athens" },
-  { value: "Africa/Cairo", label: "Cairo" },
-  { value: "Africa/Johannesburg", label: "Johannesburg" },
-  { value: "Europe/Moscow", label: "Moscow" },
-  { value: "Europe/Istanbul", label: "Istanbul" },
-  { value: "Asia/Tehran", label: "Tehran" },
-  { value: "Asia/Dubai", label: "Dubai" },
-  { value: "Asia/Kabul", label: "Kabul" },
-  { value: "Asia/Karachi", label: "Karachi" },
-  { value: "Asia/Kolkata", label: "Mumbai" },
-  { value: "Asia/Kathmandu", label: "Kathmandu" },
-  { value: "Asia/Dhaka", label: "Dhaka" },
-  { value: "Asia/Yangon", label: "Yangon" },
-  { value: "Asia/Bangkok", label: "Bangkok" },
-  { value: "Asia/Shanghai", label: "Shanghai" },
-  { value: "Asia/Hong_Kong", label: "Hong Kong" },
-  { value: "Asia/Singapore", label: "Singapore" },
-  { value: "Australia/Eucla", label: "Eucla" },
-  { value: "Asia/Tokyo", label: "Tokyo" },
-  { value: "Asia/Seoul", label: "Seoul" },
-  { value: "Australia/Adelaide", label: "Adelaide" },
-  { value: "Australia/Sydney", label: "Sydney" },
-  { value: "Australia/Lord_Howe", label: "Lord Howe Island" },
-  { value: "Pacific/Noumea", label: "Noum\xE9a" },
-  { value: "Pacific/Auckland", label: "Auckland" },
-  { value: "Pacific/Chatham", label: "Chatham Islands" },
-  { value: "Pacific/Apia", label: "Apia" },
-  { value: "Pacific/Kiritimati", label: "Kiritimati" }
-];
-var EXCHANGE_TIMEZONE = "exchange";
-function isExchangeTimezone(zone) {
-  return zone === EXCHANGE_TIMEZONE;
-}
-function resolveTimezone(zone, exchangeZone) {
-  if (!isExchangeTimezone(zone)) return zone;
-  return exchangeZone && exchangeZone !== "" ? exchangeZone : "Etc/UTC";
-}
-function normalizeTimezone(zone) {
-  return zone === "UTC" || zone === "Etc/UTC" || zone === "Etc/GMT" ? "Etc/UTC" : zone;
-}
-function timezoneMenuRows(current) {
-  const active = normalizeTimezone(current);
-  const [utc, ...zones] = TIMEZONES.map((t) => ({ value: t.value, label: tzMenuLabel(t.value, t.label), checked: t.value === active }));
-  return [utc, { value: EXCHANGE_TIMEZONE, label: "Exchange", checked: isExchangeTimezone(current) }, ...zones];
-}
-function tzOffset(zone, date = /* @__PURE__ */ new Date()) {
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "shortOffset" }).formatToParts(date);
-    const raw = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
-    const m = raw.match(/GMT(?:(\+|-)(\d{1,2})(?::(\d{2}))?)?/);
-    if (!m || !m[1]) return "UTC";
-    const sign = m[1] === "-" ? "-" : "+";
-    const hrs = m[2] ?? "0";
-    const mins = m[3] ?? "";
-    return mins ? `UTC${sign}${hrs}:${mins}` : `UTC${sign}${hrs}`;
-  } catch {
-    return "UTC";
-  }
-}
-function tzMenuLabel(zone, location) {
-  if (normalizeTimezone(zone) === "Etc/UTC") return location;
-  return `(${tzOffset(zone)}) ${location}`;
-}
-function tzButtonLabel(zone) {
-  if (normalizeTimezone(zone) === "Etc/UTC") return "UTC";
-  return tzOffset(zone);
-}
-
 // src/core/drawings/effectiveColor.ts
 var VALID_FILL = VALID;
 var INVALID_FILL = INVALID;
@@ -2602,6 +2508,7 @@ function chromeHint(text, opts) {
 // src/renderers/native/drawings/DrawingToolbar.ts
 var TOOLBAR_WIDTH = 44;
 var TOOLBAR_COLLAPSED_WIDTH = 16;
+var FLYOUT_GAP = 3;
 var DrawingToolbar = class {
   constructor(host, theme, onArm, onMagnet = () => {
   }, onMeasure = () => {
@@ -2631,6 +2538,9 @@ var DrawingToolbar = class {
     // group id (or MAGNET_ID) whose flyout is open
     this.flyoutCell = null;
     // the cell the open flyout is anchored to
+    /** Closed flyouts still playing their exit animation, by owner id — reopening the same
+     *  owner takes its element back instead of stacking a second one on it. */
+    this.exitingFlyouts = /* @__PURE__ */ new Map();
     this.groupCells = /* @__PURE__ */ new Map();
     // the composite cell (hover/active bg + flyout anchor)
     this.groupIcons = /* @__PURE__ */ new Map();
@@ -2739,6 +2649,7 @@ var DrawingToolbar = class {
   }
   destroy() {
     this.closeFlyout();
+    for (const { exit } of [...this.exitingFlyouts.values()]) exit.finish();
     for (const dispose of this.tipDisposers.splice(0)) dispose();
     this.root.remove();
   }
@@ -2966,16 +2877,22 @@ var DrawingToolbar = class {
    *  outside-dismiss. Callers fill it with items. */
   beginFlyout(ownerId, cell) {
     const t = this.theme;
-    const fly = document.createElement("div");
+    const back = this.exitingFlyouts.get(ownerId);
+    if (back) {
+      this.exitingFlyouts.delete(ownerId);
+      back.exit.cancel();
+      back.fly.replaceChildren();
+    }
+    const fly = back?.fly ?? document.createElement("div");
     fly.className = "vela-dtb-flyout";
-    fly.style.cssText = `position:absolute;z-index:23;display:flex;flex-direction:column;gap:2px;padding:4px;border-radius:0 8px 8px 0;background:var(--vela-surface-elev);border:1px solid ${this.borderColor};border-left:none;box-shadow:var(--vela-shadow);pointer-events:auto;overflow-y:auto;overscroll-behavior:contain;`;
+    fly.style.cssText = `position:absolute;z-index:23;display:flex;flex-direction:column;gap:2px;padding:4px;border-radius:var(--vela-radius-md);background:var(--vela-surface);border:1px solid ${this.borderOverride ?? "var(--vela-border-strong)"};box-shadow:var(--vela-shadow);pointer-events:auto;overflow-y:auto;overscroll-behavior:contain;`;
     applyChromeTokens(fly, t);
     this.host.appendChild(fly);
     const r = cell.getBoundingClientRect();
     const rootR = this.root.getBoundingClientRect();
     const hostR = this.host.getBoundingClientRect();
     const top = r.top - hostR.top;
-    fly.style.left = `${rootR.right - hostR.left - 1}px`;
+    fly.style.left = `${rootR.right - hostR.left + FLYOUT_GAP}px`;
     fly.style.top = `${top}px`;
     fly.style.maxHeight = `${Math.max(120, hostR.height - top - 8)}px`;
     this.flyout = fly;
@@ -2991,6 +2908,7 @@ var DrawingToolbar = class {
     if (!cell) return;
     const fly = this.beginFlyout(group.id, cell);
     const sections = group.sections ?? [{ label: "", tools: group.tools }];
+    const badge = sections.some((s) => s.tools.some((tool) => !!tool.icon));
     for (let si = 0; si < sections.length; si++) {
       const section = sections[si];
       if (section.label) {
@@ -3001,6 +2919,7 @@ var DrawingToolbar = class {
         fly.appendChild(
           this.makeFlyoutItem({
             icon: tool.icon,
+            badge,
             label: tool.label,
             selected: tool.type === this.active,
             shortcut: this.shortcuts.get(tool.type),
@@ -3013,6 +2932,7 @@ var DrawingToolbar = class {
         );
       }
     }
+    announceSurface(fly, true, "menu", cell);
   }
   openMagnetFlyout() {
     const cell = this.magnetCell;
@@ -3036,6 +2956,7 @@ var DrawingToolbar = class {
         })
       );
     }
+    announceSurface(fly, true, "menu", cell);
   }
   flyoutHeader(text) {
     const t = this.theme;
@@ -3049,21 +2970,24 @@ var DrawingToolbar = class {
     div.style.cssText = `height:1px;margin:4px 8px;background:${this.borderColor};`;
     return div;
   }
-  /** A flyout row, left to right: optional leading icon, label, a check when it's the selected
-   *  entry, an optional shortcut hint, and — at the far right — the favorite star (tool rows).
-   *  Hover tint is CSS (`.vela-dtb-item:hover`), so navigating the menu stays smooth. */
+  /** A flyout row, left to right: optional leading icon badge, label, a check when it's the
+   *  selected entry, an optional shortcut hint, and — at the far right — the favorite star (tool
+   *  rows). Hover tint is CSS (`.vela-dtb-item:hover`), so navigating the menu stays smooth. */
   makeFlyoutItem(opts) {
     const t = this.theme;
     const item = document.createElement("button");
     item.type = "button";
     item.className = "vela-dtb-item";
     item.setAttribute("aria-label", opts.label);
-    item.style.cssText = `display:flex;align-items:center;gap:8px;padding:5px 10px 5px 8px;cursor:pointer;color:${t.textColor};border-radius:var(--vela-radius-sm);font:13px ${t.fontFamily};white-space:nowrap;min-width:148px;`;
-    if (opts.icon) {
-      const icon2 = document.createElement("span");
-      icon2.style.cssText = "width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex:none;";
-      icon2.innerHTML = sizedIcon(opts.icon);
-      item.appendChild(icon2);
+    const badged = opts.badge === true || !!opts.icon;
+    const box = badged ? "gap:10px;padding:4px 10px 4px 6px;" : "gap:8px;padding:5px 10px 5px 8px;";
+    item.style.cssText = `display:flex;align-items:center;${box}cursor:pointer;color:${t.textColor};border-radius:var(--vela-radius-sm);font:13px ${t.fontFamily};white-space:nowrap;min-width:148px;`;
+    if (opts.selected) item.dataset.selected = "1";
+    if (badged) {
+      const badge = document.createElement("span");
+      badge.className = "vela-dtb-badge";
+      if (opts.icon) badge.innerHTML = opts.icon;
+      item.appendChild(badge);
     }
     const label = document.createElement("span");
     label.textContent = opts.label;
@@ -3104,9 +3028,16 @@ var DrawingToolbar = class {
   }
   closeFlyout() {
     this.starEls.clear();
-    if (this.flyout) {
-      this.flyout.remove();
+    const fly = this.flyout;
+    if (fly) {
       this.flyout = null;
+      announceSurface(fly, false, "menu", this.flyoutCell);
+      const owner = this.flyoutOwnerId ?? "";
+      const exit = holdForExit(fly, () => {
+        if (this.exitingFlyouts.get(owner)?.fly === fly) this.exitingFlyouts.delete(owner);
+        fly.remove();
+      });
+      if (exit) this.exitingFlyouts.set(owner, { fly, exit });
       this.flyoutCell?.classList.remove("vela-open");
       this.flyoutCell = null;
       this.flyoutOwnerId = null;
@@ -3190,6 +3121,11 @@ function ensureStyles() {
 .vela-dtb[data-collapsed='1'] .vela-dtb-collapse .vela-dtb-hit{width:14px;}
 .vela-dtb-item{background:transparent;border:none;transition:background var(--vela-dur-fast) ease;}
 .vela-dtb-item:hover{background:var(--vela-hover-strong);}
+.vela-dtb-badge{width:24px;height:24px;padding:3px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex:none;border-radius:var(--vela-radius-md);background:var(--vela-hover);border:1px solid var(--vela-border);color:var(--vela-fg-muted);transition:background var(--vela-dur-fast) ease,border-color var(--vela-dur-fast) ease,color var(--vela-dur-fast) ease;}
+.vela-dtb-badge:empty{background:transparent;border-color:transparent;}
+.vela-dtb-badge svg{width:100%;height:100%;}
+.vela-dtb-item:hover .vela-dtb-badge:not(:empty){background:var(--vela-active);color:var(--vela-fg-bright);}
+.vela-dtb-item[data-selected='1'] .vela-dtb-badge:not(:empty){background:color-mix(in srgb,var(--vela-fg-bright) 83%,var(--vela-surface));border-color:color-mix(in srgb,var(--vela-fg-bright) 40%,transparent);color:var(--vela-surface);}
 .vela-dtb-star{width:26px;height:22px;margin:-3px -5px -3px 0;padding:3px 5px;box-sizing:border-box;display:flex;align-items:center;justify-content:center;flex:none;opacity:0;color:inherit;border-radius:var(--vela-radius-sm);transition:opacity .1s ease,color .1s ease,background .1s ease;}
 .vela-dtb-star svg{width:16px;height:16px;}
 .vela-dtb-item:hover .vela-dtb-star{opacity:.55;}
@@ -4075,7 +4011,10 @@ var LEGEND_ICON_PX2 = 16;
 var LEGEND_CTL_PX = 18;
 var LEGEND_ROW_PAD_Y = 2;
 var LEGEND_ROW_PAD_X = 6;
+var LEGEND_LEFT_PX = 10;
+var LEGEND_SCALE_GAP_PX = 6;
 var LEGEND_TITLE_VALUES_GAP_PX = 6;
+var LEGEND_VALUES_GAP_PX = 5;
 var LEGEND_TITLE_STATUS_GAP_PX = 8;
 var LEGEND_ACTION_GAP_PX = 6;
 var LEGEND_CTL_CSS = `cursor:pointer;display:inline-flex;align-items:center;justify-content:center;border:none;line-height:0;padding:0;width:${LEGEND_CTL_PX}px;height:${LEGEND_CTL_PX}px;border-radius:3px;box-sizing:border-box;flex:none;`;
@@ -4361,14 +4300,15 @@ var InputsUI = class {
       row.valuesEl.replaceChildren();
       return;
     }
-    row.valuesEl.style.display = "inline-flex";
+    row.valuesEl.style.display = "block";
     row.valuesEl.replaceChildren();
-    for (const v of row.plotValues) {
+    row.plotValues.forEach((v, i) => {
       const span = document.createElement("span");
       span.textContent = v.value;
       span.style.color = v.color;
+      if (i > 0) span.style.marginLeft = `${LEGEND_VALUES_GAP_PX}px`;
       row.valuesEl.appendChild(span);
-    }
+    });
   }
   // ── legend move/merge (menu + drag) ─────────────────────────────────────
   /** Open the "Move to" menu for a row, anchored under its move button. */
@@ -4469,7 +4409,7 @@ var InputsUI = class {
     if (!lg) {
       lg = document.createElement("div");
       lg.dataset.velaPane = paneId;
-      lg.style.cssText = "position:absolute;left:10px;z-index:5;display:flex;flex-direction:column;align-items:flex-start;gap:0;pointer-events:none;font:12px -apple-system,Segoe UI,sans-serif;";
+      lg.style.cssText = `position:absolute;left:${LEGEND_LEFT_PX}px;z-index:5;display:flex;flex-direction:column;align-items:flex-start;gap:0;pointer-events:none;font:12px -apple-system,Segoe UI,sans-serif;`;
       applyChromeTokens(lg, this.theme);
       this.positionLegend(lg, paneId);
       this.container.appendChild(lg);
@@ -4481,6 +4421,7 @@ var InputsUI = class {
     const bounds = this.paneBoundsOf ? this.paneBoundsOf(paneId) : { top: 0, height: Infinity };
     lg.toggleAttribute(LEGEND_AT_TOP_ATTR, bounds.top === 0);
     lg.style.display = bounds.height < 4 || !this.titlesVisible ? "none" : "flex";
+    lg.style.maxWidth = `calc(100% - ${(bounds.rightAxis ?? 0) + LEGEND_LEFT_PX + LEGEND_SCALE_GAP_PX}px)`;
     const collapsed = this.paneCollapse.has(paneId);
     const masterId = this.paneCollapse.get(paneId) ?? null;
     for (const row of this.rows.values()) {
@@ -4572,7 +4513,7 @@ var InputsUI = class {
     }
     ensureDialogStyles();
     const el = document.createElement("div");
-    el.style.cssText = `pointer-events:auto;display:flex;align-items:center;background:${this.idleRowFill()};border-radius:4px;padding:${LEGEND_ROW_PAD_Y}px ${LEGEND_ROW_PAD_X}px;margin-left:-${LEGEND_ROW_PAD_X}px;min-height:${LEGEND_ROW_MIN_H}px;box-sizing:border-box;color:${this.theme.textColor};user-select:none;-webkit-user-select:none;`;
+    el.style.cssText = `pointer-events:auto;display:flex;align-items:center;background:${this.idleRowFill()};border-radius:4px;padding:${LEGEND_ROW_PAD_Y}px ${LEGEND_ROW_PAD_X}px;margin-left:-${LEGEND_ROW_PAD_X}px;max-width:calc(100% + ${LEGEND_ROW_PAD_X}px);min-height:${LEGEND_ROW_MIN_H}px;box-sizing:border-box;color:${this.theme.textColor};user-select:none;-webkit-user-select:none;`;
     el.addEventListener("mouseleave", () => {
       if (this.selectedId !== id) this.setRowHighlighted(id, false);
     });
@@ -4600,7 +4541,7 @@ var InputsUI = class {
     const statusEl = document.createElement("span");
     statusEl.style.cssText = "display:none;box-sizing:border-box;flex:none;";
     const titleWrap = document.createElement("span");
-    titleWrap.style.cssText = "white-space:nowrap;";
+    titleWrap.style.cssText = "white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis;";
     titleWrap.addEventListener("mouseenter", () => this.setRowHighlighted(id, true));
     const titleEl = document.createElement("span");
     titleEl.textContent = title;
@@ -4618,7 +4559,7 @@ var InputsUI = class {
     el.appendChild(calloutsEl);
     el.appendChild(statusEl);
     const valuesEl = document.createElement("span");
-    valuesEl.style.cssText = `display:none;align-items:center;gap:5px;margin-left:${LEGEND_TITLE_VALUES_GAP_PX}px;white-space:nowrap;font-variant-numeric:tabular-nums;`;
+    valuesEl.style.cssText = `display:none;flex:1 1 0%;min-width:0;overflow:hidden;text-overflow:ellipsis;margin-left:${LEGEND_TITLE_VALUES_GAP_PX}px;white-space:nowrap;font-variant-numeric:tabular-nums;`;
     el.appendChild(valuesEl);
     const controlsEl = document.createElement("span");
     controlsEl.style.cssText = `display:none;align-items:center;gap:${LEGEND_ACTION_GAP_PX}px;flex:none;margin-left:${LEGEND_ACTION_GAP_PX}px;`;
@@ -5791,15 +5732,23 @@ var Batch = class {
     this.seg(x + w, y + h, x, y + h, lineWidth, c);
     this.seg(x, y + h, x, y, lineWidth, c);
   }
-  /** Filled circle (triangle fan). */
+  /**
+   * Filled circle (triangle fan), feathered like a line: the rim is padded by {@link AA_PAD} and
+   * edgeDist runs from 0 at the center to the padded radius at the rim, with edgeHalf = r. The
+   * distance grows linearly along each spoke, so the shader's line feather gives a round soft edge.
+   */
   circle(cx, cy, r, c, segments = 16) {
-    let px = cx + r;
+    const ext = r + AA_PAD;
+    let px = cx + ext;
     let py = cy;
+    this.ensure(segments * 3);
     for (let i = 1; i <= segments; i += 1) {
       const a = i / segments * Math.PI * 2;
-      const nx = cx + Math.cos(a) * r;
-      const ny = cy + Math.sin(a) * r;
-      this.tri(cx, cy, c, px, py, c, nx, ny, c);
+      const nx = cx + Math.cos(a) * ext;
+      const ny = cy + Math.sin(a) * ext;
+      this.v(cx, cy, c, 0, r);
+      this.v(px, py, c, ext, r);
+      this.v(nx, ny, c, ext, r);
       px = nx;
       py = ny;
     }
@@ -5980,7 +5929,7 @@ var WebGL2Backend = class {
   }
   mount(canvas) {
     this.canvas = canvas;
-    this.gl = canvas.getContext("webgl2", { alpha: true, antialias: true, depth: false, stencil: false, premultipliedAlpha: true });
+    this.gl = canvas.getContext("webgl2", { alpha: true, antialias: false, depth: false, stencil: false, premultipliedAlpha: true });
     if (!this.gl) return;
     if (!this.initGL()) {
       this.gl = null;
@@ -7205,6 +7154,11 @@ var InputController = class {
     /** When true (the default), the separators between stacked panes are draggable to
      *  resize the panes above/below. When false, a press there is a normal data-area pan. */
     this.paneResize = true;
+    /** When true (the default), the user drawings take part in pointer input: they claim a
+     *  press over a drawing or with a tool armed, and see hover moves. When false, every press
+     *  is a plain pan/click and hover leaves them alone; a drawing gesture already under way
+     *  still finishes. */
+    this.drawings = true;
     this.el = null;
     this.dragging = false;
     this.moved = false;
@@ -7268,18 +7222,18 @@ var InputController = class {
     this.onModifier = (e) => {
       if (e.repeat || e.key !== "Shift" && e.key !== "Control" && e.key !== "Meta") return;
       if (Number.isNaN(this.cursorX)) return;
-      if (this.dragging && this.region !== "drawing") return;
+      if (this.dragging ? this.region !== "drawing" : !this.drawings) return;
       this.deps.drawingsPointerMove?.(this.cursorX, this.cursorY, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);
     };
     this.onDown = (e) => {
       if (e.button === 1) {
         const { x: x2, y: y2 } = this.local(e);
-        this.middleDeleted = this.deps.drawingsDeleteAt?.(x2, y2) ?? false;
+        this.middleDeleted = this.drawings && (this.deps.drawingsDeleteAt?.(x2, y2) ?? false);
         if (this.middleDeleted) e.preventDefault();
         return;
       }
       if (e.button === 2) {
-        this.rightCancelled = this.deps.drawingsCancelPlacement?.() ?? false;
+        this.rightCancelled = this.drawings && (this.deps.drawingsCancelPlacement?.() ?? false);
         if (this.rightCancelled) e.preventDefault();
         return;
       }
@@ -7301,20 +7255,20 @@ var InputController = class {
       this.startY = y;
       this.prevPressDrawing = this.lastPressDrawing;
       this.lastPressDrawing = false;
-      if (this.deps.drawingsClaim?.(x, y)) {
+      if (this.drawings && this.deps.drawingsClaim?.(x, y)) {
         this.region = "drawing";
         this.lastPressDrawing = true;
         this.deps.drawingsPointerDown?.(x, y, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);
         this.capture(e.pointerId);
         return;
       }
-      if (e.shiftKey && this.regionAt(x, y) === "data" && this.deps.drawingsMeasureStart?.(x, y, this.snapMode(e))) {
+      if (this.drawings && e.shiftKey && this.regionAt(x, y) === "data" && this.deps.drawingsMeasureStart?.(x, y, this.snapMode(e))) {
         this.region = "drawing";
         this.lastPressDrawing = true;
         this.capture(e.pointerId);
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && this.regionAt(x, y) === "data" && this.deps.drawingsMarqueeStart?.(x, y)) {
+      if (this.drawings && (e.ctrlKey || e.metaKey) && this.regionAt(x, y) === "data" && this.deps.drawingsMarqueeStart?.(x, y)) {
         this.region = "drawing";
         this.lastPressDrawing = true;
         this.capture(e.pointerId);
@@ -7391,7 +7345,7 @@ var InputController = class {
         const drawCursor = this.deps.drawingsCursor?.(x, y);
         const r = this.regionAt(x, y);
         this.el.style.cursor = drawCursor ?? (r === "price" ? "ns-resize" : r === "time" ? "ew-resize" : r === "separator" ? "row-resize" : "");
-        this.deps.drawingsPointerMove?.(x, y, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);
+        if (this.drawings) this.deps.drawingsPointerMove?.(x, y, this.snapMode(e), e.shiftKey, e.ctrlKey || e.metaKey);
       }
       if (e.pointerType !== "touch") this.deps.onPointerMove(x, y);
     };
@@ -7432,7 +7386,7 @@ var InputController = class {
         this.deps.drawingsPointerUp?.(x, y, this.snapMode(e));
       } else if (tapRelease && this.region === "data") {
         this.deps.onClick(x, y);
-      } else if (this.dragging && this.region === "data") {
+      } else if (this.dragging && this.region === "data" && wasTouch) {
         const stale = e.timeStamp - this.lastT > FLING_STALE_MS;
         if (!stale && Math.abs(this.vx) > FLING_MIN_SPEED) {
           const pitch = this.deps.getCoords().pxPerBar();
@@ -7633,7 +7587,7 @@ var InputController = class {
   }
   /** Shared double-click / double-tap routing, by the region under the point. */
   doubleActivate(x, y) {
-    if (this.deps.drawingsDblClick?.(x, y)) return;
+    if (this.drawings && this.deps.drawingsDblClick?.(x, y)) return;
     const region = this.regionAt(x, y);
     if (region === "price") this.deps.resetPriceScale(x, y);
     else if (region === "separator") this.deps.resetPaneSize(y);
@@ -9683,10 +9637,13 @@ function priceTicks(min, max, target = 6) {
   const norm = raw / mag;
   const step = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag;
   const decimals = Math.max(0, -Math.floor(Math.log10(step)) + 1);
-  const out = [];
   const start = Math.ceil(min / step) * step;
-  for (let v = start; v <= max + step * 1e-6; v += step) {
-    out.push(Number(v.toFixed(decimals)));
+  if (!(step > 0) || start + step === start) return [];
+  const count = Math.floor((max - start) / step + 1e-6) + 1;
+  if (!(count > 0) || count > 1e3) return [];
+  const out = [];
+  for (let i = 0; i < count; i += 1) {
+    out.push(Number((start + i * step).toFixed(decimals)));
   }
   return out;
 }
@@ -9883,6 +9840,100 @@ function calendarTicks(zFrom, zTo, months, offsetMs) {
   }
   return out;
 }
+
+// src/renderers/native/chrome/priceAxisTicks.ts
+var PriceAxisTickSource = class {
+  constructor() {
+    this.fn = null;
+    this.memo = /* @__PURE__ */ new WeakMap();
+    this.warned = false;
+  }
+  /** The host function, or null for the built-in ticks. */
+  get hook() {
+    return this.fn;
+  }
+  /** Set (or clear) the host function. Drops every memoized result, so setting the same
+   *  function again recomputes — how a host refreshes ticks that depend on its own state. */
+  setHook(fn) {
+    this.fn = fn;
+    this.memo = /* @__PURE__ */ new WeakMap();
+  }
+  /** The pane's master-scale ticks for this frame. An unscaled pane (`axisFormat: 'none'`)
+   *  gets none, and the host is never asked for it. */
+  ticksFor(scene, pane, coords) {
+    const format = pane.axisFormat;
+    if (format === "none") return [];
+    const pct = percentScaleFor(scene, pane);
+    const height = pane.bounds.height;
+    const fn = this.fn;
+    if (!fn || !(height > 0)) return paneAxisTicks(pane.scale, height, pct, scene.priceMintick, format);
+    const s = pane.scale;
+    const m = this.memo.get(pane);
+    const fontSize = scene.style.fontSize;
+    if (m && m.kind === pane.kind && m.min === s.min && m.max === s.max && m.log === !!s.log && m.invert === !!s.invert && m.height === height && m.baseline === pct?.baseline && m.indexed === !!pct?.indexed && m.mintick === scene.priceMintick && m.format === format && m.fontSize === fontSize) {
+      return m.ticks;
+    }
+    const defaults = paneAxisTicks(s, height, pct, scene.priceMintick, format);
+    const ticks = this.callHook(fn, scene, pane, coords, defaults, pct?.baseline, pct ? pct.indexed ? "indexed" : "percent" : "price");
+    this.memo.set(pane, {
+      kind: pane.kind,
+      min: s.min,
+      max: s.max,
+      log: !!s.log,
+      invert: !!s.invert,
+      height,
+      baseline: pct?.baseline,
+      indexed: !!pct?.indexed,
+      mintick: scene.priceMintick,
+      format,
+      fontSize,
+      ticks
+    });
+    return ticks;
+  }
+  callHook(fn, scene, pane, coords, defaults, baseline, mode) {
+    const scale = { min: pane.scale.min, max: pane.scale.max, log: !!pane.scale.log, invert: !!pane.scale.invert };
+    const bounds = { top: 0, height: pane.bounds.height };
+    const ctx = {
+      pane: { id: pane.id, kind: pane.kind },
+      min: Math.min(scale.min, scale.max),
+      max: Math.max(scale.min, scale.max),
+      log: !!scale.log,
+      height: bounds.height,
+      mode,
+      baseline,
+      mintick: scene.priceMintick,
+      fontSize: scene.style.fontSize,
+      priceToY: (price) => coords.priceToY(price, scale, bounds),
+      defaults
+    };
+    let out;
+    try {
+      out = fn(ctx);
+    } catch (err) {
+      this.warnOnce("threw", err);
+      return defaults;
+    }
+    if (out == null) return defaults;
+    if (!Array.isArray(out)) {
+      this.warnOnce("returned a non-array", out);
+      return defaults;
+    }
+    const ticks = [];
+    for (const t of out) {
+      if (!t || typeof t !== "object") continue;
+      const { price, label, major } = t;
+      if (typeof price !== "number" || !Number.isFinite(price) || typeof label !== "string") continue;
+      ticks.push(typeof major === "boolean" ? { price, label, major } : { price, label });
+    }
+    return ticks;
+  }
+  warnOnce(what, detail) {
+    if (this.warned) return;
+    this.warned = true;
+    console.warn(`[vela] the priceAxisTicks function ${what} \u2014 the default ticks are used instead.`, detail);
+  }
+};
 
 // src/renderers/native/chrome/countdown.ts
 function countdownText(barOpen, barMs, now2) {
@@ -10236,8 +10287,11 @@ function standaloneSvg(markup, ink, px) {
 }
 
 // src/renderers/native/chrome/ChromeRenderer.ts
+var MINOR_LABEL_ALPHA = 0.5;
 var ChromeRenderer = class {
-  constructor() {
+  /** `axisTicks` is shared with the backdrop layer, so price labels and gridlines agree. */
+  constructor(axisTicks = new PriceAxisTickSource()) {
+    this.axisTicks = axisTicks;
     this.canvas = null;
     this.ctx = null;
     // The color for axis tick labels — the host-passed surface text, set each frame in render().
@@ -10342,7 +10396,8 @@ var ChromeRenderer = class {
     this.drawTimeAxis(ctx, scene, coords, theme, dataW, dataH, fullH);
     this.drawMarkLane(ctx, scene, coords, theme, dataW, dataH);
   }
-  /** The timeline-mark lane — after the axis, so the tokens read over the plot's bottom edge. */
+  /** The timeline-mark lane — after the axis, so the tokens read over the plot's bottom edge,
+   *  but clipped to the data area so a glyph on the edge bar never paints over the price scale. */
   drawMarkLane(ctx, scene, coords, theme, dataW, dataH) {
     if (!scene.marks.visible || scene.timelineMarks.length === 0) {
       this.markLayout = { glyphs: [], stacks: /* @__PURE__ */ new Map() };
@@ -10360,6 +10415,10 @@ var ChromeRenderer = class {
       expanded: scene.marksExpandedStack
     });
     const nowMs = typeof performance !== "undefined" ? performance.now() : Date.now();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, dataW, dataH);
+    ctx.clip();
     paintMarkLane(ctx, this.markLayout, {
       axisY: dataH,
       background: theme.background,
@@ -10373,6 +10432,7 @@ var ChromeRenderer = class {
       flashKey: scene.marksFlash && scene.marksFlash.until > nowMs ? scene.marksFlash.key : null,
       nowMs
     });
+    ctx.restore();
   }
   barTimes(scene) {
     if (this.barTimesSrc !== scene.bars || this.barTimesCache.length !== scene.bars.length) {
@@ -10429,13 +10489,19 @@ var ChromeRenderer = class {
     if (!scene.showAxisLabels) return;
     ctx.fillStyle = this.axisTextColor;
     ctx.textAlign = "left";
+    const font = `${scene.style.fontSize}px ${theme.fontFamily}`;
+    const majorFont = `600 ${font}`;
+    const alpha = ctx.globalAlpha;
     for (const pane of panes) {
       if (pane.collapsed) continue;
-      const pct = percentScaleFor(scene, pane);
-      for (const t of paneAxisTicks(pane.scale, pane.bounds.height, pct, scene.priceMintick, pane.axisFormat)) {
+      for (const t of this.axisTicks.ticksFor(scene, pane, coords)) {
         const y = coords.priceToY(t.price, pane.scale, pane.bounds);
         if (y < pane.bounds.top + 6 || y > pane.bounds.top + pane.bounds.height - 4) continue;
+        if (t.major === true) ctx.font = majorFont;
+        else if (t.major === false) ctx.globalAlpha = alpha * MINOR_LABEL_ALPHA;
         ctx.fillText(t.label, dataW + 6, y);
+        if (t.major === true) ctx.font = font;
+        else if (t.major === false) ctx.globalAlpha = alpha;
       }
       if (pane.axisBands) {
         for (const b of pane.axisBands) {
@@ -10677,15 +10743,23 @@ var CrosshairRenderer = class {
   constructor() {
     this.canvas = null;
     this.ctx = null;
+    this.shade = null;
   }
   mount(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
   }
+  /** The plot area the last frame veiled for `crosshairOverride.shadeRight` — from the
+   *  picked bar's right edge to the price scale, full plot height (the union when both the
+   *  local and a synced crosshair veil) — or null when no veil was painted. */
+  get shadeRightArea() {
+    return this.shade;
+  }
   /** Clear the cursor canvas and (re)draw the crosshair lines + axis chips. The optional
    *  `separatorHoverY` highlights the draggable pane separator under the cursor;
    *  `external` is a SYNCED ghost crosshair (another chart's pointer, pixel-resolved). */
   render(scene, coords, theme, separatorHoverY = null, external = null) {
+    this.shade = null;
     const ctx = this.ctx;
     const canvas = this.canvas;
     if (!ctx || !canvas) return;
@@ -10708,12 +10782,7 @@ var CrosshairRenderer = class {
     const x = crisp(coords.logicalToX(logical), ov?.width ?? cs.width);
     if (vertical && ov?.shadeRight) {
       const from = Math.max(0, Math.round(coords.logicalToX(logical + 0.5)));
-      if (from < dataW) {
-        ctx.fillStyle = ov.shadeRight.color;
-        ctx.globalAlpha = ov.shadeRight.opacity ?? 1;
-        ctx.fillRect(from, 0, dataW - from, dataH);
-        ctx.globalAlpha = 1;
-      }
+      if (from < dataW) this.paintShade(ctx, ov.shadeRight, from, dataW, dataH);
     }
     ctx.strokeStyle = ov?.color ?? cs.color ?? theme.textColor;
     ctx.lineWidth = ov?.width ?? cs.width;
@@ -10749,6 +10818,7 @@ var CrosshairRenderer = class {
   destroy() {
     this.canvas = null;
     this.ctx = null;
+    this.shade = null;
   }
   /** The synced ghost: a dimmed vertical line at the bar the renderer resolved as
    *  CONTAINING the foreign time (+ horizontal line when a comparable price came
@@ -10768,12 +10838,7 @@ var CrosshairRenderer = class {
     if (ov?.vertical === false) return;
     if (ov?.shadeRight) {
       const from = Math.max(0, Math.round(coords.logicalToX(Math.round(coords.xToLogical(ext.x)) + 0.5)));
-      if (from < dataW) {
-        ctx.fillStyle = ov.shadeRight.color;
-        ctx.globalAlpha = ov.shadeRight.opacity ?? 1;
-        ctx.fillRect(from, 0, dataW - from, dataH);
-        ctx.globalAlpha = 1;
-      }
+      if (from < dataW) this.paintShade(ctx, ov.shadeRight, from, dataW, dataH);
     }
     if (ext.line === false || x < 0 || x > dataW) return;
     ctx.font = `${scene.style.fontSize}px ${theme.fontFamily}`;
@@ -10808,6 +10873,15 @@ var CrosshairRenderer = class {
     }
     this.chip(ctx, x, dataH + 1, formatTimeStamp(ext.time, scene.timezone, coords.barInterval), chipBg, "center", true, theme.background);
     ctx.globalAlpha = 1;
+  }
+  /** Paint the `shadeRight` veil from `from` to the price scale and record the veiled area. */
+  paintShade(ctx, shade, from, dataW, dataH) {
+    ctx.fillStyle = shade.color;
+    ctx.globalAlpha = shade.opacity ?? 1;
+    ctx.fillRect(from, 0, dataW - from, dataH);
+    ctx.globalAlpha = 1;
+    const x = this.shade ? Math.min(this.shade.x, from) : from;
+    this.shade = { x, width: dataW - x, height: dataH };
   }
   /** A soft band + a brighter crisp center line over the hovered separator, so it reads as
    *  a draggable handle (the cursor is already `row-resize`). Spans the full width (data +
@@ -13846,6 +13920,12 @@ var DrawingInteraction = class {
   activeDragId() {
     return this.state.kind === "pressed" && this.state.moved ? this.state.id : null;
   }
+  /** The store drawings a live drag is moving — the pressed one and its riders — or none
+   *  before the drag passes the slop. A Ctrl-drag moves copies, so its sources stay put. */
+  movingIds() {
+    if (this.state.kind !== "pressed" || !this.state.moved || this.state.clones) return /* @__PURE__ */ new Set();
+    return /* @__PURE__ */ new Set([this.state.id, ...this.state.riders.map((r) => r.id)]);
+  }
   /** The drawing under a press that has not been released yet (drag or click undecided), or null. */
   pressedId() {
     return this.state.kind === "pressed" ? this.state.id : null;
@@ -14220,15 +14300,16 @@ var DrawingSettingsDialog = class {
   }
   open(drawing, actions, kind) {
     this.close();
-    const snapshot = clonePlain(drawing.serialize());
+    const live = actions.resolve() ?? drawing;
+    const snapshot = clonePlain(live.serialize());
     const grid = fieldGrid({ variant: "inputs" });
     grid.style.padding = "16px 20px";
     grid.style.overflowY = "auto";
     grid.style.overflowX = "hidden";
     grid.style.flex = "1 1 auto";
-    if (kind === "position" && drawing instanceof PositionTool) this.buildPosition(grid, drawing, actions);
-    else if (kind === "frvp" && drawing instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, drawing, actions);
-    else if (kind === "levels") this.buildLevels(grid, drawing, actions);
+    if (kind === "position" && live instanceof PositionTool) this.buildPosition(grid, live, actions);
+    else if (kind === "frvp" && live instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, live, actions);
+    else if (kind === "levels") this.buildLevels(grid, live, actions);
     else return;
     const ui = new Dialog({
       host: this.host,
@@ -14501,6 +14582,17 @@ var DrawingSettingsDialog = class {
         toggle: {
           checked: mach.showRatios !== false,
           onChange: (v) => actions.patch({ showRatios: v })
+        }
+      }));
+    }
+    if (drawing instanceof FibRetracement) {
+      const fib = drawing;
+      grid.appendChild(fieldRow({
+        label: "Reverse",
+        bool: true,
+        toggle: {
+          checked: fib.reverse,
+          onChange: (v) => actions.patch({ reverse: v })
         }
       }));
     }
@@ -14864,7 +14956,7 @@ var DrawingSettingsPopup = class {
       this.reposition();
       return;
     }
-    const text = drawing.text;
+    const text = (actions.resolve() ?? drawing).text;
     const panel = document.createElement("div");
     panel.style.cssText = `padding:6px;border-top:1px solid var(--vela-border);display:flex;flex-direction:column;gap:4px;`;
     const ta = new TextArea({
@@ -15657,6 +15749,8 @@ var UserDrawingController = class {
     this.drawings = [];
     /** Ids painted on an interleave layer this frame — the top canvas paints only their handles. */
     this.sliced = /* @__PURE__ */ new Set();
+    /** Interleaved drawings mid-drag: painted on the top canvas, left out of their slice. */
+    this.lifted = /* @__PURE__ */ new Set();
     /** Cached slice canvases, keyed `paneId|beforeZ`, reused across frames to avoid churn. */
     this.sliceCache = /* @__PURE__ */ new Map();
     /** Series boundaries per pane as of the last `prepareSlices` — lets a repaint between data
@@ -15744,7 +15838,7 @@ var UserDrawingController = class {
       selectedIds: () => this.selectedIds,
       emit: (i) => this.emit(i),
       changed: () => {
-        this.invalidateSlices();
+        this.syncLift();
         this.render();
       },
       openSettings: (id, x, y) => this.openSettingsById(id, x, y),
@@ -16032,6 +16126,12 @@ var UserDrawingController = class {
       this.hoveredId = id;
       this.render();
     }
+  }
+  /** Drop the hover (its handles) — the pointer no longer reaches the drawings. */
+  clearHover() {
+    if (this.hoveredId == null) return;
+    this.hoveredId = null;
+    this.render();
   }
   pointerUp(x, y, snap = "off") {
     if (this.eraserMode) {
@@ -16370,6 +16470,20 @@ var UserDrawingController = class {
   /** A drawing that paints inside the series stack changed (content, not hover): its pixels
    *  live in the backend composite, so this layer alone can't show the change — ask for a
    *  data frame, which re-runs `prepareSlices` before the backend composites. */
+  /** A drawing being dragged leaves its interleave slice for the top canvas, so each pointer
+   *  move repaints one 2D layer instead of re-rasterizing and re-uploading a plot-sized slice
+   *  texture through the data frame. The slices rebuild once as the drag starts and once as it
+   *  ends (release, cancel), when the lifted set changes. */
+  syncLift() {
+    const moving = this.interaction.movingIds();
+    let same = moving.size === this.lifted.size;
+    if (same) {
+      for (const id of moving) if (!this.lifted.has(id)) same = false;
+    }
+    if (same) return;
+    this.lifted = new Set(moving);
+    this.invalidateSlices();
+  }
   invalidateSlices() {
     if (this.sliced.size > 0 || this.drawings.some((d) => this.isInterleaved(d))) this.deps.requestDataPaint();
   }
@@ -16388,7 +16502,7 @@ var UserDrawingController = class {
     const theme = this.deps.theme();
     const buckets = /* @__PURE__ */ new Map();
     for (const d of this.drawings) {
-      if (!d.visible) continue;
+      if (!d.visible || this.lifted.has(d.id)) continue;
       const beforeZ = sliceKeyFor(d.zIndex, this.lastBounds.get(d.paneId) ?? []);
       if (beforeZ === null) continue;
       const key = `${d.paneId}|${beforeZ}`;
@@ -16440,8 +16554,9 @@ var UserDrawingController = class {
       mutedLabel: edited instanceof TextLabel ? edited.id : null
     };
     this.painter.seriesLook = this.deps.seriesLook();
-    this.painter.paintAll(ctx, this.drawings.filter((d) => !this.isInterleaved(d)), proj, this.deps.theme(), targets);
-    this.painter.paintHighlights(ctx, this.drawings.filter((d) => this.isInterleaved(d)), proj, handleIdsFor(targets));
+    const onTop = (d) => !this.isInterleaved(d) || this.lifted.has(d.id);
+    this.painter.paintAll(ctx, this.drawings.filter(onTop), proj, this.deps.theme(), targets);
+    this.painter.paintHighlights(ctx, this.drawings.filter((d) => !onTop(d)), proj, handleIdsFor(targets));
     const clones = this.interaction.dragClones();
     if (clones) this.painter.paintAll(ctx, clones, proj, this.deps.theme(), { selected: new Set(clones.map((c) => c.id)) });
     this.layoutTextEditor();
@@ -17008,9 +17123,10 @@ function computePaneScale(models, bars, includeCandles, i0, i1, drawings, log = 
     consider(drawings.max);
   }
   if (min === Infinity || max === -Infinity) return { min: 0, max: 1 };
-  if (min === max) {
-    const pad = Math.abs(min) * 0.1 || 1;
-    return { min: min - pad, max: max + pad, log: log && min - pad > 0 };
+  if (max - min <= Math.max(Math.abs(min), Math.abs(max)) * 1e-12) {
+    const mid = (min + max) / 2;
+    const pad = Math.abs(mid) * 0.1 || 1;
+    return { min: mid - pad, max: mid + pad, log: log && mid - pad > 0 };
   }
   const content = Math.max(0.1, 1 - (margins.top + margins.bottom) / 100);
   const above = margins.top / 100 / content;
@@ -17514,7 +17630,9 @@ function bandEdgeSlot(logical) {
   return Math.ceil(logical) - 0.5;
 }
 var BackdropRenderer = class {
-  constructor() {
+  /** `axisTicks` is shared with the chrome layer, so gridlines and price labels agree. */
+  constructor(axisTicks = new PriceAxisTickSource()) {
+    this.axisTicks = axisTicks;
     this.canvas = null;
     this.ctx = null;
   }
@@ -17591,9 +17709,8 @@ var BackdropRenderer = class {
       if (scene.showGrid && gridHorz.visible && !pane.collapsed) {
         ctx.globalAlpha = gridAlpha;
         ctx.strokeStyle = horzColor;
-        const pct = percentScaleFor(scene, pane);
         ctx.beginPath();
-        for (const t of paneAxisTicks(pane.scale, pane.bounds.height, pct, void 0, pane.axisFormat)) {
+        for (const t of this.axisTicks.ticksFor(scene, pane, coords)) {
           const y = Math.round(coords.priceToY(t.price, pane.scale, pane.bounds)) + 0.5;
           if (y < pane.bounds.top || y > pane.bounds.top + pane.bounds.height) continue;
           ctx.moveTo(0, y);
@@ -18183,8 +18300,16 @@ var NativeRenderer = class {
     this.toolbarGutter = 0;
     // px reserved on the left for the docked drawings toolbar (0 when hidden)
     this.mountContainer = null;
+    /** The host-styleable twin of the `shadeRight` veil (`.vela-shade-right`), directly under
+     *  the cursor canvas; hidden whenever the crosshair layer paints no veil. */
+    this.shadeRightEl = null;
+    /** The veil geometry last written to {@link shadeRightEl} ('' = hidden) — the DOM is
+     *  touched only when it changes, never on a plain pointer move. */
+    this.shadeRightSig = "";
     this.userDrawings = null;
-    this.backdropRenderer = new BackdropRenderer();
+    /** One price-axis tick source for the gridlines (backdrop) and the labels (chrome). */
+    this.priceAxisTicks = new PriceAxisTickSource();
+    this.backdropRenderer = new BackdropRenderer(this.priceAxisTicks);
     this.volumeRenderer = new VolumeRenderer();
     /** SDK renderer layers instantiated at mount ({@link registerRendererLayer}). */
     /**
@@ -18217,7 +18342,7 @@ var NativeRenderer = class {
     this.backendMode = "auto";
     this.glowAmount = 0;
     // WebGL2 neon-glow intensity (canvas2d ignores it)
-    this.chrome = new ChromeRenderer();
+    this.chrome = new ChromeRenderer(this.priceAxisTicks);
     /** Prepaints each indicator's Pine drawings into interleave slices at the model's z. */
     this.indicatorSlices = new IndicatorDrawingSlices();
     /** Hover tooltips for Pine labels (canvas hit-rects collected by the chrome layer). */
@@ -18334,6 +18459,8 @@ var NativeRenderer = class {
     // pane just below it
     this.resizeSplitStart = null;
     // the two panes' shared span when the drag began
+    /** The user drawings take part in pointer input (the runtime `drawingsInteractive` feature). */
+    this.drawingsInteractive = true;
     this.hoverSeparatorY = null;
     // pixel y of the separator under the cursor (drives its hover highlight)
     // ── pane management (merge / reorder / collapse / maximize) ──
@@ -18389,8 +18516,9 @@ var NativeRenderer = class {
     this.toggleVisibleCbs = /* @__PURE__ */ new Set();
     this.moveIndicatorCbs = /* @__PURE__ */ new Set();
     this.priceStyleCbs = /* @__PURE__ */ new Set();
+    this.priceStyleWillChangeCbs = /* @__PURE__ */ new Set();
     this.name = "native";
-    this.features = ["logScale", "currentPriceLine", "priceLabel", "countdown", "upColor", "downColor", "glow", "animZoom", "animPan", "animScroll", "animAutoscale", "animLiveBar", "intro", "zoomAnchor", "axisDrag", "paneResize", "candleZOrder", "candleVisible", "seriesOrder", "highlights", "sessionZones", "gridlines", "axisLabels", "scaleMode", "invertScale", "paneScales", "autoScale", "timezone", "keyboard", "historyChords", "priceStyle", "priceBaseline", "baselinePrice", "settings", "attribution", "dialogHost", "tradeMarkers", "marks", "indicatorTitles", "indicatorValues", "crosshairOverride"];
+    this.features = ["logScale", "currentPriceLine", "priceLabel", "countdown", "upColor", "downColor", "glow", "animZoom", "animPan", "animScroll", "animAutoscale", "animLiveBar", "intro", "zoomAnchor", "axisDrag", "paneResize", "candleZOrder", "candleVisible", "seriesOrder", "highlights", "sessionZones", "gridlines", "axisLabels", "scaleMode", "invertScale", "paneScales", "autoScale", "timezone", "keyboard", "historyChords", "priceStyle", "priceBaseline", "baselinePrice", "settings", "attribution", "dialogHost", "tradeMarkers", "marks", "indicatorTitles", "indicatorValues", "crosshairOverride", "drawingsInteractive", "priceAxisTicks"];
     /** Track cursor proximity to the scroll button on the plot (bubbles from the button too,
      *  so moving onto the button doesn't count as leaving). */
     this.onScrollProximityMove = (e) => {
@@ -18434,6 +18562,7 @@ var NativeRenderer = class {
       this.scene.priceStyle = opts.priceStyle;
       this.scene.basePainting = basePaintingOf(opts.priceStyle);
       this.scene.candleOverride = candleOverrideFor(opts.priceStyle, this.scene.style.chartTypes);
+      if (typeof opts.priceAxisTicks === "function") this.priceAxisTicks.setHook(opts.priceAxisTicks);
     }
     this.theme = this.deriveTheme(DARK_THEME);
   }
@@ -18572,6 +18701,15 @@ var NativeRenderer = class {
       case "crosshairOverride":
         this.scene.crosshairOverride = sanitizeCrosshairOverride(value);
         break;
+      case "drawingsInteractive":
+        this.drawingsInteractive = value !== false;
+        if (this.input) this.input.drawings = this.drawingsInteractive;
+        if (!this.drawingsInteractive) this.userDrawings?.clearHover();
+        return;
+      // affects the next gesture only — clearHover repaints what it drops
+      case "priceAxisTicks":
+        this.priceAxisTicks.setHook(typeof value === "function" ? value : null);
+        break;
       case "keyboard":
         this.setKeyboardEnabled(Boolean(value));
         return;
@@ -18687,6 +18825,10 @@ var NativeRenderer = class {
         return { visible: this.scene.marks.visible, groups: { ...this.scene.marks.groups } };
       case "crosshairOverride":
         return this.scene.crosshairOverride ? { ...this.scene.crosshairOverride } : null;
+      case "drawingsInteractive":
+        return this.drawingsInteractive;
+      case "priceAxisTicks":
+        return this.priceAxisTicks.hook;
       case "keyboard":
         return this.keyboardEnabled;
       case "historyChords":
@@ -19360,6 +19502,12 @@ var NativeRenderer = class {
     Object.assign(this.drawingsCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
     this.cursorCanvas = document.createElement("canvas");
     Object.assign(this.cursorCanvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
+    this.shadeRightEl = document.createElement("div");
+    this.shadeRightEl.className = "vela-shade-right";
+    this.shadeRightEl.setAttribute("aria-hidden", "true");
+    this.shadeRightEl.hidden = true;
+    Object.assign(this.shadeRightEl.style, { position: "absolute", top: "0", left: "0", width: "0", height: "0", pointerEvents: "none", display: "none" });
+    this.shadeRightSig = "";
     this.overlayRoot = document.createElement("div");
     Object.assign(this.overlayRoot.style, { position: "absolute", inset: "0", pointerEvents: "none" });
     this.plot = document.createElement("div");
@@ -19367,7 +19515,7 @@ var NativeRenderer = class {
     this.extLayers = rendererLayers().map((def) => ({ def, instance: def.create(), canvas: this.createLayerCanvas(), channel: def.id, owner: null }));
     const below = this.extLayers.filter((l) => l.def.placement === "below-data").map((l) => l.canvas);
     const above = this.extLayers.filter((l) => l.def.placement !== "below-data").map((l) => l.canvas);
-    this.plot.append(this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, this.vpvrCanvas, ...above, this.chromeCanvas, this.drawingsCanvas, this.cursorCanvas, this.overlayRoot);
+    this.plot.append(this.backdropCanvas, ...below, this.dataCanvas, this.volumeCanvas, this.vpvrCanvas, ...above, this.chromeCanvas, this.drawingsCanvas, this.shadeRightEl, this.cursorCanvas, this.overlayRoot);
     this.layerOrderSig = "";
     this.wrapper.appendChild(this.plot);
     this.factoryConfig = this.getConfig();
@@ -19425,13 +19573,14 @@ var NativeRenderer = class {
       drawingsPointerDown: (x, y, snap, shift2, mod) => this.userDrawings?.pointerDown(x, y, snap, shift2, mod),
       drawingsPointerMove: (x, y, snap, shift2, mod) => this.userDrawings?.pointerMove(x, y, snap, shift2, mod),
       drawingsPointerUp: (x, y, snap) => this.userDrawings?.pointerUp(x, y, snap),
-      drawingsCursor: (x, y) => this.userDrawings?.cursorAt(x, y) ?? (this.chrome.markGlyphAt(x, y) ? "pointer" : null),
+      drawingsCursor: (x, y) => (this.drawingsInteractive ? this.userDrawings?.cursorAt(x, y) : null) ?? (this.chrome.markGlyphAt(x, y) ? "pointer" : null),
       drawingsDblClick: (x, y) => this.userDrawings?.dblClick(x, y) ?? false,
       drawingsClearTransient: () => this.userDrawings?.clearTransient()
     });
     this.input.rightEdgeZoom = this.zoomAnchorMode === "right";
     this.input.axisDrag = this.axisDragEnabled;
     this.input.paneResize = this.paneResizeEnabled;
+    this.input.drawings = this.drawingsInteractive;
     this.input.attach(this.dataCanvas);
     if (this.settingsEnabled) this.setSettingsEnabled(true);
     this.syncCountdownTimer();
@@ -19740,6 +19889,8 @@ var NativeRenderer = class {
     this.backend.destroy();
     this.chrome.destroy();
     this.crosshairLayer.destroy();
+    this.shadeRightEl?.remove();
+    this.shadeRightEl = null;
     this.attributionEl?.remove();
     this.attributionEl = null;
     this.mountContainer?.style.removeProperty("--vela-toolbar-gutter");
@@ -20086,14 +20237,21 @@ var NativeRenderer = class {
     this.priceStyleCbs.add(cb);
     return () => this.priceStyleCbs.delete(cb);
   }
+  onPriceStyleWillChange(cb) {
+    this.priceStyleWillChangeCbs.add(cb);
+    return () => this.priceStyleWillChangeCbs.delete(cb);
+  }
   /**
    * THE single write path for the base price style at runtime (feature set / settings dialog /
-   * config template — the constructor seeds the field directly, pre-listeners). Updates the
-   * scene, eases any reveal layer toward the new style's target, and notifies the core —
-   * which owns the DATA side of styles that need one (a chart type's SeriesDataEngine).
+   * config template — the constructor seeds the field directly, pre-listeners). Announces the
+   * switch while the scene still holds the old style (a listener may paint/capture that frame),
+   * then updates the scene, eases any reveal layer toward the new style's target, and notifies
+   * the core — which owns the DATA side of styles that need one (a chart type's SeriesDataEngine).
    */
   setPriceStyle(style) {
     if (style === this.scene.priceStyle) return;
+    const from = this.scene.priceStyle;
+    for (const cb of this.priceStyleWillChangeCbs) cb(from, style);
     this.scene.priceStyle = style;
     this.scene.basePainting = basePaintingOf(style);
     this.scene.candleOverride = candleOverrideFor(style, this.scene.style.chartTypes);
@@ -20323,7 +20481,7 @@ var NativeRenderer = class {
     if (this.easeLiveBar(dtMs)) active = true;
     this.skeletonClockMs += dtMs;
     this.paintData();
-    this.crosshairLayer.render(this.scene, this.coords, this.theme, this.hoverSeparatorY, this.externalCrossPx());
+    this.renderCrosshairLayer();
     this.updateLegendValues();
     this.emitViewportChange();
     return active;
@@ -20898,9 +21056,30 @@ var NativeRenderer = class {
       this.chrome.render(this.scene, this.coords, this.theme, this.axisSurface());
       this.trackMarkPopover();
     }
-    this.crosshairLayer.render(this.scene, this.coords, this.theme, this.hoverSeparatorY, this.externalCrossPx());
+    this.renderCrosshairLayer();
     if (!repaintsData(level) && this.paintedData) this.repaintCursorLayers();
     this.updateLegendValues();
+  }
+  /** Repaint the L2 crosshair canvas and keep the `.vela-shade-right` element on the veil it painted. */
+  renderCrosshairLayer() {
+    this.crosshairLayer.render(this.scene, this.coords, this.theme, this.hoverSeparatorY, this.externalCrossPx());
+    this.syncShadeRight();
+  }
+  /** Position (or hide) the `.vela-shade-right` element over the veil of the last crosshair frame. */
+  syncShadeRight() {
+    const el = this.shadeRightEl;
+    if (!el) return;
+    const area = this.crosshairLayer.shadeRightArea;
+    const sig = area ? `${area.x},${area.width},${area.height}` : "";
+    if (sig === this.shadeRightSig) return;
+    this.shadeRightSig = sig;
+    if (!area) {
+      el.hidden = true;
+      el.style.display = "none";
+      return;
+    }
+    Object.assign(el.style, { left: `${area.x}px`, width: `${area.width}px`, height: `${area.height}px`, display: "" });
+    el.hidden = false;
   }
   /** Repaint the SDK layers that opted into cursor tracking (their own canvas only). */
   repaintCursorLayers() {
@@ -21695,7 +21874,7 @@ var NativeRenderer = class {
     if (this.animator.active) {
       this.computeScales();
       this.paintData();
-      this.crosshairLayer.render(this.scene, this.coords, this.theme, this.hoverSeparatorY, this.externalCrossPx());
+      this.renderCrosshairLayer();
     } else {
       this.scheduler.flushNow(4 /* Full */);
     }
@@ -21904,7 +22083,7 @@ var IndicatorHandleImpl = class {
     this.controller.applyProps(this.id, values);
   }
   updateCode(source) {
-    this.controller.updateCode(this.id, source);
+    return this.controller.updateCode(this.id, source);
   }
   setVisible(visible) {
     this.controller.setVisible(this.id, visible);
@@ -22335,6 +22514,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     this.activeEngineStyle = null;
     /** The chart's current price style (tracked from the renderer's change events + initial read). */
     this.priceStyle = "candles";
+    this.priceStyleWillChangeUnsub = null;
     this.unresolvedUnsub = null;
     /** Latest chart visible range (left/right bar times), fed to viewport-dependent scripts. */
     this.visibleRange = null;
@@ -22433,6 +22613,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     this.renderer.onThemeSelect?.((name) => this.setTheme(resolveTheme(name)));
     this.viewportUnsub = this.renderer.onViewportChange((range) => this.onViewportChange(range));
     this.renderer.onPriceStyleChange?.((style) => this.syncPriceStyle(style));
+    this.priceStyleWillChangeUnsub = this.renderer.onPriceStyleWillChange?.((from, to) => this.events.emit("priceStyle:change", { from, to })) ?? null;
     const initialStyle = this.renderer.readFeature("priceStyle");
     if (typeof initialStyle === "string") this.priceStyle = initialStyle;
     this.barTransform = barTransformFor(initialStyle);
@@ -23719,20 +23900,26 @@ var EngineOrchestrator = class _EngineOrchestrator {
   /**
    * IndicatorController: replace a SCRIPT indicator's source in place (see
    * {@link IndicatorHandle.updateCode}). Prepare-first: the running session keeps
-   * computing until the new source has compiled, so a broken edit costs the user
-   * nothing but an `error` event. Natives have no script — warn and leave them alone.
+   * computing until the new source has compiled; then the new code runs on TRIAL until
+   * its first model lands, and a failure before that puts the previous code back.
+   * Natives have no script — warn and leave them alone.
    */
   updateCode(id, source) {
     const record = this.registry.get(id);
     const handle = this.handles.get(id);
-    if (!record || !handle) return;
+    if (!record || !handle) return Promise.resolve({ ok: false, error: new Error(`[vela] updateCode("${id}") \u2014 the indicator is no longer on the chart.`) });
     if (record.native) {
       console.warn(`[vela] updateCode("${id}") \u2014 a native indicator has no script to update.`);
-      return;
+      return Promise.resolve({ ok: false, error: new Error(`[vela] updateCode("${id}") \u2014 a native indicator has no script to update.`) });
     }
-    if (source === record.source && record.pendingSource === void 0) return;
-    record.pendingSource = source;
-    void this.swapSource(id, source, handle);
+    const busy = record.pendingSource !== void 0 || record.codeTrial !== void 0;
+    if (!busy && source === record.source) return Promise.resolve({ ok: true, error: null });
+    return new Promise((resolve) => {
+      (record.codeWaiters ?? (record.codeWaiters = [])).push(resolve);
+      if (record.pendingSource === source || record.pendingSource === void 0 && record.codeTrial && record.source === source) return;
+      record.pendingSource = source;
+      void this.swapSource(id, source, handle);
+    });
   }
   async swapSource(id, source, handle) {
     const engine = this.registry.get(id)?.engine ?? this.engineFor(this.registry.get(id)?.options?.language);
@@ -23743,26 +23930,41 @@ var EngineOrchestrator = class _EngineOrchestrator {
       const record2 = this.registry.get(id);
       if (record2?.pendingSource === source) {
         record2.pendingSource = void 0;
-        this.fail(id, handle, err);
+        this.rejectCode(id, record2, handle, err);
       }
       return;
     }
     const record = this.registry.get(id);
     if (!record || record.pendingSource !== source) return;
     record.pendingSource = void 0;
+    const previous = record.codeTrial?.previous ?? {
+      source: record.source,
+      engine: record.engine,
+      prepared: record.prepared,
+      inputValues: record.inputValues,
+      propValues: record.propValues,
+      inputs: [...handle.inputs],
+      props: [...handle.props]
+    };
+    record.inputValues = valuesOnSchema(prepared.inputs, record.inputValues, record.prepared?.inputs);
+    record.propValues = valuesOnSchema(prepared.props ?? [], record.propValues, record.prepared?.props);
     record.source = source;
     record.engine = engine;
     record.prepared = prepared;
     handle.setSource(source);
-    record.inputValues = valuesOnSchema(prepared.inputs, record.inputValues);
-    record.propValues = valuesOnSchema(prepared.props ?? [], record.propValues);
     handle.setSchema(prepared.inputs);
     handle.setPropsSchema(prepared.props ?? []);
     record.session?.stop();
     record.session = void 0;
     record.pendingStructural = true;
     record.pendingCause = "code";
-    if (record.hidden) return;
+    if (record.hidden) {
+      record.codeTrial = void 0;
+      if (record.renderHandle) this.renderer.setIndicatorInputs(record.renderHandle, record.inputValues, record.propValues);
+      this.settleCode(record, { ok: true, error: null });
+      return;
+    }
+    record.codeTrial = { previous };
     if (record.renderHandle) {
       this.renderer.setIndicatorInputs(record.renderHandle, record.inputValues, record.propValues);
       this.setLoading(record, true);
@@ -23770,6 +23972,46 @@ var EngineOrchestrator = class _EngineOrchestrator {
       this.mountLoadingPlaceholder(id, record);
     }
     this.executeIndicator(id, handle);
+    if (this.bars.length === 0 && record.codeTrial) {
+      record.codeTrial = void 0;
+      this.settleCode(record, { ok: true, error: null });
+    }
+  }
+  /** Resolve every `updateCode` caller waiting on this record's chain of edits. */
+  settleCode(record, result) {
+    const waiters = record.codeWaiters;
+    record.codeWaiters = void 0;
+    if (waiters) for (const resolve of waiters) resolve(result);
+  }
+  /**
+   * An update failed — at prepare, or on trial before its first model. A trial puts the
+   * previous code back (source, engine, prepared script, values, schema) and restarts it;
+   * its visuals were never dropped, so the chart keeps painting throughout. Then the
+   * failure reports the usual way and every waiting caller learns it.
+   */
+  rejectCode(id, record, handle, err) {
+    const trial = record.codeTrial;
+    record.codeTrial = void 0;
+    this.fail(id, handle, err);
+    if (trial) {
+      const p = trial.previous;
+      record.session?.stop();
+      record.session = void 0;
+      record.source = p.source;
+      record.engine = p.engine;
+      record.prepared = p.prepared;
+      record.inputValues = p.inputValues;
+      record.propValues = p.propValues;
+      handle.setSource(p.source);
+      handle.setSchema(p.inputs);
+      handle.setPropsSchema(p.props);
+      record.pendingStructural = true;
+      record.pendingCause = void 0;
+      if (record.renderHandle) this.renderer.setIndicatorInputs(record.renderHandle, record.inputValues, record.propValues);
+      if (!record.hidden) this.executeIndicator(id, handle);
+    }
+    const error = err instanceof Error ? err : new Error(String(err));
+    this.settleCode(record, { ok: false, error });
   }
   /** IndicatorController: tear down an indicator and (if now empty) its pane. */
   /** Live handles of every indicator on the chart (script + native), insertion order. */
@@ -23784,6 +24026,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
   removeIndicator(id) {
     const record = this.registry.remove(id);
     if (record?.native?.type === "volume") this.volumeOptedOut = true;
+    if (record) this.settleCode(record, { ok: false, error: new Error(`[vela] updateCode("${id}") \u2014 the indicator was removed.`) });
     record?.session?.stop();
     if (record?.native?.started) record.native.instance.stop();
     this.handles.delete(id);
@@ -23811,6 +24054,10 @@ var EngineOrchestrator = class _EngineOrchestrator {
     if (!visible) {
       record.session?.stop();
       record.session = void 0;
+      if (record.codeTrial) {
+        record.codeTrial = void 0;
+        this.settleCode(record, { ok: true, error: null });
+      }
       if (record.native?.started) record.native.instance.suspend();
       if (record.renderHandle) this.renderer.setIndicatorVisible?.(record.renderHandle, false);
       else if (record.native) this.mountHiddenNativeRow(id, record);
@@ -23897,7 +24144,10 @@ var EngineOrchestrator = class _EngineOrchestrator {
     if (this.viewportTimer != null) clearTimeout(this.viewportTimer);
     this.viewportUnsub?.();
     this.paneActionUnsub?.();
+    this.priceStyleWillChangeUnsub?.();
+    this.priceStyleWillChangeUnsub = null;
     for (const record of this.registry.all()) {
+      this.settleCode(record, { ok: false, error: new Error("[vela] updateCode \u2014 the chart was destroyed.") });
       record.session?.stop();
       if (record.native?.started) record.native.instance.stop();
     }
@@ -23966,7 +24216,8 @@ var EngineOrchestrator = class _EngineOrchestrator {
     const record = this.registry.get(id);
     if (!record || !record.engine || !record.prepared || record.hidden) return;
     const mode = this.config.live && !record.prepared.reactsToViewport && record.engine.capabilities.streaming ? "live" : "static";
-    record.session = record.engine.execute(
+    const prepared = record.prepared;
+    const session = record.engine.execute(
       {
         prepared: record.prepared,
         market: this.market(),
@@ -23987,6 +24238,10 @@ var EngineOrchestrator = class _EngineOrchestrator {
           const cause = record.pendingCause ?? "history";
           if (!this.applyModel(id, model)) return;
           record.pendingCause = void 0;
+          if (record.codeTrial) {
+            record.codeTrial = void 0;
+            this.settleCode(record, { ok: true, error: null });
+          }
           this.emitContextChanged(id);
           this.emitScriptRun(id, cause, first);
         },
@@ -23997,9 +24252,17 @@ var EngineOrchestrator = class _EngineOrchestrator {
           handle.emit("alert", { id: a.id, message: a.message, title: a.title, time: a.time });
         },
         onWarning: (w) => this.events.emit("warning", w),
-        onError: (err) => this.fail(id, handle, err)
+        onError: (err) => {
+          if (record.codeTrial) this.rejectCode(id, record, handle, err);
+          else this.fail(id, handle, err);
+        }
       }
     );
+    if (record.prepared !== prepared) {
+      session.stop();
+      return;
+    }
+    record.session = session;
     this.emitContextChanged(id);
   }
   /**
@@ -24500,7 +24763,7 @@ function yieldToPaint() {
   }
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
-function valuesOnSchema(schema, previous) {
+function valuesOnSchema(schema, previous, oldSchema = []) {
   const out = {};
   const declared = /* @__PURE__ */ new Set();
   for (const s of schema) {
@@ -24508,8 +24771,21 @@ function valuesOnSchema(schema, previous) {
     declared.add(s.key);
     declared.add(s.title);
   }
-  for (const [k, v] of Object.entries(previous)) if (declared.has(k)) out[k] = v;
+  const oldDefaults = /* @__PURE__ */ new Map();
+  for (const s of oldSchema) {
+    oldDefaults.set(s.key, s.defval);
+    if (!oldDefaults.has(s.title)) oldDefaults.set(s.title, s.defval);
+  }
+  for (const [k, v] of Object.entries(previous)) {
+    if (!declared.has(k)) continue;
+    if (oldDefaults.has(k) && sameInputValue(oldDefaults.get(k), v)) continue;
+    out[k] = v;
+  }
   return out;
+}
+function sameInputValue(a, b) {
+  if (a === b) return true;
+  return typeof a === "object" && a !== null && typeof b === "object" && b !== null && JSON.stringify(a) === JSON.stringify(b);
 }
 function blankedModel(model) {
   return {
@@ -28533,7 +28809,8 @@ var Vela = class {
       glow: options.glow ?? 0,
       upColor: options.upColor ?? BULLISH,
       downColor: options.downColor ?? BEARISH,
-      priceStyle: options.priceStyle ?? "candles"
+      priceStyle: options.priceStyle ?? "candles",
+      priceAxisTicks: options.priceAxis?.ticks ?? null
     };
     const RendererClass = options.renderer ?? NativeRenderer;
     if (typeof RendererClass !== "function") {
@@ -28877,4 +29154,4 @@ function resolveElement(container) {
   return element;
 }
 
-export { BUILTIN_PRICE_STYLES, BarStore, CachingDataFeed, DARK_THEME, DataControl, DrawingStore, DrawingToolbar, DrawingsControl, LEGEND_AT_TOP_ATTR, LIGHT_THEME, MarksControl, MultiProviderFeed, NativeRenderer, RendererControl, ReplayControl, SecondClock, TIMEZONES, TypedEventBus, Vela, applyAttributionMarkTheme, buildToolbar, createAttributionMark, createCustomMark, defaultMemberOf, defaultToolbar, groupKeyOf, groupMembers, isExchangeTimezone, isGroupRow, normalizeSession, normalizeTimezone, parseSymbol, priceStyleIds, registerBuiltinChartTypes, resolveTheme, resolveTimezone, sharedBarStore, timeframeToMs, timezoneMenuRows, tzButtonLabel, tzMenuLabel, tzOffset };
+export { BUILTIN_PRICE_STYLES, BarStore, CANDLE_OVERRIDE_KEYS, CachingDataFeed, DARK_THEME, DataControl, DrawingStore, DrawingToolbar, DrawingsControl, LEGEND_AT_TOP_ATTR, LIGHT_THEME, MarksControl, MultiProviderFeed, NativeRenderer, RendererControl, ReplayControl, SecondClock, TypedEventBus, Vela, applyAttributionMarkTheme, buildToolbar, createAttributionMark, createCustomMark, defaultMemberOf, defaultToolbar, groupKeyOf, groupMembers, isGroupRow, normalizeSession, parseSymbol, priceStyleIds, registerBuiltinChartTypes, resolveTheme, sharedBarStore, timeframeToMs };

@@ -49,7 +49,7 @@ class ChartStream:
         with self._lock:
             cid = self._next
             self._next += 1
-            inbox: queue.Queue = queue.Queue()
+            inbox: queue.Queue = queue.Queue(maxsize=256)   # bounded: a half-open peer must not grow memory for ever
             self._clients[cid] = inbox
             return cid, inbox
 
@@ -131,7 +131,14 @@ class ChartStream:
         sent = 0
         for inbox in targets:
             try:
-                inbox.put_nowait(blob)
+                try:
+                    inbox.put_nowait(blob)
+                except queue.Full:                       # a stuck view: drop its OLDEST event, keep the newest
+                    try:
+                        inbox.get_nowait()
+                    except queue.Empty:
+                        pass
+                    inbox.put_nowait(blob)
                 sent += 1
             except Exception:  # noqa: BLE001 — a dead client must never break the caller
                 self.dropped += 1

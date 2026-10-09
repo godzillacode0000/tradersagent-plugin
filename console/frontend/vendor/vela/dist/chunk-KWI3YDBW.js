@@ -1,4 +1,4 @@
-import { svg24, NEUTRAL, BEARISH, WARNING, BULLISH, INFO, ACCENT_BRIGHT, VALID, INVALID, MARKER, ACCENT, injectStyles, iconEl } from './chunk-BZQM2XO7.js';
+import { svg24, NEUTRAL, BEARISH, WARNING, BULLISH, INFO, ACCENT_BRIGHT, VALID, INVALID, MARKER, ACCENT, injectStyles, iconEl, announceSurface, holdForExit } from './chunk-VHGACEHO.js';
 
 // src/core/model/series.ts
 function isLineLikeSeries(spec) {
@@ -2778,6 +2778,10 @@ var FibRatios = class extends Drawing {
 
 // src/core/drawings/types/FibLevels.ts
 var FibLevels = class extends FibRatios {
+  /** Price of a level for the two anchor prices; subclasses override to change which anchor ratio 0 sits on. */
+  levelPrice(ratio, p1, p2) {
+    return p1 + ratio * (p2 - p1);
+  }
   /** Per-level pixel line + price for the ENABLED levels, spanning the anchors' time range. */
   levelLines(proj) {
     const a = this.anchors[0];
@@ -2787,11 +2791,10 @@ var FibLevels = class extends FibRatios {
     const xb = proj.xOf(b.time);
     const x1 = Math.min(xa, xb);
     const x2 = Math.max(xa, xb);
-    const delta = b.price - a.price;
     const out = [];
     for (const lv of this.levels) {
       if (!lv.enabled) continue;
-      const price = a.price + lv.ratio * delta;
+      const price = this.levelPrice(lv.ratio, a.price, b.price);
       const y = proj.yOf(price, this.paneId);
       if (y == null) continue;
       out.push({ ratio: lv.ratio, color: lv.color, label: lv.label, price, x1, x2, y });
@@ -2831,8 +2834,7 @@ var FibLevels = class extends FibRatios {
     const a = this.anchors[0];
     const b = this.anchors[1];
     if (!a || !b) return null;
-    const delta = b.price - a.price;
-    const prices = this.levels.filter((l) => l.enabled).map((l) => a.price + l.ratio * delta);
+    const prices = this.levels.filter((l) => l.enabled).map((l) => this.levelPrice(l.ratio, a.price, b.price));
     if (prices.length === 0) return null;
     return { min: Math.min(...prices), max: Math.max(...prices) };
   }
@@ -2918,12 +2920,23 @@ function cycleLevels(count, enabledCount = count) {
 // src/core/drawings/types/FibRetracement.ts
 var LEVELS = fibLevels([0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]);
 var FibRetracement = class extends FibLevels {
-  constructor() {
-    super(...arguments);
+  constructor(init) {
+    super(init);
     this.type = "fibretracement";
+    if (this.reverse === void 0) this.reverse = false;
   }
   defaultLevels() {
     return LEVELS;
+  }
+  levelPrice(ratio, p1, p2) {
+    return this.reverse ? p1 + ratio * (p2 - p1) : p2 + ratio * (p1 - p2);
+  }
+  writeProps() {
+    return { ...super.writeProps(), reverse: this.reverse };
+  }
+  readProps(props) {
+    super.readProps(props);
+    this.reverse = typeof props.reverse === "boolean" ? props.reverse : true;
   }
 };
 
@@ -5892,6 +5905,100 @@ function inputDeltas(schema, values) {
   return Object.keys(out).length > 0 ? out : void 0;
 }
 
+// src/core/timezones.ts
+var TIMEZONES = [
+  { value: "Etc/UTC", label: "UTC" },
+  { value: "Etc/GMT+12", label: "International Date Line West" },
+  { value: "Pacific/Pago_Pago", label: "Pago Pago" },
+  { value: "Pacific/Honolulu", label: "Honolulu" },
+  { value: "Pacific/Marquesas", label: "Marquesas Islands" },
+  { value: "America/Anchorage", label: "Anchorage" },
+  { value: "America/Los_Angeles", label: "Los Angeles" },
+  { value: "America/Phoenix", label: "Phoenix" },
+  { value: "America/Denver", label: "Denver" },
+  { value: "America/Chicago", label: "Chicago" },
+  { value: "America/Mexico_City", label: "Mexico City" },
+  { value: "America/New_York", label: "New York" },
+  { value: "America/Bogota", label: "Bogot\xE1" },
+  { value: "America/Caracas", label: "Caracas" },
+  { value: "America/Santiago", label: "Santiago" },
+  { value: "America/St_Johns", label: "St. John's" },
+  { value: "America/Sao_Paulo", label: "S\xE3o Paulo" },
+  { value: "America/Argentina/Buenos_Aires", label: "Buenos Aires" },
+  { value: "America/Noronha", label: "Fernando de Noronha" },
+  { value: "Atlantic/Azores", label: "Azores" },
+  { value: "Atlantic/Reykjavik", label: "Reykjavik" },
+  { value: "Europe/London", label: "London" },
+  { value: "Europe/Paris", label: "Paris" },
+  { value: "Europe/Berlin", label: "Berlin" },
+  { value: "Europe/Athens", label: "Athens" },
+  { value: "Africa/Cairo", label: "Cairo" },
+  { value: "Africa/Johannesburg", label: "Johannesburg" },
+  { value: "Europe/Moscow", label: "Moscow" },
+  { value: "Europe/Istanbul", label: "Istanbul" },
+  { value: "Asia/Tehran", label: "Tehran" },
+  { value: "Asia/Dubai", label: "Dubai" },
+  { value: "Asia/Kabul", label: "Kabul" },
+  { value: "Asia/Karachi", label: "Karachi" },
+  { value: "Asia/Kolkata", label: "Mumbai" },
+  { value: "Asia/Kathmandu", label: "Kathmandu" },
+  { value: "Asia/Dhaka", label: "Dhaka" },
+  { value: "Asia/Yangon", label: "Yangon" },
+  { value: "Asia/Bangkok", label: "Bangkok" },
+  { value: "Asia/Shanghai", label: "Shanghai" },
+  { value: "Asia/Hong_Kong", label: "Hong Kong" },
+  { value: "Asia/Singapore", label: "Singapore" },
+  { value: "Australia/Eucla", label: "Eucla" },
+  { value: "Asia/Tokyo", label: "Tokyo" },
+  { value: "Asia/Seoul", label: "Seoul" },
+  { value: "Australia/Adelaide", label: "Adelaide" },
+  { value: "Australia/Sydney", label: "Sydney" },
+  { value: "Australia/Lord_Howe", label: "Lord Howe Island" },
+  { value: "Pacific/Noumea", label: "Noum\xE9a" },
+  { value: "Pacific/Auckland", label: "Auckland" },
+  { value: "Pacific/Chatham", label: "Chatham Islands" },
+  { value: "Pacific/Apia", label: "Apia" },
+  { value: "Pacific/Kiritimati", label: "Kiritimati" }
+];
+var EXCHANGE_TIMEZONE = "exchange";
+function isExchangeTimezone(zone) {
+  return zone === EXCHANGE_TIMEZONE;
+}
+function resolveTimezone(zone, exchangeZone) {
+  if (!isExchangeTimezone(zone)) return zone;
+  return exchangeZone && exchangeZone !== "" ? exchangeZone : "Etc/UTC";
+}
+function normalizeTimezone(zone) {
+  return zone === "UTC" || zone === "Etc/UTC" || zone === "Etc/GMT" ? "Etc/UTC" : zone;
+}
+function timezoneMenuRows(current) {
+  const active = normalizeTimezone(current);
+  const [utc, ...zones] = TIMEZONES.map((t) => ({ value: t.value, label: tzMenuLabel(t.value, t.label), checked: t.value === active }));
+  return [utc, { value: EXCHANGE_TIMEZONE, label: "Exchange", checked: isExchangeTimezone(current) }, ...zones];
+}
+function tzOffset(zone, date = /* @__PURE__ */ new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "shortOffset" }).formatToParts(date);
+    const raw = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+    const m = raw.match(/GMT(?:(\+|-)(\d{1,2})(?::(\d{2}))?)?/);
+    if (!m || !m[1]) return "UTC";
+    const sign = m[1] === "-" ? "-" : "+";
+    const hrs = m[2] ?? "0";
+    const mins = m[3] ?? "";
+    return mins ? `UTC${sign}${hrs}:${mins}` : `UTC${sign}${hrs}`;
+  } catch {
+    return "UTC";
+  }
+}
+function tzMenuLabel(zone, location) {
+  if (normalizeTimezone(zone) === "Etc/UTC") return location;
+  return `(${tzOffset(zone)}) ${location}`;
+}
+function tzButtonLabel(zone) {
+  if (normalizeTimezone(zone) === "Etc/UTC") return "UTC";
+  return tzOffset(zone);
+}
+
 // src/renderers/native/layers.ts
 function foldBaseModulation(acc, next) {
   if (next == null) return acc;
@@ -6023,10 +6130,12 @@ function legendActions() {
 }
 function legendActionsProviderFor(chart, context) {
   return (indicatorId) => {
-    const handle = chart.indicators().find((h) => h.id === indicatorId);
+    const find = () => chart.indicators().find((h) => h.id === indicatorId);
+    const infoOf = (h) => ({ id: h.id, title: h.title, ...h.source !== void 0 ? { source: h.source } : {} });
+    const handle = find();
     if (!handle) return [];
-    const info = { id: handle.id, title: handle.title, ...handle.source !== void 0 ? { source: handle.source } : {} };
-    return legendActions().filter((d) => !d.when || d.when(info)).map((d) => ({ id: d.id, icon: d.icon, tooltip: d.tooltip, run: () => d.run(context(), info) }));
+    const info = infoOf(handle);
+    return legendActions().filter((d) => !d.when || d.when(info)).map((d) => ({ id: d.id, icon: d.icon, tooltip: d.tooltip, run: () => d.run(context(), infoOf(find() ?? handle)) }));
   };
 }
 var calloutRegistry = /* @__PURE__ */ new Map();
@@ -6113,6 +6222,127 @@ function resolveEngines(overrides) {
   return { ...Object.fromEntries(defaultEngines), ...overrides };
 }
 
+// src/widget/context-menu-model.ts
+var SETTINGS_SECTION = {
+  body: "Canvas",
+  "price-axis": "Scales and lines",
+  "time-axis": "Scales and lines"
+};
+function settingsItem(zone, label, icon) {
+  return { id: `settings:${SETTINGS_SECTION[zone]}`, label, ...icon ? { icon } : {}, separatorBefore: true };
+}
+function settingsSectionOf(id) {
+  return id.slice("settings:".length) || void 0;
+}
+var SCALE_CHOICES = [
+  ["regular", "Regular"],
+  ["percent", "Percent"],
+  ["indexed", "Indexed to 100"],
+  ["log", "Logarithmic"]
+];
+function paneScaleAt(panes, y) {
+  return panes.find((p) => y >= p.top && y < p.top + p.height) ?? panes[0] ?? null;
+}
+function scaleChoiceOf(scale) {
+  if (scale.log) return "log";
+  if (scale.mode === "percent") return "percent";
+  if (scale.mode === "indexed") return "indexed";
+  return "regular";
+}
+function mainScale(pane) {
+  return pane === null || pane.kind === "price";
+}
+function scaleWrites(choice, pane) {
+  const mode = choice === "percent" ? "percent" : choice === "indexed" ? "indexed" : "price";
+  const log = choice === "log";
+  if (mainScale(pane)) {
+    return [
+      ["scaleMode", mode],
+      ["logScale", log]
+    ];
+  }
+  return [
+    ["scaleMode", { pane: pane.id, mode }],
+    ["logScale", { pane: pane.id, value: log }]
+  ];
+}
+function invertWrite(next, pane) {
+  return mainScale(pane) ? ["invertScale", next] : ["invertScale", { pane: pane.id, value: next }];
+}
+function priceAxisItems(s) {
+  return [
+    { id: "auto", label: "Auto (fits data to screen)", checked: s.auto },
+    { id: "invert", label: "Invert scale", checked: s.invert },
+    ...SCALE_CHOICES.map(([choice, label], i) => ({
+      id: `scale:${choice}`,
+      label,
+      checked: s.choice === choice,
+      separatorBefore: i === 0
+    })),
+    {
+      id: "labels",
+      label: "Labels",
+      separatorBefore: true,
+      submenu: [
+        { id: "toggle:axisLabels", label: "Price axis labels", checked: s.axisLabels },
+        { id: "toggle:priceLabel", label: "Last price label", checked: s.priceLabel },
+        { id: "toggle:countdown", label: "Countdown to bar close", checked: s.countdown }
+      ]
+    },
+    {
+      id: "levels",
+      label: "Levels",
+      submenu: [{ id: "toggle:currentPriceLine", label: "Last Price Line", checked: s.priceLine }]
+    },
+    settingsItem("price-axis", "More settings\u2026")
+  ];
+}
+function timeAxisItems(timezone) {
+  return [
+    {
+      id: "timezone",
+      label: "Time zone",
+      submenu: timezoneMenuRows(timezone).map((r) => ({ id: `tz:${r.value}`, label: r.label, checked: r.checked }))
+    },
+    settingsItem("time-axis", "More settings\u2026")
+  ];
+}
+function bodyItems(counts) {
+  return [
+    { id: "reset-view", label: "Reset chart view", icon: "reset" },
+    { id: "remove-drawings", label: "Remove drawings", icon: "eraser", disabled: counts.drawings === 0, separatorBefore: true },
+    { id: "remove-indicators", label: "Remove indicators", icon: "indicators", disabled: counts.indicators === 0 },
+    settingsItem("body", "Settings\u2026", "gear")
+  ];
+}
+var CONTEXT_MENU_BUILTIN_ORDER = {
+  body: { "reset-view": -30, "remove-drawings": -20, "remove-indicators": -10, settings: 1e3 },
+  "price-axis": {
+    auto: -80,
+    invert: -70,
+    "scale:regular": -60,
+    "scale:percent": -50,
+    "scale:indexed": -40,
+    "scale:log": -30,
+    labels: -20,
+    levels: -10,
+    settings: 1e3
+  },
+  "time-axis": { timezone: -10, settings: 1e3 }
+};
+function composeMenu(zone, builtin, contributed) {
+  const ranks = CONTEXT_MENU_BUILTIN_ORDER[zone];
+  const rows = [];
+  let group = 0;
+  for (const item of builtin) {
+    if (item.separatorBefore) group += 1;
+    rows.push({ item, rank: ranks[item.id.startsWith("settings") ? "settings" : item.id] ?? 0, group });
+  }
+  for (const { item, order } of contributed) rows.push({ item, rank: order ?? 0, group: -1 });
+  rows.sort((a, b) => a.rank - b.rank);
+  return rows.map(({ item, group: g }, i) => ({ ...item, separatorBefore: i > 0 && rows[i - 1].group !== g }));
+}
+
 // src/widget/side-panel.ts
 var STYLE_ID = "vela-widget-sidepanel";
 var DEFAULT_PANEL_WIDTH = 280;
@@ -6177,6 +6407,32 @@ var CSS = `
 .vela-panel-pin .vela-icon { width: 15px; height: 15px; }
 .vela-panel-pin:hover { background: var(--vela-hover); color: var(--vela-fg-bright); }
 .vela-panel-pin[data-on='1'] { color: var(--vela-fg-bright); }
+.vela-panel-max {
+    all: unset;
+    cursor: pointer;
+    width: 26px;
+    height: 26px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--vela-fg-muted);
+}
+.vela-panel-max .vela-icon { width: 15px; height: 15px; }
+.vela-panel-max:hover { background: var(--vela-hover); color: var(--vela-fg-bright); }
+/* MAXIMIZED: the panel covers the whole dock host \u2014 every chart of the shell \u2014 whatever
+   its placement; the width handle and the pin have nothing to do meanwhile. */
+.vela-panel[data-maximized] {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    max-width: none;
+    z-index: 26;
+    border-left: none;
+}
+.vela-panel[data-maximized] .vela-panel-resizer,
+.vela-panel[data-maximized] .vela-panel-pin { display: none; }
 .vela-panel-body { flex: 1; overflow: auto; padding: 8px; }
 .vela-panel-body::-webkit-scrollbar { width: 8px; }
 .vela-panel-body::-webkit-scrollbar-thumb { background: var(--vela-scroll); border-radius: 4px; border: 2px solid transparent; background-clip: padding-box; }
@@ -6229,6 +6485,7 @@ var CSS = `
     border-left: none;
 }
 [data-layout='mobile'] .vela-panel-resizer { display: none; }
+[data-layout='mobile'] .vela-panel-max { display: none; }
 `;
 function clampPanelWidth(px, min = DEFAULT_PANEL_MIN_WIDTH, max = DEFAULT_PANEL_MAX_WIDTH) {
   const lo = Number.isFinite(min) && min > 0 ? min : DEFAULT_PANEL_MIN_WIDTH;
@@ -6252,6 +6509,15 @@ var SidePanel = class {
      *  never on a programmatic {@link setOverlay}, for the same reason as widths. */
     this.onPlacementChange = null;
     this.pin = null;
+    this.maxButton = null;
+    this.maximizedOn = false;
+    /** Set while the close is announced, so a listener's own close does not re-enter. */
+    this.closing = false;
+    /** Open as far as the dock and the host are concerned — a closed panel can still be on
+     *  screen while its exit animation runs. */
+    this.isOpen = false;
+    /** The exit animation of a close; a reopen cancels it. */
+    this.exit = null;
     const doc = host.ownerDocument;
     injectStyles(STYLE_ID, CSS, doc);
     this.minWidth = opts.resizable ? opts.minWidth ?? DEFAULT_PANEL_MIN_WIDTH : 1;
@@ -6286,7 +6552,13 @@ var SidePanel = class {
       });
       this.refreshPin();
     }
-    header.append(this.heading, this.slot, ...this.pin ? [this.pin] : [], close);
+    if (opts.maximizable) {
+      this.maxButton = doc.createElement("button");
+      this.maxButton.className = "vela-panel-max";
+      this.maxButton.addEventListener("click", () => this.setMaximized(!this.maximizedOn));
+      this.refreshMaxButton();
+    }
+    header.append(this.heading, this.slot, ...this.pin ? [this.pin] : [], ...this.maxButton ? [this.maxButton] : [], close);
     this.body = doc.createElement("div");
     this.body.className = "vela-panel-body";
     this.el.append(header, this.body);
@@ -6294,13 +6566,65 @@ var SidePanel = class {
     host.appendChild(this.el);
   }
   get open() {
-    return !this.el.hidden;
+    return this.isOpen;
   }
-  /** Open/close the panel — a bare call flips it. */
-  toggle(open = this.el.hidden) {
-    if (open === !this.el.hidden) return;
-    this.el.hidden = !open;
+  /**
+   * Open/close the panel — a bare call flips it. The panel reports closed at once, but a
+   * close keeps it on screen, marked `data-closing`, while a host exit animation runs.
+   * `instant` skips that, and also cuts short the exit of a panel already closing: a panel
+   * handing the dock to another leaves at once.
+   */
+  toggle(open = !this.isOpen, instant = false) {
+    if (open === this.isOpen) {
+      if (!open && instant) this.exit?.finish();
+      return;
+    }
+    if (!open && this.closing) return;
+    if (!open) {
+      this.closing = true;
+      announceSurface(this.el, false, "panel");
+      this.closing = false;
+    }
+    this.isOpen = open;
+    if (open) {
+      if (this.exit) {
+        this.exit.cancel();
+        this.exit = null;
+        this.setMaximized(false);
+      }
+      this.el.hidden = false;
+    } else {
+      const hide = () => {
+        this.exit = null;
+        this.el.hidden = true;
+        this.setMaximized(false);
+      };
+      if (instant) hide();
+      else this.exit = holdForExit(this.el, hide);
+    }
     this.onOpenChange?.(open);
+    if (open && this.isOpen) announceSurface(this.el, true, "panel");
+  }
+  /** Whether the panel covers every chart right now. */
+  get maximized() {
+    return this.maximizedOn;
+  }
+  /** Maximize the panel over the shell's charts, or restore it. A no-op on a panel not
+   *  declared `maximizable`. */
+  setMaximized(maximized) {
+    if (!this.maxButton || maximized === this.maximizedOn) return;
+    this.maximizedOn = maximized;
+    if (maximized) this.el.dataset.maximized = "1";
+    else delete this.el.dataset.maximized;
+    this.refreshMaxButton();
+  }
+  refreshMaxButton() {
+    if (!this.maxButton) return;
+    const doc = this.maxButton.ownerDocument;
+    this.maxButton.replaceChildren(iconEl(this.maximizedOn ? "restore" : "maximize", doc));
+    this.maxButton.title = this.maximizedOn ? "Restore" : "Maximize";
+    this.maxButton.setAttribute("aria-label", this.maxButton.title);
+    this.maxButton.setAttribute("aria-pressed", this.maximizedOn ? "true" : "false");
   }
   /** The scrolling body, for a panel filled from OUTSIDE the class — a contributed panel's
    *  `mount` receives exactly this element. Subclasses use the protected `body`. */
@@ -6352,6 +6676,8 @@ var SidePanel = class {
     this.pin.setAttribute("aria-pressed", pinned ? "true" : "false");
   }
   destroy() {
+    if (this.open) announceSurface(this.el, false, "panel");
+    this.exit?.finish();
     this.el.remove();
   }
   /** The drag handle on the panel's inner (left) edge — the panel is docked right, so dragging
@@ -6396,4 +6722,4 @@ var SidePanel = class {
   }
 };
 
-export { AnchoredVwap, ArrowMark, Callout, CalloutBase, Comment, DEDEKIND_CURVATURE_OPTIONS, DEFAULT_DRAWING_COLOR, DEFAULT_PANEL_MAX_WIDTH, DEFAULT_PANEL_MIN_WIDTH, DEFAULT_PANEL_ORDER, DEFAULT_PANEL_WIDTH, DIRECTION_OPTIONS, DedekindTessellation, Drawing, FibRatios, FibSpiral, FixedRangeVolumeProfile, GANN_SQUARE_ARCS, GLYPH_OPTIONS, GannSquare, GlyphStamp, LINE_STYLE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, MAGNIFIER_TIMEFRAME_OPTIONS, MachFigure, Magnifier, MeasureBox, Note, OVERRIDABLE_TOPBAR_IDS, PatternDrawing, PositionTool, PriceLabel, PriceNote, RadialFib, RegressionChannel, STAMP_SIZE_OPTIONS, SegmentDrawing, SidePanel, Signpost, TEXT_SIZE_OPTIONS, TOPBAR_BUILTIN_IDS, TOPBAR_DEFAULT_LEFT, TOPBAR_DEFAULT_RIGHT, TextLabel, chartType, chartTypes, clampPanelWidth, createDrawing, deserializeDrawing, drawingTypes, foldBaseModulation, formatDuration, getDrawingType, getNativeIndicator, inputDeltas, inputVisible, isLineLikeSeries, legendActions, legendActionsProviderFor, legendCallouts, legendCalloutsProviderFor, lineSegmentIntersection, magnifierTimeframeLabel, mobilePlacement, nativeIndicatorDescriptors, nativeIndicatorTypes, nativeInstanceChannel, normalizeSettingsRow, pinnedTopbarActionIds, registerChartType, registerDefaultEngine, registerDrawingType, registerLegendAction, registerLegendCallout, registerNativeIndicator, registerRendererDefaults, registerRendererLayer, registerSidePanel, registerStatePersistence, registerSymbolRanking, registerWidgetAction, registerWidgetAttachment, rendererDefaults, rendererLayers, resetDrawingSettings, resolveEngines, resolveTopbarComposition, seriesInScale, seriesShownOn, settingsRowValueKeys, settingsRowVisible, sidePanels, stableSeriesId, statePersistenceHandlers, symbolRanking, tickerModifierIds, topbarActionOverride, topbarHas, unregisterChartType, unregisterDefaultEngine, unregisterLegendAction, unregisterLegendCallout, unregisterNativeIndicator, unregisterRendererDefaults, unregisterRendererLayer, unregisterSidePanel, unregisterStatePersistence, unregisterWidgetAction, unregisterWidgetAttachment, widgetActions, widgetAttachments };
+export { AnchoredVwap, ArrowMark, CONTEXT_MENU_BUILTIN_ORDER, Callout, CalloutBase, Comment, DEDEKIND_CURVATURE_OPTIONS, DEFAULT_DRAWING_COLOR, DEFAULT_PANEL_MAX_WIDTH, DEFAULT_PANEL_MIN_WIDTH, DEFAULT_PANEL_ORDER, DEFAULT_PANEL_WIDTH, DIRECTION_OPTIONS, DedekindTessellation, Drawing, FibRatios, FibRetracement, FibSpiral, FixedRangeVolumeProfile, GANN_SQUARE_ARCS, GLYPH_OPTIONS, GannSquare, GlyphStamp, LINE_STYLE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, MAGNIFIER_TIMEFRAME_OPTIONS, MachFigure, Magnifier, MeasureBox, Note, OVERRIDABLE_TOPBAR_IDS, PatternDrawing, PositionTool, PriceLabel, PriceNote, RadialFib, RegressionChannel, STAMP_SIZE_OPTIONS, SegmentDrawing, SidePanel, Signpost, TEXT_SIZE_OPTIONS, TIMEZONES, TOPBAR_BUILTIN_IDS, TOPBAR_DEFAULT_LEFT, TOPBAR_DEFAULT_RIGHT, TextLabel, bodyItems, chartType, chartTypes, clampPanelWidth, composeMenu, createDrawing, deserializeDrawing, drawingTypes, foldBaseModulation, formatDuration, getDrawingType, getNativeIndicator, inputDeltas, inputVisible, invertWrite, isExchangeTimezone, isLineLikeSeries, legendActions, legendActionsProviderFor, legendCallouts, legendCalloutsProviderFor, lineSegmentIntersection, magnifierTimeframeLabel, mobilePlacement, nativeIndicatorDescriptors, nativeIndicatorTypes, nativeInstanceChannel, normalizeSettingsRow, normalizeTimezone, paneScaleAt, pinnedTopbarActionIds, priceAxisItems, registerChartType, registerDefaultEngine, registerDrawingType, registerLegendAction, registerLegendCallout, registerNativeIndicator, registerRendererDefaults, registerRendererLayer, registerSidePanel, registerStatePersistence, registerSymbolRanking, registerWidgetAction, registerWidgetAttachment, rendererDefaults, rendererLayers, resetDrawingSettings, resolveEngines, resolveTimezone, resolveTopbarComposition, scaleChoiceOf, scaleWrites, seriesInScale, seriesShownOn, settingsRowValueKeys, settingsRowVisible, settingsSectionOf, sidePanels, stableSeriesId, statePersistenceHandlers, symbolRanking, tickerModifierIds, timeAxisItems, timezoneMenuRows, topbarActionOverride, topbarHas, tzButtonLabel, tzMenuLabel, tzOffset, unregisterChartType, unregisterDefaultEngine, unregisterLegendAction, unregisterLegendCallout, unregisterNativeIndicator, unregisterRendererDefaults, unregisterRendererLayer, unregisterSidePanel, unregisterStatePersistence, unregisterWidgetAction, unregisterWidgetAttachment, widgetActions, widgetAttachments };

@@ -17,7 +17,7 @@ so the page boots the same way offline as online.
 | `zag/` | the module closure Vela's ES modules import: `@zag-js/*` 1.44.0 (18 packages), `@floating-ui/{core,dom}` 1.8.0, `@floating-ui/utils` 0.2.12, `proxy-compare` 3.0.1 | all MIT |
 | `pinets/pinets.min.browser.es.js` | **our patch of LuxAlgo's PineTS** (Library path) — not a stock build; see `pinets/PROVENANCE.md` and `THIRD-PARTY.md` | AGPL-3.0-only |
 
-Versions are pinned: **vela 0.8.1, vela-pinets 0.2.15** (whose inlined worker engine is PineTS
+Versions are pinned: **vela 0.8.3, vela-pinets 0.2.15** (whose inlined worker engine is PineTS
 **0.11.0**; see `THIRD-PARTY.md`). The `zag/` closure is not optional — the
 browser cannot resolve a bare specifier on its own and Vela's ES modules import these by name; the
 import map in `index.html` carries one entry per specifier (`@floating-ui/utils/dom` is a subpath
@@ -27,7 +27,7 @@ entry, not a typo).
 
 ```bash
 # the two LuxAlgo packages: registry tarballs, dist/ + licences only
-curl -sL https://registry.npmjs.org/@luxalgo/vela/-/vela-0.8.1.tgz        | tar xz -C vela
+curl -sL https://registry.npmjs.org/@luxalgo/vela/-/vela-0.8.3.tgz        | tar xz -C vela
 curl -sL https://registry.npmjs.org/@luxalgo/vela-pinets/-/vela-pinets-0.2.15.tgz | tar xz -C vela-pinets
 # the module closure: install the four entry packages, then vendor every package npm pulled in
 npm install --no-audit --no-fund @zag-js/vanilla @zag-js/dialog @zag-js/menu @zag-js/tooltip
@@ -67,3 +67,10 @@ parallel (see CHANGELOG, 6 Oct). When a vendored family changes its files, regen
     python3 tools/modulepreload.py --write
 
 `test_boot_speed.py` runs `--check`, so a stale list fails the suite instead of quietly slowing the boot.
+
+## After a vendor change: refresh the checksums
+
+`console/frontend/vendor/SHA256SUMS` lists every vendored file. The test suite (and CI) run `tools/vendor-sums.py --check`, so a
+hand edit or a half-applied upgrade fails there. After a deliberate change: `tools/vendor-sums.py --write`, then
+`tools/modulepreload.py --write` (the preload list follows the module graph), and review the diff of both. The `zag/`
+licence texts are in `zag/THIRD-PARTY-LICENSES.md`; re-copy each package's LICENSE into it when the versions change.

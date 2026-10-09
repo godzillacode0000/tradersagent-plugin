@@ -12,7 +12,6 @@ Requires `fastmcp` (the MCP wrapper's own dependency, not the console's).
 
 import importlib.util
 import os
-import sys
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -96,12 +95,31 @@ class ToolAnnotationsTest(unittest.TestCase):
             self.assertTrue(hint(self.ann(name), "read_only_hint"), f"{name} should be read-only")
 
     def test_chart_mutating_tools_say_so(self):
-        for name in ("chart_apply_pine", "chart_add_indicator", "chart_set_market",
+        for name in ("chart_apply_pine", "chart_set_market",
                      "chart_draw", "chart_clear", "chart_remove_indicator", "chart_reload"):
             annotations = self.ann(name)
             self.assertFalse(hint(annotations, "read_only_hint"), f"{name} changes the chart")
             self.assertTrue(hint(annotations, "destructive_hint"),
                             f"{name} should declare destructiveHint")
+
+    def test_every_writer_states_whether_it_destroys(self):
+        """An unset destructiveHint reads as TRUE to a client (the MCP default for a non-read-only tool), so a writer that
+        does not say is treated as destructive. All 54 say (audit 8 Oct, AS-19)."""
+        for name, tool in self.tools.items():
+            a = tool.annotations if hasattr(tool, "annotations") else None
+            if hint(a, "read_only_hint"):
+                continue
+            self.assertIsNotNone(hint(a, "destructive_hint"), f"{name} does not state destructiveHint")
+
+    def test_additive_tools_are_not_destructive_and_the_ones_that_delete_work_are(self):
+        for name in ("chart_add_indicator", "chart_theme", "chart_fullscreen", "chart_replay", "chart_snapshot"):
+            self.assertFalse(hint(self.ann(name), "destructive_hint"), f"{name} only adds or toggles")
+        for name in ("chart_drawing", "chart_marks", "chart_clear", "chart_remove_indicator", "chart_undo"):
+            self.assertTrue(hint(self.ann(name), "destructive_hint"), f"{name} can delete the operator's work")
+
+    def test_the_backtest_tools_reach_binance(self):
+        for name in ("bt_run", "bt_optimize"):
+            self.assertTrue(hint(self.ann(name), "open_world_hint"), f"{name} fetches klines from Binance")
 
     def test_replay_is_a_chart_mutation(self):
         self.assertFalse(hint(self.ann("chart_replay"), "read_only_hint"))

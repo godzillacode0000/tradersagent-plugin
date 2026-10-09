@@ -4,6 +4,79 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Changed
+
+- **Vela 0.8.1 → 0.8.3** (`@luxalgo/vela`, published 5 and 7 Oct; vela-pinets 0.2.15 already accepts it and is unchanged). The
+  files are LuxAlgo's, byte for byte (nothing in `vendor/vela/` is patched); only the vendored set moved: the ES modules, the
+  Binance / Coinbase / Hyperliquid providers and the global build (`chunk-*.js` names changed; the preload list, the vendor
+  checksums and the docs follow). What 0.8.2/0.8.3 bring arrives with it: the maximise / restore control on Vela's panels, the
+  price-axis tick hook and price-style change events in the renderer API, surface open / close events, a "Reverse" action, touch-only
+  pan inertia (a mouse release now stops dead). **Nothing of ours was touched to take it**, and it was held to that: the same 56
+  agent actions (add / remove studies, layouts, 10 drawing types, marks, view settings, themes, replay, fullscreen, a Pine run
+  with inputs, the drawer, a screenshot) answer identically on both versions; the keyboard focus ring, the ⋯ menu band, the 200 % zoom
+  layout, the drawer and Edge sheet focus handling all pass unchanged; the CSP blocks nothing; first canvas is 1,544 ms against
+  1,549 ms (median of six, alternating runs) for +58 KB. `test_vela_doors` now finds Vela's drawings chunk by content, because its
+  hashed file name changes with every release.
+
+### Fixed (the 8 Oct 2026 full audit: seven read-only lanes over `3c2ad34`, handed to Hermes as a report)
+
+- **The chart bridge no longer loses or duplicates commands.** Its three files were read-modify-written with no lock and one
+  shared temp name: 60 parallel command POSTs gave 11 to 23 HTTP 500s and duplicate ids (the page drops a duplicate id, so a
+  command silently never ran). One lock, a temp file of its own per write, and command ids from a counter that only grows.
+  A result must name the command it answers (400 otherwise) and now keeps the fields the page reports (`trades`, `overlay`…).
+- **Replay prices only the symbol being replayed.** An ETH order used to fill at the BTC cursor price. The page sends the
+  symbol with the push; another symbol is priced live.
+- **Paper broker:** the entry fee is in `realized` (it now reconciles with equity); an approve that cannot be saved leaves the
+  account exactly as it was; a read error on `paper.json` no longer resets the account to 10,000; large quantities sell
+  without a ghost position; prices are read outside the lock; order ids continue across a reset.
+- **`once_per_view` now reaches the stream** (`reload` runs in every view). **A month is a month:** `1M` was mapped to one minute.
+  Intervals Binance does not serve are refused with the list. A partial catalogue is no longer cached for 12 h.
+- **The console listens at once** (it waited up to 60 s for the LuxAlgo MCP first); SIGTERM now stops it cleanly; a busy port
+  is one line, not a traceback; bad numbers are a 400, not a 500.
+- **Trust boundaries.** `GET /api/session` goes to the console's own page and to local tools, not to other pages or LAN
+  peers (`--host 0.0.0.0` no longer hands out the token; `TRADERS_AGENT_ALLOW_LAN=1` opts in). The Origin check compares the
+  port, so another localhost app cannot post. Cross-site `/api` GETs are refused (`Sec-Fetch-Site`). The page carries a
+  Content-Security-Policy; every answer is `nosniff`. Idle sockets time out (30 s), connections are capped, SSE queues are
+  bounded. `run_id` and the backtest service's `local:` names cannot leave their folder; the backtest service answers the
+  console only; thumbnails come from exact hosts, are content-sniffed, follow no redirect and are written atomically. Agent
+  definitions are validated (a toolset such as `--yolo` is refused); the chat route's workdir and timeout are the operator's.
+  Loopback calls from the MCP server and CLIs bypass `http_proxy`.
+- **The agent is no longer told things that are not true.** `library_source` / `library_indicator` cut long scripts silently
+  at 6,000 / 8,000 characters while claiming the full source: they now return up to 60,000 and say `truncated … offset=N`
+  (as do the edge, prop-firm and related lists). The tool and skill no longer say `while` / `for…in` cannot run (only
+  `import` is refused). `bt_*` answer instead of raising; `chart_shot` uses the same view gate as every tool; `chart_batch`
+  takes a list; all 54 tools state `destructiveHint`; an empty chart is called empty; `chart_add_indicator` refuses an unknown
+  name before Vela is asked (no ghost study row) and suggests the lower-case spelling.
+- **Docs match the code.** The skill is 139 lines (the history moved to `docs/desk-engineering-notes.md`) and covers the paper
+  broker and replay; README corrects "no order placement", "nothing written outside the repo", "synthetic bars", the removed
+  buttons, ports and `LUXALGO_CONSOLE`; `docs/MCP-TOOLS.md` groups tools by their real annotations.
+- **Installer:** flags are parsed (an unknown flag or `--help` no longer installs), `--uninstall`, `PORT=` is baked into the
+  installed plugin, `--doctor` no longer `eval`s paths and checks the Python version and the MCP registration.
+- **UI and accessibility:** the Vela top bar has a keyboard focus ring; the ⋯ menu is no longer covered by the pane at 1020-1069 px;
+  the run status stays on screen at 200 % zoom; the highlight layer is no longer a Tab stop; the drawer and Edge sheet are
+  dialogs that make the rest inert and return focus to what opened them; Esc from ⋯ returns focus; filled buttons are 4.9:1
+  in the dark theme; inputs keep a forced-colours focus outline; `<title>` is "Trader's Agent".
+- **Frontend races:** a market switch during a re-run no longer leaves another symbol's labels; the newest run wins; a failed
+  first `/api/session` is retried; the poll loop cannot stall on a hung request; the stream no longer moves the poll's
+  high-water mark; the library detail pane shows the last row opened; the script draft is saved when the page goes away;
+  catalogue links must be `https:`; two untitled inline inputs no longer share one override.
+- **Plugin:** the reveal-on-launch default is off, as documented, and waits for the stored choice.
+
+### Removed
+
+- `docs/studies/luxalgo-reference/smart-money-concepts-smc.pine`: LuxAlgo's CC BY-NC-SA 4.0 script was committed in this (public)
+  repository. It remains in git history; rewriting history is the maintainer's call.
+- `./install.sh --vendor` (it rewrote committed files without checking them). See `console/frontend/vendor/VENDORING.md`.
+
+### Added (from the same audit)
+
+- `NOTICE` (the AGPL status of the distribution and the source offer for the patched engine), the MIT texts of the vendored Zag
+  packages, `console/frontend/vendor/SHA256SUMS` with `tools/vendor-sums.py --check`, a "Network" section in `THIRD-PARTY.md`.
+- CI: `permissions: contents: read`, one run per PR, a lint job (`ruff F,E9`, `node --check`, `bash -n`, vendor sums, preload list),
+  the whole suite once with fastmcp and node REQUIRED and a skip ceiling, both `mcp` majors, pinned test dependencies
+  (`console/requirements*.txt`), and a boot check that fails when the server never answers.
+- About 130 new tests that drive the real code: threads against the bridge, a live socket for the gates, a fastmcp stub console.
+
 ### Added
 
 - **Syntax colouring in the script editor.** Comments, `//@directives`, strings, numbers and `#RRGGBB`

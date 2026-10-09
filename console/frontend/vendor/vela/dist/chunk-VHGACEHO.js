@@ -146,6 +146,7 @@ registerIcon("expand", S('<rect x="2.2" y="2.2" width="11.6" height="11.6" rx="1
 registerIcon("plus", S('<path d="M8 2.8v10.4M2.8 8h10.4"/>'));
 registerIcon("minus", S('<path d="M2.8 8h10.4"/>'));
 registerIcon("maximize", S('<path d="M2.5 6V3a.5.5 0 0 1 .5-.5h3M10 2.5h3a.5.5 0 0 1 .5.5v3M13.5 10v3a.5.5 0 0 1-.5.5h-3M6 13.5H3a.5.5 0 0 1-.5-.5v-3"/>'));
+registerIcon("restore", S('<path d="M6 2.5v3a.5.5 0 0 1-.5.5h-3M13.5 6h-3a.5.5 0 0 1-.5-.5v-3M10 13.5v-3a.5.5 0 0 1 .5-.5h3M2.5 10h3a.5.5 0 0 1 .5.5v3"/>'));
 registerIcon("restore", S('<path d="M6.2 2.5v3.7H2.5M9.8 13.5V9.8h3.7M13.5 6.2H9.8V2.5M2.5 9.8h3.7v3.7"/>'));
 registerIcon("star", S('<path d="M8 2.2l1.75 3.55 3.9.55-2.8 2.75.65 3.9L8 11.1l-3.5 1.85.65-3.9-2.8-2.75 3.9-.55z"/>'));
 registerIcon("star-filled", S('<path d="M8 2.2l1.75 3.55 3.9.55-2.8 2.75.65 3.9L8 11.1l-3.5 1.85.65-3.9-2.8-2.75 3.9-.55z"/>', 'fill="currentColor"'));
@@ -270,4 +271,64 @@ function iconEl(id, doc = document) {
   return span;
 }
 
-export { ACCENT, ACCENT_BRIGHT, BEARISH, BULLISH, CATEGORICAL, CHIP_PLATE, CROSSHAIR, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, HIGHLIGHT, INFO, INVALID, MARKER, NEUTRAL, SERIES_LINE, SESSION_OFF, SESSION_POST, SESSION_PRE, SLATE, SLATE_DEEP, TRADE_EXIT, TRADE_LONG, TRADE_SHORT, VALID, WARNING, categoricalColor, icon, iconAt, iconEl, iconMarkup, injectStyles, isDarkColor, mix, overlayScrollbarCss, registerIcon, svg16, svg24, svg24Solid, withAlpha };
+// src/ui/surface-events.ts
+var SURFACE_OPEN_EVENT = "vela:surface-open";
+var SURFACE_CLOSE_EVENT = "vela:surface-close";
+function announceSurface(el, open, kind, trigger = null) {
+  const View = el.ownerDocument.defaultView;
+  if (!View) return;
+  el.dispatchEvent(
+    new View.CustomEvent(open ? SURFACE_OPEN_EVENT : SURFACE_CLOSE_EVENT, { bubbles: true, composed: true, detail: { kind, trigger } })
+  );
+}
+
+// src/ui/surface-exit.ts
+var CLOSING_ATTR = "data-closing";
+var SURFACE_EXIT_CAP_MS = 1e3;
+function animationsOf(els) {
+  return els.flatMap((el) => el.getAnimations({ subtree: true }));
+}
+function ends(a) {
+  return Number.isFinite(a.effect?.getComputedTiming().endTime ?? Number.POSITIVE_INFINITY);
+}
+function holdForExit(els, done, opts = {}) {
+  const list = Array.isArray(els) ? els : [els];
+  if (list.length === 0 || !list.every((el) => typeof el.getAnimations === "function")) {
+    done();
+    return null;
+  }
+  const before = new Set(animationsOf(list));
+  for (const el of list) el.setAttribute(CLOSING_ATTR, "");
+  const exit = animationsOf(list).filter((a) => !before.has(a) && ends(a));
+  if (exit.length === 0) {
+    for (const el of list) el.removeAttribute(CLOSING_ATTR);
+    done();
+    return null;
+  }
+  const frozen = [...list, ...opts.inert ?? []];
+  const wasInert = frozen.map((el) => el.inert);
+  for (const el of frozen) el.inert = true;
+  let settled = false;
+  const settle = (complete) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(cap);
+    for (const el of list) el.removeAttribute(CLOSING_ATTR);
+    frozen.forEach((el, i) => {
+      el.inert = wasInert[i];
+    });
+    if (complete) done();
+  };
+  const cap = setTimeout(() => settle(true), SURFACE_EXIT_CAP_MS);
+  let pending = exit.length;
+  const one = () => {
+    if (--pending === 0) settle(true);
+  };
+  for (const a of exit) a.finished.then(one, one);
+  return {
+    cancel: () => settle(false),
+    finish: () => settle(true)
+  };
+}
+
+export { ACCENT, ACCENT_BRIGHT, BEARISH, BULLISH, CATEGORICAL, CHIP_PLATE, CROSSHAIR, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, HIGHLIGHT, INFO, INVALID, MARKER, NEUTRAL, SERIES_LINE, SESSION_OFF, SESSION_POST, SESSION_PRE, SLATE, SLATE_DEEP, SURFACE_CLOSE_EVENT, SURFACE_OPEN_EVENT, TRADE_EXIT, TRADE_LONG, TRADE_SHORT, VALID, WARNING, announceSurface, categoricalColor, holdForExit, icon, iconAt, iconEl, iconMarkup, injectStyles, isDarkColor, mix, overlayScrollbarCss, registerIcon, svg16, svg24, svg24Solid, withAlpha };

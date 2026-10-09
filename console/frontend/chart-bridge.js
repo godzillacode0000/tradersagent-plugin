@@ -60,15 +60,15 @@
      request but cannot READ the answer: no CORS for its origin) and send it as a header. */
   let TOKEN = null;
   const token = async () => {
-    if (TOKEN !== null) return TOKEN;
+    if (TOKEN) return TOKEN;
     try {
       const res = await fetch('/api/session', { cache: 'no-store' });
       const payload = await res.json();
-      TOKEN = (payload && payload.data && payload.data.token) || '';
+      TOKEN = (payload && payload.data && payload.data.token) || null;
     } catch (err) {
-      TOKEN = '';
+      TOKEN = null;            // NOT cached: a failed first fetch used to leave every later POST without a token for good
     }
-    return TOKEN;
+    return TOKEN || '';
   };
 
   const api = async (path, body) => {
@@ -77,9 +77,15 @@
       const t = await token();
       if (t) headers['X-Trader-Token'] = t;
     }
-    const res = await fetch(path, body
-      ? { method: 'POST', headers, body: JSON.stringify(body) }
-      : { method: 'GET', headers });
+    /* A request with no deadline hangs for ever on a half-open socket; the poll loop then never reschedules. */
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctl ? setTimeout(() => ctl.abort(), 20000) : null;
+    let res;
+    try {
+      res = await fetch(path, Object.assign(body
+        ? { method: 'POST', headers, body: JSON.stringify(body) }
+        : { method: 'GET', headers }, ctl ? { signal: ctl.signal } : {}));
+    } finally { if (timer) clearTimeout(timer); }
     if (!res.ok) throw new Error(path + ' → HTTP ' + res.status);
     const payload = await res.json();
     if (payload && payload.ok === false) throw new Error(path + ' → ' + (payload.error || 'error'));
@@ -438,6 +444,23 @@
             out.natives = before;
             out.detail = 'the chart already carries Vela native "' + name + '"' + dupes +
               ' · nothing added · chart carries: ' + (before.join(', ') || 'none');
+            break;
+          }
+
+          /* Ask Vela what it HAS before asking it to add anything. An unknown or wrong-case name ("EMA") used to be
+             accepted by the handle, answered with a failure, and left a ghost study row on the chart that
+             chart_studies then listed (audit 8 Oct, AS-6). */
+          let catalog = [];
+          try { catalog = (typeof c.availableNativeIndicators === 'function') ? ((await c.availableNativeIndicators()) || []) : []; } catch (err) { catalog = []; }
+          if (!Array.isArray(catalog)) catalog = [];
+          const types = catalog.map((a) => (a && (a.type || a.id)) || (typeof a === 'string' ? a : '')).filter(Boolean).map(String);
+          if (types.length && !types.includes(name)) {
+            const near = types.find((t) => t.toLowerCase() === name.toLowerCase());
+            out.ok = false;
+            out.added = null;
+            out.natives = before;
+            out.detail = 'unknown native "' + name + '"' + (near ? ' — did you mean "' + near + '"? the names are lower-case' : '')
+              + ' · nothing added · e.g. ' + types.slice(0, 12).join(', ') + ' (chart_natives lists all ' + types.length + ')';
             break;
           }
 
@@ -1598,7 +1621,7 @@
     try {
       await api('/api/chart/result', out);
     } catch (err) {
-      /* if the report cannot be delivered the command will be re-read and retried */
+      /* the command already RAN; if the report cannot be delivered the agent's wait times out and it asks chart_state */
     }
     return out;
   }
@@ -1662,7 +1685,8 @@
       const id = Number(payload.command.id) || 0;
       if (seen.has(id)) return;
       seen.add(id);
-      lastCommandId = Math.max(lastCommandId, id);
+      /* lastCommandId belongs to the poll alone: a pushed id used to move it, so an id the stream dropped was skipped by
+         the poll that exists to catch it (`seen` already stops a command running twice). */
       await run(payload.command);
     };
   }
@@ -1670,8 +1694,7 @@
   heartbeat();
   setInterval(heartbeat, STATE_EVERY);
   async function tick() {
-    await poll();
-    setTimeout(tick, pollDelay);
+    try { await poll(); } finally { setTimeout(tick, pollDelay); }
   }
   setTimeout(tick, POLL_FAST);
   connectStream();

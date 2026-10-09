@@ -305,7 +305,11 @@ function log(message, quiet = false) {
   clearTimeout(logTimer);
   logTimer = setTimeout(() => el.chartLog.classList.remove('is-live'), 7000);
 }
-const esc = (s = '') => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+/** A link from the catalogue is followed only if it is an https URL; anything else (javascript:, data:) becomes '#'. */
+function safeHref(u) {
+  return /^https:\/\//i.test(String(u || '')) ? String(u) : '#';
+}
+const esc = (s = '') => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /* A tiny, safe markdown subset for Library concept write-ups: headings, bold/italic, inline code,
    fenced code, links, lists, blockquotes and rules. Escapes FIRST, then formats — the write-up is
@@ -857,7 +861,9 @@ function thumbUrl(slug, rawUrl, width = CARD_SHOT_W) {
   return '/api/library/thumb?' + params.toString();
 }
 
+let openSeq = 0;      // the LAST row opened wins: a slow answer for an earlier row used to overwrite a later one
 async function openResult(row, button) {
+  const mySeq = ++openSeq;
   document.querySelectorAll('.row--active').forEach((n) => n.classList.remove('row--active'));
   button?.classList.add('row--active');
   el.detail.innerHTML = '<h2 class="detail__title">Loading…</h2><div class="skeleton"></div>';
@@ -867,6 +873,7 @@ async function openResult(row, button) {
   try {
     if (row.kind === 'indicator') {
       const data = await api('/api/source', { slug: row.slug });
+      if (mySeq !== openSeq) return;
       const source = data.source || '';
       const lic = licenseLine(source);
       /* The catalogue ships a preview picture per indicator (`image_url`, 1600×1000): the same
@@ -884,7 +891,7 @@ async function openResult(row, button) {
             <span class="badge badge--ok">source: public</span>
             <span class="badge">${source.length.toLocaleString()} chars</span>
             ${lic ? `<span class="badge badge--lic">${esc(lic)}</span>` : '<span class="badge badge--lic">no licence header</span>'}
-            <a class="badge" href="${esc(row.url || '#')}" target="_blank" rel="noreferrer">Library page ↗</a>
+            <a class="badge" href="${esc(safeHref(row.url))}" target="_blank" rel="noreferrer">Library page ↗</a>
           </div>
           <div class="detail__actions">
             <button class="btn btn--primary" id="run-pinets">▶ Run PineTS</button>
@@ -986,17 +993,19 @@ async function openResult(row, button) {
     }
 
     const data = await api('/api/concept', { slug: row.slug });
+    if (mySeq !== openSeq) return;
     const body = data.content_markdown || data.body_markdown || data.raw || 'No write-up returned.';
     el.detail.innerHTML = `
       <h2 class="detail__title">${esc(data.name || row.slug)}</h2>
       <div class="detail__meta">
         <span class="badge">concept</span>
         <span class="badge">${esc(data.family || row.family || '')}</span>
-        <a class="badge" href="${esc(row.url || '#')}" target="_blank" rel="noreferrer">Library page</a>
+        <a class="badge" href="${esc(safeHref(row.url))}" target="_blank" rel="noreferrer">Library page</a>
       </div>
       <div class="detail__text">${renderMarkdown(body.slice(0, 14000))}</div>`;
     checkHealth();   // the concept fetch moved the counter — refresh the pill
   } catch (err) {
+    if (mySeq !== openSeq) return;
     el.detail.innerHTML = `<h2 class="detail__title">Failed</h2><p class="muted">${esc(err.message)}</p>`;
     toast('Could not load detail: ' + err.message, true);
   }
@@ -1691,6 +1700,15 @@ async function main() {
       } catch { /* private mode */ }
     }, 400);
   }
+  function flushDraft() {
+    clearTimeout(draftTimer);
+    try {
+      localStorage.setItem('luxalgo-web:script', JSON.stringify({ src: srcBox.value, name: nameBox.value, inputs: inputStore, inputsFor: storeFor }));
+    } catch { /* private mode */ }
+  }
+  /* The 400 ms debounce lost what was typed in the last moments before a reload or a closed tab. */
+  window.addEventListener('pagehide', flushDraft);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushDraft(); });
   srcBox.addEventListener('input', saveDraft);
   nameBox.addEventListener('input', saveDraft);
   $('#script-close').addEventListener('click', () => setPanel('script', false));

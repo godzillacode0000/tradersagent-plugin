@@ -22,6 +22,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import urllib.error
@@ -40,7 +41,7 @@ ALLOWED_HOSTS = (
     "luxalgo-production.s3.amazonaws.com",
     "luxalgo-images-production.s3.us-east-1.amazonaws.com",
 )
-_HOST_RULE = re.compile(r"^https?://(?:[a-z0-9-]+\.)*s3(?:[.-][a-z0-9-]+)*\.amazonaws\.com/", re.I)
+MAX_BYTES = 4_000_000            # a card is ~30 KB; nothing legitimate here is bigger than a few MB
 
 CACHE_DIR = Path(os.environ.get("TRADERS_AGENT_THUMBS")
                  or Path.home() / ".local" / "share" / "traders-agent" / "thumbs")
@@ -72,12 +73,27 @@ def _clamp(width: int) -> int:
 
 
 def _allowed(url: str) -> bool:
-    """LuxAlgo's own buckets only, and only over https. Anything else is refused, not fetched."""
-    if not url.startswith("https://"):
+    """LuxAlgo's two buckets only, over https, by EXACT host. A "contains luxalgo" rule on any S3 host let someone
+    else's bucket (or an S3 website endpoint that redirects) through (audit SEC-8)."""
+    if not isinstance(url, str) or not url.startswith("https://"):
         return False
-    if any(url.startswith(f"https://{host}/") for host in ALLOWED_HOSTS):
-        return True
-    return bool(_HOST_RULE.match(url)) and "luxalgo" in url.split("//", 1)[1].split("/", 1)[0]
+    return any(url.startswith(f"https://{host}/") for host in ALLOWED_HOSTS)
+
+
+def _kind(raw: bytes) -> str | None:
+    """The picture type by its first bytes, never by name. Only these reach vips / ImageMagick / ffmpeg."""
+    if raw[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if raw[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):          # a 30x from the bucket is an answer, not a path to follow
+        return None
 
 
 def _tag(url: str) -> str:
@@ -113,11 +129,13 @@ def _fetch(url: str) -> bytes | None:
     # URL with a space in it, so quote the unsafe characters and keep the ones that mean structure.
     safe = urllib.parse.quote(url, safe=":/?&=#%+,;@[]~")
     request = urllib.request.Request(safe, headers={"User-Agent": "traders-agent-console/1.0"})
+    opener = urllib.request.build_opener(_NoRedirect)
     try:
-        with urllib.request.urlopen(request, timeout=FETCH_TIMEOUT) as response:  # noqa: S310
+        with opener.open(request, timeout=FETCH_TIMEOUT) as response:  # noqa: S310
             if response.status != 200:
                 return None
-            return response.read()
+            raw = response.read(MAX_BYTES + 1)
+            return raw if len(raw) <= MAX_BYTES else None
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError, ValueError):
         return None
 
@@ -135,6 +153,16 @@ def _shrink(src: Path, dst: Path, width: int) -> bool:
     return done.returncode == 0 and dst.exists() and dst.stat().st_size > 0
 
 
+_KEY_LOCKS: dict[str, threading.Lock] = {}
+
+
+def _key_lock(name: str) -> threading.Lock:
+    with _LOCK:
+        if len(_KEY_LOCKS) > 512:
+            _KEY_LOCKS.clear()
+        return _KEY_LOCKS.setdefault(name, threading.Lock())
+
+
 def thumb(slug: str, url: str, width: int = DEFAULT_WIDTH) -> tuple[bytes, str] | None:
     """The bytes to send for one card. `None` means "no preview, say so" — never a stand-in image."""
     width = _clamp(width)
@@ -146,24 +174,38 @@ def thumb(slug: str, url: str, width: int = DEFAULT_WIDTH) -> tuple[bytes, str] 
         pass
     if not _allowed(url):
         return None
-    raw = _fetch(url)
-    if raw is None:
-        return None
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    tmp_png = dst.with_suffix(".src.png")
-    try:
-        tmp_png.write_bytes(raw)
-        if _shrink(tmp_png, dst, width):
-            return dst.read_bytes(), "image/jpeg"
-        # No converter on this machine: the original is bigger but it is the real picture.
-        return raw, "image/png"
-    except OSError:
-        return raw, "image/png"
-    finally:
+    # One build per picture at a time: the modal and the background warmer ask for the same key together, and the
+    # second used to read the first's half-written file, which the browser then kept for a year (audit BE-10).
+    with _key_lock(dst.name):
         try:
-            tmp_png.unlink()
+            if dst.exists() and dst.stat().st_size > 0:
+                return dst.read_bytes(), "image/jpeg"
         except OSError:
             pass
+        raw = _fetch(url)
+        kind = _kind(raw) if raw else None
+        if raw is None or kind is None:
+            return None
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        fd, name = tempfile.mkstemp(dir=str(CACHE_DIR), prefix=".src-", suffix="." + kind)
+        tmp_src = Path(name)
+        tmp_dst = tmp_src.with_name(tmp_src.name + ".jpg")
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(raw)
+            if _shrink(tmp_src, tmp_dst, width):
+                os.replace(tmp_dst, dst)                  # atomic: nobody ever reads a partial file
+                return dst.read_bytes(), "image/jpeg"
+            # No converter on this machine: the original is bigger but it is the real picture.
+            return raw, ("image/" + ("jpeg" if kind == "jpg" else kind))
+        except OSError:
+            return raw, ("image/" + ("jpeg" if kind == "jpg" else kind))
+        finally:
+            for f in (tmp_src, tmp_dst):
+                try:
+                    f.unlink()
+                except OSError:
+                    pass
 
 
 def _build(key: str, slug: str, url: str, width: int) -> None:

@@ -40,6 +40,9 @@
   --lx-fg-bright:       #f0f3fa;
   --lx-chart-ink:       #d1d4dc;
   --lx-fg-on-fill:      #ffffff;
+  /* A filled button's colour: the accent itself is 3.2:1 under white text in the dark theme (audit 8 Oct); this is 4.9:1. */
+  --lx-accent-fill:       #0e76b4;
+  --lx-accent-fill-hover: #0b659c;
 
   /* exactly one accent (trade-journal's dark brand blue) */
   --lx-accent:          #1197e2;
@@ -197,6 +200,8 @@
   --lx-fg-bright:     #000000;
   --lx-chart-ink:     #0b0b0b;
   --lx-fg-on-fill:    #ffffff;
+  --lx-accent-fill:       var(--lx-accent);
+  --lx-accent-fill-hover: var(--lx-accent-hover);
 
   --lx-accent:        #0071b2;
   --lx-accent-hover:  #0a6ba3;
@@ -310,8 +315,20 @@ body {
   box-shadow: var(--lx-focus-halo);
 }
 input:focus-visible, textarea:focus-visible {
-  outline: none;
+  /* transparent, not none: in forced-colors (Windows high contrast) box-shadow and border colour are dropped, and an
+     outline that is transparent here is drawn in the system colour, so the focused field is still visible. */
+  outline: 2px solid transparent;
   border-color: var(--lx-accent);
+  box-shadow: var(--lx-focus-halo);
+}
+/* Vela's top bar (Symbol, timeframes, Indicators, Script, Agent, Replay, ⋯) is built with `all: unset`, which beats the
+   zero-specificity :where() rule above, so keyboard focus on the main toolbar showed nothing at all (audit 8 Oct, G1).
+   Higher specificity and !important on the outline, because `all: unset` is what we are overriding. */
+.vela-widget-symbol:focus-visible, .vela-widget-tf:focus-visible, .vela-topbar-tf:focus-visible,
+.vela-widget-action:focus-visible, .vela-widget-action-left:focus-visible,
+[id^="vela-action-"]:focus-visible, [class*="vela-widget-"]:is(button, [role="button"]):focus-visible {
+  outline: var(--lx-focus-ring) !important;
+  outline-offset: -2px !important;
   box-shadow: var(--lx-focus-halo);
 }
 .panel:has(:focus-visible) { outline: 2px solid var(--lx-accent); outline-offset: var(--lx-focus-inset); }
@@ -417,6 +434,21 @@ pre, .detail { overscroll-behavior: contain; }
   max-height: none;
   /* Clear the bare-chart fallback strip (set in app.js setPaneTop) so ▶ Run and ✕ stay reachable. */
   padding-top: var(--lx-strip-h, 0px);
+}
+
+/* Between ~1020 and ~1069 px the docked chart column is 640 to 690 px: too wide for Vela's compact toolbar (under ~640) and
+   too narrow for its desktop one (~670), so the toolbar spilled under the pane and the ⋯ menu, the only door to Edge Stats,
+   was covered (audit 8 Oct, G2). In that band the pane takes the extra width and the chart column stays at 630 px, which
+   Vela renders in its compact mode. Outside it nothing changes. */
+@media (min-width: 1020px) and (max-width: 1069px) {
+  .main[data-dock="on"][data-detail="on"] { grid-template-columns: minmax(320px, 1fr) calc(100vw - 630px); }
+  .main[data-dock="on"][data-library="on"][data-detail="on"] { grid-template-columns: 300px minmax(320px, 1fr) calc(100vw - 930px); }
+}
+/* A short viewport (a 1440x900 monitor at 200% zoom is 720x450 CSS px): the editor's 160 px floor plus the bar pushed the run
+   status, and with it any error, below the visible page. Let the editor give way and the pane scroll (audit G3). */
+@media (max-height: 560px) {
+  .panel--right .script__edit { min-height: 72px; }      /* (more specific than the base rule further down, which comes later) */
+  .panel--right { overflow-y: auto; }
 }
 
 @media (max-width: 1099px) {
@@ -569,8 +601,8 @@ input[type="text"]:hover { border-color: var(--lx-border-strong); }
   transition: background var(--lx-dur-90) var(--lx-ease), border-color var(--lx-dur-90) var(--lx-ease);
 }
 .btn:hover { background: var(--lx-bg-hover-strong); }
-.btn--primary { background: var(--lx-accent); border-color: var(--lx-accent); color: var(--lx-fg-on-fill); }
-.btn--primary:hover { background: var(--lx-accent-hover); border-color: var(--lx-accent-hover); }
+.btn--primary { background: var(--lx-accent-fill); border-color: var(--lx-accent-fill); color: var(--lx-fg-on-fill); }
+.btn--primary:hover { background: var(--lx-accent-fill-hover); border-color: var(--lx-accent-fill-hover); }
 .btn--ghost { background: transparent; }
 /* Topbar panel toggles: a notch smaller than a form button, so the bar stays a bar. */
 .btn--toggle { height: var(--lx-control-h-sm); padding: 0 var(--lx-space-2); font-size: var(--lx-fs-xs); color: var(--lx-fg-muted); }

@@ -25,6 +25,18 @@
   const lineOf = (text) => String(text).split('\n');
 
   /** A line with its `//` comment and its string literals taken out, so a name inside either never matches. */
+  /** A line without its trailing `//` comment, KEEPING its strings (a `//` inside "A // B" is text, not a comment). */
+  function dropComment(line) {
+    let quote = '';
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (quote) { if (c === '\\') i++; else if (c === quote) quote = ''; }
+      else if (c === '"' || c === "'") quote = c;
+      else if (c === '/' && line[i + 1] === '/') return line.slice(0, i);
+    }
+    return line;
+  }
+
   function codeOnly(line) {
     return String(line)
       .replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""')
@@ -63,7 +75,11 @@
   /** A stable handle for one input across edits. The engine's ids (`in_0`, `in_1`) are positions, so adding
    *  an input above shifts them all; the variable it is assigned to, its label and its type do not move. */
   function inputKey(meta) {
-    return [meta.varId || '', meta.title || meta.name || '', meta.type || ''].join('|');
+    const named = !!(meta.varId || meta.title || meta.name);
+    /* An input with neither a variable nor a label (`ta.sma(close, input.int(5)) + ta.ema(close, input.int(9))`) has only
+       its type to go by, so two of them shared one key and an override for one reached both. Its position tells them
+       apart; named inputs keep the key they always had, so stored values still match. */
+    return [meta.varId || '', meta.title || meta.name || '', meta.type || '', named ? '' : (meta.id || '')].join('|').replace(/\|$/, '');
   }
 
   const NUMERIC = new Set(['int', 'float', 'price']);
@@ -309,7 +325,7 @@
   /** The title a script declares for itself: indicator('Smart Money Concepts', …). Changed values belong to
    *  that script — a different script that happens to have an input called "Length" must not inherit them. */
   function declaredName(source) {
-    const m = String(source || '').replace(/\/\/[^\n]*/g, '').match(/\b(?:indicator|strategy|library)\s*\(\s*(?:title\s*=\s*)?(['"])((?:(?!\1).)*)\1/);
+    const m = String(source || '').split('\n').map(dropComment).join('\n').match(/\b(?:indicator|strategy|library)\s*\(\s*(?:title\s*=\s*)?(['"])((?:(?!\1).)*)\1/);
     return m ? m[2].trim() : '';
   }
 

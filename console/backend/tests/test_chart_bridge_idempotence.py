@@ -147,11 +147,11 @@ class BothFixesSurviveInTheLiveCopy(unittest.TestCase):
         self.assertIn("SWITCH_DEADLINE_MS", source)
 
     def test_the_live_tree_matches_the_repo_when_present(self):
-        live = os.environ.get("LUXALGO_LIVE") or os.path.expanduser(
-            "~/Projects/luxalgo-web/frontend/chart-bridge.js"
-        )
-        if not os.path.exists(live):
-            self.skipTest("no live tree on this machine")
+        # Opt-in: it compares against ONE person's served tree, so it must never fail by accident on that machine (or
+        # on any other). `LUXALGO_LIVE=/path/to/chart-bridge.js python -m unittest ...` runs it.
+        live = os.environ.get("LUXALGO_LIVE")
+        if not live or not os.path.exists(live):
+            self.skipTest("set LUXALGO_LIVE to a served chart-bridge.js to compare it with the repo")
         with open(live, encoding="utf-8") as fh:
             live_source = fh.read()
         self.assertEqual(

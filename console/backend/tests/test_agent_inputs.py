@@ -15,8 +15,6 @@ import contextlib
 import importlib.machinery
 import importlib.util
 import io
-import os
-import re
 import sys
 import tempfile
 import threading

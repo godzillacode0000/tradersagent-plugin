@@ -37,11 +37,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import concurrent.futures
+import ipaddress
 import json
 import secrets
 import os
 import re
-import socketserver
 import sys
 import threading
 import time
@@ -172,6 +172,8 @@ def _study_input(fn, *args, **kwargs):
         return fn(*args, **kwargs)
     except ValueError as exc:
         raise ApiError(str(exc), HTTPStatus.BAD_REQUEST, "bad_request") from exc
+    except FileNotFoundError as exc:
+        raise ApiError("no such study", HTTPStatus.NOT_FOUND, "unknown_agent") from exc
 
 
 class MCPUnavailable(ApiError):
@@ -393,7 +395,7 @@ class MCPBridge:
                     self.last_error = f"{type(exc).__name__}: {exc}"
             self._ready.clear()
             self._session = None
-            self._fail_pending(self.last_error or "MCP session closed")
+            await self._fail_pending(self.last_error or "MCP session closed")
             if self._shutdown.is_set():
                 break
             self._reconnects += 1
@@ -630,7 +632,17 @@ def ep_indicators(params: dict) -> dict:
     }
 
 
+_CATALOGUE_LOCK = threading.Lock()
+
+
 def ep_catalogue(params: dict) -> dict:
+    """One walk at a time: every concurrent first call used to do its own nine-plus serial MCP calls (audit BE-11);
+    the callers that wait find the finished answer on disk."""
+    with _CATALOGUE_LOCK:
+        return _ep_catalogue(params)
+
+
+def _ep_catalogue(params: dict) -> dict:
     """Every row of the catalogue in one answer — families, counts, descriptions.
 
     Why one call instead of paging: the grid wants to group by family and show a reading under each
@@ -652,6 +664,8 @@ def ep_catalogue(params: dict) -> dict:
 
     rows: list[dict] = []
     page = 0
+    upstream_total = None
+    last_full = False
     while page < CATALOGUE_MAX_PAGES:
         # `ep_indicators` reads the shape a query string produces (a list per key — see `_one`), so
         # pass lists even though this call never came from HTTP. Handing it bare strings is how
@@ -659,10 +673,16 @@ def ep_catalogue(params: dict) -> dict:
         data = ep_indicators({"page": [str(page)], "page_size": [str(CATALOGUE_PAGE)],
                               "sort": ["family"], "direction": ["asc"]})
         chunk = (data or {}).get("indicators") or []
+        if page == 0:
+            try:
+                upstream_total = int((data or {}).get("total"))
+            except (TypeError, ValueError):
+                upstream_total = None
         if not chunk:
             break
         rows.extend(chunk)
         page += 1
+        last_full = len(chunk) >= CATALOGUE_PAGE
         if len(chunk) < CATALOGUE_PAGE:
             break
 
@@ -722,6 +742,12 @@ def ep_catalogue(params: dict) -> dict:
 
     out = {"rows": rows, "total": len(rows), "groups": groups,
            "pages": page, "fetched_at": time.time(), "cached": False}
+    # A page that came back empty or unparsable (a rate-limit sentence, a hiccup) ends the walk early, and the short
+    # answer used to be saved and served as complete for 12 h (audit BE-11). Compare with what the upstream said.
+    if (upstream_total is not None and len(rows) < upstream_total) or (last_full and page >= CATALOGUE_MAX_PAGES):
+        out["partial"] = True
+        out["upstream_total"] = upstream_total
+        return out                                        # served, but never kept: the next ask walks again
     try:
         os.makedirs(AGENTS_ROOT, exist_ok=True)
         tmp = path + ".tmp"
@@ -1107,11 +1133,24 @@ def ep_chart_state(params: dict) -> dict:
     return load_chart_state(AGENTS_ROOT)
 
 
+# What Binance spot actually serves. A capital M here is a MONTH (Binance's own spelling, and what the page and the
+# Pine worker send); the display form below ("30M") is minutes. The old table turned "1M" into one MINUTE, so a
+# monthly chart or request.security(..., "M") got 1-minute bars with no error (audit 8 Oct, BE-6).
+BINANCE_INTERVALS = frozenset(("1s", "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"))
+
+
+def normalise_interval(interval: str) -> str:
+    iv = str(interval or "1h").strip() or "1h"
+    if iv in BINANCE_INTERVALS:
+        return iv                          # already Binance's spelling ("1M" is a month)
+    return _BINANCE_TF.get(iv, iv.lower())
+
+
 # Binance only accepts lowercase intervals. The chart reports its own timeframe in display form
 # ("30M", "4H", "1D"), so normalise before the request instead of trusting the caller.
 _BINANCE_TF = {
-    "1M": "1m", "3M": "3m", "5M": "5m", "15M": "15m", "30M": "30m", "45M": "45m",
-    "1H": "1h", "2H": "2h", "3H": "3h", "4H": "4h", "6H": "6h", "8H": "8h", "12H": "12h",
+    "3M": "3m", "5M": "5m", "15M": "15m", "30M": "30m",
+    "1H": "1h", "2H": "2h", "4H": "4h", "6H": "6h", "8H": "8h", "12H": "12h",
     "1D": "1d", "3D": "3d", "1W": "1w",
 }
 
@@ -1219,19 +1258,22 @@ def ep_bars(params: dict) -> dict:
     if not symbol:
         return {"bars": [], "symbol": symbol, "interval": interval, "error": "symbol_required"}
 
-    interval = _BINANCE_TF.get(interval, interval) or "1h"
+    interval = normalise_interval(interval)
+    if interval not in BINANCE_INTERVALS:
+        return {"bars": [], "symbol": symbol, "interval": interval,
+                "error": "bad_interval: Binance serves " + ", ".join(sorted(BINANCE_INTERVALS, key=lambda v: (v[-1], len(v), v)))}
     return fetch_bars(symbol, interval, limit)
 
 
 def ep_chart_commands(params: dict) -> dict:
     """Commands the chart page has not executed yet (it passes the last id it handled)."""
-    since = int((params.get("since") or ["0"])[0] or 0)
+    since = _int_param(params, "since")
     return {"commands": chart_commands_since(AGENTS_ROOT, since)}
 
 
 def ep_chart_result(params: dict) -> dict:
     """The outcome of one command: ok, a plain-language detail, and what it painted."""
-    rid = int((params.get("id") or ["0"])[0] or 0)
+    rid = _int_param(params, "id")
     found = get_chart_result(AGENTS_ROOT, rid)
     if found is None:
         return {"id": rid, "pending": True}
@@ -1256,7 +1298,10 @@ def frontend_build() -> str:
     from hours ago and no amount of reloading from the page side reaches it. With the stamp in the
     heartbeat, "this view is running build X while the server serves Y" is a fact, not a guess.
     """
-    frontend = Path(DEFAULT_FRONTEND)
+    # The folder actually being served (--frontend), not the default relative path: from another working directory the
+    # default matched nothing and the stamp was always "0", which defeats the stale-frame check (audit BE-21).
+    served = getattr(getattr(Handler, "static", None), "root", None)
+    frontend = Path(served) if served else Path(DEFAULT_FRONTEND)
     try:
         js_files = list(frontend.glob("*.js"))
         newest = max((f.stat().st_mtime for f in js_files), default=0.0)
@@ -1299,7 +1344,7 @@ _WARM: dict = {"state": "idle", "page": 0, "rows": 0, "done": None}
 def ep_library_warm(params: dict) -> dict:
     """Fetch + shrink a page of catalogue pictures in the background, so the next open is instant."""
     pairs = _library_pairs(params)
-    width = int((params.get("w") or [library_thumbs.DEFAULT_WIDTH])[0] or library_thumbs.DEFAULT_WIDTH)
+    width = _int_param(params, "w", library_thumbs.DEFAULT_WIDTH) or library_thumbs.DEFAULT_WIDTH
     queued = library_thumbs.warm(pairs, width)
     return {"queued": queued, "asked": len(pairs), "cache": library_thumbs.stats()}
 
@@ -1370,12 +1415,13 @@ from broker import PaperBroker, BrokerError  # noqa: E402
 _BROKER = None
 _BROKER_LOCK = threading.Lock()
 _BROKER_HTTP = {"unknown_order": 404, "not_pending": 409, "insufficient_cash": 409,
-                "insufficient_position": 409, "no_price": 503, "too_many_pending": 429}
+                "insufficient_position": 409, "no_price": 503, "too_many_pending": 429,
+                "broker_unavailable": 503}
 _BROKER_NEEDS_PAGE = ("approve", "reject", "reset", "replay")
 # While the operator replays, a paper fill uses the REPLAY cursor's price — the strip in the chart
 # pushes it here (page-only, like approve). `broker_price` below is what makes approve() and the
 # marks read it; nothing else may.
-_REPLAY = {"active": False, "price": None, "time": None}
+_REPLAY = {"active": False, "price": None, "time": None, "symbol": None}
 
 
 def _http_json(url: str):
@@ -1402,7 +1448,12 @@ def broker_price(symbol: str) -> float:
     """The price a paper fill (and a position's mark) uses: the REPLAY cursor price while the operator
     is replaying — pushed by the page, see _REPLAY — else Binance's public ticker."""
     if _REPLAY.get("active") and _REPLAY.get("price"):
-        return float(_REPLAY["price"])
+        # The cursor price belongs to the symbol being replayed. Applied to any other one, an ETH order filled at the
+        # BTC price and every position was marked at it (audit 8 Oct, BE-2). A push with no symbol (an older page)
+        # still prices everything, as before.
+        replayed = _REPLAY.get("symbol")
+        if not replayed or str(replayed).upper() == str(symbol).upper():
+            return float(_REPLAY["price"])
     return binance_price(symbol)
 
 
@@ -1430,7 +1481,11 @@ def _set_replay(body: dict) -> dict:
                            400, "replay_needs_price")
         if not (price > 0):
             raise ApiError("the replay cursor price must be positive", 400, "replay_needs_price")
-    _REPLAY.update(active=active, price=(price if active else None), time=(when if active else None))
+    sym = str(body.get("symbol") or "").strip().upper()
+    if sym and not re.fullmatch(r"[A-Z0-9._-]{1,32}", sym):
+        raise ApiError("replay symbol is not a market name", 400, "bad_request")
+    _REPLAY.update(active=active, price=(price if active else None), time=(when if active else None),
+                   symbol=(sym or None) if active else None)
     STREAM.publish({"type": "broker", "event": "replay", "replay": dict(_REPLAY)})
     return {"replay": dict(_REPLAY)}
 
@@ -1761,8 +1816,11 @@ def console_token() -> str:
         pass
     fresh = secrets.token_urlsafe(32)
     try:
-        TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
-        TOKEN_PATH.write_text(fresh + "\n", encoding="utf-8")
+        TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # Created 0600 from the first byte: write_text then chmod left a window at the default umask (audit SEC-14).
+        fd = os.open(str(TOKEN_PATH), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(fresh + "\n")
         os.chmod(TOKEN_PATH, 0o600)
         log(f"console token minted at {TOKEN_PATH} — POSTs need it (the page receives it as a cookie)")
     except OSError as exc:
@@ -1771,12 +1829,33 @@ def console_token() -> str:
 
 
 CONSOLE_TOKEN = console_token()
+# `--host 0.0.0.0` exposes the page to the LAN, but a LAN peer is not handed the POST token unless the operator also sets
+# this: the console is then read-only to it rather than "authenticated" by a token anybody can fetch.
+ALLOW_LAN = os.environ.get("TRADERS_AGENT_ALLOW_LAN", "") not in ("", "0", "false")
+
+
+# What the console's page may load and talk to. 'unsafe-eval' is needed by the Pine engine (it compiles Pine to JS) and
+# 'unsafe-inline' by the import map / inline boot script, so this does not stop script injection by itself; it does stop
+# the page sending anything to a host that is not listed (audit 8 Oct, SEC-1 defence in depth). It deliberately has no
+# frame-ancestors: the Hermes pane embeds this page.
+CSP = ("default-src 'self'; "
+       "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; "
+       "worker-src 'self' blob:; "
+       "style-src 'self' 'unsafe-inline'; "
+       "img-src 'self' data: blob: https://crypto-icons.ledger.com; "
+       "font-src 'self' data:; "
+       "connect-src 'self' https://api.binance.com https://api.binance.us https://fapi.binance.com https://dapi.binance.com "
+       "wss://stream.binance.com:* wss://stream.binance.us:* wss://fstream.binance.com:* https://crypto-icons.ledger.com; "
+       "object-src 'none'; base-uri 'none'; form-action 'self'")
 
 
 class Handler(BaseHTTPRequestHandler):
     server_version = f"luxalgo-web/{SERVER_VERSION}"
     protocol_version = "HTTP/1.1"
     static: StaticFiles = StaticFiles(DEFAULT_FRONTEND)
+    # A socket that sends nothing (or trickles a header / body) used to hold its thread for ever (audit SEC-10). The
+    # long-lived chart stream only writes, so this does not touch it.
+    timeout = 30
 
     # -- helpers ---------------------------------------------------------
 
@@ -1813,9 +1892,33 @@ class Handler(BaseHTTPRequestHandler):
         if origin.strip().lower() == "null":
             return False
         try:
-            return (urlparse(origin).hostname or "") in LOCAL_HOSTS
+            parsed = urlparse(origin)
+            if (parsed.hostname or "") not in LOCAL_HOSTS:
+                return False
+            # The PORT counts too: any other web app on localhost (a dev server, a notebook) is "a local name" but is
+            # not this console's page, and used to pass with the user's cookie (audit 8 Oct, SEC-4). The page's own
+            # Origin always equals the Host it was served from.
+            host = (self.headers.get("Host") or "").strip().lower()
+            return parsed.scheme in ("http", "https") and bool(host) and parsed.netloc.lower() == host
         except ValueError:
             return False
+
+    def _peer_is_local(self) -> bool:
+        try:
+            return ipaddress.ip_address(self.client_address[0]).is_loopback
+        except (ValueError, IndexError, TypeError):
+            return False
+
+    def _session_ok(self) -> bool:
+        """May this caller be handed the POST token? Only a page this console served (same-origin fetch), or a local
+        non-browser (CLI, curl) on loopback. It used to answer anyone with a local Host, so `--host 0.0.0.0` gave every
+        LAN peer the token and the "still authenticated" claim was false (audit 8 Oct, SEC-3)."""
+        if not self._peer_is_local() and not ALLOW_LAN:
+            return False
+        site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+        if site:
+            return site in ("same-origin", "none")
+        return not self.headers.get("Origin") or self._origin_ok()
 
     def _token_ok(self) -> bool:
         header = (self.headers.get("X-Trader-Token") or "").strip()
@@ -1836,6 +1939,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header(key, value)
         for key, value in (extra or {}).items():
             self.send_header(key, value)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
         if not head_only and body:
             try:
@@ -1902,7 +2007,7 @@ class Handler(BaseHTTPRequestHandler):
         # a symbol mapping (the chart knows whether it is BTCUSD or BTCUSDT).
         src = str(payload.get("source") or "")
         if src.startswith("chart:"):
-            want = int(payload.get("bars") or 1000)
+            want = _clamped_int(payload.get("bars"), 1000, 1, BARS_MAX)
             queued = enqueue_chart_command(AGENTS_ROOT, {"action": "bars", "count": want})
             rid = int((queued or {}).get("id") or 0)
             res = None
@@ -2015,7 +2120,10 @@ class Handler(BaseHTTPRequestHandler):
                                 "source": "page heartbeat" if supported != CHART_ACTIONS_FALLBACK else "built-in fallback"})
                     return
                 command = enqueue_chart_command(AGENTS_ROOT, payload)
-                pushed = STREAM.publish({"type": "command", "command": command},
+                # `once_per_view` is read at the TOP level of the pushed payload (chart_stream.publish). It used to
+                # be left inside `command`, so a `reload` was claimed by one view only (audit 8 Oct, BE-4).
+                pushed = STREAM.publish({"type": "command", "command": command,
+                                         "once_per_view": bool(command.get("once_per_view")) if isinstance(command, dict) else False},
                                         command_id=command.get("id") if isinstance(command, dict) else None)
                 inline = self._await_chart_result(command, payload) if pushed else None
                 self._ok({"command": command, "views": STREAM.client_count(),
@@ -2025,7 +2133,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._backtest_proxy(path, payload)
                 return
             if path == "/api/chart/result":
-                recorded = record_chart_result(AGENTS_ROOT, payload)
+                try:
+                    recorded = record_chart_result(AGENTS_ROOT, payload)
+                except ValueError as exc:
+                    self._fail(str(exc), HTTPStatus.BAD_REQUEST, "bad_request")
+                    return
                 if isinstance(recorded, dict):
                     # resolves whoever is waiting on this command (the push path's fast answer)
                     recorded = STREAM.deliver_result(recorded)
@@ -2034,7 +2146,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/chart/claim":
                 # Several consoles can be alive at once (the Hermes pane, the HUD's pane, a browser
                 # tab). They all get the same push, so one of them must win the right to execute it.
-                rid = payload.get("id")
+                try:
+                    rid = int(payload.get("id"))
+                except (TypeError, ValueError, OverflowError):
+                    raise ApiError("claim needs the integer id of a command", 400, "bad_request") from None
                 viewer = str(payload.get("viewer") or "")
                 self._ok({"id": rid, "claimed": STREAM.claim(rid, viewer, once=STREAM.is_once(rid)), "viewer": viewer})
                 return
@@ -2084,8 +2199,8 @@ class Handler(BaseHTTPRequestHandler):
             agent=agent,
             message=message,
             context=context,
-            timeout=int(payload.get("timeout") or 180),
-            workdir=str(payload.get("workdir") or os.path.expanduser("~/Projects/luxalgo-web")),
+            timeout=_clamped_int(payload.get("timeout"), 180, 10, 600),
+            workdir=_agent_workdir(),
             resume=None if fresh else agent.get("session_id"),
             learnings=learnings_tail(AGENTS_ROOT, agent_id),
             extra_args=[],
@@ -2167,6 +2282,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._fail("refused: non-local Host", HTTPStatus.FORBIDDEN, "non_local_host",
                            head_only=head_only)
                 return
+            # A browser tells us which kind of page is asking. This console's own page is `same-origin`; an <img> or
+            # fetch from another site is `cross-site` / `same-site` and could only ever cause side effects here (Binance
+            # requests from the user's IP, the Edge engine spawned, the LuxAlgo quota burned): refuse those. A CLI or
+            # curl sends no such header and is unaffected (audit 8 Oct, SEC-9).
+            fetch_site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+            if parsed.path.startswith("/api") and fetch_site and fetch_site not in ("same-origin", "none"):
+                self.close_connection = True
+                self._fail("refused: this route is for the console's own page and local tools", HTTPStatus.FORBIDDEN,
+                           "cross_site", head_only=head_only)
+                return
             if parsed.path.rstrip("/") == "/api/backtest/health":
                 self._backtest_proxy("/api/backtest/health", {})
                 return
@@ -2196,6 +2321,10 @@ class Handler(BaseHTTPRequestHandler):
                 # check — so the token stays on this machine.
                 if not self._host_ok():
                     self._fail("refused: non-local Host", HTTPStatus.FORBIDDEN, "non_local_host", head_only=head_only)
+                    return
+                if not self._session_ok():
+                    self._fail("the token is given to this console's own page and to local tools, not to other pages "
+                               "or machines", HTTPStatus.FORBIDDEN, "session_refused", head_only=head_only)
                     return
                 self._ok({"token": CONSOLE_TOKEN}, head_only=head_only)
                 return
@@ -2294,8 +2423,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         extra = {"Cache-Control": "no-store"}
         if os.path.basename(target) == "index.html":
-            # The page's own POSTs carry this cookie; a cross-site request never does (SameSite=Strict).
-            extra["Set-Cookie"] = f"trader_token={CONSOLE_TOKEN}; Path=/; SameSite=Strict; HttpOnly"
+            # The page's own POSTs carry this cookie; a cross-site request never does (SameSite=Strict). A LAN peer is
+            # not handed it either (see _session_ok).
+            if self._peer_is_local() or ALLOW_LAN:
+                extra["Set-Cookie"] = f"trader_token={CONSOLE_TOKEN}; Path=/; SameSite=Strict; HttpOnly"
+            extra["Content-Security-Policy"] = CSP
         self._send(200, body, ctype, extra, head_only)
 
 
@@ -2303,6 +2435,25 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
     request_queue_size = 64
+
+    MAX_CONNECTIONS = 128
+    _slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+
+    def process_request(self, request, client_address):
+        # One thread per connection and no cap let a few hundred idle sockets pin memory and file descriptors.
+        if not self._slots.acquire(blocking=False):
+            try:
+                request.close()
+            except OSError:
+                pass
+            return
+        super().process_request(request, client_address)
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
 
     def handle_error(self, request, client_address):
         exc = sys.exc_info()[1]
@@ -2369,6 +2520,8 @@ def load_backtest_result(root: str = "", run_id: str = "") -> dict:
     if base is None:
         return {"ok": False, "error": "no backtest results found in " +
                 ", ".join(str(c) for c in cands if c)}
+    if run_id and not re.fullmatch(r"[0-9A-Za-z_-]{1,64}", str(run_id)):
+        return {"ok": False, "error": "run_id must be letters, digits, _ or - (up to 64)"}
     try:
         if not run_id:
             latest = base / "latest.json"
@@ -2406,6 +2559,43 @@ def list_local_data(data_dir: str = "") -> dict:
             "use": 'source="local:NAME" in bt_run / bt_optimize'}
 
 
+def _clamped_int(value, default: int, lo: int, hi: int) -> int:
+    """A client-supplied number, held to a sane range. A body may not ask for a timeout of 99999 s (a thread held that
+    long) and a word is a 400, not a 500."""
+    if value in (None, ""):
+        return default
+    try:
+        return max(lo, min(hi, int(value)))
+    except (TypeError, ValueError, OverflowError):
+        raise ApiError("expected a whole number", 400, "bad_request") from None
+
+
+def _int_param(params: dict, name: str, default: int = 0) -> int:
+    raw = (params.get(name) or [str(default)])[0] or str(default)
+    try:
+        return int(raw)
+    except (TypeError, ValueError, OverflowError):
+        raise ApiError(f"{name} must be a whole number", 400, "bad_request") from None
+
+
+def _agent_workdir() -> str:
+    """Where the agent CLI runs. It is the OPERATOR's setting, never the request's: a token holder used to choose any
+    folder (audit SEC-2)."""
+    env = os.environ.get("TRADERS_AGENT_WORKDIR")
+    if env:
+        return env
+    legacy = os.path.expanduser("~/Projects/luxalgo-web")
+    return legacy if os.path.isdir(legacy) else str(AGENTS_ROOT)
+
+
+def _env_int(name: str, default: int) -> int:
+    """An integer from the environment; a typo falls back to the default instead of a traceback after the port is bound."""
+    try:
+        return int(os.environ.get(name, "") or default)
+    except ValueError:
+        return default
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -2420,23 +2610,42 @@ def main(argv=None) -> int:
     if MCP_IMPORT_ERROR:
         log(f"WARNING: mcp package not importable ({MCP_IMPORT_ERROR})")
 
-    if args.no_mcp:
-        log("starting WITHOUT an MCP session (--no-mcp)")
-    else:
-        log(f"connecting to MCP at {args.mcp_url} ...")
-        started = time.time()
-        ready = BRIDGE.start()
-        if ready:
-            log(f"MCP session established in {time.time() - started:.1f}s")
-        else:
-            log(f"WARNING: MCP session not ready after {MCP_CONNECT_WAIT:.0f}s "
-                f"({BRIDGE.last_error}); the server will keep retrying in the background")
-
     log(f"frontend dir: {frontend_root} "
         f"({'ok' if Handler.static.exists() else 'MISSING'})")
 
-    httpd = Server((args.host, args.port), Handler)
+    # Bind FIRST. The MCP session is only the Library's; the chart, bars, broker and the agent bridge need none of
+    # it, and waiting up to 60 s for it before opening the port left the pane and every tool failing for a minute
+    # (audit 8 Oct, BE-5). A busy port is also found at once, with one line instead of a traceback.
+    try:
+        httpd = Server((args.host, args.port), Handler)
+    except (OSError, OverflowError) as exc:
+        log(f"cannot listen on {args.host}:{args.port}: {exc}")
+        return 2
     log(f"listening on http://{args.host}:{args.port}  (Ctrl-C to stop)")
+
+    if args.no_mcp:
+        log("starting WITHOUT an MCP session (--no-mcp)")
+    else:
+        def connect_mcp():
+            log(f"connecting to MCP at {args.mcp_url} ...")
+            started = time.time()
+            if BRIDGE.start():
+                log(f"MCP session established in {time.time() - started:.1f}s")
+            else:
+                log(f"WARNING: MCP session not ready after {MCP_CONNECT_WAIT:.0f}s "
+                    f"({BRIDGE.last_error}); the server will keep retrying in the background")
+        threading.Thread(target=connect_mcp, name="mcp-connect", daemon=True).start()
+
+    # `systemctl stop` sends SIGTERM, which used to end the process with no cleanup (the Edge Stats engine was
+    # left running). Treat it like Ctrl-C so the finally block below runs.
+    try:
+        import signal as _signal
+
+        def _term(_signum, _frame):
+            raise KeyboardInterrupt
+        _signal.signal(_signal.SIGTERM, _term)
+    except (ValueError, OSError, AttributeError):
+        pass                                                  # not the main thread / not supported here
 
     # Preview pictures, fetched once and kept: the operator's first open of the Indicators modal used
     # to fill in picture by picture (60 × ~1–2 s from S3 on this link). Warming starts here, in the
@@ -2445,7 +2654,7 @@ def main(argv=None) -> int:
         threading.Thread(
             target=warm_catalogue_thumbs,
             # 0 = every page of the catalogue (the default). Set a small number on a metered link.
-            kwargs={"pages": int(os.environ.get("TRADERS_AGENT_THUMB_WARM_PAGES", "0") or 0)},
+            kwargs={"pages": _env_int("TRADERS_AGENT_THUMB_WARM_PAGES", 0)},
             name="thumb-warmer", daemon=True,
         ).start()
     try:

@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 
 DEFAULT_CLI = os.environ.get(
@@ -54,7 +55,8 @@ def extract_pine(reply: str) -> str:
     return match.group(1).strip() if match else ""
 
 
-CHART_ACTION_RE = re.compile(r"^\s*CHART:\s*(.+?)\s*$", re.I | re.M)
+# [ \t] not \s: with \s a 20 KB reply of blank lines took ~1.5 s here and held the GIL for all of it (audit SEC-17).
+CHART_ACTION_RE = re.compile(r"^[ \t]*CHART:[ \t]*(.*\S)[ \t]*$", re.I | re.M)
 MARKET_KV_RE = re.compile(r"(\w+)\s*=\s*([A-Za-z0-9._\-/]+)")
 ADD_RE = re.compile(r"^add\s+([a-z0-9\-]+)", re.I)
 
@@ -95,7 +97,9 @@ def run_agent(cli: str, agent: dict, message: str, context: dict | None = None,
               learnings: str = "", extra_args: list[str] | None = None) -> dict:
     """Run one prompt through `hermes -z`. Never raises; always returns a reportable dict."""
     prompt = compose_prompt(agent, message, context, learnings=learnings)
-    usage_file = os.path.join("/tmp", f"hermes-usage-{os.getpid()}-{int(time.time() * 1000)}.json")
+    # A private 0700 directory, not a guessable name in /tmp (audit SEC-14).
+    usage_dir = tempfile.mkdtemp(prefix="hermes-usage-")
+    usage_file = os.path.join(usage_dir, "usage.json")
     cmd = [cli, "-z", prompt, "--usage-file", usage_file]
     for skill in agent.get("skills") or []:
         cmd += ["-s", skill]
@@ -104,6 +108,10 @@ def run_agent(cli: str, agent: dict, message: str, context: dict | None = None,
     if resume:
         cmd += ["--resume", resume]
     if workdir:
+        if not os.path.isdir(workdir):
+            shutil.rmtree(usage_dir, ignore_errors=True)
+            return {"ok": False, "reason": f"the agent's working folder does not exist: {workdir} "
+                                           "(set TRADERS_AGENT_WORKDIR)", "elapsed_ms": 0}
         cmd += ["--in", workdir]
     cmd += list(extra_args or [])
 
@@ -112,9 +120,11 @@ def run_agent(cli: str, agent: dict, message: str, context: dict | None = None,
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
                               cwd=workdir or None, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
+        shutil.rmtree(usage_dir, ignore_errors=True)
         return {"ok": False, "reason": f"agent timed out after {timeout}s",
                 "elapsed_ms": int((time.time() - started) * 1000)}
     except OSError as exc:
+        shutil.rmtree(usage_dir, ignore_errors=True)
         return {"ok": False, "reason": f"could not start the agent CLI: {exc}", "elapsed_ms": 0}
 
     elapsed_ms = int((time.time() - started) * 1000)
@@ -125,10 +135,7 @@ def run_agent(cli: str, agent: dict, message: str, context: dict | None = None,
     except (OSError, json.JSONDecodeError):
         usage = None
     finally:
-        try:
-            os.unlink(usage_file)
-        except OSError:
-            pass
+        shutil.rmtree(usage_dir, ignore_errors=True)
 
     session_id = usage.get("session_id") if isinstance(usage, dict) else None
 

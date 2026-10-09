@@ -1,0 +1,27 @@
+Trader's Agent: licence notice
+==============================
+
+1. This project's own code (everything outside console/frontend/vendor/) is MIT-licensed: see LICENSE.
+
+2. The distribution as a whole is NOT only MIT. It redistributes, unmodified or patched, these components:
+
+   console/frontend/vendor/pinets/       PineTS, patched build (AGPL-3.0-only; LICENSE beside it)
+   console/frontend/vendor/vela-pinets/  Vela-PineTS (AGPL-3.0-only; LICENSE beside it)
+   console/frontend/vendor/vela/         Vela (Apache-2.0; LICENSE and NOTICE beside it)
+   console/frontend/vendor/zag/          Zag, Floating UI, proxy-compare (MIT; texts in THIRD-PARTY-LICENSES.md)
+
+   Because AGPL-3.0 code is redistributed here, the combined distribution (this repository with its vendor/ folder, and a
+   console served from it) is offered under the AGPL-3.0 terms for those parts: anyone who receives it, including a person
+   using a console reached over a network, may ask for the complete corresponding source. Details: THIRD-PARTY.md.
+
+3. Written offer of source for the patched engine (console/frontend/vendor/pinets/pinets.min.browser.es.js):
+     repository  https://github.com/godzillacode0000/PineTS   (fork of https://github.com/LuxAlgo/PineTS)
+     branch      fix/p1-p8-on-0.11
+     built from  commit f5ec571
+     build       npm ci && npm run build:prod:browser-es
+   console/frontend/vendor/pinets/PROVENANCE.md records the patches, the file's size and its sha256. The source for the
+   rest of this distribution is this repository.
+
+4. Third-party content that is deliberately NOT in this repository: LuxAlgo Library indicators (CC BY-NC-SA 4.0). They are
+   fetched on demand at run time and never committed or redistributed here. Product names (TradingView, LuxAlgo, Hermes,
+   Binance) belong to their owners; this is an unofficial plugin.

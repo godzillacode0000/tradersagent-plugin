@@ -318,9 +318,11 @@ window.TraderRun = (function () {
     return out;
   }
 
+  let runSeq = 0;      // the newest run STARTED wins: two overlapping runs used to paint in the order they FINISHED
   async function run(pine, name, opts) {
+    const mySeq = ++runSeq;
     name = name || 'agent';
-    if (!pine || !String(pine).trim()) return { ok: false, reason: 'no Pine source in the command' };
+    if (!pine || !String(pine).trim()) return { ok: false, reason: 'nothing to run yet \u2014 paste some Pine into the editor, then press Run' };
     if (typeof window.chartBars !== 'function') return { ok: false, reason: 'no chart on this page' };
     if (!window.PineTSRunner) return { ok: false, reason: 'Pine engine missing — indicators cannot be mounted' };
 
@@ -334,6 +336,9 @@ window.TraderRun = (function () {
     let res = await window.PineTSRunner.run(String(pine), bars, runOpts);
     if (!res.ok) {
       return { ok: false, name, reason: res.reason || 'not runnable: unknown', error: res.error || null, ms: res.ms || null };
+    }
+    if (mySeq !== runSeq) {
+      return { ok: false, name, superseded: true, reason: 'a newer run started while this one was computing, so this one was not drawn', ms: res.ms || null };
     }
 
     /* The provider's clean return can lie: it reported a healthy run while its data never
@@ -585,6 +590,10 @@ window.TraderRun = (function () {
       timer = setTimeout(async () => {
         pendingSig = null;
         if (sigNow() !== now) { check(); return; }
+        /* A re-run for the PREVIOUS market may still be computing: rerun() would answer null and, with marketSig already
+           moved on, nothing would ever redraw (ETH labels stayed on a SOL chart). Leave marketSig as it was so the
+           next check arms again, until the in-flight run ends. */
+        if (rerunning) { check(); return; }
         marketSig = now;
         /* The new bars load and Vela's visible window settles first: drawing against the old window put
            boxes at the wrong bars. A quick script gets a second pass after the chart has surely settled. */

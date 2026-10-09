@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import os
 import threading
 import time
@@ -47,9 +48,14 @@ _CHART_ROOT = None
 
 def _klines_binance(symbol: str, interval: str, bars: int) -> "object":
     """Public klines REST, paginated. No key, no account — the same feed the chart itself uses."""
+    import urllib.parse
     import urllib.request
     import pandas as pd
 
+    if not _SYMBOL.match(symbol or "") or not _INTERVAL.match(interval or ""):
+        raise ValueError(f"not a Binance symbol / interval: {symbol!r} {interval!r}")
+    bars = max(1, min(MAX_BARS, int(bars)))
+    symbol, interval = urllib.parse.quote(symbol), urllib.parse.quote(interval)
     out, end = [], None
     while len(out) < bars:
         want = min(1000, bars - len(out))
@@ -71,13 +77,29 @@ def _klines_binance(symbol: str, interval: str, bars: int) -> "object":
     return df
 
 
+_LOCAL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_SYMBOL = re.compile(r"^[A-Z0-9]{3,20}$")
+_INTERVAL = re.compile(r"^[0-9]{1,2}[smhdwM]$")
+MAX_BARS = 20000
+MAX_COMBOS_SPAN = 120          # a sweep window wider than this is ~7,000 pairs; [1, 5000] was ~12.5 million
+MAX_TOP = 50
+MAX_BODY = 4 * 1024 * 1024
+
+
 def _bars_local(name: str) -> "object":
-    """A file the operator owns: CSV or Parquet in the data dir. Same schema the chart uses."""
+    """A file the operator owns: CSV or Parquet in the data dir. Same schema the chart uses.
+
+    The name is a bare file name: `local:../../etc/passwd` and `local:/etc/hostname` used to read any file (audit
+    SEC-7)."""
     import pandas as pd
 
-    base = Path(_DATA_DIR)
+    if not _LOCAL_NAME.match(name or ""):
+        raise ValueError(f"local data names are plain file names (letters, digits, . _ -), got {name!r}")
+    base = Path(_DATA_DIR).resolve()
     for suffix in (".parquet", ".csv", ""):
-        p = base / (name if name.endswith(suffix) and suffix else name + suffix)
+        p = (base / (name if name.endswith(suffix) and suffix else name + suffix)).resolve()
+        if base not in p.parents:
+            continue
         if p.exists():
             df = pd.read_parquet(p) if p.suffix == ".parquet" else pd.read_csv(p, index_col=0)
             df.index = pd.to_datetime(df.index, utc=True)
@@ -90,6 +112,7 @@ def _bars_local(name: str) -> "object":
 
 
 def load_bars(source: str, bars: int, inline: list | None = None):
+    bars = max(0, min(MAX_BARS, int(bars or 0)))
     if inline:
         import pandas as _pd
         df = _pd.DataFrame(inline)
@@ -110,6 +133,18 @@ def load_bars(source: str, bars: int, inline: list | None = None):
 
 
 # ─────────────────────────── engine ───────────────────────────
+
+def _clean_nan(v):
+    """JSON has no NaN / Infinity: a run with no trades has NaN Sharpe and an infinite profit factor, which
+    json.dumps wrote as bare `NaN` / `Infinity` that strict parsers refuse (audit BE-18)."""
+    if isinstance(v, float):
+        return v if v == v and v not in (float("inf"), float("-inf")) else None
+    if isinstance(v, dict):
+        return {k: _clean_nan(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_clean_nan(x) for x in v]
+    return v
+
 
 def _num(x, default: float = 0.0) -> float:
     """vectorbt hands back a Series in places even for a single column — take the last value.
@@ -183,9 +218,12 @@ def run_ma_cross_sweep(spec: dict) -> dict:
     import vectorbt as vbt
 
     lo, hi = spec.get("window", [5, 60])
+    lo, hi = int(lo), int(hi)
+    if lo < 1 or hi < lo or hi - lo > MAX_COMBOS_SPAN:
+        raise ValueError(f"window must satisfy 1 <= lo <= hi and hi - lo <= {MAX_COMBOS_SPAN}")
     fee = float(spec.get("fee", 0.001))
     init = float(spec.get("init_cash", 10000))
-    top_n = int(spec.get("top", 10))
+    top_n = max(1, min(MAX_TOP, int(spec.get("top", 10))))
     df = load_bars(str(spec.get("source", "binance:BTCUSDT:30m")), int(spec.get("bars", 1000)),
                    inline=spec.get("inline") or None)
     price = df["close"]
@@ -219,7 +257,7 @@ def run_signals(spec: dict) -> dict:
     summary cannot carry. Entries and exits are matched onto the chart's own bar timestamps, and
     timestamps that land on no bar are reported rather than silently dropped.
     """
-    import numpy as _np
+    import numpy as _np  # noqa: F401
     import pandas as _pd
     import vectorbt as _vbt
     fee = float(spec.get("fee", 0.001))
@@ -313,8 +351,20 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # keep the journal readable
         print(f"[backtest] {fmt % args}", flush=True)
 
+    def _gate(self) -> bool:
+        """The same door as the console's: a local Host, and no browser page (no Origin). This service has no token,
+        so without this any web page could POST `text/plain` to 127.0.0.1:8788/run, and a DNS-rebinding page could
+        read the answers (audit SEC-7). The console proxies with urllib, which sends neither Origin nor a foreign
+        Host."""
+        host = (self.headers.get("Host") or "").strip().lower()
+        name = host.rsplit(":", 1)[0].strip("[]") if not host.startswith("[") else host.split("]")[0].lstrip("[")
+        if name not in ("127.0.0.1", "localhost", "::1", "0.0.0.0") or self.headers.get("Origin"):
+            self._send(403, {"ok": False, "error": "refused: this service answers the Trader's Agent console only"})
+            return False
+        return True
+
     def _send(self, code: int, body: dict):
-        raw = json.dumps(body).encode("utf-8")
+        raw = json.dumps(_clean_nan(body), allow_nan=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(raw)))
@@ -322,6 +372,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self):  # noqa: N802
+        if not self._gate():
+            return
         if self.path.rstrip("/") in ("/health", "/api/backtest/health"):
             self._send(200, {"ok": True, "version": VERSION, "vectorbt": _STATE["vectorbt"],
                              "warm": _STATE["warm"], "jit_ms": _STATE["jit_ms"],
@@ -331,12 +383,20 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"ok": False, "error": "GET /health"})
 
     def do_POST(self):  # noqa: N802
+        if not self._gate():
+            return
         path = self.path.rstrip("/") or "/"
         if path not in ("/run", "/sweep", "/api/backtest", "/api/backtest/sweep"):
             self._send(404, {"ok": False, "error": "POST /run or /sweep"})
             return
         try:
             length = int(self.headers.get("Content-Length") or 0)
+            if length < 0 or length > MAX_BODY:
+                self._send(413, {"ok": False, "error": f"body over {MAX_BODY} bytes"})
+                return
+            if "json" not in (self.headers.get("Content-Type") or "").lower():
+                self._send(415, {"ok": False, "error": "Content-Type must be application/json"})
+                return
             spec = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
         except (ValueError, UnicodeDecodeError) as exc:
             self._send(400, {"ok": False, "error": f"bad JSON body: {exc}"})

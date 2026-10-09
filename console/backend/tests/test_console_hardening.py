@@ -21,7 +21,6 @@ Each pin below corresponds to a defect or a claim, and each would come back sile
     the fix, its review, and the same door in `script` are pinned here.
 """
 
-import io
 import os
 import socket
 import sys
@@ -88,7 +87,11 @@ class TestTheRequestPredicates(unittest.TestCase):
 
     def test_origin_may_be_absent_or_local_only(self):
         self.assertTrue(srv.Handler._origin_ok(fake_request()))                       # CLI, MCP, curl
-        self.assertTrue(srv.Handler._origin_ok(fake_request(origin="http://127.0.0.1:8787")))
+        self.assertTrue(srv.Handler._origin_ok(fake_request(host="127.0.0.1:8787", origin="http://127.0.0.1:8787")))
+        # the PORT counts: another web app on localhost is a "local name" but not this console's page (audit SEC-4)
+        self.assertFalse(srv.Handler._origin_ok(fake_request(host="127.0.0.1:8787", origin="http://127.0.0.1:9999")))
+        self.assertFalse(srv.Handler._origin_ok(fake_request(host="127.0.0.1:8787", origin="http://localhost:8787")))
+        self.assertFalse(srv.Handler._origin_ok(fake_request(origin="http://127.0.0.1:8787")))   # no Host to compare with
         self.assertFalse(srv.Handler._origin_ok(fake_request(origin="null")))          # sandboxed page
         self.assertFalse(srv.Handler._origin_ok(fake_request(origin="http://evil.example")))
 
