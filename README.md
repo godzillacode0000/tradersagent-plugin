@@ -318,6 +318,25 @@ tick — measured 37-156 ms on the wire for `add` / `market` / `apply`, ~65-80 m
 healthy, 2 s if it drops) and the file bridge is untouched, so an older view still works. The bridge
 is still not a headless renderer: with no view attached, commands fail fast and say so.
 
+### Using it from the DeepSeek Harness (dsh)
+
+The chart pane is Hermes-only, but the desk is not: the same MCP server (56 tools) and the same skill work from dsh,
+and the agent drives the console's chart exactly as it does from Hermes. Open `http://127.0.0.1:8787/` in a browser tab
+to watch it.
+
+```bash
+./console/start.sh                                   # the console must be running
+./adapters/dsh/install-dsh.sh --mcp-file PATH        # PATH: the JSON file where your dsh lists MCP servers
+./adapters/dsh/install-dsh.sh --doctor               # skill, launcher, a real MCP handshake, the console
+```
+
+It copies the skill to `~/.agents/skills/trader-desk` (`--skills-dir` or `DSH_SKILLS_DIR` to change it) and writes a
+stdio entry into the file you name (it runs `console/mcp/server.py` with `PY`, the repo's `.venv` or a python that has the `mcp` client, same order as `bin/register-mcp.sh`; else `uvx fastmcp run`; `--venv` forces a private venv),
+keeping your other servers and a `.bak-traders` copy. Without `--mcp-file` it prints the entry for you to paste.
+`PORT=9000` points the entry at a console on another port. It reads nothing from dsh itself and writes nowhere else, so
+check your dsh's own docs for the config path. Not verified against a real dsh install yet: the handshake is tested with
+the MCP client, and dsh's skill and config locations are as reported by third-party dsh plugins.
+
 ## Screenshots
 
 | | |

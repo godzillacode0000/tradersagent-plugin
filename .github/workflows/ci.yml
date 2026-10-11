@@ -47,7 +47,7 @@ jobs:
       - run: pip install ruff && ruff check --select F,E9 console tools
       # Every first-party script must at least parse.
       - run: for f in console/frontend/*.js traders-desk/desktop/plugin.js; do node --check "$f"; done
-      - run: for f in install.sh console/start.sh tools/sync-live.sh bin/is-enabled.sh; do bash -n "$f"; done
+      - run: for f in install.sh adapters/dsh/install-dsh.sh console/start.sh tools/sync-live.sh bin/is-enabled.sh; do bash -n "$f"; done
       # The vendored bundles are what was recorded (a hand edit or a half-applied upgrade fails here), and the
       # generated preload list follows the module graph.
       - run: python tools/vendor-sums.py --check

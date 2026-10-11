@@ -26,6 +26,10 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   `console/service-macos.sh` behind launchd), so the OS row, the service section and the platform bullet now
   say Linux + macOS, name the launchd counterpart of the systemd unit, and link the Mac setup. Windows stays
   out of scope, and `docs/HANDOFF.md`'s operator line now names both machines.
+- **DeepSeek Harness adapter** (`adapters/dsh/install-dsh.sh`): installs the desk skill and registers the `traders-chart` MCP server for
+  dsh. `--mcp-file` merges the entry into a JSON file you name (other servers kept, backup made, invalid JSON refused), `--doctor`
+  runs a real MCP handshake (56 tools) and checks the console, `--uninstall` undoes it. The Hermes pane stays Hermes-only. Not yet
+  tried against a real dsh install.
 
 ### Changed
 
