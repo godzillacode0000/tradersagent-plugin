@@ -339,6 +339,21 @@ def _http(method: str, url: str, body: dict | None = None, timeout: float = REQU
     return json.loads(raw.decode("utf-8") or "{}")
 
 
+def _process_state(pid: int) -> str | None:
+    """The single-letter process state ('R', 'S', 'Z', …), or None when no state table can be read.
+    Linux reads /proc; macOS (and other BSDs) fall back to `ps` — same meaning, different spelling."""
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+    except (OSError, IndexError):
+        pass
+    try:
+        out = subprocess.run(["ps", "-o", "state=", "-p", str(pid)],
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.split()[0] if out else ""              # empty output: `ps` saw no such process
+
+
 def _pid_alive(pid: int) -> bool:
     """Alive means running — a killed child nobody has reaped yet still answers kill(pid, 0), so the
     process state is read too (a zombie is a corpse, and adopting or waiting on one is a bug)."""
@@ -346,20 +361,33 @@ def _pid_alive(pid: int) -> bool:
         os.kill(pid, 0)
     except OSError:
         return False
+    state = _process_state(pid)
+    if state is None:
+        return True                                   # no readable state table: the signal check stands
+    if state == "":
+        return False                                  # the process left the table between the two probes
+    return not state.startswith("Z")
+
+
+def _process_cmdline(pid: int) -> str | None:
+    """The full command line a pid is running, or None when it cannot be read (Linux /proc, elsewhere
+    `ps`). Callers treat None as "ownership unproven" — never as evidence of a match."""
     try:
-        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
-    except (OSError, IndexError):
-        return True                                   # no /proc: the signal check stands
-    return state != "Z"
+        return Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace")
+    except OSError:
+        pass
+    try:
+        out = subprocess.run(["ps", "-o", "command=", "-p", str(pid)],
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out or None
 
 
 def _is_our_engine(pid: int) -> bool:
     """A recorded pid is ours only if it is still the engine CLI — pids are recycled."""
-    try:
-        cmd = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace")
-    except OSError:
-        return False
-    return "packages/cli/src/index.ts" in cmd and " serve" in cmd
+    cmd = _process_cmdline(pid)
+    return cmd is not None and "packages/cli/src/index.ts" in cmd and " serve" in cmd
 
 
 def _tail_log(lines: int = 8) -> str:

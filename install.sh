@@ -22,7 +22,18 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
-DST="$HERMES_HOME/desktop-plugins/traders-desk"
+# Desktop plugins are APP-LEVEL in current Hermes Desktop builds: the renderer loads the one root
+# `<hermes-root>/desktop-plugins`, and a profile-scoped copy is migrated away or ignored. So if
+# HERMES_HOME points at a profile (…/profiles/<name> — an agent session exports exactly that),
+# the plugin still deploys to that home's root; only the skill keeps its documented destination.
+PLUGIN_HOME="$HERMES_HOME"
+case "$HERMES_HOME" in
+  */profiles/*) PLUGIN_HOME="${HERMES_HOME%/profiles/*}" ;;
+esac
+if [[ "$PLUGIN_HOME" != "$HERMES_HOME" ]]; then
+  echo "note: HERMES_HOME points at a profile — desktop plugin goes to the app-level root: $PLUGIN_HOME/desktop-plugins"
+fi
+DST="$PLUGIN_HOME/desktop-plugins/traders-desk"
 SKILL_DST="$HERMES_HOME/skills/trading/trader-desk"
 PORT="${PORT:-8787}"
 CONSOLE_URL="${LUXALGO_CONSOLE:-http://127.0.0.1:$PORT}"
@@ -43,13 +54,33 @@ for arg in "$@"; do
 done
 if ! [[ "$PORT" =~ ^[0-9]{1,5}$ ]]; then echo "install.sh: PORT must be a number, got '$PORT'" >&2; exit 2; fi
 
+# Resolve the console's interpreter the same way start.sh does: PY wins, then the repo's .venv,
+# then the first python3.11+ on PATH. macOS ships python3 as 3.9, so checking the bare name
+# "python3" would fail a healthy install there.
+resolve_py() {
+  # Probes run with PYTHONPATH/PYTHONHOME scrubbed: an agent session can export a PYTHONPATH that
+  # points at a DIFFERENT interpreter's site-packages, shadowing the probe's own packages (on
+  # macOS this made a healthy venv report "no mcp"). PY= still wins.
+  if [[ -n "${PY:-}" ]]; then echo "$PY"; return 0; fi
+  if [[ -x "$HERE/.venv/bin/python" ]]; then echo "$HERE/.venv/bin/python"; return 0; fi
+  local cand
+  for cand in python3.14 python3.13 python3.12 python3.11 python3; do
+    if command -v "$cand" >/dev/null 2>&1 \
+       && env -u PYTHONPATH -u PYTHONHOME "$cand" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
+      command -v "$cand"; return 0
+    fi
+  done
+  return 1
+}
+
 if [[ $UNINSTALL -eq 1 ]]; then
   rm -rf "$DST" "$SKILL_DST"
   echo "removed $DST"
   echo "removed $SKILL_DST"
   echo "still yours to undo, if you want a clean machine:"
   echo "  hermes mcp remove traders-chart            (the MCP registration)"
-  echo "  systemctl --user disable --now traders-agent.service   (if you installed the unit)"
+  echo "  systemctl --user disable --now traders-agent.service   (Linux: if you installed the unit)"
+  echo "  ./console/service-macos.sh uninstall                   (macOS: if you installed the LaunchAgent)"
   echo "  ~/.local/state/traders-agent/ (token, paper account)   ~/.local/share/traders-agent/ (caches, Edge Stats, backtest venv)"
   exit 0
 fi
@@ -61,21 +92,28 @@ if [[ $DOCTOR -eq 1 ]]; then
     if "$@" >/dev/null 2>&1; then echo "  ok  $label"; else echo "  FAIL $label"; fail=1; fi
   }
   echo "Trader's Agent — install doctor"
-  check "python3 on PATH" command -v python3
-  check "python3 is 3.11 or newer" python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'
-  check "python3 has the mcp client (pip install mcp)" python3 -c 'import mcp'
+  if PY_RESOLVED="$(resolve_py)"; then
+    echo "  ok  console python: $PY_RESOLVED"
+    check "$PY_RESOLVED is 3.11 or newer" "$PY_RESOLVED" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)'
+    check "$PY_RESOLVED has the mcp client (pip install mcp)" env -u PYTHONPATH -u PYTHONHOME "$PY_RESOLVED" -c 'import mcp'
+  else
+    echo "  FAIL no python3.11+ interpreter found for the console"
+    echo "       set PY=/path/to/python, or create the repo .venv (macOS: docs/MACOS.md)"
+    fail=1
+  fi
   check "plugin.js in repo" test -f "$HERE/plugin/plugin.js"
   check "MCP server in repo" test -f "$HERE/console/mcp/server.py"
   check "console answering on $CONSOLE_URL" curl -fsS --max-time 3 "$CONSOLE_URL/api/health"
   # Only this development machine carries luxalgo-web.service; a fresh install follows the README and
   # runs traders-agent.service instead. Checking the machine-specific unit unconditionally made
   # `--doctor` FAIL on every other install, which is exactly the first thing a new user runs.
-  if systemctl --user list-unit-files luxalgo-web.service >/dev/null 2>&1; then
+  # systemd is Linux-only; on macOS the console runs under launchd (console/service-macos.sh).
+  if command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files luxalgo-web.service >/dev/null 2>&1; then
     check "luxalgo-web.service active (this machine)" systemctl --user is-active luxalgo-web.service
-  elif systemctl --user list-unit-files traders-agent.service >/dev/null 2>&1; then
+  elif command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files traders-agent.service >/dev/null 2>&1; then
     check "traders-agent.service active" systemctl --user is-active traders-agent.service
   else
-    check "console reachable (no user unit installed)" curl -fsS --max-time 3 "$CONSOLE_URL/api/health"
+    check "console reachable (no systemd user unit installed)" curl -fsS --max-time 3 "$CONSOLE_URL/api/health"
   fi
   check "plugin deployed" test -f "$DST/plugin.js"
   check "desk skill deployed" test -f "$SKILL_DST/SKILL.md"
@@ -104,7 +142,12 @@ mkdir -p "$DST"
 cp "$HERE/plugin/plugin.js" "$HERE/plugin/plugin.expect.json" "$DST/"
 if [[ "$PORT" != "8787" ]]; then
   # The frame points at one hard-coded origin; a console on another port needs the installed copy (not the repo) changed.
-  sed -i "s#const CONSOLE_ORIGIN = 'http://127.0.0.1:8787/'#const CONSOLE_ORIGIN = 'http://127.0.0.1:$PORT/'#" "$DST/plugin.js"
+  # BSD sed (macOS) spells in-place editing `-i ''`; GNU sed rejects that spelling. Probe once, keep one expression.
+  if sed --version >/dev/null 2>&1; then
+    sed -i "s#const CONSOLE_ORIGIN = 'http://127.0.0.1:8787/'#const CONSOLE_ORIGIN = 'http://127.0.0.1:$PORT/'#" "$DST/plugin.js"
+  else
+    sed -i '' "s#const CONSOLE_ORIGIN = 'http://127.0.0.1:8787/'#const CONSOLE_ORIGIN = 'http://127.0.0.1:$PORT/'#" "$DST/plugin.js"
+  fi
   grep -q "127.0.0.1:$PORT/" "$DST/plugin.js" || { echo "install.sh: could not point the plugin at port $PORT" >&2; exit 1; }
   echo "plugin installed -> $DST (console port $PORT)"
 else
@@ -126,10 +169,11 @@ if [[ $WITH_BT -eq 1 ]]; then
   if [[ -x "$BT/venv/bin/python" ]] && "$BT/venv/bin/python" -c 'import vectorbt' >/dev/null 2>&1; then
     echo "backtest engine already installed at $BT/venv (skipping)"
   else
+    resolve_py >/dev/null 2>&1 || { echo "the backtest engine needs python3.11+ — create the repo .venv first (docs/MACOS.md)" >&2; exit 1; }
     echo "installing the backtest engine (vectorbt) into $BT/venv — this downloads ~840 MB once"
     mkdir -p "$BT"
     rm -rf "$BT/venv"   # a half-made venv from a failed earlier run is rebuilt, not trusted
-    python3 -m venv "$BT/venv"
+    "$(resolve_py)" -m venv "$BT/venv"
     "$BT/venv/bin/pip" install --quiet --upgrade pip
     "$BT/venv/bin/pip" install --quiet vectorbt
     echo "done. start it with:"
@@ -199,9 +243,9 @@ fi
 # (a catalogue panel that returned nothing until the unit was restarted), so the installer closes it
 # instead of documenting it.
 UNIT=""
-if systemctl --user list-unit-files luxalgo-web.service >/dev/null 2>&1; then
+if command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files luxalgo-web.service >/dev/null 2>&1; then
   UNIT="luxalgo-web.service"
-elif systemctl --user list-unit-files traders-agent.service >/dev/null 2>&1; then
+elif command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files traders-agent.service >/dev/null 2>&1; then
   UNIT="traders-agent.service"
 fi
 
@@ -226,18 +270,22 @@ elif [[ -n "$UNIT" ]]; then
   echo "console not running -> $UNIT (start it before using the pane)"
 else
   echo "no user unit found — start the console yourself with ./console/start.sh"
+  echo "  macOS: keep it running across logins -> ./console/service-macos.sh install (docs/MACOS.md)"
 fi
 
 cat <<'EOF'
 
 Next:
-  1. start the console      ./console/start.sh          (needs python3 with `pip install mcp`)
-  2. reload the plugins     in Hermes Desktop: Ctrl+K -> "Reload desktop plugins"
-  3. enable it              Capabilities -> Plugins -> "Trader's Agent" -> on
+  1. start the console      ./console/start.sh          (needs python3.11+ with the `mcp` client;
+                                                        macOS one-time setup: docs/MACOS.md)
+  2. reload the plugins     in Hermes Desktop: Cmd+K -> "Reload desktop plugins"
+  3. enable it if it is off Settings -> Plugins -> "Trader's Agent" -> on
+                            (current Desktop builds load standalone plugins on by default)
   4. click the row          left sidebar -> "Trader's Agent"
   5. give the agent its tools (once):
        hermes mcp add traders-chart --command "$HOME/.hermes/bin/uvx" --args fastmcp run "<this folder>/console/mcp/server.py"
      (add --env LUXALGO_CONSOLE=http://127.0.0.1:<port> if the console is not on 8787; ./install.sh --doctor checks it)
+     (macOS without uvx: use "<repo>/.venv/bin/python <repo>/console/mcp/server.py"; docs/MACOS.md)
 
 The chart docks on the right, beside whatever chat you are already in — the row does not switch your
 session. If the pane cannot be shown, the page renders the console itself rather than an empty page.

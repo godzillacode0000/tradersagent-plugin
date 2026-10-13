@@ -2,9 +2,9 @@
 # Is the desktop half of Trader's Agent actually on?
 #
 # `install.sh --doctor` answers "are the files in place". This answers the question that actually
-# cost an afternoon: the app keeps its own enable/disable decision, desktop plugins ship OFF by
-# default, and an installed-but-disabled plugin looks identical to a broken one — no row, no pane,
-# no message. This reads that decision and says it out loud.
+# cost an afternoon: the app keeps its own enable/disable decision, and an installed-but-disabled
+# plugin looks identical to a broken one — no row, no pane, no message. This reads that decision
+# and says it out loud.
 #
 #   ./bin/is-enabled.sh          report only
 #   ./bin/is-enabled.sh --help
@@ -32,9 +32,10 @@ say "files      ok    $PLUGIN_DIR/plugin.js"
 
 # The app stores its decisions in the renderer's localStorage, which is a LevelDB (not a text file),
 # so a plain grep cannot answer this. Look for the id next to its value, tolerating LevelDB's
-# surrounding bytes.
+# surrounding bytes. macOS keeps its user data under ~/Library/Application Support/Hermes.
 STORE=""
-for candidate in "$HOME/.config/Hermes/Default/Local Storage/leveldb" \
+for candidate in "$HOME/Library/Application Support/Hermes/Local Storage/leveldb" \
+                 "$HOME/.config/Hermes/Default/Local Storage/leveldb" \
                  "$HOME/.config/hermes-desktop/Local Storage/leveldb" \
                  "$HOME/.config/Hermes/Local Storage/leveldb"; do
   [ -d "$candidate" ] && STORE="$candidate" && break
@@ -52,20 +53,22 @@ case "$HIT" in
   true)
     say "decision   on    the app has $ID enabled"
     say ""
-    say "Open it: click the Trader's Agent row in the sidebar, or Ctrl+K -> Trader's Agent."
+    say "Open it: click the Trader's Agent row in the sidebar (its pane docks beside the chat)."
     exit 0
     ;;
   false)
-    say "decision   OFF   the app has $ID disabled (this is the default for desktop plugins)"
+    say "decision   OFF   the app has $ID disabled"
     say ""
-    say "Nothing will appear until you switch it on — that is why an installed plugin can look broken."
-    say "Enable: Capabilities -> Plugins -> Trader's Agent, or Ctrl+K -> plugins."
+    say "Nothing will appear until you switch it on."
+    say "Enable: Settings -> Plugins -> Trader's Agent (or the palette: \"plugins\")."
     exit 1
     ;;
   *)
     say "decision   ?     $ID not found in the app's decision store"
     say ""
-    say "The app has never seen this plugin. Enable it: Capabilities -> Plugins -> Trader's Agent."
+    say "No stored decision — current Desktop builds load standalone plugins ENABLED by"
+    say "default, so this is the expected state before anything is toggled. Look for the"
+    say "\"Trader's Agent\" row in the left sidebar; clicking it docks the chart pane."
     exit 1
     ;;
 esac
