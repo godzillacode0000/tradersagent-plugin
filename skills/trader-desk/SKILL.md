@@ -32,7 +32,8 @@ If `chart_state` says the chart holds **no bars**, the market feed is unreachabl
 ## Step 1 to 4: read, place, one study, prove
 
 1. **Read before you write:** `chart_state` (symbol, timeframe, last, bars, studies), `chart_caps` (actions this page can
-   run), `chart_studies` (everything ON the chart, each with the reader that saw it; ask it before calling a chart clean).
+   run), `chart_studies` (everything ON the chart, each with the reader that saw it; ask it before calling a chart clean),
+   `chart_objects` (the drawings on the chart, back to front, with their ids).
 2. **Place:** `chart_set_market` (the answer has last price and bars; do not follow with `chart_state` to confirm).
 3. **One study at a time.** Take extras off first (`chart_remove_indicator(all=True)`; `chart_clear` removes only our
    overlay and paint layer). Then one native (`chart_add_indicator`) **or** one overlay (`chart_draw` for levels and
@@ -53,6 +54,8 @@ If `chart_state` says the chart holds **no bars**, the market feed is unreachabl
 | remove indicators | `chart_remove_indicator(all=True)` |
 | draw PDH/PDL / lines / boxes | `chart_draw` (Pine overlay), or `chart_drawing` for Vela's own editable objects (`op=types` lists 76) |
 | mark an event on the time axis | `chart_marks` |
+| what is drawn on the chart / clean up drawings | `chart_objects` (`op="list"` shows the ids; then `hide`/`lock`/`front`/`back`/`duplicate`/`delete` by `ids`, or by `type` — `delete` refuses an id that is not there, `all=True` takes the lot) |
+| the numbers at a candle (O/H/L/C, volume, each indicator) | `chart_data_window` — the chart's own readout at the cursor's bar (or the latest bar when the cursor is off the plot); it never recomputes a value |
 | change a script's setting ("length 50") | `chart_pine_inputs` for the labels, then `chart_apply_pine` / `chart_draw` with `inputs={"Length": 50}`; do not edit the Pine to change a default |
 | chart type, log scale, timezone, status line | `chart_view` (no value reads it) |
 | light / dark | `chart_theme`; `chart_palette` only reads the colours it wears |
@@ -131,6 +134,8 @@ says the tier is not running, tell the operator how to start it; do not try to s
 ## Hard stops
 
 - One indicator per chart: replace, never stack.
+- `chart_objects delete` asks before it wipes: a specific `ids` list, or `all=True` for the whole stack (the operator's
+  hand-drawn lines included). Quote the ids the answer says are gone — never "I removed them".
 - No claim without a screenshot. A frozen or hidden pane executes nothing: `chart_views` and the heartbeat `build`, then `chart_reload`.
 - Our overlay draws labels as plain text at (x, y); a label at the last bar runs off the right edge. Anchor diagnostics mid-pane.
 - Never open the console in your own browser while the operator's pane is live; a second view can take commands the pane never sees.

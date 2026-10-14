@@ -42,6 +42,8 @@ capabilities:
     - chart_drawing
     - chart_view
     - chart_marks
+    - chart_objects
+    - chart_data_window
     - chart_palette
     - chart_browse
     - broker_state

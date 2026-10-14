@@ -15,6 +15,10 @@ composer, not a second one.
     trader-chart edge ask "gapFill WHERE dayOfWeek = Tue" --symbol BTCUSDT
                                            Edge Stats: P(outcome | conditions) with N and a 95% interval
                                            (also: edge status | presets | fields | report | session | show | setup)
+    trader-chart objects [op] [--ids A,B] [--type hline] [--all]
+                                           the Object tree: the chart's drawings — list / select / hide / lock /
+                                           front / back / duplicate / delete / settings / price
+    trader-chart datawindow                the Data window: the chart's own readout (time, OHLC + volume, indicators)
 
 Exit codes: 0 = it worked · 1 = the chart refused or failed · 2 = no chart is open right now.
 `--json` prints the raw payload instead of prose.
@@ -777,6 +781,39 @@ def cmd_marks(args) -> int:
     return ok_code(result)
 
 
+def cmd_objects(args) -> int:
+    """The Object tree: what is ON the chart, and acting on it by id.
+
+    `objects list` reads the stack; `objects delete --type hline` removes every horizontal line;
+    `objects hide --ids fib-1,fib-2` hides two. Every op reads the stack back.
+    """
+    payload = {"action": "objects", "op": args.op}
+    if args.ids:
+        payload["ids"] = args.ids
+    if args.type:
+        payload["type"] = args.type
+    if args.value is not None:
+        payload["value"] = args.value
+    if args.all:
+        payload["all"] = True
+    result = send(args, payload)
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return ok_code(result)
+
+
+def cmd_datawindow(args) -> int:
+    """The Data window: the chart's own readout — time, OHLC + volume, one section per indicator."""
+    result = send(args, {"action": "datawindow", "op": args.op})
+    if args.json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(result.get("detail") or "no detail")
+    return ok_code(result)
+
+
 def cmd_wait(args) -> int:
     args._payload = {}
     result = wait(args.id, timeout=args.timeout)
@@ -928,6 +965,20 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--letter", default="", help="up to 2 characters on the glyph")
     s.add_argument("--id", default="", help="(remove) which mark")
     s.set_defaults(func=cmd_marks)
+
+    s = sub.add_parser("objects", help="the Object tree: the chart's drawings — list / select / hide / lock / reorder / delete")
+    s.add_argument("op", nargs="?", default="list",
+                   choices=["list", "select", "show", "hide", "lock", "unlock", "front", "back",
+                            "duplicate", "delete", "settings", "price"])
+    s.add_argument("--ids", default="", help="which drawings — a comma list of ids from `list`")
+    s.add_argument("--type", default="", help="every drawing of that kind: hline, trendline, box, fibretracement …")
+    s.add_argument("--value", default=None, help="(price) on / off instead of toggling")
+    s.add_argument("--all", action="store_true", help="(delete) every drawing, hand-drawn too")
+    s.set_defaults(func=cmd_objects)
+
+    s = sub.add_parser("datawindow", help="the Data window: the chart's own readout (time, OHLC + volume, indicators)")
+    s.add_argument("op", nargs="?", default="now", choices=["now"])
+    s.set_defaults(func=cmd_datawindow)
 
     s = sub.add_parser("edge", help="Edge Stats: how often did a setup actually work? (N + 95%% interval on every number)")
     es = s.add_subparsers(dest="edge_op", required=True)

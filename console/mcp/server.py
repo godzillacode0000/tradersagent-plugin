@@ -858,6 +858,50 @@ def chart_marks(op: str = "list", time: str = "", bars_ago: int = -1, title: str
     return _command("marks", **fields)
 
 
+@mcp.tool(annotations=_ann("The chart's drawings: list, select, hide, lock, reorder, delete", read_only=False, destructive=True))
+def chart_objects(op: str = "list", ids: str = "", type: str = "", value: str = "",
+                  all: bool = False) -> str:
+    """What is ON the chart, and acting on it by id — Vela's **Object tree** as a door.
+
+    `op`: list | select | show | hide | lock | unlock | front | back | duplicate | delete | settings |
+    price. `list` (the default, and the read-only op) reports every drawing back-to-front — id, type,
+    text, hidden/locked, z — then the indicators, then whether the base price series is shown.
+
+    What an op acts on: `ids` (a comma list of ids from `list`), or `type` (any of Vela's drawing
+    types — `hline`, `trendline`, `box`, `fibretracement`, …) for every drawing of that kind, or
+    neither for all of them. `delete` refuses ids that are not on the chart, and `all=True` deletes
+    every drawing (hand-drawn too — one undo restores them). `settings` opens ONE drawing's own popup
+    so the operator can edit it, `price` hides/shows the candles themselves (`value` = on/off, absent
+    toggles).
+
+    Every op READS THE STACK BACK and reports what the chart holds afterwards — Vela answers several
+    of these calls with a clean return that removes nothing, so "I asked" is never the answer.
+    """
+    fields: dict = {"op": op}
+    for name, val in (("ids", ids), ("type", type), ("value", value)):
+        if str(val or "").strip():
+            fields[name] = str(val).strip()
+    if all:
+        fields["all"] = True
+    return _command("objects", **fields)
+
+
+@mcp.tool(annotations=_ann("The Data window readout: the chart's own values", read_only=True))
+def chart_data_window(op: str = "now") -> str:
+    """The **Data window**, as a door: the chart's own readout, section by section.
+
+    Time (the bar's date and time in the chart's time zone), Price (open/high/low/close and volume,
+    formatted on the pane's scale) and one section per mounted indicator — the same numbers Vela's
+    Data window panel prints, read from `renderer.dataWindowReadout()`. Nothing here recomputes a
+    value: an indicator's rows are the chart's.
+
+    Which bar: the one under the cursor, or the **latest bar** when the cursor is off the plot
+    (Vela's own rule) — the Time section says which, so this never guesses. `op` is `now` only; an
+    arbitrary bar cannot be asked for.
+    """
+    return _command("datawindow", op=str(op or "now"))
+
+
 @mcp.tool(annotations=_ann("Console theme (light / dark)", read_only=False, destructive=False))
 def chart_theme(theme: str = "") -> str:
     """Read or set the console's theme: 'light', 'dark', or '' to report what is worn now.

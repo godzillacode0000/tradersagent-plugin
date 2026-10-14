@@ -1,18 +1,24 @@
-/* Phase 7 (3 Oct): the Vela features that only a hand could reach, as three agent doors.
+/* Phase 7 (3 Oct): the Vela features that only a hand could reach, as agent doors.
+   Phase 8 (13 Oct): the Object tree and the Data window — the rail's two panels — join them.
 
-     TaVela.drawing(cmd)  Vela's own drawing tools (76 types: trend line, channel, fib, Gann, Elliott,
-                          XABCD, pitchfork, box, text …) — real objects the operator can drag afterwards
-     TaVela.view(cmd)     chart type, price scale, countdown, time zone, session, watermark, status line,
-                          grid sync, the ? shortcuts panel, the alerts inbox
-     TaVela.marks(cmd)    event marks on the time axis, in one named group
+     TaVela.drawing(cmd)     Vela's own drawing tools (76 types: trend line, channel, fib, Gann, Elliott,
+                             XABCD, pitchfork, box, text …) — real objects the operator can drag afterwards
+     TaVela.view(cmd)        chart type, price scale, countdown, time zone, session, watermark, status line,
+                             grid sync, the ? shortcuts panel, the alerts inbox
+     TaVela.marks(cmd)       event marks on the time axis, in one named group
+     TaVela.objects(cmd)     the Object tree: what is ON the chart (drawings, then indicators) — list,
+                             select, show/hide, lock, front/back, duplicate, delete, a drawing's popup
+     TaVela.datawindow(cmd)  the Data window: the chart's own readout at the cursor (or the latest bar) —
+                             time, OHLC + volume, one section per indicator
 
    The bridge (chart-bridge.js) only hands the command over; the logic lives here so the bridge stays
    small. This module paints nothing of its own and keeps no timers: a door that changes the chart goes
    through Vela's own setters, then READS THE VALUE BACK — a write is never reported blind (the Phase 1
    lesson: Vela returns a half-made drawing for one anchor on a trend line, and it paints nothing).
 
-   Honest limit: Vela has no call that CREATES a price alert. Its inbox only collects the alerts an
-   indicator raises with alertcondition(); the `alerts` setting reads and clears that inbox. */
+   Honest limits: Vela has no call that CREATES a price alert — its inbox only collects the alerts an
+   indicator raises with alertcondition(), and the `alerts` setting reads and clears that inbox. The
+   Data window describes the cursor's bar, so an arbitrary-bar read is not offered. */
 (function () {
   'use strict';
 
@@ -445,5 +451,249 @@
     return { ok: !!made, detail: made ? 'mark ' + id + ' placed · it is data, so it clears when the symbol or timeframe changes' : 'Vela did not keep the mark', data: made ? { id, time, glyph } : null };
   }
 
-  window.TaVela = { drawing, view, marks, ANCHORS, SETTINGS: Object.keys(SETTINGS), GROUP };
+  /* ── door 4: objects — Vela's Object tree, as a door ───────────────────────────────────────────
+     The rail's Object tree lists what is ON the chart — the operator's drawings in paint order, then
+     the indicators — and can hide, lock, reorder, duplicate and delete a row. The agent had no door
+     to any of it, and acting blind here is worse than not acting: Vela returns cleanly from calls
+     that remove nothing (the same class of silent no-op that cost a cycle on indicators), so every
+     op below READS THE STACK BACK and reports what the chart holds afterwards. */
+
+  const OBJECT_OPS = ['list', 'select', 'show', 'hide', 'lock', 'unlock', 'front', 'back',
+                      'duplicate', 'delete', 'settings', 'price'];
+
+  function drawingRows(c) {
+    return (c.drawings.all() || []).map((d) => ({
+      id: d.id,
+      type: d.type,
+      label: (d.text && d.text.value) ? String(d.text.value) : '',
+      visible: d.visible !== false,
+      locked: !!d.locked,
+      z: typeof d.zIndex === 'number' ? d.zIndex : null,
+      pane: d.paneId == null ? null : d.paneId,
+      anchors: (d.anchors || []).length,
+    }));
+  }
+
+  function objectLine(r) {
+    const bits = [r.id, r.type];
+    if (r.label) bits.push('"' + r.label.slice(0, 24) + '"');
+    if (!r.visible) bits.push('hidden');
+    if (r.locked) bits.push('locked');
+    bits.push(r.anchors + ' anchor' + (r.anchors === 1 ? '' : 's'));
+    return bits.join(' ');
+  }
+
+  /* Which drawings an op acts on: `type` (any of the 76, by name or alias), `ids` (a comma list or
+     an array), or neither for everything. An id that is not on the chart is REFUSED rather than
+     ignored — a typo that silently does nothing reads as success. A single id travels as
+     `drawing_id`, never `id`: the backend stamps the command's own number into `id`. */
+  function objectTargets(c, command) {
+    const rows = drawingRows(c);
+    let want = rows;
+    if (command.type != null && String(command.type).trim() !== '') {
+      const type = resolveType(command.type);
+      if (!type) throw new Error("unknown drawing type '" + command.type + "' — " + (suggest(command.type).join(', ') || 'see `objects list`'));
+      want = want.filter((r) => r.type === type);
+    }
+    const raw = (command.ids != null && command.ids !== '') ? command.ids
+      : ((command.drawing_id != null && command.drawing_id !== '') ? command.drawing_id : '');
+    const listed = (Array.isArray(raw) ? raw : String(raw).split(',')).map((s) => String(s).trim()).filter(Boolean);
+    if (listed.length) {
+      const known = new Set(rows.map((r) => r.id));
+      const missing = listed.filter((i) => !known.has(i));
+      if (missing.length) throw new Error('no drawing ' + missing.join(', ') + ' on the chart — `objects list` shows the ids');
+      want = want.filter((r) => listed.includes(r.id));
+    }
+    return { rows, want };
+  }
+
+  async function objects(command) {
+    const c = activeChart();
+    if (!c) throw new Error('no chart on this page');
+    const D = c.drawings;
+    if (!D || !D.supported) return fail("this renderer keeps no drawings (Vela's `drawings` capability is off)");
+    const op = String(command.op || 'list').toLowerCase();
+    if (!OBJECT_OPS.includes(op)) return fail("unknown objects op '" + op + "' — " + OBJECT_OPS.join(', '));
+
+    const priceShown = () => c.renderer.get('candleVisible') !== false;
+    let rows, want;
+    try { ({ rows, want } = objectTargets(c, command)); } catch (err) { return fail(String(err.message || err)); }
+
+    if (op === 'list') {
+      const handles = (typeof c.indicators === 'function' ? c.indicators() : null) || [];
+      const head = rows.length
+        ? rows.length + ' drawing(s), back to front: ' + rows.slice(0, 20).map(objectLine).join(' · ') +
+          (rows.length > 20 ? ' … ' + (rows.length - 20) + ' more' : '')
+        : 'no drawings on the chart';
+      const ind = handles.length
+        ? ' | ' + handles.length + ' indicator(s) (chart_studies reads those): ' +
+          handles.slice(0, 10).map((h) => h.title || h.nativeType || h.id).join(', ')
+        : ' | no indicators mounted';
+      return {
+        ok: true,
+        detail: head + ind + ' | price series ' + (priceShown() ? 'visible' : 'hidden'),
+        data: { drawings: rows, indicators: handles.map((h) => ({ id: h.id, title: h.title || null, nativeType: h.nativeType || null, visible: h.visible !== false })), price_visible: priceShown() },
+      };
+    }
+
+    /* `price` is the object tree's eye on the candles themselves: hide the base series and every
+       overlay keeps drawing (the pane rescales to them). */
+    if (op === 'price') {
+      if (typeof c.renderer.set !== 'function') return fail('this renderer has no price-series switch');
+      const asked = asBool(command.value);
+      const v = asked === null ? !priceShown() : asked;
+      c.renderer.set('candleVisible', v);
+      const now = priceShown();
+      const ws = (window.__wsApp || {}).ws;
+      if (ws && typeof ws.markStateDirty === 'function') ws.markStateDirty();
+      return { ok: now === v, detail: 'price series → ' + (now ? 'shown' : 'hidden') + (now === v ? '' : ' (the chart still reports ' + (now ? 'visible' : 'hidden') + ')'), data: { visible: now } };
+    }
+
+    if (!want.length) {
+      return fail((command.type || command.ids ? 'nothing matches that filter — ' : 'nothing matches — ') +
+                  rows.length + ' drawing(s) on the chart');
+    }
+    const ids = want.map((r) => r.id);
+
+    if (op === 'select') {
+      D.select(ids);
+      return { ok: true, detail: 'selected ' + ids.length + ' drawing(s): ' + ids.join(', ') + ' — Vela highlights them and shows their toolbar', data: { selected: ids } };
+    }
+
+    if (op === 'settings') {
+      if (ids.length !== 1) return fail('settings opens ONE drawing\'s popup — give one id (got ' + ids.length + ')');
+      if (typeof D.openSettings !== 'function') return fail('this Vela build has no openSettings call');
+      D.openSettings(ids[0]);
+      return { ok: true, detail: 'opened the settings popup of ' + ids[0] + ' — the operator edits it there', data: { id: ids[0] } };
+    }
+
+    if (op === 'show' || op === 'hide') {
+      const visible = op === 'show';
+      for (const id of ids) D.show(id, visible);
+      const after = drawingRows(c).filter((r) => ids.includes(r.id));
+      const stuck = after.filter((r) => r.visible !== visible).map((r) => r.id);
+      return {
+        ok: stuck.length === 0,
+        detail: stuck.length ? stuck.join(', ') + ' did not take: ' + after.map(objectLine).join(' · ')
+                             : ids.length + ' drawing(s) → ' + (visible ? 'shown' : 'hidden'),
+        data: { ids, visible },
+      };
+    }
+
+    if (op === 'lock' || op === 'unlock') {
+      const locked = op === 'lock';
+      for (const id of ids) D.lock(id, locked);
+      const after = drawingRows(c).filter((r) => ids.includes(r.id));
+      const stuck = after.filter((r) => r.locked !== locked).map((r) => r.id);
+      return {
+        ok: stuck.length === 0,
+        detail: stuck.length ? stuck.join(', ') + ' did not take: ' + after.map(objectLine).join(' · ')
+                             : ids.length + ' drawing(s) ' + (locked ? 'locked (Vela no longer drags them)' : 'unlocked'),
+        data: { ids, locked },
+      };
+    }
+
+    if (op === 'front' || op === 'back') {
+      for (const id of ids) { if (op === 'front') D.bringToFront(id); else D.sendToBack(id); }
+      const after = drawingRows(c);
+      const mine = after.filter((r) => ids.includes(r.id));
+      const others = after.filter((r) => !ids.includes(r.id));
+      const edge = op === 'front' ? Math.max(0, ...others.map((r) => r.z == null ? -Infinity : r.z)) : Math.min(Infinity, ...others.map((r) => r.z == null ? Infinity : r.z));
+      const ok = mine.every((r) => r.z != null && (op === 'front' ? r.z >= edge : r.z <= edge));
+      return {
+        ok,
+        detail: ids.length + ' drawing(s) sent ' + (op === 'front' ? 'in front of every other drawing and the candles' : 'behind the candles and the indicators') +
+                ' · z now ' + mine.map((r) => r.z).join(', '),
+        data: { ids, z: mine.map((r) => r.z) },
+      };
+    }
+
+    if (op === 'duplicate') {
+      const before = new Set(rows.map((r) => r.id));
+      const made = [];
+      for (const id of ids) {
+        D.clone(id);
+        const fresh = drawingRows(c).filter((r) => !before.has(r.id));
+        fresh.forEach((r) => { before.add(r.id); made.push(r.id); });
+      }
+      return {
+        ok: made.length === ids.length,
+        detail: made.length ? 'duplicated ' + made.length + ' drawing(s): ' + made.join(', ') +
+                (made.length < ids.length ? ' (Vela kept only ' + made.length + ' of ' + ids.length + ')' : '')
+                             : 'Vela duplicated nothing — the originals are unchanged',
+        data: { ids, copies: made },
+      };
+    }
+
+    /* delete — `all` takes the whole stack, hand-drawn too, so it must be asked for; either way
+       one undo step (removeMany), and the answer is the ids that are gone. */
+    if (op === 'delete') {
+      const whole = command.all === true || String(command.all).toLowerCase() === 'true' || String(command.all) === '1';
+      const targets = whole ? rows.map((r) => r.id) : ids;
+      if (targets.length === 1) D.remove(targets[0]); else D.removeMany(targets);
+      const left = drawingRows(c).map((r) => r.id);
+      const gone = targets.filter((id) => !left.includes(id));
+      const stuck = targets.filter((id) => left.includes(id));
+      return {
+        ok: stuck.length === 0,
+        detail: stuck.length ? 'removed ' + gone.length + ' of ' + targets.length + ' — still on the chart: ' + stuck.join(', ')
+                             : 'removed ' + gone.length + ' drawing(s) · ' + left.length + ' left on the chart' +
+                               (gone.length && !left.length ? ' (one undo restores them)' : ''),
+        data: { removed: gone, remaining: left },
+      };
+    }
+
+    return fail("unknown objects op '" + op + "' — " + OBJECT_OPS.join(', '));   // unreachable: OBJECT_OPS vets `op` first
+  }
+
+  /* ── door 5: the Data window ───────────────────────────────────────────────────────────────────
+     Vela's Data window panel reads the renderer once per repaint and prints Time, then Price
+     (O/H/L/C + volume), then one section per indicator. `renderer.dataWindowReadout()` IS that
+     readout, so this door hands the agent the chart's own numbers — nothing here recomputes a
+     value. Vela's rule for WHICH bar: the one under the cursor, or the latest bar when the cursor
+     is off the plot; the Time section names the bar either way, so the answer never guesses. */
+
+  const DW_LABELS = { o: 'Open', h: 'High', l: 'Low', c: 'Close', vol: 'Volume' };
+
+  function readoutSections(r) {
+    const out = [];
+    if (r.date || r.time) {
+      out.push({ title: 'Time', lines: [{ label: 'Date', value: r.date || '' }, { label: 'Time', value: r.time || '' }] });
+    }
+    const o = r.ohlc;
+    if (o) {
+      const lines = ['o', 'h', 'l', 'c'].map((k) => ({ label: DW_LABELS[k], value: o[k] }));
+      if (o.vol !== undefined && o.vol !== null) lines.push({ label: DW_LABELS.vol, value: o.vol });
+      out.push({ title: 'Price', lines, up: o.up !== false });
+    }
+    for (const g of (r.groups || [])) {
+      out.push({ title: g.name, lines: (g.rows || []).map((x) => ({ label: x.label, value: x.value, color: x.color || '' })) });
+    }
+    return out;
+  }
+
+  async function datawindow(command) {
+    const c = activeChart();
+    if (!c) throw new Error('no chart on this page');
+    const R = c.renderer;
+    if (!R || typeof R.dataWindowReadout !== 'function') throw new Error('this page has no renderer readout (older Vela) — reload the chart');
+    const op = String(command.op || 'now').toLowerCase();
+    if (op !== 'now' && op !== 'read') return fail("unknown datawindow op '" + op + "' — now (the bar under the cursor, or the latest bar)");
+
+    const readout = R.dataWindowReadout();
+    if (!readout || (!readout.ohlc && !(readout.groups || []).length && !readout.date)) {
+      return fail('the renderer has no readout yet — the chart may still be loading its bars');
+    }
+    const sections = readoutSections(readout);
+    const stamp = [readout.date, readout.time].filter(Boolean).join(' ');
+    const line = (s) => s.title + ': ' + s.lines.map((l) => l.label + ' ' + l.value).join(' · ');
+    return {
+      ok: true,
+      detail: 'Data window' + (stamp ? ' · ' + stamp : '') + ' | ' + sections.map(line).join(' | ') +
+              ' | Vela reads the bar under the cursor, or the latest bar when the cursor is off the plot',
+      data: { date: readout.date || '', time: readout.time || '', ohlc: readout.ohlc || null, sections },
+    };
+  }
+
+  window.TaVela = { drawing, view, marks, objects, datawindow, ANCHORS, SETTINGS: Object.keys(SETTINGS), GROUP };
 })();

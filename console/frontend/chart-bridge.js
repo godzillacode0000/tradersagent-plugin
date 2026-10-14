@@ -51,6 +51,8 @@
                    'drawing',
                    'view',
                    'marks',
+                   'objects',
+                   'datawindow',
                    'edge',
                    'overlay',];
 
@@ -1559,6 +1561,19 @@
         case 'marks': {
           if (!window.TaVela) throw new Error('this page has no vela-doors module (older frontend) — reload the chart');
           Object.assign(out, await window.TaVela.marks(command));
+          break;
+        }
+        /* Phase 8 (13 Oct): the rail's two panels as doors — the Object tree (what is on the chart,
+           and acting on it by id) and the Data window (the renderer's own readout). Same hand-over:
+           the logic is in vela-doors.js, so this bridge only passes the command on. */
+        case 'objects': {
+          if (!window.TaVela) throw new Error('this page has no vela-doors module (older frontend) — reload the chart');
+          Object.assign(out, await window.TaVela.objects(command));
+          break;
+        }
+        case 'datawindow': {
+          if (!window.TaVela) throw new Error('this page has no vela-doors module (older frontend) — reload the chart');
+          Object.assign(out, await window.TaVela.datawindow(command));
           break;
         }
         case 'edge': {

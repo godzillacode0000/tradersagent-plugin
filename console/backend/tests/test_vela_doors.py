@@ -54,9 +54,9 @@ class TheModule(unittest.TestCase):
         self.assertIn('src="./vela-doors.js"', self.html)
         self.assertLess(self.html.index("vela-doors.js"), self.html.index("chart-bridge.js"))
 
-    def test_it_is_one_global_with_three_doors(self):
+    def test_it_is_one_global_with_five_doors(self):
         self.assertIn("window.TaVela", self.js)
-        for door in ("drawing", "view", "marks"):
+        for door in ("drawing", "view", "marks", "objects", "datawindow"):
             self.assertRegex(self.js, rf"\b{door}\b\s*[:(]")
 
     def test_it_keeps_the_pane_quiet(self):
@@ -166,15 +166,109 @@ class TheMarksDoor(unittest.TestCase):
         self.assertIn("GROUP.id", body)
 
 
+class TheObjectsDoor(unittest.TestCase):
+    """Phase 8 (13 Oct): the rail's Object tree as a door. The panel is the model — the same rows
+    (drawings in paint order, then the indicators), the same row actions (hide, lock, front/back,
+    duplicate, remove) — so a call this door makes is one the operator could have made by hand."""
+
+    js = _read(FRONT / "vela-doors.js")
+    body = None
+
+    def _body(self):
+        return self.js.split("async function objects(", 1)[1].split("\n  /* ── door 5", 1)[0]
+
+    def test_it_covers_the_panels_row_actions(self):
+        for op in ("'list'", "'select'", "'show'", "'hide'", "'lock'", "'unlock'", "'front'", "'back'",
+                   "'duplicate'", "'delete'", "'settings'", "'price'"):
+            self.assertIn(op, self._body(), f"objects op {op} missing")
+
+    def test_it_walks_velas_own_drawing_stack(self):
+        # rows come from ONE reader of the ledger, not from several guesses about it
+        self.assertIn("c.drawings.all()", self.js)      # the ledger itself
+        self.assertIn("drawingRows(c)", self._body())   # and every op reads through it
+
+    def test_every_mutating_op_reads_the_stack_back(self):
+        """The reason this door exists at all: Vela answers several removal calls with a clean
+        return that removes nothing, so the answer is the stack afterwards, never the request."""
+        body = self._body()
+        for op in ("show", "hide", "lock", "unlock", "duplicate", "delete"):
+            self.assertIn(op, body)
+        self.assertGreaterEqual(body.count("drawingRows(c)"), 4)
+        self.assertIn("stuck", body)                   # names what did NOT take
+
+    def test_it_calls_velas_own_methods(self):
+        # Each one is a method the vendored bundle really states (guarded by the class-list test below).
+        for call in ("D.select(", "D.show(", "D.lock(", "D.bringToFront(", "D.sendToBack(",
+                     "D.clone(", "D.remove(", "D.removeMany(", "D.openSettings("):
+            self.assertIn(call, self.js)
+
+    def test_it_never_asks_vela_for_a_method_the_bundle_lacks(self):
+        """Drift guard, like the anchor table: a Vela upgrade that renames one of these must fail
+        here rather than at the operator's chart. The façade lives in a different chunk from the
+        drawing classes, so the whole vendored bundle is the evidence, not one file."""
+        src = "".join(_read(p) for p in sorted((FRONT / "vendor" / "vela" / "dist").glob("*.js")))
+        for method in ("removeMany", "openSettings", "bringToFront", "sendToBack",
+                       "setVisible", "setLocked", "duplicate", "clone"):
+            self.assertIn(method, src, f"the vendored Vela has no drawings.{method} any more")
+
+    def test_an_id_that_is_not_on_the_chart_is_refused(self):
+        # the refusal lives in the shared selector, so every op inherits it
+        self.assertIn("no drawing ", self.js)
+        self.assertIn("missing.length", self.js)
+
+    def test_the_price_series_switch_is_the_renderers_own_setting(self):
+        self.assertIn("'candleVisible'", self._body())
+
+    def test_delete_all_is_gated_and_one_undo_step(self):
+        body = self._body()
+        self.assertIn("command.all", body)
+        self.assertIn("D.removeMany(", body)
+
+    def test_it_reports_the_ids_it_acted_on(self):
+        self.assertIn("objectLine", self._body())
+
+
+class TheDataWindowDoor(unittest.TestCase):
+    """Phase 8 (13 Oct): the Data window as a door — the renderer's own readout, not a recomputation."""
+
+    js = _read(FRONT / "vela-doors.js")
+
+    def _body(self):
+        return self.js.split("async function datawindow(", 1)[1].split("\n  window.TaVela", 1)[0]
+
+    def test_it_reads_velas_own_readout(self):
+        self.assertIn("dataWindowReadout()", self._body())
+
+    def test_the_readout_really_exists_on_the_bundle_renderer(self):
+        src = "".join(_read(p) for p in sorted((FRONT / "vendor" / "vela" / "dist").glob("*.js")))
+        self.assertIn("getDataWindowReadout", src)
+        self.assertIn("hoverLogical", src)             # the cursor's bar, Vela's own rule
+
+    def test_it_prints_the_three_sections_the_panel_prints(self):
+        self.assertIn("'Time'", self.js)
+        self.assertIn("'Price'", self.js)
+        self.assertIn("volume", self.js.lower())
+        self.assertIn("groups", self._body())          # one section per indicator
+        self.assertIn("readoutSections(", self._body())
+
+    def test_it_never_recomputes_a_value(self):
+        body = self._body()
+        for forbidden in ("chartBars(", "Number(", "parseFloat", "toFixed"):
+            self.assertNotIn(forbidden, body)
+
+    def test_an_empty_readout_is_reported_not_dressed_up(self):
+        self.assertIn("no readout", self._body())
+
+
 class TheBridgeDelegates(unittest.TestCase):
     bridge = _read(FRONT / "chart-bridge.js")
 
-    def test_the_page_publishes_the_three_actions(self):
-        for action in ("'drawing'", "'view'", "'marks'"):
+    def test_the_page_publishes_the_five_actions(self):
+        for action in ("'drawing'", "'view'", "'marks'", "'objects'", "'datawindow'"):
             self.assertIn(action, self.bridge.split("const ACTIONS", 1)[1].split("];", 1)[0])
 
     def test_each_case_hands_over_to_the_module(self):
-        for action in ("drawing", "view", "marks"):
+        for action in ("drawing", "view", "marks", "objects", "datawindow"):
             body = self.bridge.split(f"case '{action}': {{", 1)[1].split("\n        case ", 1)[0]
             self.assertIn(f"window.TaVela.{action}(", body)
 
@@ -225,7 +319,7 @@ class TheServerFallback(unittest.TestCase):
 
     def test_the_fallback_allow_list_has_the_new_actions(self):
         block = self.server.split("CHART_ACTIONS_FALLBACK = {", 1)[1].split("}", 1)[0]
-        for action in ("drawing", "view", "marks"):
+        for action in ("drawing", "view", "marks", "objects", "datawindow"):
             self.assertIn(f'"{action}"', block)
 
 
@@ -234,20 +328,33 @@ class TheMcpDoors(unittest.TestCase):
     cli = _read(ROOT / "console" / "bin" / "trader-chart")
 
     def test_each_door_is_a_tool_that_sends_its_action(self):
-        for tool, action in (("chart_drawing", "drawing"), ("chart_view", "view"), ("chart_marks", "marks")):
+        for tool, action in (("chart_drawing", "drawing"), ("chart_view", "view"), ("chart_marks", "marks"),
+                             ("chart_objects", "objects"), ("chart_data_window", "datawindow")):
             self.assertIn(f"def {tool}(", self.mcp)
             body = self.mcp.split(f"def {tool}(", 1)[1].split("\n@mcp.tool", 1)[0]
             self.assertIn(f'_command("{action}"', body)
 
     def test_each_is_declared_a_chart_mutation(self):
-        for tool in ("chart_drawing", "chart_view", "chart_marks"):
+        for tool in ("chart_drawing", "chart_view", "chart_marks", "chart_objects"):
             head = self.mcp.split(f"def {tool}(", 1)[0].rsplit("@mcp.tool", 1)[1]
             self.assertIn("read_only=False", head)
 
+    def test_the_data_window_is_declared_read_only(self):
+        head = self.mcp.split("def chart_data_window(", 1)[0].rsplit("@mcp.tool", 1)[1]
+        self.assertIn("read_only=True", head)
+
     def test_the_cli_can_drive_each(self):
-        for name in ("drawing", "view", "marks"):
+        for name in ("drawing", "view", "marks", "objects", "datawindow"):
             self.assertIn(f'add_parser("{name}"', self.cli)
             self.assertIn(f"def cmd_{name}(", self.cli)
+
+    def test_objects_never_sends_the_reserved_id_field(self):
+        body = self.mcp.split("def chart_objects(", 1)[1].split("\n@mcp.tool", 1)[0]
+        self.assertIn('("ids", ids)', body)
+        self.assertNotIn('"id"', body)
+        cli = self.cli.split("def cmd_objects(", 1)[1].split("\ndef ", 1)[0]
+        self.assertIn('payload["ids"]', cli)
+        self.assertNotIn('payload["id"]', cli)
 
     def test_the_tool_tells_the_agent_about_the_alert_limit(self):
         body = self.mcp.split("def chart_view(", 1)[1].split("\n@mcp.tool", 1)[0]
