@@ -66,7 +66,15 @@ Then in Hermes Desktop:
 
 1. `Ctrl+K` → **Reload desktop plugins**
 2. **Capabilities → Plugins** → enable **Trader's Agent**
-3. Click **Trader's Agent** in the left sidebar — the chart docks beside your conversation
+3. Click **Trader's Agent** in the left sidebar — the chart docks on the **right**, beside your
+   conversation (the plugin declares that position as a standing invariant, so the row never needs
+   arranging by hand)
+
+The agent's chart tools are registered by `install.sh` itself (the `traders-chart` MCP server).
+`./bin/register-mcp.sh` does that one job — it resolves the interpreter the same way `start.sh`
+does (repo `.venv`, then a `python3.11+` with the `mcp` client, then `uvx`), prints the exact
+command with `--print`, and leaves an existing registration alone unless you ask for `--force`.
+A new session (or `/reload-mcp`) picks the tools up; `./install.sh --doctor` checks the wiring.
 
 **Step 2 is not optional, and it is the step that gets skipped.** Hermes Desktop ships every desktop
 plugin **disabled by default**: an installed plugin is inventoried but contributes nothing — no
@@ -203,11 +211,12 @@ frequencies are not predictions and not advice.
 ### Letting your agent drive the chart
 
 Two ways in, and they share one path underneath. **Preferred: the MCP server** — Hermes (or any MCP
-client) gets the chart as real tools:
+client) gets the chart as real tools. `./install.sh` already ran this step; do it by hand only when
+you skipped it (`--no-mcp`) or want a different interpreter:
 
 ```bash
-hermes mcp add traders-chart --command "$HOME/.hermes/bin/uvx" \
-    --args fastmcp run "$PWD/console/mcp/server.py"      # run this from the repo root
+./bin/register-mcp.sh                  # the one job: register traders-chart (idempotent)
+./bin/register-mcp.sh --print          # show the exact command for THIS machine first
 hermes mcp test traders-chart          # start a new session afterwards
 ```
 
@@ -233,6 +242,8 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_drawing` | draw with Vela's own **drawing tools** — 76 types (trend line, channel, fib, Gann, Elliott, XABCD …), placed by `bars_ago` + price, real objects the operator can drag; a wrong anchor count is refused before drawing |
 | `chart_view` | read or set a **view setting** — chart type, log / invert / percent scale, countdown, time zone, session, watermark, status line, grid sync, the `?` shortcuts panel; every write is read back. Vela cannot *create* a price alert, so `alerts` only reads / clears the indicator-alert inbox |
 | `chart_marks` | event **marks** on the time axis, in one "Trader's Agent" group (`clear` only touches its own) |
+| `chart_objects` | the **Object tree**: what is ON the chart (drawings back-to-front, then the indicators) and acting on it by id — `list`/`select`/`show`/`hide`/`lock`/`unlock`/`front`/`back`/`duplicate`/`delete`/`settings`/`price`, by `ids` or by `type`; every op reads the stack back |
+| `chart_data_window` | the **Data window**: the chart's own readout — time, OHLC + volume, one section per indicator — at the cursor's bar (or the latest bar when the cursor is off the plot) |
 | `chart_browse` | open the catalogue in the drawer (optional `family`) |
 | `broker_state` | the paper (simulated Binance) account: cash, equity, positions, orders waiting for you |
 | `broker_propose` | propose a paper order — it only puts an Approve/Reject card on the chart; the agent cannot approve it |
@@ -333,7 +344,8 @@ console/bin/       agent-side CLIs (trader-chart, library-indicator)
 tools/             verify-plugin.mjs — runs a plugin in Node against SDK stubs (used by CI)
 tools/             verify-plugin-hook.mjs — the resolve hook it registers; only the three allowed specifiers resolve
 tools/             verify-plugin-selftest.mjs — crafted-copy battery for the import gate (evasions fail, lookalikes pass)
-install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/
+install.sh         installs the plugin into $HERMES_HOME/desktop-plugins/, copies the skill, registers the MCP server
+bin/               register-mcp.sh (the MCP registration on its own) · is-enabled.sh (is the plugin switched on?)
 ```
 
 ## Configuration

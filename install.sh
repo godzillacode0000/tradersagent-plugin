@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Install the Trader's Agent plugin into Hermes Desktop.
 #
-#   ./install.sh                    copy plugin/ -> $HERMES_HOME/desktop-plugins/traders-desk/ and the desk skill
-#   ./install.sh --doctor           check interpreter, console port, service, plugin folder
+#   ./install.sh                    copy plugin/ -> $HERMES_HOME/desktop-plugins/traders-desk/, the desk
+#                                   skill, and register the chart's MCP server with Hermes (idempotent)
+#   ./install.sh --no-mcp           skip the MCP registration (register it later: ./bin/register-mcp.sh)
+#   ./install.sh --doctor           check interpreter, console port, service, plugin folder, MCP server
 #   ./install.sh --uninstall        remove the installed plugin and the desk skill (prints what is left to undo)
 #   ./install.sh --with-backtest    also install the optional vectorbt backtesting engine
 #                                   into ~/.local/share/traders-agent/bt/venv (~840 MB, once)
@@ -40,7 +42,7 @@ CONSOLE_URL="${LUXALGO_CONSOLE:-http://127.0.0.1:$PORT}"
 
 usage() { sed -n '2,/^# listening on/p' "$0" | sed 's/^# \{0,1\}//'; }
 
-DOCTOR=0 UNINSTALL=0 WITH_BT=0 WITH_EDGE=0
+DOCTOR=0 UNINSTALL=0 WITH_BT=0 WITH_EDGE=0 NO_MCP=0
 for arg in "$@"; do
   case "$arg" in
     -h|--help)       usage; exit 0 ;;
@@ -48,6 +50,7 @@ for arg in "$@"; do
     --uninstall)     UNINSTALL=1 ;;
     --with-backtest) WITH_BT=1 ;;
     --with-edge)     WITH_EDGE=1 ;;
+    --no-mcp)        NO_MCP=1 ;;
     --vendor)        echo "install.sh: --vendor was removed (it rewrote committed files without checking them); see console/frontend/vendor/VENDORING.md" >&2; exit 2 ;;
     *)               echo "install.sh: unknown option '$arg'" >&2; usage >&2; exit 2 ;;
   esac
@@ -273,6 +276,19 @@ else
   echo "  macOS: keep it running across logins -> ./console/service-macos.sh install (docs/MACOS.md)"
 fi
 
+# Give the agent its chart tools (once). This used to be a README line carrying machine-specific
+# paths — `$HOME/.hermes/bin/uvx` (absent on macOS without uv) or the repo's venv python — and it is
+# the step a new install most often stalled on. bin/register-mcp.sh resolves the interpreter the
+# same way start.sh does and is idempotent, because the registration is also the operator's own
+# (a re-run must not silently repoint an interpreter they chose).
+if [[ $NO_MCP -eq 0 ]]; then
+  echo
+  if ! "$HERE/bin/register-mcp.sh"; then
+    echo "warning: could not register the MCP server yet — run ./bin/register-mcp.sh once the" >&2
+    echo "         console's python is set up (./install.sh --no-mcp skips this step)" >&2
+  fi
+fi
+
 cat <<'EOF'
 
 Next:
@@ -282,10 +298,12 @@ Next:
   3. enable it if it is off Settings -> Plugins -> "Trader's Agent" -> on
                             (current Desktop builds load standalone plugins on by default)
   4. click the row          left sidebar -> "Trader's Agent"
-  5. give the agent its tools (once):
-       hermes mcp add traders-chart --command "$HOME/.hermes/bin/uvx" --args fastmcp run "<this folder>/console/mcp/server.py"
-     (add --env LUXALGO_CONSOLE=http://127.0.0.1:<port> if the console is not on 8787; ./install.sh --doctor checks it)
-     (macOS without uvx: use "<repo>/.venv/bin/python <repo>/console/mcp/server.py"; docs/MACOS.md)
+
+The chart's tools were registered with Hermes above (`traders-chart`), unless this run said
+otherwise — they appear in a NEW agent session or after /reload-mcp. To see or redo that step:
+  ./bin/register-mcp.sh --print        what it would run, changing nothing
+  ./bin/register-mcp.sh --force        rewrite an existing registration
+  ./install.sh --doctor                checks it (among everything else)
 
 The chart docks on the right, beside whatever chat you are already in — the row does not switch your
 session. If the pane cannot be shown, the page renders the console itself rather than an empty page.
