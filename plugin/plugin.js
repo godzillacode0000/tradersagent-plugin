@@ -633,7 +633,15 @@ export default {
       id: 'chart',
       area: PANES_AREA,
       title: "Trader's Agent",
-      data: { placement: 'right', dock: { pane: 'workspace', pos: 'right' },
+      /* `enforce: true` is the standing invariant, not a one-shot migration: the app re-homes
+         this pane to the RIGHT of the workspace at every boot's first adoption pass when it is
+         not already there, whatever the saved layout remembers (the app's own Bots pane uses the
+         same door to keep its tab strip). Measured 13 Oct: the plain hint is honoured only on the
+         pane's FIRST adoption, and the committed tree remembers it afterwards — after a layout
+         reset or an early drag the chart kept coming back as a TAB in the left zone, so clicking
+         the row filled the left side instead of docking beside the chat. An intra-session drag
+         still sticks until the next launch. */
+      data: { placement: 'right', dock: { pane: 'workspace', pos: 'right', enforce: true },
               width: '620px', defaultCollapsed: true },
       render: () => jsx(ConsolePane, {})
     }
