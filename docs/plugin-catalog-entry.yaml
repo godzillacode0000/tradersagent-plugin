@@ -1,23 +1,39 @@
-# Plugin-catalog entry — ready to submit, deliberately not submitted.
+# Plugin-catalog entry — local prep for the submission PR.
 #
-# Why it is not live: the catalog's submission bar (Hermes docs,
-# user-guide/features/plugin-catalog.md) requires a PUBLIC repository, real
-# releases/tags, passing validation, and no self-updating. This repo is private
-# and personal for now, so the entry sits here until that changes.
+# State (measured 14 Oct):
+#   repo public .......... YES (was the old blocker; the API answers 200)
+#   validation ........... FAILS today: "no plugin.yaml (or portable plugin.json) in the plugin
+#                          directory". The catalog needs a plugin.yaml manifest plus an entrypoint
+#                          Hermes loads — this repo's is plugin/plugin.js, not plugin/desktop/plugin.js.
+#                          Restructure to plugin/plugin.yaml + plugin/desktop/plugin.js, run
+#                          `hermes plugins validate plugin --install-deps` until it passes, THEN submit.
+#   self-updating ........ none (rule 3 satisfied)
+#   disclosure ........... the pane frames a LOCAL console service (127.0.0.1:8787, stdout on the
+#                          machine, talks to Binance for bars and LuxAlgo's hosted MCP for the
+#                          Library). A catalog install cannot start it; the README and `known_issues`
+#                          must say so plainly, or a reviewer will.
 #
-# To submit: make the repo public, then open a PR against the catalog repo with
-# this object, `sha` set to the tagged release commit.
+# The submission itself is ONE file — plugin-catalog/tradersagent-plugin.yaml — in a PR against
+# NousResearch/hermes-agent (rules: plugin-catalog/README.md there). `sha` must be the full 40-hex
+# commit of the tagged release that carries the restructured layout.
 name: tradersagent-plugin
 repo: https://github.com/godzillacode0000/tradersagent-plugin
-sha: THE-V1.0.0-TAG-COMMIT-SHA
+sha: PENDING-RESTRUCTURE-PIN-THE-TAG-COMMIT
+subdir: plugin
+version: "1.1.0"
 description: Chart-first Vela console with the LuxAlgo Library, as a Hermes Desktop sidebar page.
 maintainer: godzillacode0000
 tier: community
 category: desktop
-# Honest scope: a systemd user unit and a shell script are the ops story. No macOS/Windows build.
+# Linux (systemd user unit) and macOS (launchd helper + venv notes: docs/MACOS.md). No Windows build.
 platforms:
   - linux
+  - macos
 docs_url: https://github.com/godzillacode0000/tradersagent-plugin#readme
+known_issues: >-
+  The pane frames a local console service (127.0.0.1:8787) that this catalog install does not start:
+  clone the repo and run ./console/start.sh (or the launchd/systemd helper) first. Without it the
+  pane says so instead of showing a blank page.
 capabilities:
   # The MCP server's tools (console/mcp/server.py) — kept in step by
   # console/backend/tests/test_docs_drift.py.
