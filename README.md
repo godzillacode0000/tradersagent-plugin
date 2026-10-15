@@ -45,13 +45,32 @@ MCP server) in one local web app — your chat session is left exactly where it 
 | | |
 |---|---|
 | **Hermes Desktop** | v0.21.3 or newer (the plugin uses the `sidebar.nav` + `routes` contribution areas) |
-| **Python** | 3.11+ with the `mcp` client: `pip install mcp` (a venv is fine — point `PY=` at it) |
+| **Python** | 3.11+ with the `mcp` client. `./install.sh --all` (or `./bin/setup-python.sh`) makes a `.venv` with it; or `pip install mcp` yourself and point `PY=` at it |
 | **Network** | for LuxAlgo's MCP endpoint and the Binance data feed; with no market feed the chart stays empty (`chart_state` says `bars None`). The chart engine and Pine runtime are served locally |
 | **Node 20+** *(optional)* | only for [Edge Stats](#edge-stats--how-often-did-it-actually-happen) — `./install.sh --with-edge` installs LuxAlgo's engine (~300 MB with its dependencies) next to the console. Without it everything else works and the sheet explains what is missing |
 | **Preview resizer** *(optional)* | `libvips` (or ImageMagick, or `ffmpeg`) — see [Catalogue previews](#catalogue-previews-are-kept-on-your-machine). With none of them the console still shows every preview, just at the catalogue's original size |
 | **OS** | Linux (built and verified on Omarchy / Arch + Hyprland) or **macOS** — Macs need the one-time venv + the launchd service; see [`docs/MACOS.md`](docs/MACOS.md). Windows is out of scope. |
 
 ## Install
+
+**One command** (Linux and macOS; about a minute with [uv](https://docs.astral.sh/uv/), a few without it):
+
+```bash
+git clone --depth 1 https://github.com/godzillacode0000/tradersagent-plugin
+cd tradersagent-plugin
+./install.sh --all
+```
+
+`--all` installs the plugin and the desk skill, makes a python with the `mcp` client (`bin/setup-python.sh`: uv when
+it is on PATH, else `python3.11+ -m venv` + pip; it leaves a python you already have alone), installs the console as a
+service (systemd user unit on Linux, LaunchAgent on macOS, a detached process where neither exists), registers the
+chart's MCP server with Hermes, and waits until the console answers. Then, in Hermes Desktop: reload the plugins and
+click the **Trader's Agent** row. Measured on a clean machine: clone 1.5 s, `./install.sh` 0.25 s, console up in 1.6 s;
+the dependency step is the long one (`uv pip install mcp` 5.6 s against 286 s for pip in the same slow sandbox).
+Optional extras stay separate: `--with-edge` (~300 MB), `--with-backtest` (~840 MB). Add `--no-mcp` to skip the
+registration. Re-running is safe.
+
+The same steps by hand:
 
 ```bash
 git clone https://github.com/godzillacode0000/tradersagent-plugin

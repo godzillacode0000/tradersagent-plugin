@@ -26,6 +26,14 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   `console/service-macos.sh` behind launchd), so the OS row, the service section and the platform bullet now
   say Linux + macOS, name the launchd counterpart of the systemd unit, and link the Mac setup. Windows stays
   out of scope, and `docs/HANDOFF.md`'s operator line now names both machines.
+- **`./install.sh --all`, the one-command install**, plus the two pieces it is made of. `bin/setup-python.sh` gives the console and the
+  agent a python with the `mcp` client: `uv` when it is on PATH (5.6 s against 286 s for pip in the same slow sandbox), else
+  `python3.11+ -m venv` + pip; a python you already have that imports `mcp` is left alone. It asks for Python 3.12, then 3.13, then
+  3.11, never "the newest": a bare `>=3.11` once made uv choose a 3.14 release candidate whose pydantic could not import (found by
+  running it, held by a test). `console/service-linux.sh` is the systemd counterpart of `service-macos.sh` (user unit
+  `traders-agent.service`; a detached console where there is no systemd user session, said plainly; an already-running console, or the
+  developer's `luxalgo-web.service`, is left alone). `--setup-python` and `--service` run each step alone. Nothing about what the
+  plugin does changes; a plain `./install.sh` behaves as before. Tests: `test_fast_install`.
 - **DeepSeek Harness adapter** (`adapters/dsh/install-dsh.sh`): installs the desk skill and registers the `traders-chart` MCP server for
   dsh. `--mcp-file` merges the entry into a JSON file you name (other servers kept, backup made, invalid JSON refused), `--doctor`
   runs a real MCP handshake (56 tools) and checks the console, `--uninstall` undoes it. The Hermes pane stays Hermes-only. Not yet
