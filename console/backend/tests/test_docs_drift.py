@@ -18,6 +18,8 @@ MCP_SERVER = os.path.join(ROOT, "console", "mcp", "server.py")
 README = os.path.join(ROOT, "README.md")
 CATALOG = os.path.join(ROOT, "docs", "plugin-catalog-entry.yaml")
 MCP_TOOLS_DOC = os.path.join(ROOT, "docs", "MCP-TOOLS.md")
+MANIFEST = os.path.join(ROOT, "plugin", "plugin.yaml")
+DESKTOP_ENTRY = os.path.join(ROOT, "plugin", "desktop", "plugin.js")
 
 TABLE_HEADER = "| Tool | What it does |"
 
@@ -99,12 +101,26 @@ class DocDrift(unittest.TestCase):
         extra = [name for name in readme_tool_rows() if name not in declared]
         self.assertEqual(extra, [], f"README documents tools that do not exist: {extra}")
 
-    def test_catalog_entry_lists_the_same_tools(self):
-        src = _read(CATALOG)
-        block = re.search(r"provides_tools:\n((?:\s+-\s+\S+\n)+)", src)
-        self.assertIsNotNone(block, "docs/plugin-catalog-entry.yaml has no provides_tools list")
-        listed = re.findall(r"-\s+(\S+)", block.group(1) if block else "")
-        self.assertEqual(sorted(listed), sorted(mcp_tools()))
+    def test_catalog_entry_declares_no_tools_of_its_own(self):
+        """The catalog entry's `capabilities` must match what the package REGISTERS (rule 6).
+
+        This package is the desktop half — UI contributions, not tools. The 56 chart tools belong
+        to the traders-chart MCP server the operator registers separately (bin/register-mcp.sh), so
+        the entry claims none of them: the old version of this test asserted the opposite and would
+        have shipped a capability-creep entry to review.
+        """
+        entry = _read(CATALOG)
+        self.assertIn("provides_tools: []", entry,
+                      "docs/plugin-catalog-entry.yaml must claim no tools (they live in the MCP server)")
+        # The manifest agrees, and the loadable entrypoint the catalog requires is really there.
+        self.assertTrue(os.path.isfile(MANIFEST), "plugin/plugin.yaml has gone missing")
+        manifest = _read(MANIFEST)
+        self.assertIn("name: traders-desk", manifest)
+        self.assertNotRegex(manifest, r"provides_tools:\s*\n\s+-",
+                            "the manifest must not declare tools it does not register")
+        self.assertTrue(os.path.isfile(DESKTOP_ENTRY), "plugin/desktop/plugin.js has gone missing")
+        # And the tools themselves are still documented where the agent reads them.
+        self.assertIn("chart_objects", _read(MCP_TOOLS_DOC))
 
     def test_mcp_tools_doc_lists_the_same_tools(self):
         """docs/MCP-TOOLS.md is the third view of the same fact, and it rotted worst.

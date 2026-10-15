@@ -171,7 +171,7 @@ explicit apply leaves behind 300 ms later.
 
 ## 4. Component reference
 
-**Plugin (`plugin/plugin.js`, one file, ~660 lines, no JSX — it uses `jsx()`/`jsxs()` runtime calls):**
+**Plugin (`plugin/desktop/plugin.js`, one file, ~660 lines, no JSX — it uses `jsx()`/`jsxs()` runtime calls):**
 
 | Contribution | Area | What it does |
 | --- | --- | --- |
@@ -342,7 +342,7 @@ cp ~/Projects/luxalgo-web/bin/trader-chart ~/Projects/tradersagent-plugin/consol
 # 2. prove it locally — never pipe the suite
 cd ~/Projects/tradersagent-plugin/console/backend
 python3 -m unittest discover -s tests -t tests -p 'test_*.py'
-cd ~/Projects/tradersagent-plugin && node tools/verify-plugin.mjs plugin/plugin.js   # bare, no pipe
+cd ~/Projects/tradersagent-plugin && node tools/verify-plugin.mjs plugin/desktop/plugin.js   # bare, no pipe
 cd ~/Projects/tradersagent-plugin && node tools/verify-plugin-selftest.mjs        # gate's crafted-copy battery
 
 # 3. console (frontend) changes: reload the page — every view, not just one

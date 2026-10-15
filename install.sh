@@ -104,7 +104,7 @@ if [[ $DOCTOR -eq 1 ]]; then
     echo "       set PY=/path/to/python, or create the repo .venv (macOS: docs/MACOS.md)"
     fail=1
   fi
-  check "plugin.js in repo" test -f "$HERE/plugin/plugin.js"
+  check "plugin.js in repo" test -f "$HERE/plugin/desktop/plugin.js"
   check "MCP server in repo" test -f "$HERE/console/mcp/server.py"
   check "console answering on $CONSOLE_URL" curl -fsS --max-time 3 "$CONSOLE_URL/api/health"
   # Only this development machine carries luxalgo-web.service; a fresh install follows the README and
@@ -142,7 +142,7 @@ if [[ $DOCTOR -eq 1 ]]; then
 fi
 
 mkdir -p "$DST"
-cp "$HERE/plugin/plugin.js" "$HERE/plugin/plugin.expect.json" "$DST/"
+cp "$HERE/plugin/desktop/plugin.js" "$HERE/plugin/desktop/plugin.expect.json" "$DST/"
 if [[ "$PORT" != "8787" ]]; then
   # The frame points at one hard-coded origin; a console on another port needs the installed copy (not the repo) changed.
   # BSD sed (macOS) spells in-place editing `-i ''`; GNU sed rejects that spelling. Probe once, keep one expression.

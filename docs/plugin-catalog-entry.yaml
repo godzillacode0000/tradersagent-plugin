@@ -35,65 +35,25 @@ known_issues: >-
   clone the repo and run ./console/start.sh (or the launchd/systemd helper) first. Without it the
   pane says so instead of showing a blank page.
 capabilities:
-  # The MCP server's tools (console/mcp/server.py) — kept in step by
-  # console/backend/tests/test_docs_drift.py.
-  provides_tools:
-    - chart_views
-    - chart_caps
-    - chart_state
-    - chart_shot
-    - chart_apply_pine
-    - chart_draw
-    - chart_pine_inputs
-    - chart_clear
-    - chart_add_indicator
-    - chart_remove_indicator
-    - chart_set_market
-    - chart_set_layout
-    - chart_natives
-    - chart_studies
-    - chart_indicators
-    - chart_reload
-    - chart_replay
-    - chart_drawing
-    - chart_view
-    - chart_marks
-    - chart_objects
-    - chart_data_window
-    - chart_palette
-    - chart_browse
-    - broker_state
-    - broker_propose
-    - library_search
-    - library_indicator
-    - library_list
-    - library_taxonomy
-    - library_concept
-    - library_source
-    - edge_presets
-    - edge_report
-    - edge_symbols
-    - edgestats_status
-    - edgestats_fields
-    - edgestats_presets
-    - edgestats_query
-    - edgestats_report
-    - edgestats_session
-    - edgestats_show
-    - edgestats_setup
-    - propfirms
-    - bt_run
-    - bt_optimize
-    - bt_status
-    - bt_data_list
-    - propfirm_offers
-    - chart_batch
-    - chart_snapshot
-    - chart_undo
-    - chart_watch
-    - chart_alert
-    - chart_fullscreen
-    - chart_theme
+  # EMPTY on purpose, and it is not a typo: the catalog's rule 6 says the declared capabilities
+  # must match what the plugin REGISTERS at the pinned commit. This package is the desktop half —
+  # it registers UI (a sidebar row, the chart pane, a status chip, palette commands), not tools.
+  # The 56 chart tools below the line belong to the traders-chart MCP SERVER, which the operator
+  # registers separately with ./bin/register-mcp.sh; claiming them here would be capability creep
+  # and a reviewer decline. They are documented in docs/MCP-TOOLS.md and kept in step there.
+  provides_tools: []
   provides_hooks: []
   provides_middleware: []
   requires_env: []
+
+# ── the MCP server's tools, for reference (NOT this plugin's capabilities) ──
+# chart_views · chart_caps · chart_state · chart_shot · chart_apply_pine · chart_draw ·
+# chart_pine_inputs · chart_clear · chart_add_indicator · chart_remove_indicator · chart_set_market ·
+# chart_set_layout · chart_natives · chart_studies · chart_indicators · chart_reload · chart_replay ·
+# chart_drawing · chart_view · chart_marks · chart_objects · chart_data_window · chart_palette ·
+# chart_browse · broker_state · broker_propose · library_search · library_indicator · library_list ·
+# library_taxonomy · library_concept · library_source · edge_presets · edge_report · edge_symbols ·
+# edgestats_status · edgestats_fields · edgestats_presets · edgestats_query · edgestats_report ·
+# edgestats_session · edgestats_show · edgestats_setup · propfirms · bt_run · bt_optimize ·
+# bt_status · bt_data_list · propfirm_offers · chart_batch · chart_snapshot · chart_undo ·
+# chart_watch · chart_alert · chart_fullscreen · chart_theme

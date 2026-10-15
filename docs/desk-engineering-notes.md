@@ -215,7 +215,7 @@ Vela's toolbar row carry. Two halves, and only the first is guaranteed:
 - **the page half** — `body.chart-focus` hides our chrome (topbar, statusbar, both panels) so the
   chart owns the page. Pure CSS, works everywhere.
 - **the display half** — `requestFullscreen()` on the page root. It needs (a) the plugin pane's
-  iframe to carry `allowfullscreen` (plugin/plugin.js does) and (b) **a real user gesture**: a click
+  iframe to carry `allowfullscreen` (plugin/desktop/plugin.js does) and (b) **a real user gesture**: a click
   on the button is granted, the door/agent is not (Chromium refuses a script-initiated request), so a
   door call honestly answers `native: false, page: true`. Never report that as a failure — quote it.
 - `Esc` in native fullscreen is consumed by the browser and never reaches the page's keydown; the

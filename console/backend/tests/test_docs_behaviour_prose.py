@@ -26,8 +26,8 @@ FORBIDDEN = [
     ("README.md", "opens a full trading console in the main zone"),
     ("README.md", "620px, open by\ndefault"),
     ("docs/HANDOFF.md", "opens the desk chat"),
-    ("plugin/plugin.js", "opens the desk chat"),
-    ("plugin/plugin.js", "opens by default"),
+    ("plugin/desktop/plugin.js", "opens the desk chat"),
+    ("plugin/desktop/plugin.js", "opens by default"),
 ]
 
 # What the reader is promised instead — asserted so a fix cannot delete the claim and pass.
@@ -36,7 +36,7 @@ REQUIRED = [
     ("README.md", "leaves your session alone"),
     ("README.md", "collapsed"),
     ("docs/HANDOFF.md", "session untouched"),
-    ("plugin/plugin.js", "leaves the session alone"),
+    ("plugin/desktop/plugin.js", "leaves the session alone"),
 ]
 
 
@@ -66,7 +66,7 @@ class ProseMatchesBehaviour(unittest.TestCase):
 
     def test_the_pane_is_still_contributed_collapsed(self):
         # The behaviour behind the prose: the pane does not open with the app (operator's call, 19 Sep).
-        plugin = self._read("plugin/plugin.js")
+        plugin = self._read("plugin/desktop/plugin.js")
         self.assertIn("defaultCollapsed: true", plugin)
 
 

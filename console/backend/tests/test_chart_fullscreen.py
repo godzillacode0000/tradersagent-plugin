@@ -33,7 +33,7 @@ BRIDGE = os.path.join(FRONTEND, "chart-bridge.js")
 CLI = os.path.join(ROOT, "console", "bin", "trader-chart")
 MCP = os.path.join(ROOT, "console", "mcp", "server.py")
 STORE = os.path.join(ROOT, "console", "backend", "chart_bridge.py")
-PLUGIN = os.path.join(ROOT, "plugin", "plugin.js")
+PLUGIN = os.path.join(ROOT, "plugin", "desktop", "plugin.js")
 
 
 def read(path: str) -> str:

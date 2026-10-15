@@ -1,0 +1,26 @@
+# The Trader's Agent desktop plugin. One manifest, one entrypoint:
+#
+#   desktop/plugin.js   the whole plugin (a Hermes Desktop contribution: sidebar row, the chart
+#                       pane, a status-bar chip, palette commands), loaded by the app itself.
+#
+# The console this pane frames is NOT part of the plugin package: it is a local service
+# (127.0.0.1:8787) that ships in the same repository and is started by ./console/start.sh. The
+# agent's chart tools come the same way — ./bin/register-mcp.sh registers the traders-chart MCP
+# server with Hermes; the plugin itself registers UI, not tools (so `provides_tools` stays empty).
+name: traders-desk
+version: 1.2.0
+description: >-
+  A chart-first Trader's Agent for Hermes Desktop: one sidebar row docks a live Vela chart (the
+  LuxAlgo engine this repo vendors) beside your conversation, with replay, 76 drawing tools, the
+  LuxAlgo Library, a paper broker and Edge Stats behind it. The pane frames a local console
+  service on 127.0.0.1:8787 that this package does not start — see the README's install steps.
+author: godzillacode0000
+kind: standalone
+requires_env: []
+# The plugin's own surface (panes, sidebar.nav, palette, status bar) is old; the chart pane's
+# enforced right-edge dock is the one piece that needs a recent Desktop build and degrades to a
+# plain placement hint on older ones (it docks, but the operator may need to drag it once).
+requires_hermes: ">=0.17.0"
+platforms:
+  - linux
+  - macos

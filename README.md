@@ -96,7 +96,7 @@ Their checksums are in `console/frontend/vendor/SHA256SUMS` (`tools/vendor-sums.
 
 ```bash
 curl -s localhost:8787/api/health                    # {"ok": true, "data": {"status": "ok", ...}}
-node tools/verify-plugin.mjs plugin/plugin.js        # OK — 8 contributions
+node tools/verify-plugin.mjs plugin/desktop/plugin.js        # OK — 8 contributions
 console/bin/trader-chart state                       # symbol, timeframe, price, bars, indicators on
 ```
 
@@ -335,7 +335,9 @@ Outside the repo the console writes: `~/.local/state/traders-agent/` (`console.t
 ## Repository layout
 
 ```
-plugin/            the Hermes Desktop plugin: plugin.js + its harness expectations
+plugin/            the Hermes Desktop plugin package: plugin.yaml + desktop/plugin.js (+ its harness
+                   expectations beside it). The catalog loads desktop/plugin.js; install.sh copies the
+                   desktop half into $HERMES_HOME/desktop-plugins/traders-desk/
 console/frontend/  the web app: Vela chart, Library panel, detail panel, PineTS paint layer
 console/backend/   one stdlib HTTP server proxying LuxAlgo's MCP + the chart bridge + the push channel;
                    edgestats.py runs the optional Edge Stats engine as a sidecar
@@ -413,7 +415,7 @@ it from `http://127.0.0.1:8787/api/library/thumb`: **~5 ms warm instead of ~2 s*
 ## Development
 
 ```bash
-node tools/verify-plugin.mjs plugin/plugin.js                                      # plugin harness (same check CI runs)
+node tools/verify-plugin.mjs plugin/desktop/plugin.js                                      # plugin harness (same check CI runs)
 python3 -m unittest discover -s console/backend/tests -t console/backend/tests -v   # the unit suite (no dependencies)
 uv run --with fastmcp python -m unittest discover \
     -s console/backend/tests -t console/backend/tests -p 'test_mcp_server.py' -v     # the MCP tool layer

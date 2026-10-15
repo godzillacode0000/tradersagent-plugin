@@ -26,8 +26,8 @@ jobs:
           node-version: '20'
       # Runs the plugin in plain Node against stubs of the three modules a plugin may import,
       # records what register() contributes, renders each contribution and checks it against
-      # plugin/plugin.expect.json. Exits non-zero on a broken plugin.
-      - run: node tools/verify-plugin.mjs plugin/plugin.js
+      # plugin/desktop/plugin.expect.json. Exits non-zero on a broken plugin.
+      - run: node tools/verify-plugin.mjs plugin/desktop/plugin.js
       # The harness's crafted-copy battery: every evasion must fail, every lookalike must pass.
       - run: node tools/verify-plugin-selftest.mjs
 
@@ -46,7 +46,7 @@ jobs:
       # Undefined and unused names, and syntax errors: the class of defect that needs no test to find.
       - run: pip install ruff && ruff check --select F,E9 console tools
       # Every first-party script must at least parse.
-      - run: for f in console/frontend/*.js plugin/plugin.js; do node --check "$f"; done
+      - run: for f in console/frontend/*.js plugin/desktop/plugin.js; do node --check "$f"; done
       - run: for f in install.sh console/start.sh tools/sync-live.sh bin/is-enabled.sh; do bash -n "$f"; done
       # The vendored bundles are what was recorded (a hand edit or a half-applied upgrade fails here), and the
       # generated preload list follows the module graph.
