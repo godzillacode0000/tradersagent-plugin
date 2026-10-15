@@ -64,6 +64,13 @@ cmd_install() {
     echo "    python3.12 -m venv \"$ROOT/.venv\" && \"$ROOT/.venv/bin/pip\" install 'mcp>=1,<3'" >&2
     exit 1
   fi
+  # Preserve a previously installed extra-hosts value when the shell does not supply one: a
+  # re-install must not silently drop the tailnet name that phone access relies on.
+  local PREV_ALLOWED="" ALLOWED_HOSTS=""
+  if [[ -f "$PLIST" ]]; then
+    PREV_ALLOWED="$(/usr/libexec/PlistBuddy -c 'Print :EnvironmentVariables:TRADERS_AGENT_ALLOWED_HOSTS' "$PLIST" 2>/dev/null || true)"
+  fi
+  ALLOWED_HOSTS="${TRADERS_AGENT_ALLOWED_HOSTS:-$PREV_ALLOWED}"
   mkdir -p "$HOME/Library/LaunchAgents" "$STATE_DIR"
   cat > "$PLIST" <<PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -83,6 +90,8 @@ cmd_install() {
     <string>$PORT</string>
     <key>PY</key>
     <string>$(xml_escape "$PY_RESOLVED")</string>
+    <key>TRADERS_AGENT_ALLOWED_HOSTS</key>
+    <string>$(xml_escape "$ALLOWED_HOSTS")</string>
     <key>PATH</key>
     <string>$(xml_escape "$SVC_PATH")</string>
   </dict>

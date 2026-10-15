@@ -1760,6 +1760,18 @@ def _machine_addresses() -> set:
 
 LOCAL_HOSTS = _machine_addresses()
 
+# Extra Host names this console treats as its own when it is fronted by a local proxy that forwards
+# the public name as Host instead of a loopback address — `tailscale serve` does exactly this:
+# the request arrives from 127.0.0.1 carrying `Host: macmini.tailXXXX.ts.net`. Comma-separated,
+# via TRADERS_AGENT_ALLOWED_HOSTS (see console/service-macos.sh, which bakes it into the plist).
+# Every other name still fails the DNS-rebinding refusal; only add names that resolve to this
+# machine inside an access-controlled network (a tailnet), i.e. you reached it on purpose.
+for _extra in os.environ.get("TRADERS_AGENT_ALLOWED_HOSTS", "").split(","):
+    _extra = _extra.strip()
+    if _extra:
+        LOCAL_HOSTS.add(_extra)
+        LOCAL_HOSTS.add(_extra.lower())
+
 # One JSON body cannot be worth more than this: the biggest real one is a Pine source in a `draw`
 # command (~40 KB). The cap exists because the door now runs BEFORE the body is read, and the read
 # used to trust Content-Length with no limit (the audit's round 3). Anything larger is refused whole.
