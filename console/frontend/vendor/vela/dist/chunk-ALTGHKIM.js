@@ -1,4 +1,4 @@
-import { svg24, NEUTRAL, BEARISH, WARNING, BULLISH, INFO, ACCENT_BRIGHT, VALID, INVALID, MARKER, ACCENT, injectStyles, iconEl, announceSurface, holdForExit } from './chunk-VHGACEHO.js';
+import { svg24, NEUTRAL, BEARISH, WARNING, BULLISH, INFO, ACCENT_BRIGHT, VALID, INVALID, MARKER, ACCENT, injectStyles, iconEl, announceSurface, holdForExit } from './chunk-I2U4NZD2.js';
 
 // src/core/model/series.ts
 function isLineLikeSeries(spec) {
@@ -42,6 +42,39 @@ function defaultText(value = "") {
   return { value, size: "normal", hAlign: "left", vAlign: "top" };
 }
 
+// src/core/drawings/visibility.ts
+var MIN = 6e4;
+var HOUR = 60 * MIN;
+var DAY = 24 * HOUR;
+var TIMEFRAME_BANDS = [
+  { key: "s", label: "Sec", fromMs: 0 },
+  { key: "1", label: "1m", fromMs: MIN },
+  { key: "5", label: "5m", fromMs: 5 * MIN },
+  { key: "15", label: "15m", fromMs: 15 * MIN },
+  { key: "60", label: "1H", fromMs: HOUR },
+  { key: "240", label: "4H", fromMs: 4 * HOUR },
+  { key: "D", label: "D", fromMs: DAY },
+  { key: "W", label: "W", fromMs: 7 * DAY },
+  { key: "M", label: "M", fromMs: 28 * DAY }
+];
+var BAND_KEYS = new Set(TIMEFRAME_BANDS.map((b) => b.key));
+function timeframeBandOf(barMs) {
+  if (!(barMs > 0)) return null;
+  let key = null;
+  for (const band of TIMEFRAME_BANDS) if (barMs >= band.fromMs) key = band.key;
+  return key;
+}
+function shownOnTimeframe(showOn, barMs) {
+  if (!showOn) return true;
+  const band = timeframeBandOf(barMs);
+  return band === null || showOn.includes(band);
+}
+function sanitizeShowOn(v) {
+  if (!Array.isArray(v)) return void 0;
+  const wanted = new Set(v.filter((k) => typeof k === "string" && BAND_KEYS.has(k)));
+  return TIMEFRAME_BANDS.map((b) => b.key).filter((k) => wanted.has(k));
+}
+
 // src/core/drawings/Drawing.ts
 var _Drawing = class _Drawing {
   // Public so the registry can construct concrete subclasses; `abstract` still
@@ -58,6 +91,7 @@ var _Drawing = class _Drawing {
     this.locked = init.locked ?? false;
     this.visible = init.visible ?? true;
     this.zIndex = init.zIndex ?? 0;
+    this.showOn = sanitizeShowOn(init.showOn);
     this.createdAt = init.createdAt ?? Date.now();
     if (init.props) this.readProps(init.props);
   }
@@ -144,7 +178,10 @@ var _Drawing = class _Drawing {
       visible: this.visible,
       zIndex: this.zIndex,
       createdAt: this.createdAt,
-      props: this.writeProps()
+      props: this.writeProps(),
+      // Always present (undefined = every timeframe) so an edit can lift a limit; JSON
+      // drops the undefined value, so unlimited drawings save as before.
+      showOn: this.showOn ? [...this.showOn] : void 0
     };
   }
   /** Per-type extras to serialize into `props` (override in subclasses). */
@@ -290,9 +327,16 @@ var TrendLine = class extends Drawing {
     if (y1 == null || y2 == null) return null;
     return [proj.xOf(a.time), y1, proj.xOf(b.time), y2];
   }
+  /** Which ends run on past the anchors. */
+  extension() {
+    const { extendLeft: l, extendRight: r } = this.style;
+    return l && r ? "both" : l ? "left" : r ? "right" : "none";
+  }
   hitTest(px, py, proj, tol) {
     const p = this.pixels(proj);
-    return p != null && distToSegment(px, py, p[0], p[1], p[2], p[3]) <= tol;
+    if (!p) return false;
+    const [x1, y1, x2, y2] = extendRay(p[0], p[1], p[2], p[3], this.extension(), proj.width, proj.height);
+    return distToSegment(px, py, x1, y1, x2, y2) <= tol;
   }
   handlePoints(proj) {
     const p = this.pixels(proj);
@@ -319,6 +363,8 @@ var TrendLine = class extends Drawing {
       fields: [
         ...LINE_FIELDS,
         { path: "style.arrowRight", label: "Arrow", kind: "boolean", group: "line" },
+        { path: "style.extendLeft", label: "Extend left", kind: "boolean", group: "line" },
+        { path: "style.extendRight", label: "Extend right", kind: "boolean", group: "line" },
         ...TEXT_FIELDS
       ]
     };
@@ -2778,6 +2824,14 @@ var FibRatios = class extends Drawing {
 
 // src/core/drawings/types/FibLevels.ts
 var FibLevels = class extends FibRatios {
+  // `declare`d: the base constructor reads saved props before these could be initialized.
+  constructor(init) {
+    super(init);
+    if (this.showRatios === void 0) this.showRatios = true;
+    if (this.showPrices === void 0) this.showPrices = true;
+    if (this.labelSide === void 0) this.labelSide = "left";
+    if (this.background === void 0) this.background = true;
+  }
   /** Price of a level for the two anchor prices; subclasses override to change which anchor ratio 0 sits on. */
   levelPrice(ratio, p1, p2) {
     return p1 + ratio * (p2 - p1);
@@ -2789,8 +2843,8 @@ var FibLevels = class extends FibRatios {
     if (!a || !b) return null;
     const xa = proj.xOf(a.time);
     const xb = proj.xOf(b.time);
-    const x1 = Math.min(xa, xb);
-    const x2 = Math.max(xa, xb);
+    const x1 = this.style.extendLeft ? 0 : Math.min(xa, xb);
+    const x2 = this.style.extendRight ? proj.width : Math.max(xa, xb);
     const out = [];
     for (const lv of this.levels) {
       if (!lv.enabled) continue;
@@ -2804,6 +2858,7 @@ var FibLevels = class extends FibRatios {
   entryLines(proj) {
     const lines = this.levelLines(proj);
     if (!lines) return null;
+    const right = this.labelSide === "right";
     return lines.map((l) => ({
       color: l.color,
       label: l.label,
@@ -2811,16 +2866,24 @@ var FibLevels = class extends FibRatios {
       y1: l.y,
       x2: l.x2,
       y2: l.y,
-      numberText: `${l.ratio} (${l.price.toFixed(2)})`,
-      numberX: l.x1 + 4,
+      numberText: this.levelText(l.ratio, l.price),
+      numberX: right ? l.x2 - 4 : l.x1 + 4,
       numberY: l.y - 7,
-      numberAlign: "left",
+      numberAlign: right ? "right" : "left",
       labelX: (l.x1 + l.x2) / 2,
       labelY: l.y - 7
     }));
   }
+  /** The text beside a level: its ratio, its price, both, or nothing. */
+  levelText(ratio, price) {
+    const p = price.toFixed(2);
+    if (this.showRatios && this.showPrices) return `${ratio} (${p})`;
+    if (this.showRatios) return String(ratio);
+    return this.showPrices ? p : "";
+  }
   fillBands(proj) {
-    const lines = this.levelLines(proj);
+    if (!this.background) return [];
+    const lines = this.levelLines(proj)?.sort((p, q) => p.ratio - q.ratio);
     if (!lines) return [];
     const bands = [];
     for (let i = 1; i < lines.length; i += 1) {
@@ -2837,6 +2900,26 @@ var FibLevels = class extends FibRatios {
     const prices = this.levels.filter((l) => l.enabled).map((l) => this.levelPrice(l.ratio, a.price, b.price));
     if (prices.length === 0) return null;
     return { min: Math.min(...prices), max: Math.max(...prices) };
+  }
+  schema() {
+    const base = super.schema();
+    return {
+      fields: [
+        ...base.fields,
+        { path: "style.extendLeft", label: "Extend left", kind: "boolean", group: "line" },
+        { path: "style.extendRight", label: "Extend right", kind: "boolean", group: "line" }
+      ]
+    };
+  }
+  writeProps() {
+    return { ...super.writeProps(), showRatios: this.showRatios, showPrices: this.showPrices, labelSide: this.labelSide, background: this.background };
+  }
+  readProps(props) {
+    super.readProps(props);
+    if (typeof props.showRatios === "boolean") this.showRatios = props.showRatios;
+    if (typeof props.showPrices === "boolean") this.showPrices = props.showPrices;
+    if (props.labelSide === "left" || props.labelSide === "right") this.labelSide = props.labelSide;
+    if (typeof props.background === "boolean") this.background = props.background;
   }
 };
 
@@ -2883,14 +2966,31 @@ var RATIO_COLORS = [
   [0.75, LEVEL_BLUE],
   [0.786, LEVEL_BLUE],
   [1, LEVEL_ANCHOR],
+  [0.705, LEVEL_AMBER],
+  [0.886, LEVEL_PURPLE],
   [1.272, LEVEL_BLUE],
   [1.382, LEVEL_ORANGE],
+  [1.414, LEVEL_AQUA],
   [1.618, LEVEL_RED],
   [2, LEVEL_ANCHOR],
+  [2.272, LEVEL_VIOLET],
   [2.382, LEVEL_ORANGE],
+  [2.414, LEVEL_PINK],
   [2.618, LEVEL_ORANGE],
   [3, LEVEL_ANCHOR],
+  [3.272, LEVEL_CORAL],
+  [3.618, LEVEL_PURPLE],
   [4.236, LEVEL_GREEN],
+  [4.618, LEVEL_PINK],
+  // Beyond the swing's end (targets): blues, deepening with distance.
+  [-0.27, LEVEL_CYAN],
+  [-0.272, LEVEL_CYAN],
+  [-0.62, LEVEL_BLUE],
+  [-0.618, LEVEL_BLUE],
+  [-1, LEVEL_AQUA],
+  [-1.5, LEVEL_VIOLET],
+  [-2, LEVEL_PURPLE],
+  [-2.5, LEVEL_PINK],
   [6.854, LEVEL_TEAL],
   [11.09, LEVEL_BLUE]
 ];
@@ -2917,8 +3017,41 @@ function cycleLevels(count, enabledCount = count) {
   }));
 }
 
+// src/core/drawings/fibPresets.ts
+var LADDER = [0, 0.236, 0.382, 0.5, 0.618, 0.705, 0.786, 0.886, 1, 1.272, 1.414, 1.618, 2, 2.272, 2.414, 2.618, 3, 3.272, 3.618, 4.236, 4.618, -0.272, -0.618, -1];
+var OTE_LADDER = [0, 0.236, 0.382, 0.5, 0.62, 0.705, 0.79, 0.886, 1, 1.272, 1.414, 1.618, 2, 2.618, 3, 3.618, 4.236, 4.618, -0.27, -0.62, -1, -1.5, -2, -2.5];
+function ladder(ratios, on, colors = {}) {
+  return fibLevels(ratios.map((ratio) => ({ ratio, enabled: on.includes(ratio), color: colors[String(ratio)] })));
+}
+var FIB_PRESETS = [
+  {
+    key: "classic",
+    label: "Classic",
+    reverse: false,
+    levels: ladder(LADDER, [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1])
+  },
+  {
+    key: "extension",
+    label: "Extension",
+    reverse: true,
+    levels: ladder(LADDER, [0, 1, 1.272, 1.414, 1.618, 2, 2.618, 3.618, 4.236])
+  },
+  {
+    key: "ote",
+    label: "OTE",
+    reverse: false,
+    // The entry zone reads as one band.
+    levels: ladder(OTE_LADDER, [0, 0.5, 0.62, 0.705, 0.79, 1, -0.27, -0.62], { "0.62": LEVEL_AMBER, "0.79": LEVEL_AMBER })
+  }
+];
+function matchFibPreset(levels, reverse) {
+  const key = (ls) => JSON.stringify(ls.map((l) => [l.ratio, l.color, l.enabled, l.label ?? ""]));
+  const mine = key(levels);
+  return FIB_PRESETS.find((p) => p.reverse === reverse && key(p.levels) === mine)?.key ?? null;
+}
+
 // src/core/drawings/types/FibRetracement.ts
-var LEVELS = fibLevels([0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]);
+var LEVELS = FIB_PRESETS[0].levels;
 var FibRetracement = class extends FibLevels {
   constructor(init) {
     super(init);
@@ -2941,7 +3074,11 @@ var FibRetracement = class extends FibLevels {
 };
 
 // src/core/drawings/types/FibExtension.ts
-var LEVELS2 = fibLevels([0, 0.382, 0.618, 1, 1.272, 1.618, { ratio: 2.618, color: LEVEL_PURPLE }]);
+var LEVELS2 = ladder(
+  [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.414, 1.618, 2, 2.272, 2.414, 2.618, 3, 3.272, 3.618, 4.236, 4.618],
+  [0, 0.382, 0.618, 1, 1.272, 1.618, 2.618],
+  { "2.618": LEVEL_PURPLE }
+);
 var FibExtension = class extends FibLevels {
   constructor() {
     super(...arguments);
@@ -4528,20 +4665,20 @@ function signed(n) {
 }
 function formatDuration(ms) {
   const m = Math.abs(ms);
-  const DAY = 864e5;
+  const DAY2 = 864e5;
   const HR = 36e5;
-  const MIN = 6e4;
-  if (m >= DAY) {
-    const d = Math.floor(m / DAY);
-    const h = Math.round(m % DAY / HR);
+  const MIN2 = 6e4;
+  if (m >= DAY2) {
+    const d = Math.floor(m / DAY2);
+    const h = Math.round(m % DAY2 / HR);
     return h ? `${d}d ${h}h` : `${d}d`;
   }
   if (m >= HR) {
     const h = Math.floor(m / HR);
-    const mn = Math.round(m % HR / MIN);
+    const mn = Math.round(m % HR / MIN2);
     return mn ? `${h}h ${mn}m` : `${h}h`;
   }
-  if (m >= MIN) return `${Math.round(m / MIN)}m`;
+  if (m >= MIN2) return `${Math.round(m / MIN2)}m`;
   return `${Math.round(m / 1e3)}s`;
 }
 var MeasureBox = class extends Drawing {
@@ -5021,6 +5158,11 @@ var MAGNIFIER_TIMEFRAME_OPTIONS = [
   { value: "240", label: "4h", ms: 144e5 },
   { value: "D", label: "1D", ms: 864e5 }
 ];
+function magnifierTimeframesBelow(chartMs) {
+  if (!(chartMs > 0)) return [...MAGNIFIER_TIMEFRAME_OPTIONS];
+  const lower = MAGNIFIER_TIMEFRAME_OPTIONS.filter((o) => o.ms > 0 && o.ms < chartMs);
+  return lower.length > 0 ? [MAGNIFIER_TIMEFRAME_OPTIONS[0], ...lower] : [];
+}
 function magnifierTimeframeLabel(value) {
   const opt = MAGNIFIER_TIMEFRAME_OPTIONS.find((o) => o.value === value);
   if (opt) return opt.label;
@@ -5112,6 +5254,393 @@ var Magnifier = class extends Drawing {
   }
   readProps(props) {
     this.magnifier = { ...defaultMagnifierStyle(), ...props };
+  }
+};
+
+// src/core/drawings/priceAction.ts
+var GAP_REACH = 3;
+function nearestBarIndex(bars, time) {
+  if (bars.length === 0) return -1;
+  let lo = 0;
+  let hi = bars.length - 1;
+  while (lo < hi) {
+    const mid = lo + hi >> 1;
+    if (bars[mid].time < time) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0 && Math.abs(bars[lo - 1].time - time) <= Math.abs(bars[lo].time - time)) return lo - 1;
+  return lo;
+}
+function gapAt(bars, i) {
+  const prev = bars[i - 1];
+  const next = bars[i + 1];
+  if (!prev || !next || !bars[i]) return null;
+  if (next.low > prev.high) return { bull: true, top: next.low, bottom: prev.high };
+  if (next.high < prev.low) return { bull: false, top: prev.low, bottom: next.high };
+  return null;
+}
+function nearestGap(bars, i) {
+  for (let k = 0; k <= GAP_REACH; k += 1) {
+    for (const j of k === 0 ? [i] : [i - k, i + k]) {
+      const g = gapAt(bars, j);
+      if (g) return { index: j, ...g };
+    }
+  }
+  return null;
+}
+function gapState(bars, i) {
+  const g = nearestGap(bars, i);
+  if (!g) return null;
+  const { index, bull, top, bottom } = g;
+  const mid = (top + bottom) / 2;
+  let tested = null;
+  let half = null;
+  let filled = null;
+  let inverted = null;
+  for (let j = index + 2; j < bars.length && inverted === null; j += 1) {
+    const b = bars[j];
+    const reach = bull ? b.low : b.high;
+    const into = (v) => bull ? reach <= v : reach >= v;
+    if (tested === null && into(bull ? top : bottom)) tested = j;
+    if (half === null && into(mid)) half = j;
+    if (filled === null && into(bull ? bottom : top)) filled = j;
+    if (filled !== null && (bull ? b.close < bottom : b.close > top)) inverted = j;
+  }
+  return { index, bull, top, bottom, mid, tested, half, filled, inverted };
+}
+function blockState(bars, i, range) {
+  const c = bars[i];
+  if (!c) return null;
+  const bull = c.close < c.open;
+  const top = range === "body" ? Math.max(c.open, c.close) : c.high;
+  const bottom = range === "body" ? Math.min(c.open, c.close) : c.low;
+  const mid = (top + bottom) / 2;
+  let left = false;
+  let tested = null;
+  let half = null;
+  let broken = null;
+  let leftAfterBreak = false;
+  let retest = null;
+  for (let j = i + 1; j < bars.length && retest === null; j += 1) {
+    const b = bars[j];
+    if (broken === null) {
+      if (!left) left = bull ? b.low > top : b.high < bottom;
+      else {
+        if (tested === null && (bull ? b.low <= top : b.high >= bottom)) tested = j;
+        if (half === null && (bull ? b.low <= mid : b.high >= mid)) half = j;
+      }
+      if (bull ? b.close < bottom : b.close > top) broken = j;
+    } else if (!leftAfterBreak) leftAfterBreak = bull ? b.high < bottom : b.low > top;
+    else if (bull ? b.high >= bottom : b.low <= top) retest = j;
+  }
+  return { index: i, bull, top, bottom, mid, tested, half, broken, retest };
+}
+function liquidityState(bars, i, side) {
+  const c = bars[i];
+  if (!c) return null;
+  const high = side === "high";
+  const price = high ? c.high : c.low;
+  let swept = null;
+  let broken = null;
+  for (let j = i + 1; j < bars.length && broken === null; j += 1) {
+    const b = bars[j];
+    if (high ? b.close > price : b.close < price) broken = j;
+    else if (swept === null && (high ? b.high > price : b.low < price)) swept = j;
+  }
+  return { index: i, high, price, swept, broken };
+}
+
+// src/core/drawings/types/PriceActionZone.ts
+var candlesSeen = /* @__PURE__ */ new WeakMap();
+var PriceActionTool = class extends Drawing {
+  anchorSchema() {
+    return { min: 1, max: 1, slots: [{ role: "candle", free: "x" }] };
+  }
+  /** The chart's candles, and the one nearest the anchor. */
+  candles(proj) {
+    const a = this.anchors[0];
+    if (!a) return null;
+    let bars = candlesSeen.get(proj);
+    if (!bars) {
+      bars = proj.barsInRange?.(Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY) ?? [];
+      candlesSeen.set(proj, bars);
+    }
+    return bars.length > 0 ? { bars, at: nearestBarIndex(bars, a.time) } : null;
+  }
+  /** Half a candle's width at bar `i`, in pixels. */
+  halfBar(proj, bars, i) {
+    const a = bars[Math.max(0, i - 1)];
+    const b = bars[Math.min(bars.length - 1, Math.max(1, i))];
+    if (!a || !b || a === b) return 3;
+    return Math.max(1, Math.abs(proj.xOf(b.time) - proj.xOf(a.time)) / 2);
+  }
+  /** Pixel x for the right edge of a zone that stops at bar `end`, or runs on to the chart's edge. */
+  rightEdge(proj, bars, end) {
+    if (end === null) return Math.max(proj.width, proj.xOf(bars[bars.length - 1].time));
+    return proj.xOf(bars[end].time) + this.halfBar(proj, bars, end);
+  }
+  /** The anchor itself, for a tool with nothing on the candles to hang its handle on. */
+  anchorHandle(proj) {
+    const a = this.anchors[0];
+    const y = a ? proj.yOf(a.price, this.paneId) : null;
+    return a && y != null ? [[proj.xOf(a.time), y]] : [];
+  }
+  hitHandle(px, py, proj, tol) {
+    return handleAt(px, py, this.handlePoints(proj), tol + 3);
+  }
+  priceRange() {
+    return null;
+  }
+};
+var PriceActionZone = class extends PriceActionTool {
+  /** The zone's pixel layout, or null when the candles don't form one. */
+  zone(proj) {
+    const c = this.candles(proj);
+    const f = c && this.formation(c.bars, c.at);
+    if (!c || !f) return null;
+    const yt = proj.yOf(f.top, this.paneId);
+    const yb = proj.yOf(f.bottom, this.paneId);
+    if (yt == null || yb == null) return null;
+    const { bars } = c;
+    const s = this.settings();
+    const left = (i) => proj.xOf(bars[i].time) - this.halfBar(proj, bars, i);
+    const yTop = Math.min(yt, yb);
+    const yBottom = Math.max(yt, yb);
+    const midY = proj.yOf(f.mid, this.paneId) ?? (yTop + yBottom) / 2;
+    const flip = f.flip && { x1: left(f.flip.from), x2: this.rightEdge(proj, bars, f.flip.to), fill: f.bull ? s.downColor : s.upColor };
+    const edge = s.extend === "tested" ? f.bull ? f.top : f.bottom : s.extend === "half" ? f.mid : f.bull ? f.bottom : f.top;
+    const edgeY = proj.yOf(edge, this.paneId);
+    return {
+      x1: left(f.start),
+      x2: this.rightEdge(proj, bars, f.end),
+      yTop,
+      yBottom,
+      fill: f.bull ? s.upColor : s.downColor,
+      border: s.border,
+      midY: s.midline ? midY : null,
+      faded: f.end !== null && s.fade && !flip,
+      marker: f.end !== null && !flip && edgeY != null ? { x: proj.xOf(bars[f.end].time), y: edgeY } : null,
+      flip,
+      handle: [proj.xOf(bars[f.index].time), midY]
+    };
+  }
+  hitTest(px, py, proj, tol) {
+    const z = this.zone(proj);
+    if (!z) {
+      const a = this.anchors[0];
+      return a != null && Math.abs(px - proj.xOf(a.time)) <= tol;
+    }
+    const inY = py >= z.yTop - tol && py <= z.yBottom + tol;
+    if (inY && px >= z.x1 - tol && px <= z.x2 + tol) return true;
+    return z.flip != null && inY && px >= z.flip.x1 - tol && px <= z.flip.x2 + tol;
+  }
+  handlePoints(proj) {
+    const z = this.zone(proj);
+    return z ? [z.handle] : this.anchorHandle(proj);
+  }
+  bounds(proj) {
+    const z = this.zone(proj);
+    if (!z) return null;
+    const right = Math.min(proj.width, z.flip ? z.flip.x2 : z.x2);
+    return { x: z.x1, y: z.yTop, w: Math.max(1, right - z.x1), h: Math.max(1, z.yBottom - z.yTop) };
+  }
+};
+
+// src/core/drawings/types/FairValueGap.ts
+var EXTEND_OPTIONS = [
+  { value: "tested", label: "Until tested" },
+  { value: "half", label: "Until 50%" },
+  { value: "filled", label: "Until filled" },
+  { value: "always", label: "Always" }
+];
+function defaults() {
+  return { extend: "filled", upColor: `${BULLISH}33`, downColor: `${BEARISH}33`, midline: true, border: false, fade: true, inverse: false };
+}
+var FairValueGap = class extends PriceActionZone {
+  constructor(init) {
+    super(init);
+    this.type = "fairvaluegap";
+    if (!this.gap) this.gap = defaults();
+  }
+  settings() {
+    return this.gap;
+  }
+  formation(bars, at) {
+    const s = gapState(bars, at);
+    if (!s) return null;
+    const { extend, inverse } = this.gap;
+    const flip = inverse && extend === "filled" && s.inverted !== null ? { from: s.inverted, to: null } : null;
+    return { ...s, start: s.index - 1, end: extend === "always" ? null : s[extend], flip };
+  }
+  schema() {
+    return {
+      fields: [
+        { path: "gap.extend", label: "Extend right", kind: "select", options: EXTEND_OPTIONS, group: "behavior" },
+        { path: "gap.upColor", label: "Bullish", kind: "color", group: "fill" },
+        { path: "gap.downColor", label: "Bearish", kind: "color", group: "fill" },
+        { path: "gap.midline", label: "Midline", kind: "boolean", group: "line" },
+        { path: "gap.border", label: "Border", kind: "boolean", group: "line" },
+        { path: "gap.fade", label: "Fade at end", kind: "boolean", group: "behavior", when: { path: "gap.extend", in: ["tested", "half", "filled"] } },
+        { path: "gap.inverse", label: "Flip on close", kind: "boolean", group: "behavior", when: { path: "gap.extend", in: ["filled"] } }
+      ]
+    };
+  }
+  writeProps() {
+    return { ...this.gap };
+  }
+  readProps(props) {
+    const d = defaults();
+    const p = props;
+    this.gap = {
+      extend: EXTEND_OPTIONS.some((o) => o.value === p.extend) ? p.extend : d.extend,
+      upColor: typeof p.upColor === "string" ? p.upColor : d.upColor,
+      downColor: typeof p.downColor === "string" ? p.downColor : d.downColor,
+      midline: typeof p.midline === "boolean" ? p.midline : d.midline,
+      border: typeof p.border === "boolean" ? p.border : d.border,
+      fade: typeof p.fade === "boolean" ? p.fade : d.fade,
+      inverse: typeof p.inverse === "boolean" ? p.inverse : d.inverse
+    };
+  }
+};
+
+// src/core/drawings/types/OrderBlock.ts
+var RANGE_OPTIONS = [
+  { value: "body", label: "Body" },
+  { value: "wick", label: "Full range" }
+];
+var EXTEND_OPTIONS2 = [
+  { value: "tested", label: "Until tested" },
+  { value: "half", label: "Until 50%" },
+  { value: "broken", label: "Until broken" },
+  { value: "always", label: "Always" }
+];
+function defaults2() {
+  return { range: "body", extend: "broken", upColor: `${BULLISH}29`, downColor: `${BEARISH}29`, midline: true, border: true, fade: true, breaker: true };
+}
+var OrderBlock = class extends PriceActionZone {
+  constructor(init) {
+    super(init);
+    this.type = "orderblock";
+    if (!this.block) this.block = defaults2();
+  }
+  settings() {
+    return this.block;
+  }
+  formation(bars, at) {
+    const s = blockState(bars, at, this.block.range);
+    if (!s) return null;
+    const { extend, breaker } = this.block;
+    const flip = breaker && extend === "broken" && s.broken !== null ? { from: s.broken, to: s.retest } : null;
+    return { ...s, start: s.index, end: extend === "always" ? null : s[extend], flip };
+  }
+  schema() {
+    return {
+      fields: [
+        { path: "block.range", label: "Zone", kind: "select", options: RANGE_OPTIONS, group: "behavior" },
+        { path: "block.extend", label: "Extend right", kind: "select", options: EXTEND_OPTIONS2, group: "behavior" },
+        { path: "block.upColor", label: "Bullish", kind: "color", group: "fill" },
+        { path: "block.downColor", label: "Bearish", kind: "color", group: "fill" },
+        { path: "block.midline", label: "Midline", kind: "boolean", group: "line" },
+        { path: "block.border", label: "Border", kind: "boolean", group: "line" },
+        { path: "block.fade", label: "Fade at end", kind: "boolean", group: "behavior", when: { path: "block.extend", in: ["tested", "half", "broken"] } },
+        { path: "block.breaker", label: "Breaker", kind: "boolean", group: "behavior", when: { path: "block.extend", in: ["broken"] } }
+      ]
+    };
+  }
+  writeProps() {
+    return { ...this.block };
+  }
+  readProps(props) {
+    const d = defaults2();
+    const p = props;
+    this.block = {
+      range: p.range === "body" || p.range === "wick" ? p.range : d.range,
+      extend: EXTEND_OPTIONS2.some((o) => o.value === p.extend) ? p.extend : d.extend,
+      upColor: typeof p.upColor === "string" ? p.upColor : d.upColor,
+      downColor: typeof p.downColor === "string" ? p.downColor : d.downColor,
+      midline: typeof p.midline === "boolean" ? p.midline : d.midline,
+      border: typeof p.border === "boolean" ? p.border : d.border,
+      fade: typeof p.fade === "boolean" ? p.fade : d.fade,
+      breaker: typeof p.breaker === "boolean" ? p.breaker : d.breaker
+    };
+  }
+};
+
+// src/core/drawings/types/Liquidity.ts
+var EXTEND_OPTIONS3 = [
+  { value: "swept", label: "Until swept" },
+  { value: "broken", label: "Until broken" },
+  { value: "always", label: "Always" }
+];
+function defaults3() {
+  return { extend: "swept", markSweep: true };
+}
+var Liquidity = class extends PriceActionTool {
+  constructor(init) {
+    super(init);
+    this.type = "liquidity";
+    if (!this.liq) this.liq = defaults3();
+  }
+  anchorSchema() {
+    return { min: 1, max: 1, slots: [{ role: "candle", free: "both" }] };
+  }
+  state(proj) {
+    const c = this.candles(proj);
+    const a = this.anchors[0];
+    if (!c || !a) return null;
+    const bar = c.bars[c.at];
+    return liquidityState(c.bars, c.at, a.price >= (bar.high + bar.low) / 2 ? "high" : "low");
+  }
+  line(proj) {
+    const c = this.candles(proj);
+    const s = this.state(proj);
+    if (!c || !s) return null;
+    const y = proj.yOf(s.price, this.paneId);
+    if (y == null) return null;
+    const { bars } = c;
+    const { extend, markSweep } = this.liq;
+    const end = extend === "always" ? null : extend === "broken" ? s.broken : s.swept ?? s.broken;
+    const x1 = proj.xOf(bars[s.index].time);
+    let sweep = null;
+    if (markSweep && s.swept !== null && (end === null || s.swept <= end)) {
+      const b = bars[s.swept];
+      const wick = proj.yOf(s.high ? b.high : b.low, this.paneId);
+      if (wick != null) sweep = { x: proj.xOf(b.time), y: wick + (s.high ? -9 : 9) };
+    }
+    return { x1, x2: this.rightEdge(proj, bars, end), y, sweep, handle: [x1, y] };
+  }
+  hitTest(px, py, proj, tol) {
+    const l = this.line(proj);
+    return l != null && px >= l.x1 - tol && px <= l.x2 + tol && Math.abs(py - l.y) <= tol;
+  }
+  handlePoints(proj) {
+    const l = this.line(proj);
+    return l ? [l.handle] : this.anchorHandle(proj);
+  }
+  bounds(proj) {
+    const l = this.line(proj);
+    if (!l) return null;
+    return { x: l.x1, y: l.y - 4, w: Math.max(1, Math.min(proj.width, l.x2) - l.x1), h: 8 };
+  }
+  schema() {
+    return {
+      fields: [
+        ...LINE_FIELDS,
+        { path: "liq.extend", label: "Extend right", kind: "select", options: EXTEND_OPTIONS3, group: "behavior" },
+        { path: "liq.markSweep", label: "Mark sweep", kind: "boolean", group: "behavior" }
+      ]
+    };
+  }
+  writeProps() {
+    return { ...this.liq };
+  }
+  readProps(props) {
+    const d = defaults3();
+    const p = props;
+    this.liq = {
+      extend: EXTEND_OPTIONS3.some((o) => o.value === p.extend) ? p.extend : d.extend,
+      markSweep: typeof p.markSweep === "boolean" ? p.markSweep : d.markSweep
+    };
   }
 };
 
@@ -5808,6 +6337,36 @@ registerDrawingType({
   defaultStyle: { lineColor: BULLISH, lineWidth: 1, lineStyle: "solid" },
   create: (init) => new FixedRangeVolumeProfile(init)
 });
+var FVG_ICON = svg24('<path d="M6 15v6M12 3v18M18 2v6"/><rect x="3.5" y="9.5" width="17" height="5" rx="1" fill="currentColor" fill-opacity="0.28" stroke-width="1.4"/>');
+var ORDER_BLOCK_ICON = svg24('<rect x="4" y="7.5" width="5" height="8" rx="1"/><path d="M6.5 4v3.5M6.5 15.5V19"/><rect x="9" y="7.5" width="11.5" height="8" rx="1" fill="currentColor" fill-opacity="0.22" stroke-width="1.4"/>');
+var LIQUIDITY_ICON = svg24('<path d="M3 8h12" stroke-dasharray="2.5 2.5"/><path d="m16.5 4.5 4 4m0-4-4 4"/><path d="M3.5 20 8 13.5l4 3.5 5-8"/>');
+registerDrawingType({
+  type: "fairvaluegap",
+  group: "priceaction",
+  label: "Fair Value Gap",
+  icon: FVG_ICON,
+  defaultStyle: { lineColor: BULLISH, lineWidth: 1, lineStyle: "solid" },
+  placementHint: "Click the middle candle of a gap",
+  create: (init) => new FairValueGap(init)
+});
+registerDrawingType({
+  type: "orderblock",
+  group: "priceaction",
+  label: "Order Block",
+  icon: ORDER_BLOCK_ICON,
+  defaultStyle: { lineColor: BULLISH, lineWidth: 1, lineStyle: "solid" },
+  placementHint: "Click the candle that forms the block",
+  create: (init) => new OrderBlock(init)
+});
+registerDrawingType({
+  type: "liquidity",
+  group: "priceaction",
+  label: "Liquidity",
+  icon: LIQUIDITY_ICON,
+  defaultStyle: { lineColor: WARNING, lineWidth: 1, lineStyle: "solid" },
+  placementHint: "Click near a candle's high or low",
+  create: (init) => new Liquidity(init)
+});
 
 // src/chart-types/registry.ts
 function normalizeSettingsRow(r) {
@@ -5874,20 +6433,20 @@ function tickerModifierIds() {
 }
 
 // src/core/renderer-defaults.ts
-var defaults = /* @__PURE__ */ new Map();
+var defaults4 = /* @__PURE__ */ new Map();
 function registerRendererDefaults(values) {
   const applied = Object.entries(values);
-  for (const [key, value] of applied) defaults.set(key, value);
+  for (const [key, value] of applied) defaults4.set(key, value);
   return () => {
-    for (const [key, value] of applied) if (defaults.get(key) === value) defaults.delete(key);
+    for (const [key, value] of applied) if (defaults4.get(key) === value) defaults4.delete(key);
   };
 }
 function unregisterRendererDefaults(...keys) {
-  if (keys.length === 0) defaults.clear();
-  else for (const key of keys) defaults.delete(key);
+  if (keys.length === 0) defaults4.clear();
+  else for (const key of keys) defaults4.delete(key);
 }
 function rendererDefaults() {
-  return Object.fromEntries(defaults);
+  return Object.fromEntries(defaults4);
 }
 
 // src/core/model/inputs.ts
@@ -6722,4 +7281,4 @@ var SidePanel = class {
   }
 };
 
-export { AnchoredVwap, ArrowMark, CONTEXT_MENU_BUILTIN_ORDER, Callout, CalloutBase, Comment, DEDEKIND_CURVATURE_OPTIONS, DEFAULT_DRAWING_COLOR, DEFAULT_PANEL_MAX_WIDTH, DEFAULT_PANEL_MIN_WIDTH, DEFAULT_PANEL_ORDER, DEFAULT_PANEL_WIDTH, DIRECTION_OPTIONS, DedekindTessellation, Drawing, FibRatios, FibRetracement, FibSpiral, FixedRangeVolumeProfile, GANN_SQUARE_ARCS, GLYPH_OPTIONS, GannSquare, GlyphStamp, LINE_STYLE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, MAGNIFIER_TIMEFRAME_OPTIONS, MachFigure, Magnifier, MeasureBox, Note, OVERRIDABLE_TOPBAR_IDS, PatternDrawing, PositionTool, PriceLabel, PriceNote, RadialFib, RegressionChannel, STAMP_SIZE_OPTIONS, SegmentDrawing, SidePanel, Signpost, TEXT_SIZE_OPTIONS, TIMEZONES, TOPBAR_BUILTIN_IDS, TOPBAR_DEFAULT_LEFT, TOPBAR_DEFAULT_RIGHT, TextLabel, bodyItems, chartType, chartTypes, clampPanelWidth, composeMenu, createDrawing, deserializeDrawing, drawingTypes, foldBaseModulation, formatDuration, getDrawingType, getNativeIndicator, inputDeltas, inputVisible, invertWrite, isExchangeTimezone, isLineLikeSeries, legendActions, legendActionsProviderFor, legendCallouts, legendCalloutsProviderFor, lineSegmentIntersection, magnifierTimeframeLabel, mobilePlacement, nativeIndicatorDescriptors, nativeIndicatorTypes, nativeInstanceChannel, normalizeSettingsRow, normalizeTimezone, paneScaleAt, pinnedTopbarActionIds, priceAxisItems, registerChartType, registerDefaultEngine, registerDrawingType, registerLegendAction, registerLegendCallout, registerNativeIndicator, registerRendererDefaults, registerRendererLayer, registerSidePanel, registerStatePersistence, registerSymbolRanking, registerWidgetAction, registerWidgetAttachment, rendererDefaults, rendererLayers, resetDrawingSettings, resolveEngines, resolveTimezone, resolveTopbarComposition, scaleChoiceOf, scaleWrites, seriesInScale, seriesShownOn, settingsRowValueKeys, settingsRowVisible, settingsSectionOf, sidePanels, stableSeriesId, statePersistenceHandlers, symbolRanking, tickerModifierIds, timeAxisItems, timezoneMenuRows, topbarActionOverride, topbarHas, tzButtonLabel, tzMenuLabel, tzOffset, unregisterChartType, unregisterDefaultEngine, unregisterLegendAction, unregisterLegendCallout, unregisterNativeIndicator, unregisterRendererDefaults, unregisterRendererLayer, unregisterSidePanel, unregisterStatePersistence, unregisterWidgetAction, unregisterWidgetAttachment, widgetActions, widgetAttachments };
+export { AnchoredVwap, ArrowMark, CONTEXT_MENU_BUILTIN_ORDER, Callout, CalloutBase, Comment, DEDEKIND_CURVATURE_OPTIONS, DEFAULT_DRAWING_COLOR, DEFAULT_PANEL_MAX_WIDTH, DEFAULT_PANEL_MIN_WIDTH, DEFAULT_PANEL_ORDER, DEFAULT_PANEL_WIDTH, DIRECTION_OPTIONS, DedekindTessellation, Drawing, FIB_PRESETS, FibLevels, FibRatios, FibRetracement, FibSpiral, FixedRangeVolumeProfile, GANN_SQUARE_ARCS, GLYPH_OPTIONS, GannSquare, GlyphStamp, LINE_STYLE_OPTIONS, Liquidity, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, MachFigure, Magnifier, MeasureBox, Note, OVERRIDABLE_TOPBAR_IDS, PatternDrawing, PositionTool, PriceActionZone, PriceLabel, PriceNote, RadialFib, RegressionChannel, STAMP_SIZE_OPTIONS, SegmentDrawing, SidePanel, Signpost, TEXT_SIZE_OPTIONS, TIMEFRAME_BANDS, TIMEZONES, TOPBAR_BUILTIN_IDS, TOPBAR_DEFAULT_LEFT, TOPBAR_DEFAULT_RIGHT, TextLabel, TrendLine, bodyItems, chartType, chartTypes, clampPanelWidth, composeMenu, createDrawing, defaultText, deserializeDrawing, drawingTypes, foldBaseModulation, formatDuration, getDrawingType, getNativeIndicator, inputDeltas, inputVisible, invertWrite, isExchangeTimezone, isLineLikeSeries, legendActions, legendActionsProviderFor, legendCallouts, legendCalloutsProviderFor, lineSegmentIntersection, magnifierTimeframeLabel, magnifierTimeframesBelow, matchFibPreset, mobilePlacement, nativeIndicatorDescriptors, nativeIndicatorTypes, nativeInstanceChannel, normalizeSettingsRow, normalizeTimezone, paneScaleAt, pinnedTopbarActionIds, priceAxisItems, registerChartType, registerDefaultEngine, registerDrawingType, registerLegendAction, registerLegendCallout, registerNativeIndicator, registerRendererDefaults, registerRendererLayer, registerSidePanel, registerStatePersistence, registerSymbolRanking, registerWidgetAction, registerWidgetAttachment, rendererDefaults, rendererLayers, resetDrawingSettings, resolveEngines, resolveTimezone, resolveTopbarComposition, sanitizeShowOn, scaleChoiceOf, scaleWrites, seriesInScale, seriesShownOn, settingsRowValueKeys, settingsRowVisible, settingsSectionOf, shownOnTimeframe, sidePanels, stableSeriesId, statePersistenceHandlers, symbolRanking, tickerModifierIds, timeAxisItems, timeframeBandOf, timezoneMenuRows, topbarActionOverride, topbarHas, tzButtonLabel, tzMenuLabel, tzOffset, unregisterChartType, unregisterDefaultEngine, unregisterLegendAction, unregisterLegendCallout, unregisterNativeIndicator, unregisterRendererDefaults, unregisterRendererLayer, unregisterSidePanel, unregisterStatePersistence, unregisterWidgetAction, unregisterWidgetAttachment, widgetActions, widgetAttachments };

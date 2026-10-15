@@ -6,6 +6,21 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Changed
 
+- **Vela 0.8.3 → 0.8.4** (`@luxalgo/vela`, published 13 Oct; vela-pinets moved with it, 0.2.15 → 0.2.16, the release built
+  against it — it still inlines PineTS 0.11.0, so the patched PineTS fork below is untouched). The vendored copy of 0.8.3 was
+  an exact tarball subset, byte for byte, and so is this one: the ES modules, the Binance / Coinbase / Hyperliquid providers
+  and the global build (`chunk-*.js` names changed again; the preload list — 157 links — and SHA256SUMS were regenerated and
+  both check clean, 333 sums). What arrives: drawings remember their last settings (`toolDefaults` / `setToolDefaults`,
+  `drawing:defaults`), a full settings panel and named styles for every drawing, drawings limited to chosen timeframes
+  (`showOn`), Fib level sets and a Price Action section (fair value gap / order block / liquidity), and two fixes that meet
+  this console head-on — **`live: true` no longer nudges bars passed as `data`** (the chart's own bars were moved up to
+  0.15 %/s and made-up candles appended; exactly the shape `workspace.js` runs) and **per-bar `plotcandle`/`plotbar` colours
+  now repaint on every recalculation** instead of sticking to the first paint. Public API is additive only — nothing removed
+  (`DrawingToolsState` added; dependencies unchanged, so the vendored Zag closure stands; NOTICE unchanged). Held to the same
+  bar as the last bump: a scratch copy of this console with only the two vendors swapped boots with 0 console errors, the
+  Object tree and Data window doors read live BTCUSDT bars (500, `layout: workspace`), a hline writes and reads back, and
+  `trader-chart state` reports the same shape as before.
+
 - **Vela 0.8.1 → 0.8.3** (`@luxalgo/vela`, published 5 and 7 Oct; vela-pinets 0.2.15 already accepts it and is unchanged). The
   files are LuxAlgo's, byte for byte (nothing in `vendor/vela/` is patched); only the vendored set moved: the ES modules, the
   Binance / Coinbase / Hyperliquid providers and the global build (`chunk-*.js` names changed; the preload list, the vendor

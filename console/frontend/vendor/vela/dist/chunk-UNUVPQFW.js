@@ -1,6 +1,6 @@
-import { deserializeDrawing, chartTypes, rendererLayers, isLineLikeSeries, seriesShownOn, foldBaseModulation, registerChartType, rendererDefaults, getDrawingType, normalizeTimezone, settingsRowVisible, normalizeSettingsRow, Magnifier, TextLabel, Callout, resetDrawingSettings, registerNativeIndicator, chartType, getNativeIndicator, nativeIndicatorDescriptors, nativeInstanceChannel, drawingTypes, settingsRowValueKeys, TIMEZONES, tzMenuLabel, formatDuration, RegressionChannel, FixedRangeVolumeProfile, DEFAULT_DRAWING_COLOR, SegmentDrawing, ArrowMark, GlyphStamp, RadialFib, FibSpiral, DedekindTessellation, MachFigure, GannSquare, FibRatios, MeasureBox, PositionTool, AnchoredVwap, PatternDrawing, Comment, PriceNote, Signpost, Note, PriceLabel, GANN_SQUARE_ARCS, magnifierTimeframeLabel, lineSegmentIntersection, MAGNIFIER_TIMEFRAME_OPTIONS, GLYPH_OPTIONS, STAMP_SIZE_OPTIONS, LINE_STYLE_OPTIONS, DEDEKIND_CURVATURE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, TEXT_SIZE_OPTIONS, createDrawing, inputVisible, seriesInScale, tickerModifierIds, CalloutBase, DIRECTION_OPTIONS, FibRetracement, stableSeriesId } from './chunk-KWI3YDBW.js';
-import { themeTokens, Dialog, closeOpenPopovers, closeWidthPopover, fieldSection, buildFieldControl, fieldSeparator, fieldGrid, fieldRow, CALLOUT_STYLE_ID, CALLOUT_CSS, Popover, blendOver, splitColor, CalloutBubble, Menu, TextArea, NumberInput, buildColorPicker, isPopoverOpen, DatePicker, eventDismissedPopover, toggleSelectList, normalizeDateInput, openPopoverTrigger, fieldGridColumns, FIELD_GAP_PX, STATIC_TOKENS } from './chunk-G7B7ZCBF.js';
-import { icon, iconAt, withAlpha, WARNING, ACCENT, NEUTRAL, INFO, BULLISH, BEARISH, announceSurface, holdForExit, isDarkColor, injectStyles, SERIES_LINE, CHIP_PLATE, CROSSHAIR, TRADE_EXIT, TRADE_SHORT, TRADE_LONG, iconMarkup, overlayScrollbarCss, SLATE_DEEP, VALID, INVALID, SLATE, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, svg24, svg24Solid } from './chunk-VHGACEHO.js';
+import { sanitizeShowOn, deserializeDrawing, chartTypes, rendererLayers, isLineLikeSeries, seriesShownOn, foldBaseModulation, registerChartType, rendererDefaults, getDrawingType, normalizeTimezone, settingsRowVisible, normalizeSettingsRow, Magnifier, TextLabel, Callout, shownOnTimeframe, resetDrawingSettings, registerNativeIndicator, chartType, getNativeIndicator, nativeIndicatorDescriptors, nativeInstanceChannel, drawingTypes, settingsRowValueKeys, TIMEZONES, tzMenuLabel, formatDuration, RegressionChannel, FixedRangeVolumeProfile, DEFAULT_DRAWING_COLOR, SegmentDrawing, ArrowMark, GlyphStamp, RadialFib, FibSpiral, DedekindTessellation, MachFigure, GannSquare, FibRatios, MeasureBox, PositionTool, AnchoredVwap, PriceActionZone, Liquidity, PatternDrawing, Comment, PriceNote, Signpost, Note, PriceLabel, TrendLine, GANN_SQUARE_ARCS, magnifierTimeframeLabel, lineSegmentIntersection, GLYPH_OPTIONS, STAMP_SIZE_OPTIONS, magnifierTimeframesBelow, LINE_STYLE_OPTIONS, DEDEKIND_CURVATURE_OPTIONS, MACH_NUMBER_OPTIONS, MACH_WAVE_COUNT_OPTIONS, TEXT_SIZE_OPTIONS, createDrawing, defaultText, inputVisible, seriesInScale, tickerModifierIds, CalloutBase, FibRetracement, FIB_PRESETS, matchFibPreset, FibLevels, timeframeBandOf, TIMEFRAME_BANDS, stableSeriesId, DIRECTION_OPTIONS } from './chunk-ALTGHKIM.js';
+import { themeTokens, Dialog, closeOpenPopovers, closeWidthPopover, fieldSection, buildFieldControl, fieldSeparator, fieldGrid, fieldRow, CALLOUT_STYLE_ID, CALLOUT_CSS, Popover, blendOver, splitColor, CalloutBubble, Menu, TextArea, NumberInput, buildColorPicker, isPopoverOpen, DatePicker, eventDismissedPopover, toggleSelectList, normalizeDateInput, openPopoverTrigger, fieldGridColumns, FIELD_GAP_PX, STATIC_TOKENS } from './chunk-WY5H4S4I.js';
+import { icon, iconAt, withAlpha, WARNING, ACCENT, NEUTRAL, INFO, BULLISH, BEARISH, announceSurface, holdForExit, isDarkColor, injectStyles, SERIES_LINE, CHIP_PLATE, CROSSHAIR, TRADE_EXIT, TRADE_SHORT, TRADE_LONG, iconMarkup, overlayScrollbarCss, toHex6, SLATE_DEEP, VALID, INVALID, SLATE, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, svg24, svg24Solid } from './chunk-I2U4NZD2.js';
 
 // src/core/events/EventBus.ts
 var TypedEventBus = class {
@@ -57,6 +57,7 @@ var FIBONACCI_TYPES = [
   "fibwedge",
   "fibspiral"
 ];
+var PRICE_ACTION_TYPES = ["fairvaluegap", "orderblock", "liquidity"];
 var GANN_TYPES = ["gannfan", "gannbox", "gannsquare"];
 var GEOMETRY_TYPES = ["dedekind", "sonic", "supersonic", "goldensonic", "goldensupersonic"];
 var PATTERN_TYPES = ["xabcd", "abcd", "headshoulders"];
@@ -84,6 +85,7 @@ var TOOLBAR_LAYOUT = [
     label: "Fibonacci",
     sections: [
       { label: "Fibonacci", types: FIBONACCI_TYPES },
+      { label: "Price Action", types: PRICE_ACTION_TYPES },
       { label: "Gann", types: GANN_TYPES },
       { label: "Geometry", types: GEOMETRY_TYPES }
     ]
@@ -261,6 +263,7 @@ var DrawingStore = class {
     if (patch.visible !== void 0) d.visible = patch.visible;
     if (patch.zIndex !== void 0) d.zIndex = patch.zIndex;
     if (patch.props !== void 0) d.applyProps(patch.props);
+    if ("showOn" in patch) d.showOn = sanitizeShowOn(patch.showOn);
     this.emit();
     return d;
   }
@@ -1151,38 +1154,11 @@ function attachForming(closed, forming) {
 }
 
 // src/data/MultiProviderFeed.ts
-function intervalMs(timeframe) {
-  const map2 = {
-    "1m": 6e4,
-    "3m": 18e4,
-    "5m": 3e5,
-    "15m": 9e5,
-    "30m": 18e5,
-    "1h": 36e5,
-    "2h": 72e5,
-    "4h": 144e5,
-    "1d": 864e5,
-    "1w": 6048e5,
-    "1M": 2592e6,
-    "1": 6e4,
-    "5": 3e5,
-    "15": 9e5,
-    "30": 18e5,
-    "60": 36e5,
-    "240": 144e5,
-    D: 864e5,
-    W: 6048e5,
-    M: 2592e6
-  };
-  return map2[timeframe] ?? 36e5;
-}
 var MultiProviderFeed = class {
   constructor(store = sharedBarStore) {
     this.registry = new ProviderRegistry();
     /** The chart symbol's resolved provider — the default for bare secondary symbols. */
     this.primaryProvider = null;
-    /** A copy of offline history, used to synthesize ticks for the `data` path. */
-    this.liveBars = [];
     /** Sync-accessible symbol metadata, warmed by load()/symbolInfoFor (the engine reads it synchronously). */
     this.symInfoCache = /* @__PURE__ */ new Map();
     /** Requests in flight, keyed like the cache — every concurrent asker shares one round trip. */
@@ -1292,10 +1268,7 @@ var MultiProviderFeed = class {
   }
   // ── MarketDataFeed ─────────────────────────────────────────────────────
   async load(cfg) {
-    if (cfg.data && cfg.data.length > 0) {
-      this.liveBars = cfg.data.map((b) => ({ ...b }));
-      return cfg.data;
-    }
+    if (cfg.data && cfg.data.length > 0) return cfg.data;
     const resolved = await this.registry.whenResolvable(rawSymbol(cfg), { default: this.primaryProvider });
     this.primaryProvider = resolved.provider;
     this.prefetchSymbolInfo(resolved);
@@ -1303,10 +1276,7 @@ var MultiProviderFeed = class {
   }
   /** Progressive twin of {@link load} — same resolution, the cache streams the batches. */
   async loadProgressive(cfg, onBatch, opts) {
-    if (cfg.data && cfg.data.length > 0) {
-      this.liveBars = cfg.data.map((b) => ({ ...b }));
-      return cfg.data;
-    }
+    if (cfg.data && cfg.data.length > 0) return cfg.data;
     const resolved = await this.registry.whenResolvable(rawSymbol(cfg), { default: this.primaryProvider });
     this.primaryProvider = resolved.provider;
     this.prefetchSymbolInfo(resolved);
@@ -1332,38 +1302,15 @@ var MultiProviderFeed = class {
     if (!resolved) return [];
     return this.cache.loadRange(canonical(cfg, resolved), range);
   }
+  /** Offline `data` has no source of ticks: the caller's bars are shown exactly as given,
+   *  and live updates need a registered provider that implements `subscribe`. */
   subscribe(cfg, onBar) {
-    if (cfg.data && cfg.data.length > 0) return this.synthesizeTicks(cfg, onBar);
+    if (cfg.data && cfg.data.length > 0) return () => {
+    };
     const resolved = this.registry.resolve(rawSymbol(cfg), { default: this.primaryProvider });
     if (!resolved) return () => {
     };
     return this.cache.subscribe(canonical(cfg, resolved), onBar);
-  }
-  /**
-   * Synthesize price-relative ticks for offline `data` runs (no network), so the
-   * forming-candle path is exercised at any price scale. Mirrors the bundled
-   * provider feed's offline behavior.
-   */
-  synthesizeTicks(cfg, onBar) {
-    if (this.liveBars.length === 0) return () => {
-    };
-    const step = intervalMs(cfg.timeframe ?? "60");
-    const timer = setInterval(() => {
-      const bars = this.liveBars;
-      const forming = bars[bars.length - 1];
-      if (!forming) return;
-      const jitter = forming.close * 15e-4 * (Math.random() - 0.5) * 2;
-      const close = Math.max(0, forming.close + jitter);
-      const updated = { ...forming, close, high: Math.max(forming.high, close), low: Math.min(forming.low, close) };
-      bars[bars.length - 1] = updated;
-      onBar(updated);
-      if (Math.random() < 0.12) {
-        const next = { time: updated.time + step, open: updated.close, high: updated.close, low: updated.close, close: updated.close, volume: 0 };
-        bars.push(next);
-        onBar(next);
-      }
-    }, 1e3);
-    return () => clearInterval(timer);
   }
 };
 function rawSymbol(cfg) {
@@ -1716,6 +1663,34 @@ var DrawingsControl = class {
     if (this.ok("setFavorites")) this.ctrl.setFavorites([...types]);
     return this;
   }
+  /** Every tool's remembered settings, by type — what the next drawing of each type starts
+   *  from (its style, text styling and per-type settings such as fib levels). Plain JSON:
+   *  persist it and hand it back to {@link setToolDefaults} on the next load. */
+  toolDefaults() {
+    return this.ctrl.toolDefaults();
+  }
+  /** Replace every tool's remembered settings (e.g. restoring persisted prefs). Malformed
+   *  entries and unknown types are dropped. Follow changes on `drawing:defaults`. */
+  setToolDefaults(map2) {
+    this.ctrl.setToolDefaults(map2);
+    return this;
+  }
+  /** Forget one tool's remembered settings (every tool's without an argument). */
+  resetToolDefaults(type) {
+    this.ctrl.resetToolDefaults(type);
+    return this;
+  }
+  /** Every tool's saved looks ("styles" in the settings panel), by type. Plain JSON —
+   *  persist it and hand it back to {@link setToolTemplates}. */
+  toolTemplates() {
+    return this.ctrl.toolTemplates();
+  }
+  /** Replace every tool's saved looks (e.g. restoring persisted prefs). Follow changes on
+   *  `drawing:templates`. */
+  setToolTemplates(map2) {
+    this.ctrl.setToolTemplates(map2);
+    return this;
+  }
   /** Aliases mirroring `renderer.getConfig()/applyConfig()` for symmetry. */
   getConfig() {
     return this.ctrl.toJSON();
@@ -1812,8 +1787,8 @@ var ReplayControl = class {
   }
   /** Reveal one bar (one tick, with {@link setTicks}) every `intervalMs` (default: the last
    *  interval used, else 1000). Calling it again while playing changes the pace. */
-  play(intervalMs2) {
-    this.ctrl.replayPlay(intervalMs2);
+  play(intervalMs) {
+    this.ctrl.replayPlay(intervalMs);
     return this;
   }
   pause() {
@@ -1884,6 +1859,74 @@ var SecondClock = class _SecondClock {
     }, _SecondClock.delayToNextSecond(this.now()));
   }
 };
+
+// src/core/drawings/defaults.ts
+function captureToolDefaults(d) {
+  const out = { style: { ...d.style } };
+  if (d.text) {
+    const { value: _value, ...styling } = d.text;
+    out.text = styling;
+  }
+  const props = d.serialize().props;
+  if (props !== void 0) out.props = clonePlain(props);
+  return out;
+}
+function applyToolDefaults(d, defaults) {
+  if (!defaults) return;
+  if (defaults.style) d.style = { ...d.style, ...defaults.style };
+  if (defaults.text) d.text = { ...d.text ?? defaultText(), ...defaults.text, value: d.text?.value ?? "" };
+  if (defaults.props) d.applyProps(clonePlain(defaults.props));
+}
+function sameToolDefaults(a, b) {
+  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+function sanitizeToolDefaults(raw) {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw;
+  const obj = (v) => v != null && typeof v === "object" && !Array.isArray(v) ? v : void 0;
+  const out = {};
+  const style = obj(r.style);
+  if (style) out.style = style;
+  const text = obj(r.text);
+  if (text) {
+    const { value: _value, ...styling } = text;
+    out.text = styling;
+  }
+  const props = obj(r.props);
+  if (props) out.props = props;
+  return out.style || out.text || out.props ? out : null;
+}
+var TEMPLATE_NAME_MAX = 60;
+function sanitizeToolTemplates(raw) {
+  if (!Array.isArray(raw)) return [];
+  const byName = /* @__PURE__ */ new Map();
+  for (const entry of raw) {
+    if (entry == null || typeof entry !== "object") continue;
+    const e = entry;
+    const name = typeof e.name === "string" ? e.name.trim().slice(0, TEMPLATE_NAME_MAX) : "";
+    const settings = sanitizeToolDefaults(e.settings);
+    if (name && settings) byName.set(name, { name, settings });
+  }
+  return [...byName.values()];
+}
+var LINE_TOOLS = /* @__PURE__ */ new Set(["trendline", "ray", "extendedline", "hline", "hray", "vline", "crossline", "infoline", "trendangle"]);
+var AREA_TOOLS = /* @__PURE__ */ new Set(["box", "rotatedrect", "ellipse", "circle", "triangle", "parallelchannel", "disjointchannel", "flattopbottom"]);
+function builtinToolTemplates(type) {
+  if (LINE_TOOLS.has(type)) {
+    return [
+      { name: "Support", settings: { style: { lineColor: BULLISH, lineWidth: 2, lineStyle: "solid" } } },
+      { name: "Resistance", settings: { style: { lineColor: BEARISH, lineWidth: 2, lineStyle: "solid" } } },
+      { name: "Projection", settings: { style: { lineColor: NEUTRAL, lineWidth: 1, lineStyle: "dashed" } } }
+    ];
+  }
+  if (AREA_TOOLS.has(type)) {
+    return [
+      { name: "Demand", settings: { style: { lineColor: BULLISH, fillColor: `${BULLISH}26` } } },
+      { name: "Supply", settings: { style: { lineColor: BEARISH, fillColor: `${BEARISH}26` } } }
+    ];
+  }
+  return [];
+}
 
 // src/core/drawings/effectiveColor.ts
 var VALID_FILL = VALID;
@@ -1982,6 +2025,10 @@ var DrawingHistory = class {
 };
 
 // src/core/drawings/DrawingController.ts
+function factoryDefaults(d) {
+  const fresh = createDrawing(d.type, { paneId: d.paneId });
+  return fresh ? captureToolDefaults(fresh) : void 0;
+}
 var DrawingController = class {
   constructor(renderer, events, option, seriesGateway) {
     this.events = events;
@@ -2000,8 +2047,10 @@ var DrawingController = class {
     // ordered; [0] is the primary (settings-popup) selection
     this.clipboard = [];
     // in-memory copy buffer (per chart)
-    this.lastStyle = /* @__PURE__ */ new Map();
-    // per-tool "last used" style
+    /** Per-tool remembered settings — the last drawing of each type the user styled seeds the next. */
+    this.defaults = /* @__PURE__ */ new Map();
+    /** Per-tool saved looks ("styles"), in the order they were saved. */
+    this.templates = /* @__PURE__ */ new Map();
     this.subs = [];
     this.enabled = !!renderer.capabilities.userDrawings && !!renderer.userDrawingsPort;
     this.port = this.enabled ? renderer.userDrawingsPort : null;
@@ -2023,7 +2072,8 @@ var DrawingController = class {
     if (!this.port) return;
     const changed = type !== this.activeTool;
     this.activeTool = type;
-    this.port.setActiveTool(type, type ? this.lastStyle.get(type) : void 0);
+    const defaults = type ? this.defaults.get(type) : void 0;
+    this.port.setActiveTool(type, defaults?.style, defaults);
     if (changed) this.events.emit("drawing:tool", { type });
   }
   getTool() {
@@ -2091,6 +2141,84 @@ var DrawingController = class {
     this.port?.setFavorites?.(list);
     this.events.emit("drawing:favorites", { favorites: list });
   }
+  /** Every tool's remembered settings, by type (plain JSON — persist it as-is). */
+  toolDefaults() {
+    const out = {};
+    for (const [type, d] of this.defaults) out[type] = clonePlain(d);
+    return out;
+  }
+  /** Replace every tool's remembered settings (restoring persisted prefs). Unknown types and
+   *  malformed entries are dropped; an unchanged set is a no-op and emits nothing. */
+  setToolDefaults(map2) {
+    const next = /* @__PURE__ */ new Map();
+    for (const [type, raw] of Object.entries(map2 ?? {})) {
+      if (!getDrawingType(type)) continue;
+      const d = sanitizeToolDefaults(raw);
+      if (d) next.set(type, clonePlain(d));
+    }
+    const changed = /* @__PURE__ */ new Set([...this.defaults.keys(), ...next.keys()]);
+    for (const type of [...changed]) if (sameToolDefaults(this.defaults.get(type), next.get(type))) changed.delete(type);
+    if (changed.size === 0) return;
+    this.defaults.clear();
+    for (const [type, d] of next) this.defaults.set(type, d);
+    if (this.activeTool && changed.has(this.activeTool)) this.setTool(this.activeTool);
+    for (const type of changed) this.events.emit("drawing:defaults", { type });
+  }
+  /** Forget a tool's remembered settings (every tool's when `type` is omitted) — new drawings
+   *  start from the factory defaults again. */
+  resetToolDefaults(type) {
+    const types = type ? this.defaults.has(type) ? [type] : [] : [...this.defaults.keys()];
+    for (const t of types) {
+      this.defaults.delete(t);
+      this.events.emit("drawing:defaults", { type: t });
+    }
+  }
+  /** Every tool's saved looks, by type (plain JSON — persist it as-is). */
+  toolTemplates() {
+    const out = {};
+    for (const [type, list] of this.templates) out[type] = clonePlain(list);
+    return out;
+  }
+  /** Replace every tool's saved looks (restoring persisted prefs). Unknown types and
+   *  malformed entries are dropped; an unchanged set is a no-op and emits nothing. */
+  setToolTemplates(map2) {
+    const next = /* @__PURE__ */ new Map();
+    for (const [type, raw] of Object.entries(map2 ?? {})) {
+      if (!getDrawingType(type)) continue;
+      const list = sanitizeToolTemplates(raw);
+      if (list.length > 0) next.set(type, list);
+    }
+    const changed = [.../* @__PURE__ */ new Set([...this.templates.keys(), ...next.keys()])].filter(
+      (t) => JSON.stringify(this.templates.get(t) ?? []) !== JSON.stringify(next.get(t) ?? [])
+    );
+    if (changed.length === 0) return;
+    this.templates = next;
+    this.pushTemplates();
+    for (const type of changed) this.events.emit("drawing:templates", { type });
+  }
+  /** Save the given settings as a named look for a tool (a same-named one is replaced). */
+  saveToolTemplate(type, name, settings) {
+    if (!getDrawingType(type)) return;
+    const [entry] = sanitizeToolTemplates([{ name, settings }]);
+    if (!entry) return;
+    const list = (this.templates.get(type) ?? []).filter((t) => t.name !== entry.name);
+    this.templates.set(type, [...list, clonePlain(entry)]);
+    this.pushTemplates();
+    this.events.emit("drawing:templates", { type });
+  }
+  /** Delete a tool's saved look by name. */
+  removeToolTemplate(type, name) {
+    const list = this.templates.get(type);
+    if (!list?.some((t) => t.name === name)) return;
+    const rest = list.filter((t) => t.name !== name);
+    if (rest.length > 0) this.templates.set(type, rest);
+    else this.templates.delete(type);
+    this.pushTemplates();
+    this.events.emit("drawing:templates", { type });
+  }
+  pushTemplates() {
+    this.port?.setToolTemplates?.(this.toolTemplates());
+  }
   setToolbar(option) {
     this.port?.setToolbar(buildToolbar(option).definition);
   }
@@ -2106,21 +2234,22 @@ var DrawingController = class {
   // ── programmatic CRUD (facade-facing) ── each is one undo step
   add(type, init = {}) {
     if (!this.enabled) return null;
-    const last = this.lastStyle.get(type);
-    const style = { ...last ?? {}, ...init.style ?? {} };
+    const defaults = this.defaults.get(type);
     const d = createDrawing(type, {
       id: this.store.nextId(),
       paneId: init.paneId ?? "price",
       anchors: init.anchors,
-      style,
       text: init.text,
-      props: init.props,
       zIndex: init.zIndex ?? this.startZ(type, init.paneId ?? "price")
     });
     if (!d) return null;
+    applyToolDefaults(d, defaults);
+    if (init.style) d.style = { ...d.style, ...init.style };
+    if (init.text) d.text = { ...d.text ?? init.text, ...init.text };
+    if (init.props) d.applyProps(init.props);
     this.history.record(this.store.serialize());
     this.store.add(d);
-    this.captureStyle(d.id);
+    this.captureDefaults(d.id);
     this.events.emit("drawing:created", { id: d.id });
     return d;
   }
@@ -2132,9 +2261,8 @@ var DrawingController = class {
     const before = this.store.serialize();
     const cur = patch.style ? this.store.get(id) : void 0;
     const resolved = patch.style && cur ? { ...patch, style: { ...cur.style, ...patch.style } } : patch;
-    if (this.store.update(id, resolved)) {
+    if (this.updateDrawing(id, resolved)) {
       this.history.record(before);
-      this.captureStyle(id);
       this.events.emit("drawing:edited", { id });
     }
   }
@@ -2142,7 +2270,7 @@ var DrawingController = class {
   updateMany(patches) {
     this.history.begin(this.store.serialize());
     for (const { id, patch } of patches) {
-      if (this.store.update(id, patch)) {
+      if (this.updateDrawing(id, patch)) {
         this.history.markDirty();
         this.events.emit("drawing:edited", { id });
       }
@@ -2322,10 +2450,27 @@ var DrawingController = class {
   resolve(ids) {
     return ids.map((id) => this.store.get(id)).filter((d) => d != null);
   }
-  /** Remember a drawing's style as the "last used" for its type (seeds the next one). */
-  captureStyle(id) {
+  /** `store.update` that remembers the drawing's settings only when the patch changed them:
+   *  moving an older drawing must not hand its look back to the tool. */
+  updateDrawing(id, patch) {
+    const cur = this.store.get(id);
+    const before = cur ? captureToolDefaults(cur) : void 0;
+    if (!this.store.update(id, patch)) return false;
+    const after = this.store.get(id);
+    if (after && !sameToolDefaults(before, captureToolDefaults(after))) this.captureDefaults(id);
+    return true;
+  }
+  /** Remember a drawing's settings as its tool's defaults (they seed the next one), and
+   *  announce a real change so a host can save it. */
+  captureDefaults(id) {
     const d = this.store.get(id);
-    if (d) this.lastStyle.set(d.type, { ...d.style });
+    if (!d) return;
+    const captured = captureToolDefaults(d);
+    const next = sameToolDefaults(captured, factoryDefaults(d)) ? void 0 : captured;
+    if (sameToolDefaults(this.defaults.get(d.type), next)) return;
+    if (next) this.defaults.set(d.type, next);
+    else this.defaults.delete(d.type);
+    this.events.emit("drawing:defaults", { type: d.type });
   }
   sync() {
     this.port?.syncDrawings(this.store.serialize().drawings);
@@ -2341,22 +2486,20 @@ var DrawingController = class {
         break;
       case "create": {
         const before = this.store.serialize();
-        const last = this.lastStyle.get(i.doc.type);
-        const style = last ? { ...i.doc.style, ...last } : i.doc.style;
-        const d = deserializeDrawing({ ...i.doc, id: this.store.nextId(), style });
+        const d = deserializeDrawing({ ...i.doc, id: this.store.nextId() });
         if (!d) return;
+        applyToolDefaults(d, this.defaults.get(d.type));
         if (!d.zIndex) d.zIndex = this.startZ(d.type, d.paneId) ?? 0;
         this.history.record(before);
         this.store.add(d);
-        this.captureStyle(d.id);
+        this.captureDefaults(d.id);
         this.events.emit("drawing:created", { id: d.id });
         break;
       }
       case "edit": {
         const before = this.store.serialize();
-        if (this.store.update(i.doc.id, i.doc)) {
+        if (this.updateDrawing(i.doc.id, i.doc)) {
           this.history.record(before);
-          this.captureStyle(i.doc.id);
           this.events.emit("drawing:edited", { id: i.doc.id });
         }
         break;
@@ -2364,7 +2507,7 @@ var DrawingController = class {
       case "edit-many": {
         this.history.begin(this.store.serialize());
         for (const doc of i.docs) {
-          if (this.store.update(doc.id, doc)) {
+          if (this.updateDrawing(doc.id, doc)) {
             this.history.markDirty();
             this.events.emit("drawing:edited", { id: doc.id });
           }
@@ -2387,6 +2530,12 @@ var DrawingController = class {
         break;
       case "favorite":
         this.setFavorite(i.type, i.on);
+        break;
+      case "template-save":
+        this.saveToolTemplate(i.type, i.name, i.settings);
+        break;
+      case "template-remove":
+        this.removeToolTemplate(i.type, i.name);
         break;
       case "snap-mode":
         if (i.mode !== this.snapMode) {
@@ -3069,17 +3218,17 @@ var DrawingToolbar = class {
     this.paintStay();
   }
   makeButton(icon2, title, onClick) {
-    const btn2 = document.createElement("button");
-    btn2.type = "button";
-    btn2.className = "vela-dtb-btn";
-    btn2.setAttribute("aria-label", title);
-    this.tipText.set(btn2, title);
-    if (icon2) btn2.innerHTML = hitHtml(icon2);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "vela-dtb-btn";
+    btn.setAttribute("aria-label", title);
+    this.tipText.set(btn, title);
+    if (icon2) btn.innerHTML = hitHtml(icon2);
     this.tipDisposers.push(
-      attachChromeTooltip(btn2, { host: this.host, theme: () => this.theme, text: () => this.tipText.get(btn2) ?? title, placement: "right" })
+      attachChromeTooltip(btn, { host: this.host, theme: () => this.theme, text: () => this.tipText.get(btn) ?? title, placement: "right" })
     );
-    btn2.addEventListener("click", onClick);
-    return btn2;
+    btn.addEventListener("click", onClick);
+    return btn;
   }
   divider() {
     const d = document.createElement("div");
@@ -3216,8 +3365,8 @@ function resolveAnimations(animations) {
 
 // src/renderers/shared/IndicatorInputsDialog.ts
 var PROPS_TAB = "Properties";
-function bagOf(row, decl) {
-  return decl.prop ? row.propValues : row.values;
+function bagOf(row2, decl) {
+  return decl.prop ? row2.propValues : row2.values;
 }
 var SOURCES = ["close", "open", "high", "low", "hl2", "hlc3", "ohlc4", "volume"];
 var IndicatorInputsDialog = class {
@@ -3250,13 +3399,13 @@ var IndicatorInputsDialog = class {
   isOpen() {
     return this.dialog !== null;
   }
-  open(row) {
+  open(row2) {
     this.close();
-    if (row.inputs.length === 0 && row.props.length === 0) return;
-    this.row = row;
-    this.openId = row.id;
-    this.snapshot = { ...row.values };
-    this.propSnapshot = { ...row.propValues };
+    if (row2.inputs.length === 0 && row2.props.length === 0) return;
+    this.row = row2;
+    this.openId = row2.id;
+    this.snapshot = { ...row2.values };
+    this.propSnapshot = { ...row2.propValues };
     ensureDialogStyles();
     const t = this.host.theme();
     const border = "var(--vela-border)";
@@ -3264,7 +3413,7 @@ var IndicatorInputsDialog = class {
     const host = this.host.dialogHost() ?? this.host.container;
     const ui = new Dialog({
       host,
-      title: row.title,
+      title: row2.title,
       // Non-modal: live-edit dialog — a modal machine locks pointer events on the
       // whole body, killing the chart and the body-portaled popovers.
       modal: false,
@@ -3295,9 +3444,9 @@ var IndicatorInputsDialog = class {
       theme: () => this.host.theme(),
       text: () => "Close"
     }));
-    const tabDefs = tabInputs(row.inputs);
-    if (row.props.length > 0) {
-      const propDecls = row.props.map((p) => {
+    const tabDefs = tabInputs(row2.inputs);
+    if (row2.props.length > 0) {
+      const propDecls = row2.props.map((p) => {
         const d = { ...p, prop: true };
         delete d.tab;
         return d;
@@ -3331,7 +3480,7 @@ var IndicatorInputsDialog = class {
       tab.addEventListener("click", () => activate(idx));
       tabs.appendChild(tab);
       tabEls.push(tab);
-      bodies.push(this.buildTabBody(def.inputs, row, gates));
+      bodies.push(this.buildTabBody(def.inputs, row2, gates));
       if (def.inputs.every((d) => d.when)) {
         gates.push({ el: tab, visible: (bag) => def.inputs.some((d) => inputVisible(d.when, bag)) });
       }
@@ -3340,7 +3489,7 @@ var IndicatorInputsDialog = class {
     for (const b of bodies) ui.body.appendChild(b);
     activate(0);
     const refresh = () => {
-      const bag = valuesBag(row);
+      const bag = valuesBag(row2);
       for (const g of gates) g.el.style.display = g.visible(bag) ? "" : "none";
       if (tabEls[active]?.style.display === "none") {
         const next = tabEls.findIndex((el) => el.style.display !== "none");
@@ -3368,7 +3517,7 @@ var IndicatorInputsDialog = class {
   }
   /** One tab's scrollable body — one shared grid so every group's controls share a
    *  left edge (a 100px number field lines up with a wider session/time pair). */
-  buildTabBody(inputs, row, gates) {
+  buildTabBody(inputs, row2, gates) {
     const body = document.createElement("div");
     body.style.cssText = inputDialogBodyStyle(this.host.mobile());
     for (const group of groupInputs(inputs)) {
@@ -3380,7 +3529,7 @@ var IndicatorInputsDialog = class {
         section.appendChild(header);
       }
       for (const inputRow of group.rows) {
-        const el = this.buildInputRow(section, inputRow, row);
+        const el = this.buildInputRow(section, inputRow, row2);
         if (inputRow.some((d) => d.when)) {
           gates.push({ el, visible: (bag) => rowVisible(inputRow, bag) });
         }
@@ -3413,26 +3562,26 @@ var IndicatorInputsDialog = class {
   }
   /** Restore every input and prop to its open-time value (re-running the indicator), then close. */
   revertAndClose() {
-    const row = this.row;
+    const row2 = this.row;
     const snap = this.snapshot;
-    if (row && snap) {
-      for (const inp of row.inputs) {
+    if (row2 && snap) {
+      for (const inp of row2.inputs) {
         const snapped = snap[inp.key];
         const before = snapped !== void 0 ? snapped : inp.defval;
-        if (row.values[inp.key] !== before) {
-          row.values[inp.key] = before;
-          this.host.onChange?.({ indicatorId: row.id, key: inp.key, value: before });
+        if (row2.values[inp.key] !== before) {
+          row2.values[inp.key] = before;
+          this.host.onChange?.({ indicatorId: row2.id, key: inp.key, value: before });
         }
       }
     }
     const propSnap = this.propSnapshot;
-    if (row && propSnap) {
-      for (const p of row.props) {
+    if (row2 && propSnap) {
+      for (const p of row2.props) {
         const snapped = propSnap[p.key];
         const before = snapped !== void 0 ? snapped : p.defval;
-        if (row.propValues[p.key] !== before) {
-          row.propValues[p.key] = before;
-          this.host.onChange?.({ indicatorId: row.id, key: p.key, value: before, kind: "prop" });
+        if (row2.propValues[p.key] !== before) {
+          row2.propValues[p.key] = before;
+          this.host.onChange?.({ indicatorId: row2.id, key: p.key, value: before, kind: "prop" });
         }
       }
     }
@@ -3450,35 +3599,35 @@ var IndicatorInputsDialog = class {
    *  rebuild-after-reset move as the chart-settings dialog. The open-time snapshot
    *  survives the rebuild, so Cancel after a reset still reverts the whole session. */
   resetToDefaults() {
-    const row = this.row;
-    if (!row) return;
+    const row2 = this.row;
+    if (!row2) return;
     const snap = this.snapshot;
     const propSnap = this.propSnapshot;
-    for (const inp of row.inputs) {
-      if (row.values[inp.key] !== inp.defval) {
-        row.values[inp.key] = inp.defval;
-        this.host.onChange?.({ indicatorId: row.id, key: inp.key, value: inp.defval });
+    for (const inp of row2.inputs) {
+      if (row2.values[inp.key] !== inp.defval) {
+        row2.values[inp.key] = inp.defval;
+        this.host.onChange?.({ indicatorId: row2.id, key: inp.key, value: inp.defval });
       }
     }
-    for (const p of row.props) {
-      if (row.propValues[p.key] !== p.defval) {
-        row.propValues[p.key] = p.defval;
-        this.host.onChange?.({ indicatorId: row.id, key: p.key, value: p.defval, kind: "prop" });
+    for (const p of row2.props) {
+      if (row2.propValues[p.key] !== p.defval) {
+        row2.propValues[p.key] = p.defval;
+        this.host.onChange?.({ indicatorId: row2.id, key: p.key, value: p.defval, kind: "prop" });
       }
     }
-    this.open(row);
+    this.open(row2);
     if (snap) this.snapshot = snap;
     if (propSnap) this.propSnapshot = propSnap;
   }
   /** Write one edit through: store it, notify the host, and re-apply the `when` gates. */
-  commit(row, decl, value) {
-    bagOf(row, decl)[decl.key] = value;
-    this.host.onChange?.({ indicatorId: row.id, key: decl.key, value, ...decl.prop ? { kind: "prop" } : {} });
+  commit(row2, decl, value) {
+    bagOf(row2, decl)[decl.key] = value;
+    this.host.onChange?.({ indicatorId: row2.id, key: decl.key, value, ...decl.prop ? { kind: "prop" } : {} });
     this.refreshVisibility?.();
   }
   /** One settings row (or several `inline=` inputs) placed into a section's grid. */
-  buildInputRow(grid, decls, row) {
-    const idOf = (inp) => `vela-inp-${row.id}-${inp.key}`;
+  buildInputRow(grid, decls, row2) {
+    const idOf = (inp) => `vela-inp-${row2.id}-${inp.key}`;
     const append = (el) => {
       grid.appendChild(el);
       return el;
@@ -3489,7 +3638,7 @@ var IndicatorInputsDialog = class {
         inline: decls.map((d) => ({
           label: nameOf(d) || void 0,
           id: idOf(d),
-          control: this.buildControl(row, d, idOf(d)),
+          control: this.buildControl(row2, d, idOf(d)),
           toggleFirst: d.type === "bool",
           fit: d.type === "color" || d.type === "bool"
         })),
@@ -3500,7 +3649,7 @@ var IndicatorInputsDialog = class {
     const id = idOf(lead);
     const info = lead.tooltip ? this.infoButton(lead.tooltip) : void 0;
     if (lead.type === "bool") {
-      const current = Boolean(bagOf(row, lead)[lead.key] ?? lead.defval);
+      const current = Boolean(bagOf(row2, lead)[lead.key] ?? lead.defval);
       return append(fieldRow({
         label: nameOf(lead),
         id,
@@ -3509,7 +3658,7 @@ var IndicatorInputsDialog = class {
         toggle: {
           id,
           checked: current,
-          onChange: (v) => this.commit(row, lead, v)
+          onChange: (v) => this.commit(row2, lead, v)
         }
       }));
     }
@@ -3519,7 +3668,7 @@ var IndicatorInputsDialog = class {
         id,
         stacked: true,
         info,
-        control: this.buildControl(row, lead, id)
+        control: this.buildControl(row2, lead, id)
       }));
     }
     const fit = lead.type === "color" || lead.type === "session" || lead.type === "time";
@@ -3529,13 +3678,13 @@ var IndicatorInputsDialog = class {
       fit,
       controlWidth: fit ? void 0 : 100,
       info,
-      control: this.buildControl(row, lead, id)
+      control: this.buildControl(row2, lead, id)
     }));
   }
   /** Build the typed control for one input, committing edits live via `onChange`. */
-  buildControl(row, inp, id) {
-    const current = bagOf(row, inp)[inp.key] ?? inp.defval;
-    const emit = (value) => this.commit(row, inp, value);
+  buildControl(row2, inp, id) {
+    const current = bagOf(row2, inp)[inp.key] ?? inp.defval;
+    const emit = (value) => this.commit(row2, inp, value);
     if (inp.type === "bool") {
       return buildFieldControl({ kind: "switch", id, checked: Boolean(current), onChange: (v) => emit(v) }).el;
     }
@@ -3546,7 +3695,7 @@ var IndicatorInputsDialog = class {
         kind: "color",
         id,
         theme: this.host.theme(),
-        get: () => String(bagOf(row, inp)[inp.key] ?? inp.defval),
+        get: () => String(bagOf(row2, inp)[inp.key] ?? inp.defval),
         onChange: (v) => emit(v),
         // An input change re-executes the script over its whole history: commit the
         // opacity drag once on release, not once per pointer move.
@@ -3831,21 +3980,21 @@ var IndicatorInputsDialog = class {
     const picker = this.host.symbolPicker();
     if (!picker) return this.buildTextField(id, current, emit);
     let value = current;
-    const btn2 = document.createElement("button");
-    btn2.type = "button";
-    btn2.id = id;
-    btn2.style.cssText = `${this.ctrlStyle()}display:flex;align-items:center;cursor:pointer;text-align:left;`;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = id;
+    btn.style.cssText = `${this.ctrlStyle()}display:flex;align-items:center;cursor:pointer;text-align:left;`;
     const label = document.createElement("span");
     label.textContent = value || "Select symbol\u2026";
     label.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
-    btn2.append(label);
-    btn2.addEventListener("click", () => picker(value, (picked) => {
+    btn.append(label);
+    btn.addEventListener("click", () => picker(value, (picked) => {
       if (!picked) return;
       value = picked;
       label.textContent = picked;
       emit(picked);
     }));
-    return btn2;
+    return btn;
   }
   /** Shared field chrome for text / number / select controls (fills its wrapper's width). */
   ctrlStyle() {
@@ -3891,9 +4040,9 @@ function tabInputs(inputs) {
 function rowVisible(decls, bag) {
   return decls.some((d) => inputVisible(d.when, bag));
 }
-function valuesBag(row) {
+function valuesBag(row2) {
   const bag = {};
-  for (const inp of row.inputs) bag[inp.key] = row.values[inp.key] ?? inp.defval;
+  for (const inp of row2.inputs) bag[inp.key] = row2.values[inp.key] ?? inp.defval;
   return bag;
 }
 function groupInputs(inputs) {
@@ -4089,7 +4238,7 @@ var InputsUI = class {
       if (!this.selectedId) return;
       const target = e.target;
       if (target) {
-        for (const row of this.rows.values()) if (row.el.contains(target)) return;
+        for (const row2 of this.rows.values()) if (row2.el.contains(target)) return;
       }
       this.clearSelection();
     };
@@ -4172,9 +4321,9 @@ var InputsUI = class {
   setTheme(theme) {
     this.theme = theme;
     for (const lg of this.legends.values()) applyChromeTokens(lg, theme);
-    for (const row of this.rows.values()) {
-      row.el.style.background = row.highlighted ? theme.background : this.idleRowFill();
-      row.el.style.color = theme.textColor;
+    for (const row2 of this.rows.values()) {
+      row2.el.style.background = row2.highlighted ? theme.background : this.idleRowFill();
+      row2.el.style.color = theme.textColor;
     }
     if (this.foldToggle) this.syncFoldToggle();
   }
@@ -4193,26 +4342,26 @@ var InputsUI = class {
    */
   setLegendActions(provider) {
     this.legendActions = provider;
-    for (const row of this.rows.values()) this.renderExtras(row.id, row.extrasEl);
+    for (const row2 of this.rows.values()) this.renderExtras(row2.id, row2.extrasEl);
   }
   /** (Re)build one row's contributed buttons. Same look, reveal and tooltips as the built-ins. */
   renderExtras(id, extrasEl) {
     this.disposeTips(this.extrasTips, id);
     extrasEl.replaceChildren();
     for (const action of this.legendActions?.(id) ?? []) {
-      const btn2 = document.createElement("button");
-      btn2.type = "button";
-      btn2.setAttribute("aria-label", action.tooltip);
-      this.tip(this.extrasTips, id, btn2, action.tooltip);
-      btn2.innerHTML = iconAt(action.icon, LEGEND_ICON_PX2);
-      btn2.className = "vela-ind-ctl";
-      btn2.dataset.legendAction = action.id;
-      btn2.style.cssText = LEGEND_CTL_CSS;
-      btn2.addEventListener("click", (e) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("aria-label", action.tooltip);
+      this.tip(this.extrasTips, id, btn, action.tooltip);
+      btn.innerHTML = iconAt(action.icon, LEGEND_ICON_PX2);
+      btn.className = "vela-ind-ctl";
+      btn.dataset.legendAction = action.id;
+      btn.style.cssText = LEGEND_CTL_CSS;
+      btn.addEventListener("click", (e) => {
         e.stopPropagation();
         action.run();
       });
-      extrasEl.appendChild(btn2);
+      extrasEl.appendChild(btn);
     }
   }
   /**
@@ -4222,17 +4371,17 @@ var InputsUI = class {
    */
   setLegendCallouts(provider) {
     this.legendCallouts = provider;
-    for (const row of this.rows.values()) this.renderCallouts(row);
+    for (const row2 of this.rows.values()) this.renderCallouts(row2);
   }
   /** (Re)build one row's callout bubbles — tinted icon circles beside the title whose
    *  click (when the view carries content) deploys a panel of text and actions. */
-  renderCallouts(row) {
-    this.disposeTips(this.calloutTips, row.id);
-    for (const bubble of row.callouts) bubble.destroy();
-    row.callouts = [];
-    row.calloutsEl.replaceChildren();
-    const views = this.legendCallouts?.(row.id) ?? [];
-    row.calloutsEl.style.display = legendCalloutsDisplay(row.highlighted, views.length > 0);
+  renderCallouts(row2) {
+    this.disposeTips(this.calloutTips, row2.id);
+    for (const bubble of row2.callouts) bubble.destroy();
+    row2.callouts = [];
+    row2.calloutsEl.replaceChildren();
+    const views = this.legendCallouts?.(row2.id) ?? [];
+    row2.calloutsEl.style.display = legendCalloutsDisplay(row2.highlighted, views.length > 0);
     for (const view of views) {
       const bubble = new CalloutBubble({
         icon: view.icon,
@@ -4246,9 +4395,9 @@ var InputsUI = class {
         theme: () => this.theme
       });
       bubble.el.dataset.legendCallout = view.id;
-      this.tip(this.calloutTips, row.id, bubble.el, view.tooltip);
-      row.callouts.push(bubble);
-      row.calloutsEl.appendChild(bubble.el);
+      this.tip(this.calloutTips, row2.id, bubble.el, view.tooltip);
+      row2.callouts.push(bubble);
+      row2.calloutsEl.appendChild(bubble.el);
     }
   }
   /** Reposition the per-pane legend containers after a layout change. */
@@ -4268,9 +4417,9 @@ var InputsUI = class {
    */
   setValuesVisible(visible) {
     this.valuesVisible = visible;
-    for (const row of this.rows.values()) {
-      row.showValues = null;
-      this.renderRowValues(row);
+    for (const row2 of this.rows.values()) {
+      row2.showValues = null;
+      this.renderRowValues(row2);
     }
   }
   /**
@@ -4279,35 +4428,35 @@ var InputsUI = class {
    * unchanged frames: each row diffs against its last rendered values before touching DOM.
    */
   setPlotValues(values) {
-    for (const row of this.rows.values()) {
-      const next = values.get(row.id) ?? [];
+    for (const row2 of this.rows.values()) {
+      const next = values.get(row2.id) ?? [];
       const key = next.map((v) => `${v.value}|${v.color}`).join("\0");
-      if (key === row.plotValuesKey) continue;
-      row.plotValues = next;
-      row.plotValuesKey = key;
-      this.renderRowValues(row);
+      if (key === row2.plotValuesKey) continue;
+      row2.plotValues = next;
+      row2.plotValuesKey = key;
+      this.renderRowValues(row2);
     }
   }
   /** Whether a row currently shows its values: its own override, else the chart-wide flag. */
-  rowValuesShown(row) {
-    return row.showValues ?? this.valuesVisible;
+  rowValuesShown(row2) {
+    return row2.showValues ?? this.valuesVisible;
   }
   /** (Re)build one row's values readout from its stored plot values + visibility. A
    *  highlighted (hovered/selected) row shows only the title + controls — no values. */
-  renderRowValues(row) {
-    if (!this.rowValuesShown(row) || row.plotValues.length === 0 || row.highlighted) {
-      row.valuesEl.style.display = "none";
-      row.valuesEl.replaceChildren();
+  renderRowValues(row2) {
+    if (!this.rowValuesShown(row2) || row2.plotValues.length === 0 || row2.highlighted) {
+      row2.valuesEl.style.display = "none";
+      row2.valuesEl.replaceChildren();
       return;
     }
-    row.valuesEl.style.display = "block";
-    row.valuesEl.replaceChildren();
-    row.plotValues.forEach((v, i) => {
+    row2.valuesEl.style.display = "block";
+    row2.valuesEl.replaceChildren();
+    row2.plotValues.forEach((v, i) => {
       const span = document.createElement("span");
       span.textContent = v.value;
       span.style.color = v.color;
       if (i > 0) span.style.marginLeft = `${LEGEND_VALUES_GAP_PX}px`;
-      row.valuesEl.appendChild(span);
+      row2.valuesEl.appendChild(span);
     });
   }
   // ── legend move/merge (menu + drag) ─────────────────────────────────────
@@ -4316,8 +4465,8 @@ var InputsUI = class {
     this.closeMoveMenu();
     const api = this.moveApi;
     if (!api) return;
-    const row = this.rows.get(id);
-    const currentPane = row?.paneId ?? "price";
+    const row2 = this.rows.get(id);
+    const currentPane = row2?.paneId ?? "price";
     const panes = api.panes();
     const items = [];
     for (const p of panes) {
@@ -4357,13 +4506,13 @@ var InputsUI = class {
   openRowMenu(id, x, y) {
     this.closeRowMenu();
     this.closeMoveMenu();
-    const row = this.rows.get(id);
-    if (!row) return;
+    const row2 = this.rows.get(id);
+    if (!row2) return;
     this.rowMenuId = id;
     const items = [{
       id: "values",
       label: "Indicator values",
-      checked: this.rowValuesShown(row)
+      checked: this.rowValuesShown(row2)
     }];
     if (!this.rowMenu) {
       this.rowMenu = new Menu({
@@ -4390,11 +4539,11 @@ var InputsUI = class {
   }
   /** Move a legend row to another pane (indicator merged/moved), tidying an emptied container. */
   setPane(id, paneId) {
-    const row = this.rows.get(id);
-    if (!row || row.paneId === paneId) return;
-    const prev2 = row.paneId;
-    row.paneId = paneId;
-    this.attach(this.legendFor(paneId), row.el, row.native);
+    const row2 = this.rows.get(id);
+    if (!row2 || row2.paneId === paneId) return;
+    const prev2 = row2.paneId;
+    row2.paneId = paneId;
+    this.attach(this.legendFor(paneId), row2.el, row2.native);
     this.syncFoldToggle();
     if (prev2 !== "price") {
       const lg = this.legends.get(prev2);
@@ -4424,9 +4573,9 @@ var InputsUI = class {
     lg.style.maxWidth = `calc(100% - ${(bounds.rightAxis ?? 0) + LEGEND_LEFT_PX + LEGEND_SCALE_GAP_PX}px)`;
     const collapsed = this.paneCollapse.has(paneId);
     const masterId = this.paneCollapse.get(paneId) ?? null;
-    for (const row of this.rows.values()) {
-      if (row.paneId !== paneId) continue;
-      row.el.style.display = (collapsed ? row.id !== masterId : this.legendFolded) ? "none" : "flex";
+    for (const row2 of this.rows.values()) {
+      if (row2.paneId !== paneId) continue;
+      row2.el.style.display = (collapsed ? row2.id !== masterId : this.legendFolded) ? "none" : "flex";
     }
     let top = bounds.top + 8;
     if (collapsed && Number.isFinite(bounds.height)) {
@@ -4460,13 +4609,13 @@ var InputsUI = class {
       if (wasFolded && count > 0) this.reposition();
       return;
     }
-    let btn2 = this.foldToggle;
-    if (!btn2) {
-      btn2 = document.createElement("button");
-      btn2.type = "button";
-      btn2.className = "vela-ind-fold";
-      this.tip(this.rowTips, "fold", btn2, () => this.overviewAction !== null ? "Indicators" : this.legendFolded ? "Show indicator legend" : "Hide indicator legend");
-      btn2.addEventListener("click", () => {
+    let btn = this.foldToggle;
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "vela-ind-fold";
+      this.tip(this.rowTips, "fold", btn, () => this.overviewAction !== null ? "Indicators" : this.legendFolded ? "Show indicator legend" : "Hide indicator legend");
+      btn.addEventListener("click", () => {
         if (this.overviewAction !== null) {
           this.overviewAction();
           return;
@@ -4474,24 +4623,24 @@ var InputsUI = class {
         this.legendFolded = !this.legendFolded;
         this.syncFoldToggle();
       });
-      this.foldToggle = btn2;
+      this.foldToggle = btn;
     }
     const folded = this.legendFolded;
-    btn2.setAttribute("aria-label", this.overviewAction !== null ? "Indicators" : folded ? "Show indicator legend" : "Hide indicator legend");
+    btn.setAttribute("aria-label", this.overviewAction !== null ? "Indicators" : folded ? "Show indicator legend" : "Hide indicator legend");
     const ink = this.theme.textColor;
-    btn2.style.cssText = `pointer-events:auto;display:inline-flex;align-items:center;gap:4px;background:${this.theme.background};color:${ink};border:1px solid ${this.theme.borderColor};border-radius:4px;padding:2px 6px;margin-top:6px;cursor:pointer;font:inherit;line-height:0;`;
-    btn2.replaceChildren();
+    btn.style.cssText = `pointer-events:auto;display:inline-flex;align-items:center;gap:4px;background:${this.theme.background};color:${ink};border:1px solid ${this.theme.borderColor};border-radius:4px;padding:2px 6px;margin-top:6px;cursor:pointer;font:inherit;line-height:0;`;
+    btn.replaceChildren();
     const icon2 = document.createElement("span");
     icon2.style.cssText = "display:inline-flex;align-items:center;line-height:0;opacity:0.7;";
     icon2.innerHTML = this.overviewAction !== null ? OVERVIEW_SVG : folded ? UNFOLD_SVG : FOLD_SVG;
-    btn2.appendChild(icon2);
+    btn.appendChild(icon2);
     if (folded) {
       const label = document.createElement("span");
       label.textContent = String(count);
       label.style.cssText = `font-weight:600;line-height:normal;font-size:12px;color:${ink};`;
-      btn2.appendChild(label);
+      btn.appendChild(label);
     }
-    this.legendFor("price").appendChild(btn2);
+    this.legendFor("price").appendChild(btn);
     this.reposition();
   }
   /** Create or update an indicator's legend row (in the legend for its pane). */
@@ -4573,8 +4722,8 @@ var InputsUI = class {
       eye.className = "vela-ind-ctl";
       eye.style.cssText = LEGEND_CTL_CSS;
       eye.addEventListener("click", () => {
-        const row2 = this.rows.get(id);
-        this.onToggleVisible?.(id, Boolean(row2?.hidden));
+        const row3 = this.rows.get(id);
+        this.onToggleVisible?.(id, Boolean(row3?.hidden));
       });
       controlsEl.appendChild(eye);
       eyeEl = eye;
@@ -4619,9 +4768,9 @@ var InputsUI = class {
     controlsEl.appendChild(close);
     el.appendChild(controlsEl);
     this.attach(this.legendFor(paneId), el, !!opts.native);
-    const row = { id, title, inputs, values: { ...values }, props: opts.props ?? [], propValues: { ...opts.propValues ?? {} }, el, titleEl, statusEl, valuesEl, plotValues: [], plotValuesKey: "", showValues: null, highlighted: false, paneId, hidden: false, eyeEl, controlsEl, extrasEl, calloutsEl, callouts: [], native: !!opts.native };
-    this.rows.set(id, row);
-    this.renderCallouts(row);
+    const row2 = { id, title, inputs, values: { ...values }, props: opts.props ?? [], propValues: { ...opts.propValues ?? {} }, el, titleEl, statusEl, valuesEl, plotValues: [], plotValuesKey: "", showValues: null, highlighted: false, paneId, hidden: false, eyeEl, controlsEl, extrasEl, calloutsEl, callouts: [], native: !!opts.native };
+    this.rows.set(id, row2);
+    this.renderCallouts(row2);
     this.syncFoldToggle();
   }
   /** Place a row in its pane's legend — native rows PREPEND (pinned to the top), Pine rows append. */
@@ -4631,10 +4780,10 @@ var InputsUI = class {
   }
   /** Reflect programmatic input changes (so a re-opened dialog shows current values). */
   setValues(id, values, props) {
-    const row = this.rows.get(id);
-    if (!row) return;
-    row.values = { ...row.values, ...values };
-    if (props) row.propValues = { ...row.propValues, ...props };
+    const row2 = this.rows.get(id);
+    if (!row2) return;
+    row2.values = { ...row2.values, ...values };
+    if (props) row2.propValues = { ...row2.propValues, ...props };
   }
   /**
    * Reflect an indicator's live status in its legend row: `'loading'` shows three pulsing
@@ -4642,9 +4791,9 @@ var InputsUI = class {
    * at legend scale), `'live'` a pulsing dot, `'idle'` nothing. Rendered just right of the title.
    */
   setStatus(id, status) {
-    const row = this.rows.get(id);
-    if (!row) return;
-    const el = row.statusEl;
+    const row2 = this.rows.get(id);
+    if (!row2) return;
+    const el = row2.statusEl;
     el.replaceChildren();
     if (status === "idle") {
       el.style.cssText = "display:none;box-sizing:border-box;flex:none;";
@@ -4673,15 +4822,15 @@ var InputsUI = class {
   }
   /** Mark a row hidden/shown — swaps the eye glyph and dims the row; does NOT remove it. */
   setVisible(id, visible) {
-    const row = this.rows.get(id);
-    if (!row) return;
-    row.hidden = !visible;
-    row.el.style.opacity = visible ? "1" : "0.5";
-    if (row.eyeEl) {
-      row.eyeEl.innerHTML = visible ? EYE_SVG : EYE_OFF_SVG;
-      row.eyeEl.setAttribute("aria-label", visible ? "Hide" : "Show");
+    const row2 = this.rows.get(id);
+    if (!row2) return;
+    row2.hidden = !visible;
+    row2.el.style.opacity = visible ? "1" : "0.5";
+    if (row2.eyeEl) {
+      row2.eyeEl.innerHTML = visible ? EYE_SVG : EYE_OFF_SVG;
+      row2.eyeEl.setAttribute("aria-label", visible ? "Hide" : "Show");
     }
-    this.syncRowActions(row);
+    this.syncRowActions(row2);
   }
   /**
    * Select a legend row (outlining it) and clear any previous selection, so at most one
@@ -4700,32 +4849,32 @@ var InputsUI = class {
    * visible even when idle, so it can be un-hidden without hovering.
    */
   setRowHighlighted(id, highlighted) {
-    const row = this.rows.get(id);
-    if (!row) return;
-    row.highlighted = highlighted;
-    this.renderRowValues(row);
-    row.el.style.boxShadow = highlighted ? `inset 0 0 0 1px ${this.neutralBorder()}` : "none";
-    row.el.style.background = highlighted ? this.theme.background : this.idleRowFill();
-    this.syncRowActions(row);
+    const row2 = this.rows.get(id);
+    if (!row2) return;
+    row2.highlighted = highlighted;
+    this.renderRowValues(row2);
+    row2.el.style.boxShadow = highlighted ? `inset 0 0 0 1px ${this.neutralBorder()}` : "none";
+    row2.el.style.background = highlighted ? this.theme.background : this.idleRowFill();
+    this.syncRowActions(row2);
   }
   /**
    * Reveal the action cluster (or just the eye for a hidden indicator). Non-eye
    * buttons only appear while highlighted; the eye keeps its inline-flex from
    * construction and is shown/hidden with the cluster container.
    */
-  syncRowActions(row) {
-    const open = row.highlighted;
-    row.controlsEl.style.display = open || row.hidden ? "inline-flex" : "none";
+  syncRowActions(row2) {
+    const open = row2.highlighted;
+    row2.controlsEl.style.display = open || row2.hidden ? "inline-flex" : "none";
     if (open) {
-      row.el.appendChild(row.statusEl);
-      for (const bubble of row.callouts) bubble.hidePanel();
+      row2.el.appendChild(row2.statusEl);
+      for (const bubble of row2.callouts) bubble.hidePanel();
     } else {
-      row.el.insertBefore(row.statusEl, row.valuesEl);
+      row2.el.insertBefore(row2.statusEl, row2.valuesEl);
     }
-    row.calloutsEl.style.display = legendCalloutsDisplay(open, row.callouts.length > 0);
-    for (const child of Array.from(row.controlsEl.children)) {
-      if (!(child instanceof HTMLElement) || child === row.eyeEl) continue;
-      if (child === row.extrasEl) {
+    row2.calloutsEl.style.display = legendCalloutsDisplay(open, row2.callouts.length > 0);
+    for (const child of Array.from(row2.controlsEl.children)) {
+      if (!(child instanceof HTMLElement) || child === row2.eyeEl) continue;
+      if (child === row2.extrasEl) {
         child.style.display = open ? "contents" : "none";
         continue;
       }
@@ -4739,9 +4888,9 @@ var InputsUI = class {
     this.selectedId = null;
   }
   remove(id) {
-    const row = this.rows.get(id);
-    for (const bubble of row?.callouts ?? []) bubble.destroy();
-    row?.el.remove();
+    const row2 = this.rows.get(id);
+    for (const bubble of row2?.callouts ?? []) bubble.destroy();
+    row2?.el.remove();
     this.rows.delete(id);
     this.disposeTips(this.rowTips, id);
     this.disposeTips(this.extrasTips, id);
@@ -4749,11 +4898,11 @@ var InputsUI = class {
     if (this.selectedId === id) this.selectedId = null;
     if (this.inputsDialog.openId === id) this.inputsDialog.close();
     this.syncFoldToggle();
-    if (row && row.paneId !== "price") {
-      const lg = this.legends.get(row.paneId);
+    if (row2 && row2.paneId !== "price") {
+      const lg = this.legends.get(row2.paneId);
       if (lg && lg.childElementCount === 0) {
         lg.remove();
-        this.legends.delete(row.paneId);
+        this.legends.delete(row2.paneId);
       }
     }
   }
@@ -4766,7 +4915,7 @@ var InputsUI = class {
     for (const id of [...this.rowTips.keys()]) this.disposeTips(this.rowTips, id);
     for (const id of [...this.extrasTips.keys()]) this.disposeTips(this.extrasTips, id);
     for (const id of [...this.calloutTips.keys()]) this.disposeTips(this.calloutTips, id);
-    for (const row of this.rows.values()) for (const bubble of row.callouts) bubble.destroy();
+    for (const row2 of this.rows.values()) for (const bubble of row2.callouts) bubble.destroy();
     for (const lg of this.legends.values()) lg.remove();
     this.legends.clear();
     this.rows.clear();
@@ -4787,8 +4936,8 @@ var InputsUI = class {
     this.inputsDialog.close();
   }
   openDialog(id) {
-    const row = this.rows.get(id);
-    if (row) this.inputsDialog.open(row);
+    const row2 = this.rows.get(id);
+    if (row2) this.inputsDialog.open(row2);
   }
   /** Idle legend-row fill — a translucent wash of the chart background, so the title keeps
    *  contrast when candles reach it without laying a solid block over the plot. */
@@ -4960,9 +5109,9 @@ var PaneControls = class {
       const soloChip = stateChipRole != null && !hovered;
       cluster.style.background = soloChip ? "transparent" : CLUSTER_PILL;
       for (const child of cluster.children) {
-        const btn2 = child;
-        btn2.style.display = "inline-flex";
-        btn2.style.visibility = soloChip && btn2.dataset.role !== stateChipRole ? "hidden" : "visible";
+        const btn = child;
+        btn.style.display = "inline-flex";
+        btn.style.visibility = soloChip && btn.dataset.role !== stateChipRole ? "hidden" : "visible";
       }
     }
   }
@@ -9976,12 +10125,12 @@ var MARK_DECK_STEP = 3;
 var MARK_FAN_GAP = 4;
 var MARK_HIT_PAD = 3;
 var MARK_FAN_HOLD = 8;
-function snapMarkBar(time, barTimes, intervalMs2) {
+function snapMarkBar(time, barTimes, intervalMs) {
   const n = barTimes.length;
-  if (n === 0 || !(intervalMs2 > 0) || !Number.isFinite(time)) return null;
+  if (n === 0 || !(intervalMs > 0) || !Number.isFinite(time)) return null;
   if (time < barTimes[0]) return null;
   const last = barTimes[n - 1];
-  if (time >= last + intervalMs2) return n - 1 + Math.floor((time - last) / intervalMs2);
+  if (time >= last + intervalMs) return n - 1 + Math.floor((time - last) / intervalMs);
   let lo = 0;
   let hi = n - 1;
   while (lo < hi) {
@@ -9989,14 +10138,14 @@ function snapMarkBar(time, barTimes, intervalMs2) {
     if (barTimes[mid] <= time) lo = mid;
     else hi = mid - 1;
   }
-  if (time < barTimes[lo] + intervalMs2) return lo;
+  if (time < barTimes[lo] + intervalMs) return lo;
   return lo + 1;
 }
-function clusterMarks(marks, barTimes, intervalMs2, hidden) {
+function clusterMarks(marks, barTimes, intervalMs, hidden) {
   const byKey = /* @__PURE__ */ new Map();
   marks.forEach((m, seq) => {
     if (m.group !== void 0 && hidden(m.group)) return;
-    const bar = snapMarkBar(m.time, barTimes, intervalMs2);
+    const bar = snapMarkBar(m.time, barTimes, intervalMs);
     if (bar === null) return;
     const key = `${bar}|${m.group ?? ""}`;
     let c = byKey.get(key);
@@ -11603,16 +11752,16 @@ var SettingsDialog = class {
         }
       };
       for (const { group: g, depth } of rows) {
-        const row = this.boolRow(g.label, this.markGroupOwnVisible(g.id), (v) => {
+        const row2 = this.boolRow(g.label, this.markGroupOwnVisible(g.id), (v) => {
           this.emit({ marks: { groups: { [g.id]: v } } });
           refreshDimming();
         });
         if (depth > 0) {
-          row.classList.add("vela-sd-nested");
-          row.style.setProperty("--vela-sd-depth", String(depth));
+          row2.classList.add("vela-sd-nested");
+          row2.style.setProperty("--vela-sd-depth", String(depth));
         }
-        rowsById.set(g.id, row);
-        body.append(sid(row, markGroupSettingsId(g.id)));
+        rowsById.set(g.id, row2);
+        body.append(sid(row2, markGroupSettingsId(g.id)));
       }
       refreshDimming();
     }
@@ -12434,6 +12583,16 @@ var DrawingPainter = class {
       this.paintMagnifier(ctx, d, proj, theme);
       return;
     }
+    if (d instanceof PriceActionZone) {
+      this.paintPriceZone(ctx, d, proj, theme);
+      this.paintLabel(ctx, d, proj, theme);
+      return;
+    }
+    if (d instanceof Liquidity) {
+      this.paintLiquidity(ctx, d, proj);
+      this.paintLabel(ctx, d, proj, theme);
+      return;
+    }
     if (d instanceof PatternDrawing) {
       this.paintPattern(ctx, d, proj, theme);
       return;
@@ -12476,9 +12635,11 @@ var DrawingPainter = class {
       case "arrow": {
         const pts = d.handlePoints(proj);
         if (pts.length < 2) return;
+        const ext = d instanceof TrendLine ? d.extension() : "none";
+        const [ex1, ey1, ex2, ey2] = extendEndpoints(pts[0][0], pts[0][1], pts[1][0], pts[1][1], ext, proj.width, proj.height);
         this.stroke(ctx, d.style, () => {
-          ctx.moveTo(pts[0][0], pts[0][1]);
-          ctx.lineTo(pts[1][0], pts[1][1]);
+          ctx.moveTo(ex1, ey1);
+          ctx.lineTo(ex2, ey2);
         });
         if (d.style.arrowRight) this.paintArrowhead(ctx, pts[0], pts[1], d.style);
         if (d.style.arrowLeft) this.paintArrowhead(ctx, pts[1], pts[0], d.style);
@@ -12620,9 +12781,15 @@ var DrawingPainter = class {
     ctx.font = `${text.bold ? "bold " : ""}${text.italic ? "italic " : ""}${fs}px ${theme.fontFamily}`;
     ctx.textBaseline = "top";
     ctx.textAlign = layout.align;
-    ctx.fillStyle = text.color ?? theme.textColor;
     const lh = labelLineHeight(fs);
     const lines = text.value.split("\n");
+    if (d.type !== "text" && d.type !== "box") {
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = theme.background;
+      lines.forEach((line, i) => ctx.strokeText(line, layout.x, layout.top + i * lh));
+    }
+    ctx.fillStyle = text.color ?? theme.textColor;
     lines.forEach((line, i) => ctx.fillText(line, layout.x, layout.top + i * lh));
     if (d.type === "text") this.paintTextFrame(ctx, d.id, layout.x, layout.top, lines, fs, theme);
     ctx.restore();
@@ -12676,6 +12843,78 @@ var DrawingPainter = class {
     }
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
+  }
+  /** Paint a price-action zone (fair value gap, order block): the box and its halfway line,
+   *  quieter once it has run its course, a dot where it stopped, and — once price flips it —
+   *  the dashed box it carries on as. With no zone under the anchor, a faint tick marks it. */
+  paintPriceZone(ctx, d, proj, theme) {
+    const z = d.zone(proj);
+    if (!z) {
+      const a = d.anchors[0];
+      if (!a) return;
+      const x = Math.round(proj.xOf(a.time)) + 0.5;
+      this.stroke(ctx, { lineColor: withAlpha(theme.textColor, 0.35), lineWidth: 1, lineStyle: "dashed" }, () => {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, proj.height);
+      });
+      return;
+    }
+    const h = z.yBottom - z.yTop;
+    const stroke = toHex6(z.fill, z.fill);
+    ctx.save();
+    ctx.globalAlpha *= z.faded ? 0.6 : 1;
+    ctx.fillStyle = z.fill;
+    ctx.fillRect(z.x1, z.yTop, z.x2 - z.x1, h);
+    if (z.border) {
+      ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+      ctx.strokeStyle = stroke;
+      ctx.strokeRect(Math.round(z.x1) + 0.5, Math.round(z.yTop) + 0.5, Math.round(z.x2 - z.x1), Math.round(h));
+    }
+    if (z.midY != null) {
+      const y = Math.round(z.midY) + 0.5;
+      this.stroke(ctx, { lineColor: stroke, lineWidth: 1, lineStyle: "dashed" }, () => {
+        ctx.moveTo(z.x1, y);
+        ctx.lineTo(z.x2, y);
+      });
+    }
+    ctx.restore();
+    if (z.flip) {
+      const f = z.flip;
+      ctx.save();
+      ctx.fillStyle = f.fill;
+      ctx.fillRect(f.x1, z.yTop, f.x2 - f.x1, h);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = toHex6(f.fill, f.fill);
+      ctx.setLineDash([5, 4]);
+      ctx.strokeRect(Math.round(f.x1) + 0.5, Math.round(z.yTop) + 0.5, Math.round(f.x2 - f.x1), Math.round(h));
+      ctx.restore();
+    }
+    if (z.marker) {
+      ctx.beginPath();
+      ctx.arc(z.marker.x, z.marker.y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = stroke;
+      ctx.fill();
+    }
+  }
+  /** Paint a liquidity level: the line to where it stopped, and a cross where it was swept. */
+  paintLiquidity(ctx, d, proj) {
+    const l = d.line(proj);
+    if (!l) return;
+    const y = Math.round(l.y) + 0.5;
+    this.stroke(ctx, d.style, () => {
+      ctx.moveTo(l.x1, y);
+      ctx.lineTo(l.x2, y);
+    });
+    if (l.sweep) {
+      const { x, y: sy } = l.sweep;
+      this.stroke(ctx, { lineColor: d.style.lineColor, lineWidth: 1.75, lineStyle: "solid" }, () => {
+        ctx.moveTo(x - 4, sy - 4);
+        ctx.lineTo(x + 4, sy + 4);
+        ctx.moveTo(x + 4, sy - 4);
+        ctx.lineTo(x - 4, sy + 4);
+      });
+    }
   }
   /** Paint a concentric-ring fib tool (circles / arcs / wedge): each enabled level as an arc of
    *  radius R0·ratio over the tool's angular sweep, plus any bounding lines + a ratio label per ring. */
@@ -13146,15 +13385,15 @@ var DrawingPainter = class {
     const { profile, maxW, anchorX, grow, yEdges } = L;
     if (profile.maxTotal <= 0 || maxW <= 0) return;
     for (let k = 0; k < profile.rows.length; k += 1) {
-      const row = profile.rows[k];
-      const total = row.up + row.down;
+      const row2 = profile.rows[k];
+      const total = row2.up + row2.down;
       if (total <= 0) continue;
       const yA = yEdges[k];
       const yB = yEdges[k + 1];
       const yTop = Math.min(yA, yB);
       const h = Math.max(1, Math.abs(yB - yA) - 1);
       const w2 = total / profile.maxTotal * maxW;
-      const upW = row.up / total * w2;
+      const upW = row2.up / total * w2;
       const inVa = k >= profile.vaFrom && k <= profile.vaTo;
       const upColor = inVa ? s.vaUpColor : s.upColor;
       const downColor = inVa ? s.vaDownColor : s.downColor;
@@ -13619,11 +13858,20 @@ var DrawingPainter = class {
       ctx.arc(x1, y1, arcR, Math.min(0, end), Math.max(0, end));
       ctx.stroke();
     }
-    ctx.fillStyle = color;
+    const label = `${angleDeg.toFixed(1)}\xB0`;
+    const lx = x1 + arcR + 6;
+    const ly = dy < 0 ? y1 + 14 : y1 - 6;
     ctx.font = `11px ${theme.fontFamily}`;
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText(`${angleDeg.toFixed(1)}\xB0`, x1 + arcR + 6, y1 + (dy < 0 ? -14 : 2));
+    ctx.save();
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = theme.background;
+    ctx.strokeText(label, lx, ly);
+    ctx.restore();
+    ctx.fillStyle = color;
+    ctx.fillText(label, lx, ly);
   }
   /** Paint a fixed-size arrow marker as a filled glyph at its anchor. */
   paintArrowMark(ctx, d, proj) {
@@ -13766,6 +14014,12 @@ function labelLayout(d, proj) {
   const pts = d.handlePoints(proj);
   const lines = text.value.split("\n").length;
   const lh = labelLineHeight(namedFontSize(text.size));
+  if (d instanceof ArrowMark) {
+    const b = d.bounds(proj);
+    if (!b) return null;
+    const x = b.x + b.w / 2;
+    return d.type === "arrowmarkdown" ? { x, top: b.y - 4 - lh * lines, align: "center" } : { x, top: b.y + b.h + 4, align: "center" };
+  }
   switch (d.type) {
     case "text":
       return pts[0] ? { x: pts[0][0] + 2, top: pts[0][1] + 2, align: "left" } : null;
@@ -13780,11 +14034,13 @@ function labelLayout(d, proj) {
       if (pts.length < 2) return null;
       const [x1, y1] = pts[0];
       const [x2, y2] = pts[1];
+      const t = text.place === "start" ? 0.12 : text.place === "end" ? 0.88 : 0.5;
+      const below = text.side === "below";
       return {
         x: 0,
-        top: -6 - lh * lines,
+        top: below ? 6 : -6 - lh * lines,
         align: "center",
-        rotate: { angle: uprightLineAngle(x1, y1, x2, y2), cx: (x1 + x2) / 2, cy: (y1 + y2) / 2 }
+        rotate: { angle: uprightLineAngle(x1, y1, x2, y2), cx: x1 + (x2 - x1) * t, cy: y1 + (y2 - y1) * t }
       };
     }
     case "box": {
@@ -13965,8 +14221,9 @@ var DrawingInteraction = class {
     const tool = this.deps.activeTool();
     if (tool) {
       const paneId = proj.paneIdAtY(y) ?? "price";
-      const draft = createDrawing(tool, { paneId, anchors: [this.resolve(x, y, paneId, mode)], style: this.deps.lastStyle() });
+      const draft = createDrawing(tool, { paneId, anchors: [this.resolve(x, y, paneId, mode)] });
       if (!draft) return;
+      applyToolDefaults(draft, this.deps.toolDefaults());
       this.state = { kind: "placing", draft, need: draft.anchorSchema().max, cursor: null };
       if (draft.placementMode() === "click" && draft.anchors.length >= this.state.need) this.finalize();
       else this.deps.changed();
@@ -14165,7 +14422,8 @@ var DrawingInteraction = class {
     if (this.state.kind !== "placing") return null;
     const { draft, cursor } = this.state;
     if (!cursor) return draft.anchors.length >= 1 && draft.type === "hline" ? draft : null;
-    return createDrawing(draft.type, { paneId: draft.paneId, anchors: [...draft.anchors, this.placementAnchor(draft, cursor)], style: draft.style });
+    const { paneId, style, text, props } = draft.serialize();
+    return createDrawing(draft.type, { paneId, anchors: [...draft.anchors, this.placementAnchor(draft, cursor)], style, text, props });
   }
   /** Map a raw placement cursor to the anchor the drawing actually stores.
    *  Parallel channel: its 3rd anchor is the parallel-line price measured AT THE
@@ -14269,7 +14527,7 @@ function applyFree(anchor, pt, free) {
   if (free === "both" || free === "y") anchor.price = pt.price;
 }
 
-// src/renderers/native/drawings/DrawingSettingsDialog.ts
+// src/renderers/native/drawings/DrawingSettingsSections.ts
 var LEVEL_UNITS = [
   { value: "price", label: "Price" },
   { value: "points", label: "Points" }
@@ -14278,15 +14536,319 @@ var FRVP_ANCHOR = [
   { value: "right", label: "Right" },
   { value: "left", label: "Left" }
 ];
-var TITLES = {
-  position: "Position size",
-  frvp: "Volume profile",
-  levels: "Levels"
+function buildPositionSection(grid, drawing, actions, theme) {
+  const live = () => {
+    const d = actions.resolve();
+    return d instanceof PositionTool ? d : drawing;
+  };
+  const refreshers = [];
+  const refreshAll = () => refreshers.forEach((f) => f());
+  const fmt = (n) => Math.round(n * 1e8) / 1e8;
+  const numberRow = (label, path, clamp) => {
+    const ctrl = buildFieldControl({
+      kind: "number",
+      value: fmt(live()[path]),
+      min: clamp?.min,
+      max: clamp?.max,
+      step: clamp?.step,
+      integer: clamp?.integer,
+      fill: false,
+      commit: "blur",
+      onChange: (n) => {
+        actions.patch({ [path]: n });
+        refreshAll();
+      }
+    });
+    refreshers.push(() => {
+      if (document.activeElement !== ctrl.el.querySelector("input")) ctrl.setValue?.(fmt(live()[path]));
+    });
+    grid.appendChild(fieldRow({ label, control: ctrl.el }));
+  };
+  const levelRow = (label, path, level) => {
+    let mode = "price";
+    const display = () => fmt(live().levelDisplayValue(level, mode));
+    const ni = buildFieldControl({
+      kind: "number",
+      value: display(),
+      fill: false,
+      commit: "blur",
+      onChange: (n) => {
+        actions.patch({ [path]: live().levelPriceFromDisplay(level, mode, n) });
+        refreshAll();
+      }
+    });
+    const sel = buildFieldControl({
+      kind: "select",
+      options: LEVEL_UNITS,
+      value: mode,
+      fill: false,
+      theme,
+      onChange: (v) => {
+        mode = v;
+        ni.setValue?.(display());
+      }
+    });
+    refreshers.push(() => {
+      if (document.activeElement !== ni.el.querySelector("input")) ni.setValue?.(display());
+    });
+    grid.appendChild(fieldRow({ label, control: [ni.el, sel.el] }));
+  };
+  grid.appendChild(fieldSection("Account", { variant: "inputs", first: true }));
+  numberRow("Risk %", "riskPercent", { min: 0, max: 100, step: 0.1 });
+  numberRow("Account balance", "accountBalance", { min: 0, max: 1e12, step: 1, integer: true });
+  numberRow("Position size", "quantity");
+  grid.appendChild(fieldSection("Levels", { variant: "inputs" }));
+  const dir = buildFieldControl({
+    kind: "select",
+    options: DIRECTION_OPTIONS,
+    value: live().direction,
+    fill: false,
+    theme,
+    onChange: (v) => {
+      actions.patch({ direction: v });
+      refreshAll();
+    }
+  });
+  refreshers.push(() => dir.setValue?.(live().direction));
+  grid.appendChild(fieldRow({ label: "Direction", control: dir.el }));
+  numberRow("Entry price", "entryPrice");
+  levelRow("Stop", "stopPrice", "stop");
+  levelRow("Target", "targetPrice", "target");
+  grid.appendChild(fieldSection("Display", { variant: "inputs" }));
+  const toggles = [
+    ["Show text", "showText"],
+    ["Show direction & ratio", "showHeader"],
+    ["Show loss & size", "showLossSize"],
+    ["Show target label", "showTargetLabel"],
+    ["Show stop label", "showStopLabel"],
+    ["Show level prices", "showPrices"]
+  ];
+  for (const [label, path] of toggles) {
+    grid.appendChild(fieldRow({
+      label,
+      bool: true,
+      toggle: {
+        checked: live()[path],
+        onChange: (v) => {
+          actions.patch({ [path]: v });
+          refreshAll();
+        },
+        get: () => live()[path]
+      }
+    }));
+  }
+  const summary = document.createElement("div");
+  summary.className = "vela-field-span";
+  summary.style.cssText = "opacity:0.7;font-size:11px;line-height:1.4;border-top:1px solid var(--vela-border);padding-top:6px;font-variant-numeric:tabular-nums;";
+  refreshers.push(() => {
+    const d = live();
+    summary.textContent = `${d.headerLabel()}  \u2014  ${d.lossSizeLabel()}`;
+  });
+  grid.appendChild(summary);
+  refreshAll();
+}
+function buildProfileSection(grid, drawing, actions, theme) {
+  const styleOf = () => {
+    const d = actions.resolve();
+    return d instanceof FixedRangeVolumeProfile ? d.frvp : drawing.frvp;
+  };
+  const s = styleOf();
+  const numberRow = (label, path, min, max, step, integer = true) => {
+    grid.appendChild(fieldRow({
+      label,
+      control: buildFieldControl({
+        kind: "number",
+        value: s[path],
+        min,
+        max,
+        step,
+        integer,
+        fill: false,
+        commit: "blur",
+        onChange: (n) => actions.patch({ [`frvp.${path}`]: n })
+      }).el
+    }));
+  };
+  numberRow("Rows", "rows", 1, 500, 1);
+  numberRow("Value Area", "valueAreaPct", 0, 100, 1);
+  numberRow("Width %", "widthPct", 0, 100, 1);
+  grid.appendChild(fieldRow({
+    label: "Anchor",
+    control: buildFieldControl({
+      kind: "select",
+      options: FRVP_ANCHOR,
+      value: s.anchor,
+      fill: false,
+      theme,
+      onChange: (v) => actions.patch({ "frvp.anchor": v })
+    }).el
+  }));
+  const colorRow = (label, path) => {
+    grid.appendChild(fieldRow({
+      label,
+      fit: true,
+      control: buildFieldControl({
+        kind: "color",
+        theme,
+        get: () => styleOf()[path],
+        onChange: (v) => actions.patch({ [`frvp.${path}`]: v })
+      }).el
+    }));
+  };
+  colorRow("Up Volume", "upColor");
+  colorRow("Down Volume", "downColor");
+  colorRow("Value Area Up", "vaUpColor");
+  colorRow("Value Area Down", "vaDownColor");
+  const styles = LINE_STYLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
+  const levelRow = (label, showPath, colorPath, stylePath) => {
+    const row2 = document.createElement("div");
+    row2.className = "vela-field-span";
+    row2.style.cssText = "display:flex;align-items:center;gap:8px;";
+    const sw = buildFieldControl({
+      kind: "switch",
+      checked: Boolean(s[showPath]),
+      onChange: (v) => actions.patch({ [`frvp.${showPath}`]: v })
+    });
+    const lbl = document.createElement("span");
+    lbl.className = "vela-field-label";
+    lbl.style.flex = "1";
+    lbl.textContent = label;
+    let cur = s[colorPath] ?? contrastColor(theme.background);
+    const col = buildFieldControl({
+      kind: "color",
+      theme,
+      get: () => cur,
+      onChange: (v) => {
+        cur = v;
+        actions.patch({ [`frvp.${colorPath}`]: v });
+      }
+    });
+    const style = buildFieldControl({
+      kind: "select",
+      options: styles,
+      value: s[stylePath],
+      fill: false,
+      theme,
+      onChange: (v) => actions.patch({ [`frvp.${stylePath}`]: v })
+    });
+    row2.append(sw.el, lbl, col.el, style.el);
+    grid.appendChild(row2);
+  };
+  levelRow("VAH", "showVah", "vahColor", "vahStyle");
+  levelRow("VAL", "showVal", "valColor", "valStyle");
+  levelRow("POC", "showPoc", "pocColor", "pocStyle");
+  levelRow("Developing POC", "showDevelopingPoc", "developingPocColor", "developingPocStyle");
+  levelRow("Developing VA", "showDevelopingVa", "developingVaColor", "developingVaStyle");
+}
+
+// src/renderers/native/drawings/DrawingSettingsPanel.ts
+var LINE_LABEL_TYPES = /* @__PURE__ */ new Set(["trendline", "ray", "extendedline", "infoline", "trendangle"]);
+var NO_POINTS = /* @__PURE__ */ new Set(["freehand", "highlighter", "vline", "position"]);
+var MAX_POINTS = 8;
+var POSITION_PATHS = /* @__PURE__ */ new Set(["riskPercent", "accountBalance", "quantity", "direction", "entryPrice", "stopPrice", "targetPrice", "showText", "showHeader", "showLossSize", "showTargetLabel", "showStopLabel", "showPrices"]);
+var LEVEL_PATHS = /* @__PURE__ */ new Set(["showRatios"]);
+var INTRADAY = ["s", "1", "5", "15", "60", "240"];
+var HIGHER = ["60", "240", "D", "W", "M"];
+var openFolds = /* @__PURE__ */ new Map();
+var STYLE_ID4 = "vela-dsp-styles";
+var STYLE_REV = "1";
+var CHEVRON = '<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 2.5 3.5 3.5-3.5 3.5"/></svg>';
+var CHEVRON_DOWN = '<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m2.5 4.5 3.5 3.5 3.5-3.5"/></svg>';
+var CROSS = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg>';
+var EXTEND_ICONS = {
+  none: '<svg viewBox="0 0 18 14" width="18" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 7h8"/><circle cx="5" cy="7" r="1.5" fill="currentColor"/><circle cx="13" cy="7" r="1.5" fill="currentColor"/></svg>',
+  left: '<svg viewBox="0 0 18 14" width="18" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1 7h12"/><path d="m3.5 4.5-2.5 2.5 2.5 2.5"/><circle cx="13" cy="7" r="1.5" fill="currentColor"/></svg>',
+  right: '<svg viewBox="0 0 18 14" width="18" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 7h12"/><path d="m14.5 4.5 2.5 2.5-2.5 2.5"/><circle cx="5" cy="7" r="1.5" fill="currentColor"/></svg>',
+  both: '<svg viewBox="0 0 18 14" width="18" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1 7h16"/><path d="m3.5 4.5-2.5 2.5 2.5 2.5M14.5 4.5l2.5 2.5-2.5 2.5"/></svg>'
 };
-var DrawingSettingsDialog = class {
-  constructor(host, theme) {
+var widthIcon = (w) => `<svg viewBox="0 0 18 14" width="18" height="14"><rect x="2" y="${7 - w / 2}" width="14" height="${w}" rx="${w / 2}" fill="currentColor"/></svg>`;
+var dashIcon = (s) => `<svg viewBox="0 0 18 14" width="18" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="${s === "dashed" ? "4 3" : s === "dotted" ? "0.1 3.5" : "0"}"><path d="M2 7h14"/></svg>`;
+function ensureStyles4() {
+  if (typeof document === "undefined") return;
+  const existing = document.getElementById(STYLE_ID4);
+  if (existing?.dataset.rev === STYLE_REV) return;
+  const s = existing ?? document.createElement("style");
+  s.id = STYLE_ID4;
+  s.dataset.rev = STYLE_REV;
+  s.textContent = `
+.vela-dsp-pass { pointer-events: none !important; }
+.vela-dialog.vela-dsp { pointer-events: auto; width: 360px; min-width: 0; max-width: calc(100% - 24px); max-height: calc(100% - 24px); font-size: 13px; }
+.vela-dsp .vela-dialog-header { padding: 8px 8px 8px 16px; gap: 6px; }
+.vela-dsp .vela-dialog-title { font-size: 15px; line-height: 22px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vela-dsp .vela-dialog-footer { padding: 10px 12px; display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--vela-border); }
+.vela-dsp .vela-dialog-btn { height: 30px; font-size: 13px; }
+.vela-dsp-scroll { overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; }
+.vela-dsp-block { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.vela-dsp-block + .vela-dsp-block, .vela-dsp-fold { border-top: 1px solid var(--vela-border); }
+.vela-dsp-h { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--vela-fg-muted); }
+.vela-dsp-row { display: flex; align-items: center; gap: 8px; min-height: 30px; }
+.vela-dsp-row[hidden] { display: none; }
+.vela-dsp-lab { flex: 0 0 96px; color: var(--vela-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vela-dsp-row > .vela-dsp-lab + * { min-width: 0; }
+.vela-dsp-spacer { flex: 1; }
+.vela-dsp-fold-h { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 8px; padding: 11px 16px; cursor: pointer; }
+.vela-dsp-fold-h:hover { background: var(--vela-hover); }
+.vela-dsp-fold-h:focus-visible { outline: 2px solid var(--vela-selected-bg); outline-offset: -2px; }
+.vela-dsp-fold-t { font-weight: 600; color: var(--vela-fg-bright); white-space: nowrap; }
+.vela-dsp-fold-s { flex: 1; min-width: 0; text-align: right; color: var(--vela-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.vela-dsp-chev { display: flex; color: var(--vela-fg-muted); transition: transform var(--vela-dur-fast) ease; }
+.vela-dsp-fold[data-open] .vela-dsp-chev { transform: rotate(90deg); }
+.vela-dsp-fold-b { padding: 0 16px 12px; display: flex; flex-direction: column; gap: 8px; }
+.vela-dsp-fold:not([data-open]) .vela-dsp-fold-b { display: none; }
+.vela-dsp-seg { display: inline-flex; flex: none; border: 1px solid var(--vela-border-strong); border-radius: 6px; overflow: hidden; }
+.vela-dsp-seg[data-full] { display: flex; flex: 1; }
+.vela-dsp-seg > button { all: unset; box-sizing: border-box; cursor: pointer; height: 28px; min-width: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; color: var(--vela-fg-muted); white-space: nowrap; }
+.vela-dsp-seg[data-full] > button { flex: 1 1 0; min-width: 0; }
+.vela-dsp-seg > button + button { border-left: 1px solid var(--vela-border); }
+.vela-dsp-seg > button:hover { background: var(--vela-hover); color: var(--vela-fg-bright); }
+.vela-dsp-seg > button[aria-pressed='true'] { background: var(--vela-active); color: var(--vela-fg-bright); }
+.vela-dsp-seg > button:focus-visible { outline: 2px solid var(--vela-selected-bg); outline-offset: -2px; }
+.vela-dsp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.vela-dsp-chip { all: unset; box-sizing: border-box; cursor: pointer; height: 26px; padding: 0 10px; border-radius: 13px; border: 1px solid var(--vela-border-strong); color: var(--vela-fg-muted); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.vela-dsp-chip:hover { color: var(--vela-fg-bright); border-color: var(--vela-fg-muted); }
+.vela-dsp-chip[aria-pressed='true'] { background: var(--vela-active); border-color: transparent; color: var(--vela-fg-bright); }
+.vela-dsp-chip:focus-visible { outline: 2px solid var(--vela-selected-bg); outline-offset: 1px; }
+.vela-dsp-note { font-size: 12px; color: var(--vela-fg-muted); line-height: 1.45; }
+.vela-dsp-pt { display: grid; grid-template-columns: 34px minmax(0, 120px) minmax(0, 1fr); align-items: center; gap: 8px; min-height: 30px; }
+.vela-dsp-pt-k { font-weight: 600; color: var(--vela-fg-muted); }
+.vela-dsp-pt-t { color: var(--vela-fg-muted); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vela-dsp-tf[hidden], .vela-dsp-note[hidden] { display: none; }
+.vela-dsp-tf { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.vela-dsp-tf > button { all: unset; box-sizing: border-box; cursor: pointer; position: relative; height: 28px; border-radius: 6px; border: 1px solid var(--vela-border-strong); color: var(--vela-fg-muted); display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+.vela-dsp-tf > button:hover { color: var(--vela-fg-bright); border-color: var(--vela-fg-muted); }
+.vela-dsp-tf > button[aria-pressed='true'] { background: var(--vela-active); border-color: transparent; color: var(--vela-fg-bright); }
+.vela-dsp-tf > button[data-here]::after { content: ''; position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--vela-selected-bg); }
+.vela-dsp-grid { padding: 0; }
+.vela-dsp-lv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 14px; }
+.vela-dsp-lv-c { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.vela-dsp-lv-c .vela-num:not([data-fill])[data-compact] { width: 76px; }
+.vela-dsp-lv-c .vela-num input { height: 28px; }
+.vela-dsp-lv-c[data-off] .vela-num input { color: var(--vela-fg-muted); }
+.vela-dsp-style { all: unset; box-sizing: border-box; cursor: pointer; flex: none; height: 28px; max-width: 150px; padding: 0 6px 0 10px; border-radius: 6px; border: 1px solid var(--vela-border-strong); display: inline-flex; align-items: center; gap: 4px; color: var(--vela-fg); font-size: 12px; }
+.vela-dsp-style > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vela-dsp-style:hover, .vela-dsp-style[aria-expanded='true'] { background: var(--vela-hover); color: var(--vela-fg-bright); }
+.vela-dsp-menu { min-width: 220px; max-height: 320px; overflow-y: auto; padding: 4px; display: flex; flex-direction: column; gap: 1px; }
+.vela-dsp-mh { padding: 6px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--vela-fg-muted); }
+.vela-dsp-mi { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 0 4px 0 8px; height: 30px; border-radius: 5px; color: inherit; }
+.vela-dsp-mi:hover, .vela-dsp-mi:focus-visible { background: var(--vela-hover-strong); }
+.vela-dsp-mi[data-current] { color: var(--vela-fg-bright); font-weight: 600; }
+.vela-dsp-mi > .vela-dsp-mi-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vela-dsp-mi-dot { flex: none; width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--vela-border-strong); }
+.vela-dsp-mi-x { all: unset; cursor: pointer; flex: none; width: 24px; height: 24px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--vela-fg-muted); }
+.vela-dsp-mi-x:hover { background: var(--vela-hover); color: var(--vela-danger); }
+.vela-dsp-msep { height: 1px; background: var(--vela-border); margin: 4px 0; }
+.vela-dsp-mname { display: flex; gap: 6px; padding: 4px; }
+.vela-dsp-mname > input { flex: 1; min-width: 0; height: 28px; box-sizing: border-box; padding: 0 8px; border-radius: 6px; border: 1px solid var(--vela-border-strong); background: transparent; color: inherit; font: inherit; outline: none; }
+.vela-dsp-mname > input:focus { border-color: var(--vela-selected-bg); }`;
+  if (!existing) document.head.appendChild(s);
+}
+var DrawingSettingsPanel = class {
+  constructor(host, theme, env) {
     this.host = host;
+    this.env = env;
     this.ui = null;
+    this.menu = null;
+    this.refresh = null;
     this.theme = theme;
   }
   setTheme(theme) {
@@ -14296,69 +14858,97 @@ var DrawingSettingsDialog = class {
     return this.ui != null;
   }
   contains(node) {
-    return this.ui?.contains(node) === true;
+    return node != null && this.ui?.contains(node) === true;
   }
-  open(drawing, actions, kind) {
+  /** Re-read the drawing after a change made outside the panel (a drag, an undo). */
+  sync() {
+    this.refresh?.();
+  }
+  open(drawing, actions, anchor) {
     this.close();
-    const live = actions.resolve() ?? drawing;
-    const snapshot = clonePlain(live.serialize());
-    const grid = fieldGrid({ variant: "inputs" });
-    grid.style.padding = "16px 20px";
-    grid.style.overflowY = "auto";
-    grid.style.overflowX = "hidden";
-    grid.style.flex = "1 1 auto";
-    if (kind === "position" && live instanceof PositionTool) this.buildPosition(grid, live, actions);
-    else if (kind === "frvp" && live instanceof FixedRangeVolumeProfile) this.buildFrvp(grid, live, actions);
-    else if (kind === "levels") this.buildLevels(grid, live, actions);
-    else return;
+    ensureStyles4();
+    const first = actions.resolve() ?? drawing;
+    const snapshot = clonePlain(first.serialize());
+    const live = () => actions.resolve() ?? first;
+    const meta = getDrawingType(first.type);
+    const scroll = document.createElement("div");
+    scroll.className = "vela-dsp-scroll";
+    let watchers = [];
+    const runWatchers = () => {
+      for (const fn of watchers) fn();
+    };
+    const build = {
+      live,
+      edit: (p) => {
+        actions.patch(p);
+        runWatchers();
+      },
+      watch: (fn) => {
+        watchers.push(fn);
+        fn();
+      },
+      rebuild: () => {
+        const top = scroll.scrollTop;
+        watchers = [];
+        scroll.replaceChildren(...this.sections(build));
+        scroll.scrollTop = top;
+        styleBtn.refresh();
+      },
+      actions
+    };
+    const cancel = () => {
+      actions.preview?.(null);
+      actions.restore?.(snapshot);
+      this.close();
+    };
     const ui = new Dialog({
       host: this.host,
-      title: TITLES[kind],
-      // Non-modal: live-edit dialog — a modal machine locks pointer events on the
-      // whole body, killing the chart and the body-portaled popovers.
+      title: meta?.label ?? "Settings",
       modal: false,
       contained: true,
       align: "center",
       draggable: true,
       flush: true,
-      className: "vela-dialog--form",
+      className: "vela-dsp",
       closeOnEscape: false,
-      footer: (foot) => {
-        foot.append(
-          btn("Cancel", false, () => {
-            actions.restore?.(snapshot);
-            this.close();
-          }),
-          btn("Ok", true, () => this.close())
-        );
-      },
+      footer: (foot) => foot.append(button("Cancel", false, cancel), button("Ok", true, () => this.close())),
       onOpenChange: (open) => {
         if (!open) this.close();
       }
     });
     applyChromeTokens(ui.panel, this.theme);
-    ui.body.appendChild(grid);
-    const onBackdropDown = (e) => {
-      if (e.target !== ui.backdrop && e.target !== ui.positioner) return;
-      if (isPopoverOpen() || eventDismissedPopover(e)) {
-        closeOpenPopovers();
-        return;
-      }
-      this.close();
-    };
-    ui.backdrop.addEventListener("pointerdown", onBackdropDown);
-    ui.positioner.addEventListener("pointerdown", onBackdropDown);
+    ui.backdrop.classList.add("vela-dsp-pass");
+    ui.positioner.classList.add("vela-dsp-pass");
+    const hostW = this.host.clientWidth;
+    const leftHalf = anchor != null && hostW > 0 && anchor.x + anchor.w / 2 < hostW / 2;
+    ui.positioner.style.justifyContent = leftHalf ? "flex-end" : "flex-start";
+    ui.positioner.style.padding = "0 12px";
+    const styleBtn = this.styleMenuButton(build);
+    ui.titleEl.after(styleBtn.el);
+    ui.body.appendChild(scroll);
     ui.panel.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        actions.restore?.(snapshot);
-        this.close();
+        if (this.menu) this.menu.hide();
+        else cancel();
       }
     });
     this.ui = ui;
+    this.refresh = () => {
+      if (!actions.resolve()) {
+        this.close();
+        return;
+      }
+      runWatchers();
+      styleBtn.refresh();
+    };
+    build.rebuild();
     ui.show();
   }
   close() {
+    this.menu?.hide();
+    this.menu = null;
+    this.refresh = null;
     const ui = this.ui;
     this.ui = null;
     ui?.destroy();
@@ -14366,298 +14956,821 @@ var DrawingSettingsDialog = class {
   destroy() {
     this.close();
   }
-  buildPosition(grid, drawing, actions) {
-    const live = () => {
-      const d = actions.resolve();
-      return d instanceof PositionTool ? d : drawing;
-    };
-    const refreshers = [];
-    const refreshAll = () => refreshers.forEach((f) => f());
-    const fmt = (n) => Math.round(n * 1e8) / 1e8;
-    const numberRow = (label, path, clamp) => {
-      const ctrl = buildFieldControl({
-        kind: "number",
-        value: fmt(live()[path]),
-        min: clamp?.min,
-        max: clamp?.max,
-        step: clamp?.step,
-        integer: clamp?.integer,
-        fill: false,
-        commit: "blur",
-        onChange: (n) => {
-          actions.patch({ [path]: n });
-          refreshAll();
-        }
-      });
-      refreshers.push(() => {
-        if (document.activeElement !== ctrl.el.querySelector("input")) ctrl.setValue?.(fmt(live()[path]));
-      });
-      grid.appendChild(fieldRow({ label, control: ctrl.el }));
-    };
-    const levelRow = (label, path, level) => {
-      let mode = "price";
-      const display = () => fmt(live().levelDisplayValue(level, mode));
-      const ni = buildFieldControl({
-        kind: "number",
-        value: display(),
-        fill: false,
-        commit: "blur",
-        onChange: (n) => {
-          actions.patch({ [path]: live().levelPriceFromDisplay(level, mode, n) });
-          refreshAll();
-        }
-      });
-      const sel = buildFieldControl({
-        kind: "select",
-        options: LEVEL_UNITS,
-        value: mode,
-        fill: false,
-        theme: this.theme,
-        onChange: (v) => {
-          mode = v;
-          ni.setValue?.(display());
-        }
-      });
-      refreshers.push(() => {
-        if (document.activeElement !== ni.el.querySelector("input")) ni.setValue?.(display());
-      });
-      grid.appendChild(fieldRow({ label, control: [ni.el, sel.el] }));
-    };
-    grid.appendChild(fieldSection("Account", { variant: "inputs", first: true }));
-    numberRow("Risk %", "riskPercent", { min: 0, max: 100, step: 0.1 });
-    numberRow("Account balance", "accountBalance", { min: 0, max: 1e12, step: 1, integer: true });
-    numberRow("Position size", "quantity");
-    grid.appendChild(fieldSection("Levels", { variant: "inputs" }));
-    const dir = buildFieldControl({
-      kind: "select",
-      options: DIRECTION_OPTIONS,
-      value: live().direction,
-      fill: false,
-      theme: this.theme,
-      onChange: (v) => {
-        actions.patch({ direction: v });
-        refreshAll();
-      }
-    });
-    refreshers.push(() => dir.setValue?.(live().direction));
-    grid.appendChild(fieldRow({ label: "Direction", control: dir.el }));
-    numberRow("Entry price", "entryPrice");
-    levelRow("Stop", "stopPrice", "stop");
-    levelRow("Target", "targetPrice", "target");
-    grid.appendChild(fieldSection("Display", { variant: "inputs" }));
-    const toggles = [
-      ["Show text", "showText"],
-      ["Show direction & ratio", "showHeader"],
-      ["Show loss & size", "showLossSize"],
-      ["Show target label", "showTargetLabel"],
-      ["Show stop label", "showStopLabel"],
-      ["Show level prices", "showPrices"]
-    ];
-    for (const [label, path] of toggles) {
-      grid.appendChild(fieldRow({
-        label,
-        bool: true,
-        toggle: {
-          checked: live()[path],
-          onChange: (v) => {
-            actions.patch({ [path]: v });
-            refreshAll();
-          },
-          get: () => live()[path]
-        }
-      }));
-    }
-    const summary = document.createElement("div");
-    summary.className = "vela-field-span";
-    summary.style.cssText = "opacity:0.7;font-size:11px;line-height:1.4;border-top:1px solid var(--vela-border);padding-top:6px;font-variant-numeric:tabular-nums;";
-    refreshers.push(() => {
-      const d = live();
-      summary.textContent = `${d.headerLabel()}  \u2014  ${d.lossSizeLabel()}`;
-    });
-    grid.appendChild(summary);
-    refreshAll();
+  // ── sections ──
+  sections(b) {
+    const d = b.live();
+    const schema = d.schema();
+    const fields = schema.fields;
+    const has = (path) => fields.some((f) => f.path === path);
+    const out = [];
+    if (schema.textIsContent && has("text.value")) out.push(this.textContentBlock(b, has));
+    const style = this.styleBlock(b, fields, has);
+    if (style) out.push(style);
+    if (d.editableLevels()) out.push(this.levelsBlock(b));
+    if (d instanceof PositionTool) out.push(this.richBlock("Position", (grid) => buildPositionSection(grid, d, b.actions, this.theme)));
+    if (d instanceof FixedRangeVolumeProfile) out.push(this.richBlock("Profile", (grid) => buildProfileSection(grid, d, b.actions, this.theme)));
+    const own = this.optionsBlock(b, fields, d);
+    if (own) out.push(own);
+    if (!schema.textIsContent && fields.some((f) => f.path.startsWith("text."))) out.push(this.textFold(b, has));
+    const points = this.pointsFold(b);
+    if (points) out.push(points);
+    out.push(this.showOnFold(b));
+    return out;
   }
-  buildFrvp(grid, drawing, actions) {
-    const styleOf = () => {
-      const d = actions.resolve();
-      return d instanceof FixedRangeVolumeProfile ? d.frvp : drawing.frvp;
+  /** Line, width, dash, ends and fill — the look every stroked tool shares. */
+  styleBlock(b, fields, has) {
+    const rows = [];
+    if (has("style.lineColor") || has("style.lineWidth")) {
+      const ctrls = [];
+      if (has("style.lineColor")) ctrls.push(this.swatch(b, "Line color", () => b.live().style.lineColor || DEFAULT_DRAWING_COLOR, "style.lineColor"));
+      const wf = fields.find((f) => f.path === "style.lineWidth");
+      if (wf) {
+        if ((wf.min ?? 1) > 1) ctrls.push(this.number(b, "Line width", () => b.live().style.lineWidth, "style.lineWidth", wf));
+        else ctrls.push(this.seg(b, "Line width", [1, 2, 3, 4].map((w) => ({ value: w, html: widthIcon(w), title: `${w}px` })), () => b.live().style.lineWidth, (v) => b.edit({ "style.lineWidth": v })));
+      }
+      rows.push(row("Line", ...ctrls));
+    }
+    if (has("style.lineStyle")) {
+      rows.push(row("Style", this.seg(b, "Line style", LINE_STYLE_OPTIONS.map((o) => ({ value: o.value, html: dashIcon(o.value), title: o.label })), () => b.live().style.lineStyle, (v) => b.edit({ "style.lineStyle": v }))));
+    }
+    if (has("style.extendLeft") && has("style.extendRight")) {
+      const opts = [
+        { value: "none", html: EXTEND_ICONS.none, title: "Don't extend" },
+        { value: "left", html: EXTEND_ICONS.left, title: "Extend left" },
+        { value: "right", html: EXTEND_ICONS.right, title: "Extend right" },
+        { value: "both", html: EXTEND_ICONS.both, title: "Extend both ways" }
+      ];
+      const read = () => {
+        const { extendLeft: l, extendRight: r } = b.live().style;
+        return l && r ? "both" : l ? "left" : r ? "right" : "none";
+      };
+      rows.push(row("Extend", this.seg(b, "Extend", opts, read, (v) => b.edit({ "style.extendLeft": v === "left" || v === "both", "style.extendRight": v === "right" || v === "both" }))));
+    }
+    const arrows = [];
+    if (has("style.arrowLeft")) arrows.push(this.chip(b, "Start arrow", () => !!b.live().style.arrowLeft, (on) => b.edit({ "style.arrowLeft": on })));
+    if (has("style.arrowRight")) arrows.push(this.chip(b, has("style.arrowLeft") ? "End arrow" : "Arrow", () => !!b.live().style.arrowRight, (on) => b.edit({ "style.arrowRight": on })));
+    if (arrows.length) rows.push(row("Ends", chips(...arrows)));
+    if (has("style.fillColor")) {
+      rows.push(row("Fill", this.swatch(b, "Fill", () => effectiveFillColor(b.live(), this.theme) ?? b.live().style.fillColor ?? DEFAULT_DRAWING_COLOR, "style.fillColor")));
+    }
+    if (!has("text.value") && has("text.color")) rows.push(row("Text", ...this.textStyling(b, has)));
+    return rows.length ? block(null, ...rows) : null;
+  }
+  /** The tool's own options — every schema field the shared look and the rich sections
+   *  don't cover, each as the control its kind calls for. */
+  optionsBlock(b, fields, d) {
+    const skip = (f) => f.path.startsWith("style.") || f.path.startsWith("text.") || f.path.startsWith("frvp.") || d instanceof PositionTool && POSITION_PATHS.has(f.path) || d.editableLevels() != null && LEVEL_PATHS.has(f.path);
+    const rows = [];
+    const own = fields.filter((f) => !skip(f));
+    for (let i = 0; i < own.length; i += 1) {
+      const f = own[i];
+      const next = own[i + 1];
+      const base = f.kind === "color" && next?.kind === "lineStyle" ? pairBase(f.label, next.label) : f.kind === "color" && next?.kind === "color" ? upperLowerBase(f.label, next.label) : null;
+      if (base) {
+        const color = this.fieldControl(b, f);
+        const style = this.fieldControl(b, next);
+        if (color && style) rows.push(row(base, color, style));
+        i += 1;
+        continue;
+      }
+      const ctrl = this.fieldControl(b, f);
+      if (!ctrl) continue;
+      const r = row(f.label, ctrl);
+      const cond = f.when;
+      if (cond) b.watch(() => r.hidden = !cond.in.includes(readPath(b.live(), cond.path)));
+      rows.push(r);
+    }
+    const props = d.serialize().props ?? {};
+    const sizes = TEXT_SIZE_OPTIONS.map((o) => ({ value: o.value, html: o.label }));
+    if ("numbersSize" in props) rows.push(row("Numbers", this.seg(b, "Numbers size", sizes, () => b.live().serialize().props?.numbersSize ?? "small", (v) => b.edit({ numbersSize: v }), true)));
+    if ("labelsSize" in props) rows.push(row("Labels", this.seg(b, "Labels size", sizes, () => b.live().serialize().props?.labelsSize ?? "normal", (v) => b.edit({ labelsSize: v }), true)));
+    return rows.length ? block(null, ...rows) : null;
+  }
+  fieldControl(b, f) {
+    const read = () => readPath(b.live(), f.path);
+    switch (f.kind) {
+      case "color":
+        return this.swatch(b, f.label, () => read() || DEFAULT_DRAWING_COLOR, f.path);
+      case "lineStyle":
+        return this.seg(b, f.label, LINE_STYLE_OPTIONS.map((o) => ({ value: o.value, html: dashIcon(o.value), title: o.label })), () => read(), (v) => b.edit({ [f.path]: v }));
+      case "boolean":
+        return this.switch(b, () => read() !== false && read() != null, (v) => b.edit({ [f.path]: v }));
+      case "number":
+      case "opacity":
+        return this.number(b, f.label, () => Number(read() ?? 0), f.path, f);
+      case "select": {
+        const options = f.path === "magnifier.timeframe" ? magnifierTimeframesBelow(this.env.chartBarMs()) : f.options ?? [];
+        if (options.length === 0) return null;
+        const sel = buildFieldControl({ kind: "select", options, value: String(read() ?? options[0].value), fill: false, theme: this.theme, onChange: (v) => b.edit({ [f.path]: v }) });
+        b.watch(() => sel.setValue?.(String(read() ?? "")));
+        return sel.el;
+      }
+      case "text": {
+        const tf = buildFieldControl({ kind: "text", value: String(read() ?? ""), fill: true, onChange: (v) => b.edit({ [f.path]: v }) });
+        return tf.el;
+      }
+      default:
+        return null;
+    }
+  }
+  /** A levelled tool's levels: every level in a two-column grid (on/off, ratio, color) — the
+   *  ones that are off stay listed, ready to switch on. A retracement leads with its ready-made
+   *  sets; the horizontal fibs follow with how their level text and fill show. */
+  levelsBlock(b) {
+    const d = b.live();
+    const rows = [];
+    const grid = document.createElement("div");
+    grid.className = "vela-dsp-lv";
+    const key = () => JSON.stringify(b.live().editableLevels() ?? []);
+    let last = "";
+    let editing = false;
+    const mine = (p) => {
+      editing = true;
+      try {
+        b.edit(p);
+      } finally {
+        editing = false;
+      }
+      last = key();
     };
-    const s = styleOf();
-    const numberRow = (label, path, min, max, step, integer = true) => {
-      grid.appendChild(fieldRow({
-        label,
-        control: buildFieldControl({
+    const fill = () => {
+      last = key();
+      grid.replaceChildren();
+      const free = b.live() instanceof FibLevels;
+      (b.live().editableLevels() ?? []).forEach((lv, i) => {
+        const cell = document.createElement("div");
+        cell.className = "vela-dsp-lv-c";
+        cell.toggleAttribute("data-off", !lv.enabled);
+        const on = buildFieldControl({
+          kind: "switch",
+          checked: lv.enabled,
+          onChange: (v) => {
+            cell.toggleAttribute("data-off", !v);
+            mine({ [`levels.${i}.enabled`]: v });
+          }
+        });
+        let ratio = lv.ratio;
+        const num4 = buildFieldControl({
           kind: "number",
-          value: s[path],
-          min,
-          max,
-          step,
-          integer,
+          value: lv.ratio,
+          min: free ? void 0 : 0,
+          step: 0.01,
+          compact: true,
           fill: false,
           commit: "blur",
-          onChange: (n) => actions.patch({ [`frvp.${path}`]: n })
-        }).el
-      }));
-    };
-    numberRow("Rows", "rows", 1, 500, 1);
-    numberRow("Value Area", "valueAreaPct", 0, 100, 1);
-    numberRow("Width %", "widthPct", 0, 100, 1);
-    grid.appendChild(fieldRow({
-      label: "Anchor",
-      control: buildFieldControl({
-        kind: "select",
-        options: FRVP_ANCHOR,
-        value: s.anchor,
-        fill: false,
-        theme: this.theme,
-        onChange: (v) => actions.patch({ "frvp.anchor": v })
-      }).el
-    }));
-    const colorRow = (label, path) => {
-      grid.appendChild(fieldRow({
-        label,
-        fit: true,
-        control: buildFieldControl({
+          title: `Level ${i + 1}`,
+          onChange: (n) => {
+            if (!Number.isFinite(n) || !free && n <= 0) {
+              num4.setValue?.(ratio);
+              return;
+            }
+            ratio = n;
+            mine({ [`levels.${i}.ratio`]: n });
+          }
+        });
+        let color = lv.color;
+        const swatch = buildFieldControl({
           kind: "color",
           theme: this.theme,
-          get: () => styleOf()[path],
-          onChange: (v) => actions.patch({ [`frvp.${path}`]: v })
-        }).el
-      }));
-    };
-    colorRow("Up Volume", "upColor");
-    colorRow("Down Volume", "downColor");
-    colorRow("Value Area Up", "vaUpColor");
-    colorRow("Value Area Down", "vaDownColor");
-    const styles = LINE_STYLE_OPTIONS.map((o) => ({ value: o.value, label: o.label }));
-    const levelRow = (label, showPath, colorPath, stylePath) => {
-      const row = document.createElement("div");
-      row.className = "vela-field-span";
-      row.style.cssText = "display:flex;align-items:center;gap:8px;";
-      const sw = buildFieldControl({
-        kind: "switch",
-        checked: Boolean(s[showPath]),
-        onChange: (v) => actions.patch({ [`frvp.${showPath}`]: v })
-      });
-      const lbl = document.createElement("span");
-      lbl.className = "vela-field-label";
-      lbl.style.flex = "1";
-      lbl.textContent = label;
-      let cur = s[colorPath] ?? contrastColor(this.theme.background);
-      const col = buildFieldControl({
-        kind: "color",
-        theme: this.theme,
-        get: () => cur,
-        onChange: (v) => {
-          cur = v;
-          actions.patch({ [`frvp.${colorPath}`]: v });
-        }
-      });
-      const style = buildFieldControl({
-        kind: "select",
-        options: styles,
-        value: s[stylePath],
-        fill: false,
-        theme: this.theme,
-        onChange: (v) => actions.patch({ [`frvp.${stylePath}`]: v })
-      });
-      row.append(sw.el, lbl, col.el, style.el);
-      grid.appendChild(row);
-    };
-    levelRow("VAH", "showVah", "vahColor", "vahStyle");
-    levelRow("VAL", "showVal", "valColor", "valStyle");
-    levelRow("POC", "showPoc", "pocColor", "pocStyle");
-    levelRow("Developing POC", "showDevelopingPoc", "developingPocColor", "developingPocStyle");
-    levelRow("Developing VA", "showDevelopingVa", "developingVaColor", "developingVaStyle");
-  }
-  buildLevels(grid, drawing, actions) {
-    const levels = drawing.editableLevels();
-    if (!levels) return;
-    const isMach = drawing instanceof MachFigure;
-    if (isMach) {
-      const mach = drawing;
-      grid.appendChild(fieldRow({
-        label: "Show ratio labels",
-        bool: true,
-        toggle: {
-          checked: mach.showRatios !== false,
-          onChange: (v) => actions.patch({ showRatios: v })
-        }
-      }));
-    }
-    if (drawing instanceof FibRetracement) {
-      const fib = drawing;
-      grid.appendChild(fieldRow({
-        label: "Reverse",
-        bool: true,
-        toggle: {
-          checked: fib.reverse,
-          onChange: (v) => actions.patch({ reverse: v })
-        }
-      }));
-    }
-    levels.forEach((lv, i) => {
-      const row = document.createElement("div");
-      row.className = "vela-field-span";
-      row.style.cssText = "display:flex;align-items:center;gap:8px;";
-      const sw = buildFieldControl({
-        kind: "switch",
-        checked: lv.enabled,
-        onChange: (v) => actions.patch({ [`levels.${i}.enabled`]: v })
-      });
-      let curC = lv.color;
-      const col = buildFieldControl({
-        kind: "color",
-        theme: this.theme,
-        get: () => curC,
-        onChange: (v) => {
-          curC = v;
-          actions.patch({ [`levels.${i}.color`]: v });
-        }
-      });
-      let curRatio = lv.ratio;
-      const ratio = buildFieldControl({
-        kind: "number",
-        value: curRatio,
-        min: 0,
-        step: 0.01,
-        fill: isMach,
-        compact: !isMach,
-        commit: "blur",
-        onChange: (n) => {
-          if (n <= 0) {
-            ratio.setValue?.(curRatio);
-            return;
+          title: `Level ${i + 1} color`,
+          get: () => color,
+          onChange: (v) => {
+            color = v;
+            mine({ [`levels.${i}.color`]: v });
           }
-          curRatio = n;
-          actions.patch({ [`levels.${i}.ratio`]: n });
-        }
-      });
-      if (isMach) ratio.el.style.flex = "1";
-      row.append(sw.el, col.el, ratio.el);
-      if (!isMach) {
-        const label = buildFieldControl({
-          kind: "text",
-          value: lv.label ?? "",
-          fill: true,
-          placeholder: "label\u2026",
-          onChange: (v) => actions.patch({ [`levels.${i}.label`]: v })
         });
-        label.el.style.flex = "1";
-        label.el.style.minWidth = "60px";
-        row.appendChild(label.el);
+        cell.append(on.el, num4.el, swatch.el);
+        grid.appendChild(cell);
+      });
+    };
+    b.watch(() => {
+      if (!editing && key() !== last && !grid.contains(document.activeElement)) fill();
+    });
+    if (d instanceof FibRetracement) {
+      rows.push(
+        this.seg(
+          b,
+          "Level set",
+          FIB_PRESETS.map((p) => ({ value: p.key, html: p.label })),
+          () => {
+            const f = b.live();
+            return matchFibPreset(f.levels, f.reverse) ?? void 0;
+          },
+          (k) => {
+            const preset = FIB_PRESETS.find((p) => p.key === k);
+            b.edit({ levels: clonePlain(preset.levels), reverse: preset.reverse });
+          },
+          true
+        )
+      );
+    }
+    if (d instanceof MachFigure) rows.push(row("Ratios", this.switch(b, () => b.live().showRatios !== false, (v) => b.edit({ showRatios: v }))));
+    rows.push(grid);
+    if (d instanceof FibLevels) {
+      const fib = () => b.live();
+      const flags = [
+        this.chip(b, "Ratios", () => fib().showRatios, (on) => b.edit({ showRatios: on })),
+        this.chip(b, "Prices", () => fib().showPrices, (on) => b.edit({ showPrices: on })),
+        this.chip(b, "Background", () => fib().background, (on) => b.edit({ background: on }))
+      ];
+      if (d instanceof FibRetracement) flags.push(this.chip(b, "Reverse", () => b.live().reverse, (on) => b.edit({ reverse: on })));
+      rows.push(row("Show", chips(...flags)));
+      rows.push(
+        row(
+          "Label side",
+          this.seg(b, "Label side", [
+            { value: "left", html: "Left" },
+            { value: "right", html: "Right" }
+          ], () => fib().labelSide, (v) => b.edit({ labelSide: v }))
+        )
+      );
+    }
+    return block("Levels", ...rows);
+  }
+  /** A rich per-type section on the shared field grid. */
+  richBlock(title, fill) {
+    const grid = fieldGrid({ variant: "inputs" });
+    grid.classList.add("vela-dsp-grid");
+    fill(grid);
+    return block(title, grid);
+  }
+  /** A note, a callout, a text label: the words lead the panel. */
+  textContentBlock(b, has) {
+    return block(null, this.textArea(b, "Text", 3), row("Style", ...this.textStyling(b, has)));
+  }
+  /** A shape's optional label: folded to one line saying what it reads. */
+  textFold(b, has) {
+    const type = b.live().type;
+    const words = () => b.live().text?.value?.trim() ?? "";
+    const summary = () => {
+      if (!has("text.value")) return sizeLabel(b.live().text?.size);
+      const w = words();
+      return w ? `\u201C${w.split("\n")[0]}\u201D` : "None";
+    };
+    return this.fold(b, "text", has("text.value") ? "Label" : "Text", summary, () => {
+      const rows = [];
+      if (has("text.value")) rows.push(this.textArea(b, "Add a label", 1));
+      rows.push(row("Style", ...this.textStyling(b, has)));
+      if (LINE_LABEL_TYPES.has(type) && has("text.value")) {
+        const place = row(
+          "Place",
+          this.seg(b, "Position along the line", [
+            { value: "start", html: "Start" },
+            { value: "middle", html: "Middle" },
+            { value: "end", html: "End" }
+          ], () => b.live().text?.place ?? "middle", (v) => b.edit({ "text.place": v }), true)
+        );
+        const side = row(
+          "Side",
+          this.seg(b, "Side of the line", [
+            { value: "above", html: "Above" },
+            { value: "below", html: "Below" }
+          ], () => b.live().text?.side ?? "above", (v) => b.edit({ "text.side": v }), true)
+        );
+        b.watch(() => place.hidden = side.hidden = words() === "");
+        rows.push(place, side);
       }
-      grid.appendChild(row);
+      return rows;
     });
   }
+  textArea(b, placeholder, rows) {
+    const ta = new TextArea({
+      value: b.live().text?.value ?? "",
+      rows,
+      size: "sm",
+      autoGrow: true,
+      maxLines: 6,
+      placeholder,
+      onChange: (v) => b.edit({ "text.value": v })
+    });
+    ta.input.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") e.stopPropagation();
+    });
+    b.watch(() => {
+      const v = b.live().text?.value ?? "";
+      if (document.activeElement !== ta.input && ta.input.value !== v) ta.input.value = v;
+    });
+    ta.el.style.width = "100%";
+    return ta.el;
+  }
+  textStyling(b, has) {
+    const out = [];
+    if (has("text.color")) out.push(this.swatch(b, "Text color", () => b.live().text?.color || this.theme.textColor, "text.color"));
+    if (has("text.size")) {
+      const sel = buildFieldControl({
+        kind: "select",
+        options: TEXT_SIZE_OPTIONS,
+        value: b.live().text?.size ?? "normal",
+        fill: false,
+        theme: this.theme,
+        onChange: (v) => b.edit({ "text.size": v })
+      });
+      b.watch(() => sel.setValue?.(b.live().text?.size ?? "normal"));
+      out.push(sel.el);
+    }
+    const flags = [];
+    if (has("text.bold")) flags.push(this.chip(b, "B", () => !!b.live().text?.bold, (on) => b.edit({ "text.bold": on }), "Bold"));
+    if (has("text.italic")) flags.push(this.chip(b, "I", () => !!b.live().text?.italic, (on) => b.edit({ "text.italic": on }), "Italic"));
+    if (flags.length) out.push(chips(...flags));
+    return out;
+  }
+  /** Each anchor's price (editable) and time. */
+  pointsFold(b) {
+    const d = b.live();
+    if (NO_POINTS.has(d.type) || d.anchors.length === 0 || d.anchors.length > MAX_POINTS) return null;
+    const slots = d.anchorSchema().slots;
+    const free = (i) => slots[i]?.free ?? slots[slots.length - 1]?.free ?? "both";
+    const shown = d.anchors.map((_, i) => i).filter((i) => free(i) !== "none");
+    if (shown.length === 0) return null;
+    const priced = shown.filter((i) => free(i) !== "x");
+    const shownPrice = (n) => {
+      const dec = this.env.priceDecimals() ?? Math.max(2, valueDecimals(n));
+      return Number(n.toFixed(Math.min(dec, 10)));
+    };
+    const fmt = (n) => String(shownPrice(n));
+    const summary = () => {
+      const a = b.live().anchors;
+      if (priced.length) return priced.map((i) => fmt(a[i]?.price ?? 0)).join(" \u2192 ");
+      const t = a[shown[0]]?.time;
+      return shown.length === 1 && t != null ? formatTimeStamp(t, this.env.timeZone(), this.env.chartBarMs()) : `${shown.length} points`;
+    };
+    return this.fold(
+      b,
+      "points",
+      "Points",
+      summary,
+      () => shown.map((i, n) => {
+        const key = shown.length === 1 ? free(i) === "x" ? "Time" : "Price" : String.fromCharCode(65 + n);
+        const line = document.createElement("div");
+        line.className = "vela-dsp-pt";
+        const k = document.createElement("span");
+        k.className = "vela-dsp-pt-k";
+        k.textContent = key;
+        line.appendChild(k);
+        if (free(i) !== "x") {
+          const ni = buildFieldControl({
+            kind: "number",
+            value: shownPrice(d.anchors[i].price),
+            fill: true,
+            commit: "blur",
+            title: `Point ${key} price`,
+            onChange: (v) => b.edit({ [`anchors.${i}.price`]: v })
+          });
+          const input = ni.el.querySelector("input");
+          b.watch(() => {
+            if (document.activeElement !== input) ni.setValue?.(shownPrice(b.live().anchors[i]?.price ?? 0));
+          });
+          line.appendChild(ni.el);
+        } else {
+          line.appendChild(document.createElement("span"));
+        }
+        const t = document.createElement("span");
+        t.className = "vela-dsp-pt-t";
+        b.watch(() => {
+          const time = b.live().anchors[i]?.time;
+          t.textContent = time != null ? formatTimeStamp(time, this.env.timeZone(), this.env.chartBarMs()) : "";
+        });
+        line.appendChild(t);
+        return line;
+      })
+    );
+  }
+  /** The timeframes the drawing shows on: one line while it's every timeframe, the band
+   *  picker only once the user goes custom. */
+  showOnFold(b) {
+    const bands = () => b.live().showOn;
+    let pickedCustom = false;
+    const mode = () => pickedCustom && bands() ? "custom" : modeOf(bands());
+    const here = timeframeBandOf(this.env.chartBarMs());
+    const summary = () => {
+      const s = bands();
+      if (!s) return "All timeframes";
+      if (mode() === "intraday") return "Intraday";
+      if (mode() === "higher") return "1H and up";
+      if (s.length === 0) return "Nowhere";
+      return s.map((k) => TIMEFRAME_BANDS.find((t) => t.key === k)?.label ?? k).join(", ");
+    };
+    return this.fold(b, "show", "Show on", summary, () => {
+      const set = (next) => b.edit({ showOn: next });
+      const pick = this.seg(
+        b,
+        "Show on",
+        [
+          { value: "all", html: "All" },
+          { value: "intraday", html: "Intraday" },
+          { value: "higher", html: "1H and up" },
+          { value: "custom", html: "Custom" }
+        ],
+        mode,
+        (v) => {
+          pickedCustom = v === "custom";
+          if (v === "all") set(void 0);
+          else if (v === "intraday") set([...INTRADAY]);
+          else if (v === "higher") set([...HIGHER]);
+          else set([...bands() ?? TIMEFRAME_BANDS.map((t) => t.key)]);
+        },
+        true
+      );
+      const grid = document.createElement("div");
+      grid.className = "vela-dsp-tf";
+      for (const band of TIMEFRAME_BANDS) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = band.label;
+        if (band.key === here) {
+          btn.dataset.here = "";
+          btn.title = "The chart's timeframe";
+        }
+        btn.addEventListener("click", () => {
+          const cur = new Set(bands() ?? []);
+          if (cur.has(band.key)) cur.delete(band.key);
+          else cur.add(band.key);
+          set(TIMEFRAME_BANDS.map((t) => t.key).filter((k) => cur.has(k)));
+        });
+        b.watch(() => btn.setAttribute("aria-pressed", String(bands()?.includes(band.key) ?? true)));
+        grid.appendChild(btn);
+      }
+      const note = document.createElement("div");
+      note.className = "vela-dsp-note";
+      b.watch(() => {
+        grid.hidden = mode() !== "custom";
+        const s = bands();
+        const hidden = s != null && here != null && !s.includes(here);
+        note.hidden = !hidden;
+        note.textContent = s?.length === 0 ? "Hidden on every timeframe." : "Hidden on this chart's timeframe.";
+      });
+      return [pick, grid, note];
+    });
+  }
+  // ── the style menu ──
+  /** The header's style menu: the tool's ready-made and saved looks (hover to preview, click
+   *  to apply), saving the current look, and going back to the tool's defaults. */
+  styleMenuButton(b) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "vela-dsp-style";
+    btn.setAttribute("aria-haspopup", "menu");
+    btn.setAttribute("aria-expanded", "false");
+    const label = document.createElement("span");
+    const chev = document.createElement("span");
+    chev.style.display = "flex";
+    chev.innerHTML = CHEVRON_DOWN;
+    btn.append(label, chev);
+    const all = () => [...builtinToolTemplates(b.live().type), ...b.actions.templates?.() ?? []];
+    const refresh = () => {
+      const match = all().filter((t) => matchesTemplate(b.live(), t.settings)).pop();
+      label.textContent = match?.name ?? "Style";
+      btn.title = match ? `Style: ${match.name}` : "Styles";
+    };
+    btn.addEventListener("pointerdown", (e) => e.stopPropagation());
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (this.menu) {
+        this.menu.hide();
+        return;
+      }
+      this.openStyleMenu(btn, b, all, refresh);
+    });
+    refresh();
+    return { el: btn, refresh };
+  }
+  openStyleMenu(anchor, b, all, refresh) {
+    closeOpenPopovers();
+    const t = this.theme;
+    const pop = new Popover({
+      trigger: anchor,
+      host: this.host,
+      theme: t,
+      position: "absolute",
+      boundary: this.host,
+      boundaryInset: 4,
+      viewportInset: 0,
+      gap: 6,
+      align: "end",
+      zIndex: 6e3,
+      onClose: () => {
+        b.actions.preview?.(null);
+        anchor.setAttribute("aria-expanded", "false");
+        if (this.menu === pop) this.menu = null;
+      }
+    });
+    const el = pop.el;
+    el.classList.add("vela-dsp-menu");
+    el.setAttribute("role", "menu");
+    el.style.cssText += `background:${t.background};border:1px solid var(--vela-border);border-radius:var(--vela-radius-lg);box-shadow:var(--vela-shadow);color:${t.textColor};font:13px ${t.fontFamily};pointer-events:auto;`;
+    applyChromeTokens(el, t);
+    const fill = () => {
+      el.replaceChildren();
+      const builtins = builtinToolTemplates(b.live().type);
+      const saved = b.actions.templates?.() ?? [];
+      const item = (tpl, removable) => {
+        const row2 = document.createElement("button");
+        row2.type = "button";
+        row2.className = "vela-dsp-mi";
+        row2.setAttribute("role", "menuitem");
+        if (matchesTemplate(b.live(), tpl.settings)) row2.dataset.current = "";
+        const dot = document.createElement("span");
+        dot.className = "vela-dsp-mi-dot";
+        dot.style.background = templateColor(tpl.settings) ?? "transparent";
+        const name = document.createElement("span");
+        name.className = "vela-dsp-mi-t";
+        name.textContent = tpl.name;
+        row2.append(dot, name);
+        if (removable) {
+          const x = document.createElement("span");
+          x.className = "vela-dsp-mi-x";
+          x.setAttribute("role", "button");
+          x.setAttribute("aria-label", `Delete ${tpl.name}`);
+          x.innerHTML = CROSS;
+          x.addEventListener("click", (e) => {
+            e.stopPropagation();
+            b.actions.preview?.(null);
+            b.actions.removeTemplate?.(tpl.name);
+            fill();
+            refresh();
+          });
+          row2.appendChild(x);
+        }
+        row2.addEventListener("pointerenter", () => b.actions.preview?.(tpl.settings));
+        row2.addEventListener("pointerleave", () => b.actions.preview?.(null));
+        row2.addEventListener("click", () => {
+          b.actions.preview?.(null);
+          b.actions.applyToolSettings?.(tpl.settings);
+          pop.hide();
+          b.rebuild();
+        });
+        return row2;
+      };
+      if (builtins.length) {
+        el.appendChild(menuHeading("Presets"));
+        for (const tpl of builtins) el.appendChild(item(tpl, false));
+      }
+      if (saved.length) {
+        el.appendChild(menuHeading("Saved"));
+        for (const tpl of saved) el.appendChild(item(tpl, true));
+      }
+      if (builtins.length || saved.length) el.appendChild(separator());
+      if (b.actions.saveTemplate) el.appendChild(this.saveRow(b, fill, refresh));
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "vela-dsp-mi";
+      reset.setAttribute("role", "menuitem");
+      reset.innerHTML = '<span class="vela-dsp-mi-t">Reset to default</span>';
+      reset.addEventListener("click", () => {
+        b.actions.resetSettings();
+        pop.hide();
+        b.rebuild();
+      });
+      el.appendChild(reset);
+    };
+    fill();
+    anchor.setAttribute("aria-expanded", "true");
+    this.menu = pop;
+    pop.show();
+  }
+  /** "Save as style…": a menu row that turns into a name field. */
+  saveRow(b, refill, refresh) {
+    const wrap = document.createElement("div");
+    const start = document.createElement("button");
+    start.type = "button";
+    start.className = "vela-dsp-mi";
+    start.setAttribute("role", "menuitem");
+    start.innerHTML = '<span class="vela-dsp-mi-t">Save as style\u2026</span>';
+    start.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const form = document.createElement("div");
+      form.className = "vela-dsp-mname";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "Style name";
+      input.maxLength = 60;
+      input.setAttribute("aria-label", "Style name");
+      const save = button("Save", true, () => commit());
+      save.style.height = "28px";
+      const commit = () => {
+        const name = input.value.trim();
+        if (!name) return;
+        b.actions.saveTemplate?.(name);
+        refill();
+        refresh();
+      };
+      input.addEventListener("keydown", (ev) => {
+        ev.stopPropagation();
+        if (ev.key === "Enter") commit();
+        if (ev.key === "Escape") refill();
+      });
+      form.append(input, save);
+      wrap.replaceChildren(form);
+      input.focus();
+    });
+    wrap.appendChild(start);
+    return wrap;
+  }
+  // ── controls ──
+  /** A fold: a one-line header saying what's set, opening to its rows. */
+  fold(b, key, title, summary, body) {
+    const type = b.live().type;
+    const open = openFolds.get(type) ?? /* @__PURE__ */ new Set();
+    openFolds.set(type, open);
+    const wrap = document.createElement("div");
+    wrap.className = "vela-dsp-fold";
+    const head = document.createElement("button");
+    head.type = "button";
+    head.className = "vela-dsp-fold-h";
+    const t = document.createElement("span");
+    t.className = "vela-dsp-fold-t";
+    t.textContent = title;
+    const s = document.createElement("span");
+    s.className = "vela-dsp-fold-s";
+    const chev = document.createElement("span");
+    chev.className = "vela-dsp-chev";
+    chev.innerHTML = CHEVRON;
+    head.append(t, s, chev);
+    const content = document.createElement("div");
+    content.className = "vela-dsp-fold-b";
+    let built = false;
+    const setOpen = (on) => {
+      if (on) open.add(key);
+      else open.delete(key);
+      wrap.toggleAttribute("data-open", on);
+      head.setAttribute("aria-expanded", String(on));
+      if (on && !built) {
+        built = true;
+        content.append(...body());
+      }
+    };
+    head.addEventListener("click", () => setOpen(!open.has(key)));
+    b.watch(() => s.textContent = summary());
+    setOpen(open.has(key));
+    wrap.append(head, content);
+    return wrap;
+  }
+  seg(b, label, options, read, pick, full = false) {
+    const el = document.createElement("div");
+    el.className = "vela-dsp-seg";
+    el.setAttribute("role", "group");
+    el.setAttribute("aria-label", label);
+    if (full) el.dataset.full = "";
+    const buttons = options.map((o) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.innerHTML = o.html;
+      if (o.title) {
+        btn.title = o.title;
+        btn.setAttribute("aria-label", o.title);
+      }
+      btn.addEventListener("click", () => {
+        pick(o.value);
+        sync();
+      });
+      el.appendChild(btn);
+      return btn;
+    });
+    const sync = () => {
+      const cur = read();
+      options.forEach((o, i) => buttons[i].setAttribute("aria-pressed", String(o.value === cur)));
+    };
+    b.watch(sync);
+    return el;
+  }
+  chip(b, text, read, set, title) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "vela-dsp-chip";
+    btn.textContent = text;
+    if (title) {
+      btn.title = title;
+      btn.setAttribute("aria-label", title);
+    }
+    if (text === "B") btn.style.fontWeight = "700";
+    if (text === "I") btn.style.fontStyle = "italic";
+    btn.addEventListener("click", () => set(!read()));
+    b.watch(() => btn.setAttribute("aria-pressed", String(read())));
+    return btn;
+  }
+  swatch(b, title, read, path) {
+    const ctrl = buildFieldControl({ kind: "color", theme: this.theme, title, get: read, onChange: (v) => b.edit({ [path]: v }) });
+    return ctrl.el;
+  }
+  switch(b, read, set) {
+    const sw = buildFieldControl({ kind: "switch", checked: read(), onChange: set });
+    b.watch(() => sw.setValue?.(read()));
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex;flex:1;justify-content:flex-end;";
+    wrap.appendChild(sw.el);
+    return wrap;
+  }
+  number(b, title, read, path, f) {
+    const step = f.step ?? 1;
+    const ni = buildFieldControl({
+      kind: "number",
+      value: read(),
+      min: f.min,
+      max: f.max,
+      step,
+      integer: step >= 1 && Number.isInteger(step),
+      fill: false,
+      commit: "blur",
+      title,
+      onChange: (v) => b.edit({ [path]: v })
+    });
+    const input = ni.el.querySelector("input");
+    b.watch(() => {
+      if (document.activeElement !== input) ni.setValue?.(read());
+    });
+    return ni.el;
+  }
 };
-function btn(label, primary, onClick) {
+function block(title, ...rows) {
+  const el = document.createElement("div");
+  el.className = "vela-dsp-block";
+  if (title) {
+    const h = document.createElement("div");
+    h.className = "vela-dsp-h";
+    h.textContent = title;
+    el.appendChild(h);
+  }
+  el.append(...rows);
+  return el;
+}
+function row(label, ...controls) {
+  const el = document.createElement("div");
+  el.className = "vela-dsp-row";
+  const lab = document.createElement("span");
+  lab.className = "vela-dsp-lab";
+  lab.textContent = label;
+  lab.title = label;
+  el.append(lab, ...controls);
+  return el;
+}
+function chips(...items) {
+  const el = document.createElement("div");
+  el.className = "vela-dsp-chips";
+  el.append(...items);
+  return el;
+}
+function menuHeading(text) {
+  const el = document.createElement("div");
+  el.className = "vela-dsp-mh";
+  el.textContent = text;
+  return el;
+}
+function separator() {
+  const el = document.createElement("div");
+  el.className = "vela-dsp-msep";
+  return el;
+}
+function button(label, primary, onClick) {
   const b = document.createElement("button");
   b.type = "button";
   b.textContent = label;
   b.className = primary ? "vela-dialog-btn vela-dialog-btn-primary" : "vela-dialog-btn";
   b.addEventListener("click", onClick);
   return b;
+}
+function sizeLabel(size) {
+  return TEXT_SIZE_OPTIONS.find((o) => o.value === (size ?? "normal"))?.label ?? "Normal";
+}
+function readPath(d, path) {
+  let cur = d;
+  for (const k of path.split(".")) {
+    if (cur == null || typeof cur !== "object") return void 0;
+    cur = cur[k];
+  }
+  return cur;
+}
+function pairBase(colorLabel, styleLabel3) {
+  const c = /^(.*) colou?r$/i.exec(colorLabel);
+  const st = /^(.*) style$/i.exec(styleLabel3);
+  return c && st && c[1] === st[1] ? c[1] : null;
+}
+function upperLowerBase(upper, lower) {
+  const u = /^Upper (.+)$/i.exec(upper);
+  const l = /^Lower (.+)$/i.exec(lower);
+  if (!u || !l || u[1] !== l[1]) return null;
+  const name = u[1].replace(/ colou?r$/i, "");
+  const word = name.charAt(0).toUpperCase() + name.slice(1);
+  return /fill$/i.test(word) ? word : `${word}s`;
+}
+function modeOf(showOn) {
+  if (!showOn) return "all";
+  const same = (a) => a.length === showOn.length && a.every((k) => showOn.includes(k));
+  if (same(INTRADAY)) return "intraday";
+  if (same(HIGHER)) return "higher";
+  return "custom";
+}
+function matchesTemplate(d, s) {
+  const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  const style = d.style;
+  for (const [k, v] of Object.entries(s.style ?? {})) if (!same(style[k], v)) return false;
+  const text = d.text ?? {};
+  for (const [k, v] of Object.entries(s.text ?? {})) if (!same(text[k], v)) return false;
+  const props = d.serialize().props ?? {};
+  for (const [k, v] of Object.entries(s.props ?? {})) if (!same(props[k], v)) return false;
+  return Object.keys(s.style ?? {}).length + Object.keys(s.text ?? {}).length + Object.keys(s.props ?? {}).length > 0;
+}
+function templateColor(s) {
+  return s.style?.lineColor ?? s.style?.fillColor ?? s.text?.color;
 }
 
 // src/renderers/native/drawings/DrawingSettingsPopup.ts
@@ -14680,15 +15793,15 @@ function distinctValues(drawings, read) {
 }
 var BTN = 30;
 var ICON = 21;
-var STYLE_ID4 = "vela-drawing-popup-styles";
-var STYLE_REV = "4";
-function ensureStyles4() {
+var STYLE_ID5 = "vela-drawing-popup-styles";
+var STYLE_REV2 = "4";
+function ensureStyles5() {
   if (typeof document === "undefined") return;
-  const existing = document.getElementById(STYLE_ID4);
-  if (existing?.dataset.rev === STYLE_REV) return;
+  const existing = document.getElementById(STYLE_ID5);
+  if (existing?.dataset.rev === STYLE_REV2) return;
   const s = existing ?? document.createElement("style");
-  s.id = STYLE_ID4;
-  s.dataset.rev = STYLE_REV;
+  s.id = STYLE_ID5;
+  s.dataset.rev = STYLE_REV2;
   s.textContent = `
 .vela-dpop-btn{background:transparent;color:var(--vela-fg-muted);transition:background var(--vela-dur-fast) ease,color var(--vela-dur-fast) ease;}
 .vela-dpop-btn:hover{background:var(--vela-hover-strong);color:var(--vela-fg-bright);}
@@ -14704,13 +15817,14 @@ function ensureStyles4() {
   if (!existing) document.head.appendChild(s);
 }
 var DrawingSettingsPopup = class {
-  constructor(host, theme, chartBarMs = () => 0) {
+  constructor(host, theme, env = {}) {
     this.host = host;
-    this.chartBarMs = chartBarMs;
     this.el = null;
     this.tipEl = null;
     // floating hover-label (above/below the toolbar)
     this.textPanel = null;
+    /** The single drawing the bar is open on (a multi-selection has no settings panel). */
+    this.current = null;
     this.colorPop = null;
     this.colorOwner = null;
     this.menuPop = null;
@@ -14718,9 +15832,10 @@ var DrawingSettingsPopup = class {
     this.onClose = null;
     this.onOutside = (e) => {
       const node = e.target;
-      if (this.settingsDialog.isOpen()) {
-        if (this.settingsDialog.contains(node) || this.isOwnChrome(node)) return;
-        this.settingsDialog.close();
+      if (this.panel.isOpen()) {
+        if (this.panel.contains(node) || this.isOwnChrome(node)) return;
+        if (this.host.contains(node)) return;
+        this.panel.close();
         return;
       }
       if (this.isOwnChrome(node)) return;
@@ -14729,19 +15844,16 @@ var DrawingSettingsPopup = class {
       cb?.(e);
     };
     this.theme = theme;
-    this.settingsDialog = new DrawingSettingsDialog(host, theme);
-  }
-  /** The magnifier timeframe choices strictly below the chart's own bar duration
-   *  (`auto` rides along while at least one concrete lower step exists). */
-  lowerTimeframeOptions() {
-    const chartMs = this.chartBarMs();
-    if (!(chartMs > 0)) return [...MAGNIFIER_TIMEFRAME_OPTIONS];
-    const lower = MAGNIFIER_TIMEFRAME_OPTIONS.filter((o) => o.ms > 0 && o.ms < chartMs);
-    return lower.length > 0 ? [MAGNIFIER_TIMEFRAME_OPTIONS[0], ...lower] : [];
+    this.chartBarMs = env.chartBarMs ?? (() => 0);
+    this.panel = new DrawingSettingsPanel(host, theme, {
+      chartBarMs: this.chartBarMs,
+      timeZone: env.timeZone ?? (() => "UTC"),
+      priceDecimals: env.priceDecimals ?? (() => null)
+    });
   }
   setTheme(theme) {
     this.theme = theme;
-    this.settingsDialog.setTheme(theme);
+    this.panel.setTheme(theme);
   }
   isOpen() {
     return this.el != null;
@@ -14749,7 +15861,22 @@ var DrawingSettingsPopup = class {
   /** Whether `node` belongs to this popup — the bar, its host-floated color/menu shells,
    *  or a kit popover (select list / color chip) portaled into the chart host. */
   contains(node) {
-    return node != null && (this.isOwnChrome(node) || this.settingsDialog.contains(node));
+    return node != null && (this.isOwnChrome(node) || this.panel.contains(node));
+  }
+  /** Open the full settings panel for the drawing the bar is open on. False when there is
+   *  none (no bar, or a multi-selection). */
+  openPanel() {
+    const cur = this.current;
+    if (!cur) return false;
+    this.hideTip();
+    this.closeColorPopover();
+    this.closeMenu();
+    this.panel.open(cur.drawing, cur.actions, cur.anchor);
+    return true;
+  }
+  /** The drawings changed under the panel (a drag, an undo) — let it re-read them. */
+  syncPanel() {
+    this.panel.sync();
   }
   /** Open the quick toolbar for `drawings` (one, or a whole multi-selection), floating clear of
    *  their `anchor` box. With several drawings the bar shows only the controls they ALL support,
@@ -14759,10 +15886,12 @@ var DrawingSettingsPopup = class {
    *  programmatic close), with the dismissing press when there is one, so the caller can tell a
    *  modifier press (multi-select) from a plain one. */
   open(drawings, anchor, actions, onClose) {
-    this.close();
     const drawing = drawings[0];
+    const keepPanel = this.panel.isOpen() && drawings.length === 1 && drawing != null && this.current?.drawing.id === drawing.id;
+    this.close(keepPanel);
     if (!drawing) return;
-    ensureStyles4();
+    this.current = drawings.length === 1 ? { drawing, actions, anchor } : null;
+    ensureStyles5();
     this.onClose = onClose ?? null;
     const t = this.theme;
     const multi = drawings.length > 1;
@@ -14790,11 +15919,11 @@ var DrawingSettingsPopup = class {
     }
     if (paths.has("size")) {
       const sz = common((d) => d.size ?? "normal");
-      bar.appendChild(this.dropdown("Icon size", STAMP_SIZE_OPTIONS, sz, (s) => stampSizeIcon(s), (v) => actions.patch({ size: v }), { label: sizeLabel }));
+      bar.appendChild(this.dropdown("Icon size", STAMP_SIZE_OPTIONS, sz, (s) => stampSizeIcon(s), (v) => actions.patch({ size: v }), { label: sizeLabel2 }));
     }
     if (paths.has("magnifier.timeframe") && every((d) => d instanceof Magnifier)) {
       const mag = (d) => d;
-      const options = this.lowerTimeframeOptions();
+      const options = magnifierTimeframesBelow(this.chartBarMs());
       if (options.length > 0) {
         bar.appendChild(
           this.dropdown("Lower timeframe", options.map((o) => o.value), common((d) => mag(d).magnifier.timeframe), () => "", (v) => actions.patch({ "magnifier.timeframe": v }), {
@@ -14823,7 +15952,6 @@ var DrawingSettingsPopup = class {
     }
     if (paths.has("style.lineStyle")) bar.appendChild(this.dropdown("Line style", LINE_STYLE_OPTIONS.map((o) => o.value), common((d) => d.style.lineStyle), (s) => lineIcon(2, s), (v) => actions.patch({ "style.lineStyle": v }), { label: styleLabel2 }));
     if (paths.has("style.fillColor")) bar.appendChild(swatch("Fill", BUCKET_ICON, (d) => effectiveFillColor(d, this.theme) ?? d.style.fillColor ?? DEFAULT_DRAWING_COLOR, "style.fillColor"));
-    const isFrvp = paths.has("frvp.rows") && drawing instanceof FixedRangeVolumeProfile;
     const isPosition = paths.has("riskPercent") && every((d) => d instanceof PositionTool);
     if (isPosition) {
       const pos = (d) => d;
@@ -14892,7 +16020,7 @@ var DrawingSettingsPopup = class {
     if (paths.has("showPrice")) bar.appendChild(this.toggle("Show price", PRICE_DELTA_ICON, common((d) => flags(d).showPrice !== false), (v) => actions.patch({ showPrice: v })));
     if (paths.has("showDate")) bar.appendChild(this.toggle("Show date", DATE_DELTA_ICON, common((d) => flags(d).showDate !== false), (v) => actions.patch({ showDate: v })));
     if (paths.has("text.color") && textOnBar) bar.appendChild(swatch("Text color", TYPE_ICON, (d) => d.text?.color || t.textColor, "text.color"));
-    if (paths.has("text.size") && textOnBar) bar.appendChild(this.dropdown("Text size", TEXT_SIZE_OPTIONS.map((o) => o.value), common((d) => d.text?.size ?? "normal"), (s) => labelSizeIcon(s), (v) => actions.patch({ "text.size": v }), { label: sizeLabel }));
+    if (paths.has("text.size") && textOnBar) bar.appendChild(this.dropdown("Text size", TEXT_SIZE_OPTIONS.map((o) => o.value), common((d) => d.text?.size ?? "normal"), (s) => labelSizeIcon(s), (v) => actions.patch({ "text.size": v }), { label: sizeLabel2 }));
     const textField = !multi && paths.has("text.value");
     if (paths.has("text.bold") && !textField) bar.appendChild(this.toggle("Bold", BOLD_ICON, common((d) => !!d.text?.bold), (v) => actions.patch({ "text.bold": v })));
     if (paths.has("text.italic") && !textField) bar.appendChild(this.toggle("Italic", ITALIC_ICON, common((d) => !!d.text?.italic), (v) => actions.patch({ "text.italic": v })));
@@ -14901,13 +16029,11 @@ var DrawingSettingsPopup = class {
     if (editableLevels && every((d) => d.editableLevels() != null && !(d instanceof MachFigure))) {
       const fib = (d) => d;
       const sizes = TEXT_SIZE_OPTIONS.map((o) => o.value);
-      bar.appendChild(this.dropdown("Numbers size", sizes, common((d) => fib(d).numbersSize ?? "small"), (s) => numbersSizeIcon(s), (v) => actions.patch({ numbersSize: v }), { label: sizeLabel }));
-      bar.appendChild(this.dropdown("Label size", sizes, common((d) => fib(d).labelsSize ?? "normal"), (s) => labelSizeIcon(s), (v) => actions.patch({ labelsSize: v }), { label: sizeLabel }));
+      bar.appendChild(this.dropdown("Numbers size", sizes, common((d) => fib(d).numbersSize ?? "small"), (s) => numbersSizeIcon(s), (v) => actions.patch({ numbersSize: v }), { label: sizeLabel2 }));
+      bar.appendChild(this.dropdown("Label size", sizes, common((d) => fib(d).labelsSize ?? "normal"), (s) => labelSizeIcon(s), (v) => actions.patch({ labelsSize: v }), { label: sizeLabel2 }));
     }
     bar.appendChild(this.divider());
-    if (!multi && isFrvp) bar.appendChild(this.iconBtn("Settings", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "frvp")));
-    if (!multi && isPosition) bar.appendChild(this.iconBtn("Position size", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "position")));
-    if (!multi && editableLevels) bar.appendChild(this.iconBtn("Levels", GEAR_ICON, () => this.settingsDialog.open(drawing, actions, "levels")));
+    if (!multi) bar.appendChild(this.iconBtn("Settings", GEAR_ICON, () => this.openPanel()));
     bar.appendChild(this.toggle("Lock", LOCK_ICON, common((d) => d.locked), (v) => actions.setLocked(v), UNLOCK_ICON));
     const del = this.iconBtn("Delete", TRASH_ICON, () => actions.remove());
     del.style.color = "var(--vela-danger)";
@@ -14925,16 +16051,17 @@ var DrawingSettingsPopup = class {
     this.position(anchor);
     setTimeout(() => document.addEventListener("pointerdown", this.onOutside), 0);
   }
-  close() {
+  close(keepPanel = false) {
     document.removeEventListener("pointerdown", this.onOutside);
     this.closeColorPopover();
     this.closeMenu();
     this.hideTip();
-    this.settingsDialog.close();
+    if (!keepPanel) this.panel.close();
     this.el?.remove();
     this.el = null;
     this.textPanel = null;
     this.onClose = null;
+    this.current = null;
   }
   destroy() {
     this.close();
@@ -14990,7 +16117,7 @@ var DrawingSettingsPopup = class {
     if (withColorAndSize) {
       tools.append(
         this.colorButton("Text color", TYPE_ICON, text?.color || this.theme.textColor, (v) => actions.patch({ "text.color": v }), 14),
-        this.dropdown("Text size", TEXT_SIZE_OPTIONS.map((o) => o.value), text?.size ?? "normal", (s) => sizeIcon(s), (v) => actions.patch({ "text.size": v }), { label: sizeLabel })
+        this.dropdown("Text size", TEXT_SIZE_OPTIONS.map((o) => o.value), text?.size ?? "normal", (s) => sizeIcon(s), (v) => actions.patch({ "text.size": v }), { label: sizeLabel2 })
       );
     }
     tools.append(
@@ -15164,9 +16291,9 @@ var DrawingSettingsPopup = class {
    * quick toolbar — the chip works without selecting the drawing first.
    */
   openMagnifierTimeframeMenu(rect, current, onPick) {
-    ensureStyles4();
+    ensureStyles5();
     closeOpenPopovers();
-    const options = this.lowerTimeframeOptions();
+    const options = magnifierTimeframesBelow(this.chartBarMs());
     const anchor = document.createElement("div");
     anchor.style.cssText = `position:absolute;left:${rect.x}px;top:${rect.y}px;width:${rect.w}px;height:${rect.h}px;pointer-events:none;`;
     this.host.appendChild(anchor);
@@ -15207,22 +16334,22 @@ var DrawingSettingsPopup = class {
       zIndex: 26,
       padding: "4px",
       fill: (menu, pop) => {
-        for (const row of rows) {
+        for (const row2 of rows) {
           const item = document.createElement("button");
           item.type = "button";
           item.className = "vela-dpop-item";
           item.style.cssText = "display:flex;align-items:center;gap:9px;min-width:150px;padding:6px 9px;border:none;border-radius:5px;color:inherit;cursor:pointer;text-align:left;font:inherit;";
           const ic = document.createElement("span");
           ic.style.cssText = "display:flex;flex:none;width:20px;justify-content:center;";
-          ic.innerHTML = sized(row.icon, 18);
+          ic.innerHTML = sized(row2.icon, 18);
           const tx = document.createElement("span");
-          tx.textContent = row.label;
+          tx.textContent = row2.label;
           tx.style.cssText = "flex:1;";
           item.append(ic, tx);
           item.addEventListener("click", (e) => {
             e.stopPropagation();
             pop.hide();
-            row.onClick();
+            row2.onClick();
           });
           menu.appendChild(item);
         }
@@ -15447,12 +16574,12 @@ var DrawingSettingsPopup = class {
       padding: "10px",
       fill: (el, pop) => {
         if (used.length > 1) {
-          const row = document.createElement("div");
-          row.style.cssText = "display:flex;align-items:center;gap:6px;padding-bottom:9px;border-bottom:1px solid var(--vela-border);";
+          const row2 = document.createElement("div");
+          row2.style.cssText = "display:flex;align-items:center;gap:6px;padding-bottom:9px;border-bottom:1px solid var(--vela-border);";
           const lbl = document.createElement("span");
           lbl.textContent = "In use";
           lbl.style.cssText = "font:var(--vela-font-size-sm) inherit;opacity:0.7;margin-right:2px;";
-          row.appendChild(lbl);
+          row2.appendChild(lbl);
           for (const c of used) {
             const sw = document.createElement("button");
             sw.type = "button";
@@ -15463,9 +16590,9 @@ var DrawingSettingsPopup = class {
               pop.hide();
               onChange(c);
             });
-            row.appendChild(sw);
+            row2.appendChild(sw);
           }
-          el.appendChild(row);
+          el.appendChild(row2);
         }
         el.appendChild(buildColorPicker(color, t, onChange));
       }
@@ -15539,7 +16666,7 @@ function labelSizeIcon(size) {
 function capitalize(s) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
-function sizeLabel(v) {
+function sizeLabel2(v) {
   return TEXT_SIZE_OPTIONS.find((o) => o.value === v)?.label ?? capitalize(String(v));
 }
 function styleLabel2(v) {
@@ -15762,7 +16889,9 @@ var UserDrawingController = class {
     this.hoveredId = null;
     // the drawing under the cursor (its handles show)
     this.activeTool = null;
-    // last-used style for the armed tool (seeds the placement ghost)
+    // the armed tool's remembered settings (seed the placement ghost)
+    this.toolTemplates = {};
+    // saved styles, per tool
     this.intentCb = null;
     /** Another chart's in-progress placement, mirrored here as a ghost (drawings sync). */
     this.externalGhost = null;
@@ -15810,7 +16939,11 @@ var UserDrawingController = class {
       this.clearSelection();
     };
     this.ctx = canvas.getContext("2d");
-    this.popup = new DrawingSettingsPopup(overlayHost, deps.theme(), () => deps.chartBarMs());
+    this.popup = new DrawingSettingsPopup(overlayHost, deps.theme(), {
+      chartBarMs: () => deps.chartBarMs(),
+      timeZone: () => deps.timeZone?.() ?? "UTC",
+      priceDecimals: () => deps.priceDecimals?.() ?? null
+    });
     this.toolbar = new DrawingToolbar(
       toolbarHost,
       deps.theme(),
@@ -15833,7 +16966,7 @@ var UserDrawingController = class {
     this.interaction = new DrawingInteraction({
       projector: () => this.deps.projector(),
       activeTool: () => this.activeTool,
-      drawings: () => this.drawings,
+      drawings: () => this.onScreen(),
       hoveredId: () => this.hoveredId,
       selectedIds: () => this.selectedIds,
       emit: (i) => this.emit(i),
@@ -15843,7 +16976,7 @@ var UserDrawingController = class {
       },
       openSettings: (id, x, y) => this.openSettingsById(id, x, y),
       snap: (pt, paneId, mode, cursorPx) => this.deps.snap(pt, paneId, mode, cursorPx),
-      lastStyle: () => this.activeToolStyle
+      toolDefaults: () => this.activeToolDefaults
     });
   }
   // ── IDrawingsRendererPort (commands down) ──
@@ -15895,6 +17028,7 @@ var UserDrawingController = class {
     this.invalidateSlices();
     this.render();
     this.deps.requestScaleUpdate();
+    this.popup.syncPanel();
   }
   /** The pane's series stack in z terms — how the core places a new drawing (just under
    *  `price`) and computes "front of everything" / "behind everything" for the reorders. */
@@ -15922,7 +17056,7 @@ var UserDrawingController = class {
     }
     return lo <= hi ? { min: lo, max: hi } : null;
   }
-  setActiveTool(type, lastStyle) {
+  setActiveTool(type, lastStyle, defaults) {
     if (type != null) {
       this.finishTextEditor(true);
       this.withModeIntent(() => {
@@ -15931,7 +17065,7 @@ var UserDrawingController = class {
       });
     }
     this.activeTool = type;
-    this.activeToolStyle = lastStyle;
+    this.activeToolDefaults = defaults ?? (lastStyle ? { style: lastStyle } : void 0);
     this.toolbar.setActiveTool(type);
     if (type == null) this.interaction.onToolCleared();
     else this.clearSelection();
@@ -15940,6 +17074,10 @@ var UserDrawingController = class {
   /** Core push: the favorite tool set changed — reflect the flyout stars. */
   setFavorites(types) {
     this.toolbar.setFavorites(types);
+  }
+  /** Core push: every tool's saved styles — the settings panel's style menu reads them. */
+  setToolTemplates(map2) {
+    this.toolTemplates = map2;
   }
   /** Core push: per-tool shortcut hints (display strings) shown in the toolbar flyouts. */
   setToolShortcuts(map2) {
@@ -16013,8 +17151,9 @@ var UserDrawingController = class {
   /** The topmost visible (unlocked) magnifier whose timeframe chip contains (x, y) —
    *  the chip's rect is what the painter measured last frame. */
   magnifierChipAt(x, y) {
-    for (let i = this.drawings.length - 1; i >= 0; i -= 1) {
-      const d = this.drawings[i];
+    const shown = this.onScreen();
+    for (let i = shown.length - 1; i >= 0; i -= 1) {
+      const d = shown[i];
       if (!(d instanceof Magnifier) || !d.visible || d.locked) continue;
       const r = d.chipRect;
       if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return d;
@@ -16040,7 +17179,7 @@ var UserDrawingController = class {
    *  `withSelection` so a hit on a member of a multi-selection removes the selection's
    *  unlocked members — whichever member was hit, locked or not. */
   deleteAt(x, y, withSelection = false) {
-    const hit = topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE);
+    const hit = topDrawingAt(this.onScreen(), x, y, this.deps.projector(), HIT_TOLERANCE);
     if (!hit) return false;
     const ids = deleteTargets(hit, this.selectedIds, this.drawings, withSelection);
     if (ids.length === 0) return false;
@@ -16120,7 +17259,7 @@ var UserDrawingController = class {
   updateHover(x, y, mod = false) {
     let id = null;
     if (!mod && this.activeTool == null && !this.interaction.isPlacing() && !this.interaction.isDragging()) {
-      id = topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE)?.id ?? null;
+      id = topDrawingAt(this.onScreen(), x, y, this.deps.projector(), HIT_TOLERANCE)?.id ?? null;
     }
     if (id !== this.hoveredId) {
       this.hoveredId = id;
@@ -16355,16 +17494,20 @@ var UserDrawingController = class {
     }
     return false;
   }
-  /** Double-click over a drawing → suppress the chart's view reset (single-click already
-   *  opens settings). Returns true only when a drawing is under the cursor. */
+  /** Double-click over a drawing opens its full settings panel (a callout or text label edits
+   *  its words in place instead) and suppresses the chart's view reset. Returns true only
+   *  when a drawing is under the cursor. */
   dblClick(x, y) {
     if (this.interaction.finishPlacing(true)) return true;
-    const hit = topDrawingAt(this.drawings, x, y, this.deps.projector(), HIT_TOLERANCE);
+    const hit = topDrawingAt(this.onScreen(), x, y, this.deps.projector(), HIT_TOLERANCE);
     if (isInlineEditable(hit)) {
       this.editTextInline(hit.id);
       return true;
     }
-    return hit != null;
+    if (!hit) return false;
+    if (this.popupMulti || !this.selectedIds.has(hit.id) || !this.popup.isOpen()) this.openSettingsById(hit.id, 0, 0);
+    this.popup.openPanel();
+    return true;
   }
   /** Keyboard pre-empt: Escape (popup/placing/selection), undo/redo, copy/paste/duplicate,
    *  delete (multi), and arrow-nudge. Stands down while a label text field is focused. */
@@ -16462,6 +17605,13 @@ var UserDrawingController = class {
     this.popup.close();
     this.render();
   }
+  /** The drawings shown on the chart's current timeframe. One limited to other timeframes
+   *  ("show on") is neither painted nor clickable here, but stays in the model: the object
+   *  tree still lists it, and its own visibility flag is untouched. */
+  onScreen() {
+    const barMs = this.deps.chartBarMs();
+    return this.drawings.filter((d) => shownOnTimeframe(d.showOn, barMs));
+  }
   /** Whether the drawing's z puts it INSIDE the series stack (per the last-known boundaries)
    *  rather than over it — i.e. its body belongs to an interleave layer, not the top canvas. */
   isInterleaved(d) {
@@ -16501,7 +17651,7 @@ var UserDrawingController = class {
     const proj = this.deps.projector();
     const theme = this.deps.theme();
     const buckets = /* @__PURE__ */ new Map();
-    for (const d of this.drawings) {
+    for (const d of this.onScreen()) {
       if (!d.visible || this.lifted.has(d.id)) continue;
       const beforeZ = sliceKeyFor(d.zIndex, this.lastBounds.get(d.paneId) ?? []);
       if (beforeZ === null) continue;
@@ -16555,8 +17705,9 @@ var UserDrawingController = class {
     };
     this.painter.seriesLook = this.deps.seriesLook();
     const onTop = (d) => !this.isInterleaved(d) || this.lifted.has(d.id);
-    this.painter.paintAll(ctx, this.drawings.filter(onTop), proj, this.deps.theme(), targets);
-    this.painter.paintHighlights(ctx, this.drawings.filter((d) => !onTop(d)), proj, handleIdsFor(targets));
+    const shown = this.onScreen();
+    this.painter.paintAll(ctx, shown.filter(onTop), proj, this.deps.theme(), targets);
+    this.painter.paintHighlights(ctx, shown.filter((d) => !onTop(d)), proj, handleIdsFor(targets));
     const clones = this.interaction.dragClones();
     if (clones) this.painter.paintAll(ctx, clones, proj, this.deps.theme(), { selected: new Set(clones.map((c) => c.id)) });
     this.layoutTextEditor();
@@ -16666,6 +17817,7 @@ var UserDrawingController = class {
     this.emit({ kind: "select", ids: [id] });
     this.emit({ kind: "settings", id });
     const anchor = drawing.bounds(this.deps.projector());
+    let previewBase = null;
     this.popup.open([drawing], anchor, {
       // Sync rebuilds instances, so a panel that reads values back after a patch (e.g. the
       // position tool's price fields, where one edit can flip another level) resolves fresh.
@@ -16700,11 +17852,39 @@ var UserDrawingController = class {
       restore: (doc) => {
         const d = live();
         if (!d) return;
-        if (doc.style) d.style = { ...doc.style };
-        if (doc.text !== void 0) d.text = doc.text ? { ...doc.text } : void 0;
-        if (doc.props !== void 0) d.applyProps(doc.props);
+        const text = doc.text ?? (d.text ? { ...d.text, value: "" } : void 0);
+        restoreLook(d, { ...doc, text });
+        d.anchors = doc.anchors.map((a) => ({ ...a }));
+        d.showOn = doc.showOn ? [...doc.showOn] : void 0;
         this.render();
-        this.emit({ kind: "edit", doc });
+        this.emit({ kind: "edit", doc: { ...doc, text } });
+      },
+      templates: () => this.toolTemplates[drawing.type] ?? [],
+      saveTemplate: (name) => {
+        const d = live();
+        if (d) this.emit({ kind: "template-save", type: d.type, name, settings: captureToolDefaults(d) });
+      },
+      removeTemplate: (name) => this.emit({ kind: "template-remove", type: drawing.type, name }),
+      applyToolSettings: (settings) => {
+        const d = live();
+        if (!d) return;
+        applyToolDefaults(d, settings);
+        this.render();
+        this.emit({ kind: "edit", doc: d.serialize() });
+      },
+      // A hovered style paints on the drawing without an edit; leaving puts the look back.
+      preview: (settings) => {
+        const d = live();
+        if (!d) return;
+        if (settings) {
+          if (previewBase) restoreLook(d, previewBase);
+          else previewBase = d.serialize();
+          applyToolDefaults(d, settings);
+        } else if (previewBase) {
+          restoreLook(d, previewBase);
+          previewBase = null;
+        } else return;
+        this.render();
       },
       remove: () => {
         this.closeTextEditor();
@@ -16753,6 +17933,11 @@ var UserDrawingController = class {
     this.intentCb?.(i);
   }
 };
+function restoreLook(d, doc) {
+  d.style = { ...doc.style };
+  d.text = doc.text ? { ...doc.text } : void 0;
+  if (doc.props !== void 0) d.applyProps(doc.props);
+}
 
 // src/renderers/shared/TableOverlay.ts
 var SIZE_PX2 = {
@@ -16768,7 +17953,7 @@ function fontPxOf(size) {
   return SIZE_PX2[size] ?? SIZE_PX2.auto;
 }
 function tableHasContent(t) {
-  return t.cells.some((row) => row?.some((c) => c != null && !c.merged));
+  return t.cells.some((row2) => row2?.some((c) => c != null && !c.merged));
 }
 function mergeRenderPlan(t) {
   const span = /* @__PURE__ */ new Map();
@@ -17529,15 +18714,15 @@ var MarkPopover = class {
             actions.className = "vela-callout-actions";
             section.appendChild(actions);
           }
-          const btn2 = doc.createElement("button");
-          btn2.type = "button";
-          btn2.className = "vela-callout-btn" + (item.primary ? " vela-callout-btn-primary" : "");
-          btn2.textContent = item.label;
-          btn2.addEventListener("click", () => {
+          const btn = doc.createElement("button");
+          btn.type = "button";
+          btn.className = "vela-callout-btn" + (item.primary ? " vela-callout-btn-primary" : "");
+          btn.textContent = item.label;
+          btn.addEventListener("click", () => {
             item.run();
             if (item.close !== false) this.close();
           });
-          actions.appendChild(btn2);
+          actions.appendChild(btn);
           continue;
         }
         actions = null;
@@ -17547,16 +18732,16 @@ var MarkPopover = class {
           text.textContent = item.text;
           section.appendChild(text);
         } else if (item.type === "field") {
-          const row = doc.createElement("div");
-          row.className = "vela-marks-field";
+          const row2 = doc.createElement("div");
+          row2.className = "vela-marks-field";
           const label = doc.createElement("span");
           label.className = "vela-marks-field-label";
           label.textContent = item.label;
           const value = doc.createElement("span");
           value.className = "vela-marks-field-value";
           value.textContent = item.value;
-          row.append(label, value);
-          section.appendChild(row);
+          row2.append(label, value);
+          section.appendChild(row2);
         }
       }
     }
@@ -17815,7 +19000,7 @@ var VELA_LETTERS_SVG = '<svg viewBox="161.66 -142 310.57 148" aria-hidden="true"
 
 // src/renderers/native/chrome/AttributionMark.ts
 var ATTRIBUTION_URL = "https://velacharts.dev/?utm_source=vela&utm_medium=attribution";
-var STYLE_ID5 = "vela-attribution-styles";
+var STYLE_ID6 = "vela-attribution-styles";
 var CSS = `
 .vela-attribution {
     text-decoration: none;
@@ -17871,11 +19056,11 @@ var CSS = `
 [data-vela-layout='mobile'] .vela-attribution:hover .vela-attr-wordmark,
 [data-layout='mobile'] .vela-attribution:hover .vela-attr-wordmark { transform: translateX(0); }
 `;
-function ensureStyles5(doc) {
-  let s = doc.getElementById(STYLE_ID5);
+function ensureStyles6(doc) {
+  let s = doc.getElementById(STYLE_ID6);
   if (!s) {
     s = doc.createElement("style");
-    s.id = STYLE_ID5;
+    s.id = STYLE_ID6;
     doc.head.appendChild(s);
   }
   s.textContent = CSS;
@@ -17905,7 +19090,7 @@ function createCustomMark(doc, html, background) {
   return el;
 }
 function createAttributionMark(doc, background) {
-  ensureStyles5(doc);
+  ensureStyles6(doc);
   const a = doc.createElement("a");
   a.className = "vela-attribution";
   a.href = ATTRIBUTION_URL;
@@ -18178,13 +19363,13 @@ function paintVpvr(ctx, profile, geom, style) {
   const { rightX, maxW, yOf } = geom;
   if (maxTotal <= 0 || maxW <= 0) return;
   for (let k = 0; k < rows.length; k += 1) {
-    const row = rows[k];
-    const total = row.up + row.down;
+    const row2 = rows[k];
+    const total = row2.up + row2.down;
     if (total <= 0) continue;
-    const yTop = yOf(row.price + rowH);
-    const h = Math.max(1, yOf(row.price) - yTop - 1);
+    const yTop = yOf(row2.price + rowH);
+    const h = Math.max(1, yOf(row2.price) - yTop - 1);
     const w = total / maxTotal * maxW;
-    const upW = row.up / total * w;
+    const upW = row2.up / total * w;
     ctx.globalAlpha = k >= vaFrom && k <= vaTo ? VPVR_VA_ALPHA : VPVR_OUTSIDE_ALPHA;
     if (upW > 0) {
       ctx.fillStyle = style.upColor;
@@ -18196,9 +19381,9 @@ function paintVpvr(ctx, profile, geom, style) {
     }
   }
   if (style.showPoc) {
-    const row = rows[poc];
-    const yTop = yOf(row.price + rowH);
-    const h = Math.max(1, yOf(row.price) - yTop - 1);
+    const row2 = rows[poc];
+    const yTop = yOf(row2.price + rowH);
+    const h = Math.max(1, yOf(row2.price) - yTop - 1);
     ctx.globalAlpha = VPVR_POC_ALPHA;
     ctx.strokeStyle = style.pocColor;
     ctx.lineWidth = 1;
@@ -19164,11 +20349,11 @@ var NativeRenderer = class {
     }
   }
   makeSettingsButton() {
-    const btn2 = document.createElement("button");
-    btn2.type = "button";
-    btn2.title = "Chart settings";
-    btn2.innerHTML = iconAt("gear", 14);
-    Object.assign(btn2.style, {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.title = "Chart settings";
+    btn.innerHTML = iconAt("gear", 14);
+    Object.assign(btn.style, {
       position: "absolute",
       bottom: `${TIME_AXIS_H + 10}px`,
       right: `${RIGHT_AXIS_W + 10}px`,
@@ -19189,10 +20374,10 @@ var NativeRenderer = class {
       pointerEvents: "auto",
       padding: "0"
     });
-    btn2.addEventListener("mouseenter", () => btn2.style.opacity = "1");
-    btn2.addEventListener("mouseleave", () => btn2.style.opacity = "0.75");
-    btn2.addEventListener("click", () => this.toggleSettingsDialog());
-    return btn2;
+    btn.addEventListener("mouseenter", () => btn.style.opacity = "1");
+    btn.addEventListener("mouseleave", () => btn.style.opacity = "0.75");
+    btn.addEventListener("click", () => this.toggleSettingsDialog());
+    return btn;
   }
   /** Port surface: hosts (bottom-bar / chrome buttons) open the same dialog as the
    *  in-chart gear — created on demand, independent of the gear feature being enabled. */
@@ -19257,12 +20442,12 @@ var NativeRenderer = class {
   }
   /** Jump-back-to-latest button — same size/border chrome as the drawing-toolbar collapse toggle. */
   makeScrollToRealtimeButton() {
-    const btn2 = document.createElement("button");
-    btn2.type = "button";
-    btn2.title = "Scroll to most recent bar (Alt+Shift+\u2192)";
-    btn2.setAttribute("aria-label", "Scroll to most recent bar");
-    btn2.innerHTML = this.scrollButtonIcon();
-    Object.assign(btn2.style, {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.title = "Scroll to most recent bar (Alt+Shift+\u2192)";
+    btn.setAttribute("aria-label", "Scroll to most recent bar");
+    btn.innerHTML = this.scrollButtonIcon();
+    Object.assign(btn.style, {
       position: "absolute",
       bottom: `${SCROLL_BTN_BOTTOM}px`,
       right: `${SCROLL_BTN_RIGHT}px`,
@@ -19285,10 +20470,10 @@ var NativeRenderer = class {
       pointerEvents: "auto",
       padding: "0"
     });
-    btn2.addEventListener("mouseenter", () => btn2.style.opacity = "1");
-    btn2.addEventListener("mouseleave", () => btn2.style.opacity = "0.85");
-    btn2.addEventListener("click", () => this.scrollToRealtime());
-    return btn2;
+    btn.addEventListener("mouseenter", () => btn.style.opacity = "1");
+    btn.addEventListener("mouseleave", () => btn.style.opacity = "0.85");
+    btn.addEventListener("click", () => this.scrollToRealtime());
+    return btn;
   }
   /** Double-chevron icon — the "jump back to the latest bar" affordance. */
   scrollButtonIcon() {
@@ -19311,14 +20496,14 @@ var NativeRenderer = class {
    *  appears whenever the latest bars are off-screen and hides again once the view is back
    *  at the right edge. */
   updateScrollToRealtimeButton() {
-    const btn2 = this.scrollButton;
-    if (!btn2) return;
+    const btn = this.scrollButton;
+    if (!btn) return;
     const latestOffScreen = this.coords.barCount > 0 && this.coords.getViewport().rightOffset < 0;
     if (this.layoutMode === "mobile") {
-      btn2.style.display = latestOffScreen ? "flex" : "none";
+      btn.style.display = latestOffScreen ? "flex" : "none";
       return;
     }
-    btn2.style.display = latestOffScreen && this.pointerNearScrollBtn ? "flex" : "none";
+    btn.style.display = latestOffScreen && this.pointerNearScrollBtn ? "flex" : "none";
   }
   /** Glide the view back to the most recent bars, keeping the current zoom (barSpacing). */
   scrollToRealtime() {
@@ -19627,6 +20812,8 @@ var NativeRenderer = class {
         };
       },
       chartBarMs: () => this.coords.barInterval,
+      timeZone: () => this.scene.timezone,
+      priceDecimals: () => this.scene.priceMintick ? tickDecimals(this.scene.priceMintick) : null,
       snap: (pt, paneId, mode, cursorPx) => this.snapToCandle(pt, paneId, mode, cursorPx),
       setSnapMode: (mode) => this.setSnapMode(mode),
       setToolbarGutter: (px) => this.setToolbarGutter(px)
@@ -20948,7 +22135,7 @@ var NativeRenderer = class {
     if (bar) parts.push(formatStamp(bar.time, this.scene.timezone));
     if (ohlc) parts.push(`Open ${ohlc.o}, High ${ohlc.h}, Low ${ohlc.l}, Close ${ohlc.c}`);
     for (const group of this.dataWindowGroups(idx, pricePane)) {
-      for (const row of group.rows) parts.push(`${row.label} ${row.value}`);
+      for (const row2 of group.rows) parts.push(`${row2.label} ${row2.value}`);
     }
     this.liveRegion.textContent = parts.join(". ");
   }
@@ -21904,7 +23091,10 @@ function applyPatch(model, patch) {
       const s = model.series.find((x) => x.id === delta.seriesId);
       if (!s) continue;
       if (delta.kind === "points" && isLineLikeSeries(s)) s.points = delta.points;
-      else if (delta.kind === "bars" && (s.kind === "candle" || s.kind === "bar")) s.bars = delta.bars;
+      else if (delta.kind === "bars" && (s.kind === "candle" || s.kind === "bar")) {
+        s.bars = delta.bars;
+        if (delta.barColors !== void 0) s.barColors = delta.barColors;
+      }
     }
     if (patch.lines) model.lines = patch.lines;
     if (patch.boxes) model.boxes = patch.boxes;
@@ -23263,14 +24453,14 @@ var EngineOrchestrator = class _EngineOrchestrator {
     this.replayTickSource = source;
     this.prefetchTicks();
   }
-  replayPlay(intervalMs2) {
+  replayPlay(intervalMs) {
     if (!this.replayQueue) return;
-    if (intervalMs2 !== void 0) {
-      if (!(Number.isFinite(intervalMs2) && intervalMs2 > 0)) {
-        console.warn(`[vela] chart.replay.play(${intervalMs2}) ignored \u2014 the interval must be a positive number of ms`);
+    if (intervalMs !== void 0) {
+      if (!(Number.isFinite(intervalMs) && intervalMs > 0)) {
+        console.warn(`[vela] chart.replay.play(${intervalMs}) ignored \u2014 the interval must be a positive number of ms`);
         return;
       }
-      this.replayIntervalMs = intervalMs2;
+      this.replayIntervalMs = intervalMs;
     }
     this.clearReplayTimer();
     this.replayPlaying = true;
@@ -24810,7 +26000,7 @@ function modelToValuePatch(model) {
   let to = 0;
   for (const s of model.series) {
     if (s.kind === "candle" || s.kind === "bar") {
-      series.push({ seriesId: s.id, kind: "bars", bars: s.bars });
+      series.push({ seriesId: s.id, kind: "bars", bars: s.bars, barColors: s.barColors ?? [] });
       for (const b of s.bars) {
         if (b.time < from) from = b.time;
         if (b.time > to) to = b.time;

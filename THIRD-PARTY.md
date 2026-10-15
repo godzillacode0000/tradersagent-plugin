@@ -26,12 +26,12 @@ stated.
   obligations for closed-source and hosted use). This project takes the AGPL path deliberately (free
   distribution, no monetisation); the commercial option is recorded here so a later decision to
   close or charge has a known door. — <https://github.com/LuxAlgo/Vela-pinets> · <https://github.com/LuxAlgo/PineTS>
-- **How it is used:** `@luxalgo/vela-pinets@0.2.15` is **vendored unmodified** at
+- **How it is used:** `@luxalgo/vela-pinets@0.2.16` is **vendored unmodified** at
   `console/frontend/vendor/vela-pinets/dist/` and served from there. Its `PineEngine` imports `pinets`
   as an external module, which the page's import map resolves to the patched build below — so
   "Add to chart" runs the fork's engine. Its `PineWorkerEngine` is the exception: that class's worker
   is an engine copy **inlined into vela-pinets' dist** (unpatched by this project). As of vela-pinets
-  **0.2.15** that inlined copy is PineTS **0.11.0** (upstream's changelog: "Built against pinets
+  **0.2.16** that inlined copy is PineTS **0.11.0** (upstream's changelog: "Built against pinets
   0.11.0"), i.e. at or above the 0.10.0 floor this file reasons about below; the earlier vendored
   build (0.2.12, read from the v0.2.12 tag's lockfile, audited 2 Oct 2026) inlined 0.9.32, below the
   floor. Either way the worker path is "without this project's patches". The console does not register it
@@ -176,14 +176,14 @@ The pane's chart surface is not fetched from a CDN — the page has to boot iden
 CDN failure used to look exactly like a broken chart. The vendor directory therefore carries the
 third-party browser builds, each beside its licence:
 
-- **`vela/` — `@luxalgo/vela` 0.8.3** (chart, workspace, plugin SDK, Binance provider).
+- **`vela/` — `@luxalgo/vela` 0.8.4** (chart, workspace, plugin SDK, Binance provider).
   **Licence: Apache-2.0** — commercial use included, attribution kept (`vela/LICENSE`,
   `vela/NOTICE`; 0.8.1 moves the NOTICE's attribution URL `luxalgo.com/vela` → `velacharts.dev`); LuxAlgo's Vela page states the invitation in its own words ("Ship it in an
   afternoon"; "Free, open source" — luxalgo.com/vela, read 2 Oct 2026). *(A "Fork it, vendor it,
   ship it." quote this file used to carry could not be located on that page or in any of the four
   repos on 2 Oct, and was removed — per the upstream audit, an unattributable quote is worse than
   none.)*
-- **`vela-pinets/` — `@luxalgo/vela-pinets` 0.2.15** (the chart's own Pine engine: `PineEngine` /
+- **`vela-pinets/` — `@luxalgo/vela-pinets` 0.2.16** (the chart's own Pine engine: `PineEngine` /
   `PineWorkerEngine`). **Licence: AGPL-3.0-only**, stock build — obligations met the same way as for
   `pinets` above (public fork for anything we change and ship).
 - **`zag/`** — the module closure Vela's ES modules import by name: `@zag-js/*` 1.44.0,

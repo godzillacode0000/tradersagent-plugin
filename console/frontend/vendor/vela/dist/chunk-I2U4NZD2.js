@@ -239,6 +239,12 @@ function mix(base, top, alpha) {
   const c = (x, y) => Math.round(x + (y - x) * alpha);
   return `rgb(${c(b.r, t.r)},${c(b.g, t.g)},${c(b.b, t.b)})`;
 }
+function toHex6(color, fallback = "#888888") {
+  const c = parseRgb(color);
+  if (!c) return fallback;
+  const h = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  return `#${h(c.r)}${h(c.g)}${h(c.b)}`;
+}
 function isDarkColor(color) {
   const c = parseRgb(color);
   if (!c) return true;
@@ -331,4 +337,4 @@ function holdForExit(els, done, opts = {}) {
   };
 }
 
-export { ACCENT, ACCENT_BRIGHT, BEARISH, BULLISH, CATEGORICAL, CHIP_PLATE, CROSSHAIR, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, HIGHLIGHT, INFO, INVALID, MARKER, NEUTRAL, SERIES_LINE, SESSION_OFF, SESSION_POST, SESSION_PRE, SLATE, SLATE_DEEP, SURFACE_CLOSE_EVENT, SURFACE_OPEN_EVENT, TRADE_EXIT, TRADE_LONG, TRADE_SHORT, VALID, WARNING, announceSurface, categoricalColor, holdForExit, icon, iconAt, iconEl, iconMarkup, injectStyles, isDarkColor, mix, overlayScrollbarCss, registerIcon, svg16, svg24, svg24Solid, withAlpha };
+export { ACCENT, ACCENT_BRIGHT, BEARISH, BULLISH, CATEGORICAL, CHIP_PLATE, CROSSHAIR, FIELD_FOCUS_CSS, FIELD_FOCUS_RING, HIGHLIGHT, INFO, INVALID, MARKER, NEUTRAL, SERIES_LINE, SESSION_OFF, SESSION_POST, SESSION_PRE, SLATE, SLATE_DEEP, SURFACE_CLOSE_EVENT, SURFACE_OPEN_EVENT, TRADE_EXIT, TRADE_LONG, TRADE_SHORT, VALID, WARNING, announceSurface, categoricalColor, holdForExit, icon, iconAt, iconEl, iconMarkup, injectStyles, isDarkColor, mix, overlayScrollbarCss, registerIcon, svg16, svg24, svg24Solid, toHex6, withAlpha };

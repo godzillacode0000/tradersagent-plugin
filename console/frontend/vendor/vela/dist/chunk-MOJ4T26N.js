@@ -1,8 +1,8 @@
-import { parseSymbol, priceStyleIds, BUILTIN_PRICE_STYLES, SecondClock, isGroupRow, defaultMemberOf, groupKeyOf, groupMembers, LEGEND_AT_TOP_ATTR, normalizeSession, Vela, TypedEventBus, timeframeToMs, MultiProviderFeed, registerBuiltinChartTypes, resolveTheme, buildToolbar, createCustomMark, createAttributionMark, DrawingToolbar, applyAttributionMarkTheme, sharedBarStore, CANDLE_OVERRIDE_KEYS } from './chunk-HMHA733L.js';
-import { chartType, resolveTopbarComposition, topbarActionOverride, TOPBAR_BUILTIN_IDS, widgetActions, tzButtonLabel, resolveTimezone, timezoneMenuRows, SidePanel, sidePanels, DEFAULT_PANEL_ORDER, symbolRanking, paneScaleAt, composeMenu, priceAxisItems, scaleChoiceOf, timeAxisItems, bodyItems, scaleWrites, invertWrite, settingsSectionOf, resolveEngines, legendActionsProviderFor, legendCalloutsProviderFor, normalizeTimezone, isExchangeTimezone, statePersistenceHandlers, topbarHas, rendererDefaults, mobilePlacement, widgetAttachments, getDrawingType, inputDeltas } from './chunk-KWI3YDBW.js';
-import { Tooltip, KeymapManager, isEditableTarget, Drawer } from './chunk-TO3GIK7Z.js';
-import { Menu, Dialog, CalloutBubble, applyPlotOverlayTokens, ensureUIHost } from './chunk-G7B7ZCBF.js';
-import { registerIcon, svg16, injectStyles, iconEl, iconMarkup, iconAt, SESSION_OFF, SESSION_POST, SESSION_PRE, announceSurface, holdForExit, icon, categoricalColor } from './chunk-VHGACEHO.js';
+import { parseSymbol, priceStyleIds, BUILTIN_PRICE_STYLES, SecondClock, isGroupRow, defaultMemberOf, groupKeyOf, groupMembers, LEGEND_AT_TOP_ATTR, normalizeSession, Vela, TypedEventBus, timeframeToMs, MultiProviderFeed, registerBuiltinChartTypes, resolveTheme, buildToolbar, createCustomMark, createAttributionMark, DrawingToolbar, applyAttributionMarkTheme, sharedBarStore, CANDLE_OVERRIDE_KEYS } from './chunk-UNUVPQFW.js';
+import { chartType, resolveTopbarComposition, topbarActionOverride, TOPBAR_BUILTIN_IDS, widgetActions, tzButtonLabel, resolveTimezone, timezoneMenuRows, SidePanel, sidePanels, DEFAULT_PANEL_ORDER, symbolRanking, paneScaleAt, composeMenu, priceAxisItems, scaleChoiceOf, timeAxisItems, bodyItems, scaleWrites, invertWrite, settingsSectionOf, resolveEngines, legendActionsProviderFor, legendCalloutsProviderFor, normalizeTimezone, isExchangeTimezone, statePersistenceHandlers, topbarHas, rendererDefaults, mobilePlacement, widgetAttachments, getDrawingType, inputDeltas } from './chunk-ALTGHKIM.js';
+import { Tooltip, KeymapManager, isEditableTarget, Drawer } from './chunk-AUOB7A5Y.js';
+import { Menu, Dialog, CalloutBubble, applyPlotOverlayTokens, ensureUIHost } from './chunk-WY5H4S4I.js';
+import { registerIcon, svg16, injectStyles, iconEl, iconMarkup, iconAt, SESSION_OFF, SESSION_POST, SESSION_PRE, announceSurface, holdForExit, icon, categoricalColor } from './chunk-I2U4NZD2.js';
 import { baseOf } from './chunk-W4EJWLEO.js';
 
 // src/widget/timeframe.ts
@@ -3931,6 +3931,8 @@ function sanitizeState(doc) {
     const favs = d.timeframeFavorites.filter((f) => typeof f === "string");
     if (favs.length > 0) out.timeframeFavorites = favs;
   }
+  const tools = sanitizeDrawingTools(d.drawingTools);
+  if (tools) out.drawingTools = tools;
   const sync = sanitizeSync(d.sync);
   if (sync) out.sync = sync;
   const tracks = sanitizeTrackSizes(d.trackSizes);
@@ -3947,6 +3949,28 @@ function sanitizeExt(raw) {
   for (const [key, value] of Object.entries(raw)) {
     if (key.length > 0 && value !== void 0) out[key] = value;
   }
+  return Object.keys(out).length > 0 ? out : null;
+}
+function sanitizeDrawingTools(raw) {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw;
+  const out = {};
+  if (r.defaults != null && typeof r.defaults === "object" && !Array.isArray(r.defaults)) {
+    const defaults = {};
+    for (const [type, value] of Object.entries(r.defaults)) {
+      if (type.length > 0 && value != null && typeof value === "object" && !Array.isArray(value)) defaults[type] = value;
+    }
+    if (Object.keys(defaults).length > 0) out.defaults = defaults;
+  }
+  if (r.templates != null && typeof r.templates === "object" && !Array.isArray(r.templates)) {
+    const templates = {};
+    for (const [type, list] of Object.entries(r.templates)) {
+      if (type.length > 0 && Array.isArray(list) && list.length > 0) templates[type] = list;
+    }
+    if (Object.keys(templates).length > 0) out.templates = templates;
+  }
+  if (r.magnet === "off" || r.magnet === "weak" || r.magnet === "strong") out.magnet = r.magnet;
+  if (typeof r.stay === "boolean") out.stay = r.stay;
   return Object.keys(out).length > 0 ? out : null;
 }
 function sanitizeCell(raw) {
@@ -8794,6 +8818,12 @@ var VelaWorkspace = class {
     this.historyUnsub = null;
     /** Favorite drawing tools — a WORKSPACE preference (one star set, every cell). */
     this.favs = [];
+    /** Every drawing tool's remembered settings — a SHARED pref, mirrored onto every cell. */
+    this.toolDefs = {};
+    /** Every drawing tool's saved looks — a SHARED pref like the remembered settings. */
+    this.toolTemplates = {};
+    /** Re-entrancy guard while one cell's remembered settings fan out to the others. */
+    this.toolDefsBusy = false;
     /** Favorite timeframes — the shared topbar's quick-switch chips, one set for the grid. */
     this.tfFavs = [];
     /** Live sync configuration (mutable copy of the option). */
@@ -8897,6 +8927,7 @@ var VelaWorkspace = class {
     this.timezone = boot?.timezone ?? opts.timezone ?? "Etc/UTC";
     if (boot?.favorites) this.favs = [...boot.favorites];
     if (boot?.timeframeFavorites) this.tfFavs = [...boot.timeframeFavorites];
+    if (boot?.drawingTools) this.adoptDrawingTools(boot.drawingTools);
     const sync = boot?.sync ?? opts.sync;
     for (const kind of SYNC_KINDS) this.applySyncSetting(kind, sync?.[kind]);
     this.monoLayout = opts.layout === false;
@@ -9304,6 +9335,8 @@ var VelaWorkspace = class {
     if (this.activeId) state.activeCellId = this.activeId;
     if (this.favs.length > 0) state.favorites = [...this.favs];
     if (this.tfFavs.length > 0) state.timeframeFavorites = [...this.tfFavs];
+    const tools = this.drawingToolsState();
+    if (tools) state.drawingTools = tools;
     if (this.trackSizes.size > 0) state.trackSizes = Object.fromEntries([...this.trackSizes].map(([k, v]) => [k, { ...v }]));
     const panels = this.dock.getState();
     if (panels) state.panels = panels;
@@ -9337,6 +9370,7 @@ var VelaWorkspace = class {
     const st = sanitizeState(state);
     if (!st) return;
     if (st.favorites) this.favs = [...st.favorites];
+    if (st.drawingTools) this.adoptDrawingTools(st.drawingTools);
     if (st.timeframeFavorites) {
       this.tfFavs = [...st.timeframeFavorites];
       this.topbar.setTimeframeFavorites(this.tfFavs);
@@ -9352,6 +9386,7 @@ var VelaWorkspace = class {
       if (st.favorites) {
         for (const cell of this.cellsById.values()) cell.chart.drawings.setFavorites(this.favs);
       }
+      if (st.drawingTools) this.pushToolDefaults(null);
       this.drawingLinks.clear();
       this.styleSyncBusy = true;
       try {
@@ -9667,6 +9702,37 @@ var VelaWorkspace = class {
   refocusActive() {
     if (this.activeId) this.cellsById.get(this.activeId)?.chart.renderer.focus();
   }
+  /** Take a document's drawing-tool prefs as the shared mirrors (cells pick them up as they
+   *  are built, or from {@link pushToolDefaults} / the active-cell projection). */
+  adoptDrawingTools(tools) {
+    if (tools.defaults) this.toolDefs = { ...tools.defaults };
+    if (tools.templates) this.toolTemplates = { ...tools.templates };
+    if (tools.magnet) this.globalSnap = tools.magnet;
+    if (tools.stay !== void 0) this.globalStay = tools.stay;
+  }
+  /** Mirror the shared remembered settings onto every cell but `from` (the cell they came from).
+   *  Receiving them is not an edit: the cells' `drawing:defaults` echoes are ignored. */
+  pushToolDefaults(from, cells = this.cellsById.values()) {
+    this.toolDefsBusy = true;
+    try {
+      for (const other of cells) {
+        if (other === from) continue;
+        other.chart.drawings.setToolDefaults(this.toolDefs);
+        other.chart.drawings.setToolTemplates(this.toolTemplates);
+      }
+    } finally {
+      this.toolDefsBusy = false;
+    }
+  }
+  /** The drawing-tool prefs worth saving; null when every one is at its default. */
+  drawingToolsState() {
+    const out = {};
+    if (Object.keys(this.toolDefs).length > 0) out.defaults = { ...this.toolDefs };
+    if (Object.keys(this.toolTemplates).length > 0) out.templates = { ...this.toolTemplates };
+    if (this.globalSnap !== "off") out.magnet = this.globalSnap;
+    if (this.globalStay) out.stay = true;
+    return Object.keys(out).length > 0 ? out : null;
+  }
   /** Debounced dirty mark: one `state:changed` (+ one storage write in persist mode)
    *  per burst of edits, flushed hard on unload/destroy. */
   markStateDirty() {
@@ -9889,6 +9955,7 @@ var VelaWorkspace = class {
       cell.chart.renderer.setWallClock(this.clock);
       cell.setControlsSuspended(this.layoutCtl.current === "mobile");
       if (this.favs.length > 0) cell.chart.drawings.setFavorites(this.favs);
+      if (Object.keys(this.toolDefs).length > 0 || Object.keys(this.toolTemplates).length > 0) this.pushToolDefaults(null, [cell]);
       cell.setManifest(this.manifest, pooled?.indicators == null);
       cell.restorePersistedExt();
       this.events.emit("cell:created", { id });
@@ -9921,6 +9988,18 @@ var VelaWorkspace = class {
       this.drawToolbar?.setFavorites(favorites);
       this.markStateDirty();
     });
+    chart.on("drawing:defaults", () => {
+      if (this.toolDefsBusy) return;
+      this.toolDefs = chart.drawings.toolDefaults();
+      this.pushToolDefaults(cell);
+      this.markStateDirty();
+    });
+    chart.on("drawing:templates", () => {
+      if (this.toolDefsBusy) return;
+      this.toolTemplates = chart.drawings.toolTemplates();
+      this.pushToolDefaults(cell);
+      this.markStateDirty();
+    });
     chart.renderer.onCrosshairMove((e) => this.propagateCrosshair(cell.id, e.time, e.paneKind === "price" ? e.price : null));
     chart.on("drawing:created", ({ id }) => {
       this.propagateDrawing(cell.id, id);
@@ -9942,13 +10021,17 @@ var VelaWorkspace = class {
     });
     chart.on("drawing:snap", ({ mode }) => {
       if (cell.id !== this.activeId) return;
+      const changed = mode !== this.globalSnap;
       this.globalSnap = mode;
       this.drawToolbar?.setMagnetMode(mode);
+      if (changed) this.markStateDirty();
     });
     chart.on("drawing:stay", ({ on }) => {
       if (cell.id !== this.activeId) return;
+      const changed = on !== this.globalStay;
       this.globalStay = on;
       this.drawToolbar?.setStayMode(on);
+      if (changed) this.markStateDirty();
     });
     chart.on("drawing:mode", ({ mode }) => {
       if (cell.id !== this.activeId) return;
