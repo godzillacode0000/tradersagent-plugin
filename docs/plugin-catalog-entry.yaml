@@ -4,8 +4,8 @@
 #   repo public .......... YES (was the old blocker; the API answers 200)
 #   validation ........... FAILS today: "no plugin.yaml (or portable plugin.json) in the plugin
 #                          directory". The catalog needs a plugin.yaml manifest plus an entrypoint
-#                          Hermes loads — this repo's is plugin/plugin.js, not plugin/desktop/plugin.js.
-#                          Restructure to plugin/plugin.yaml + plugin/desktop/plugin.js, run
+#                          Hermes loads — this repo's is plugin/plugin.js, not traders-desk/desktop/plugin.js.
+#                          Restructure to traders-desk/plugin.yaml + traders-desk/desktop/plugin.js, run
 #                          `hermes plugins validate plugin --install-deps` until it passes, THEN submit.
 #   self-updating ........ none (rule 3 satisfied)
 #   disclosure ........... the pane frames a LOCAL console service (127.0.0.1:8787, stdout on the

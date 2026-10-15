@@ -18,8 +18,8 @@ MCP_SERVER = os.path.join(ROOT, "console", "mcp", "server.py")
 README = os.path.join(ROOT, "README.md")
 CATALOG = os.path.join(ROOT, "docs", "plugin-catalog-entry.yaml")
 MCP_TOOLS_DOC = os.path.join(ROOT, "docs", "MCP-TOOLS.md")
-MANIFEST = os.path.join(ROOT, "plugin", "plugin.yaml")
-DESKTOP_ENTRY = os.path.join(ROOT, "plugin", "desktop", "plugin.js")
+MANIFEST = os.path.join(ROOT, "traders-desk", "plugin.yaml")
+DESKTOP_ENTRY = os.path.join(ROOT, "traders-desk", "desktop", "plugin.js")
 
 TABLE_HEADER = "| Tool | What it does |"
 
@@ -113,12 +113,12 @@ class DocDrift(unittest.TestCase):
         self.assertIn("provides_tools: []", entry,
                       "docs/plugin-catalog-entry.yaml must claim no tools (they live in the MCP server)")
         # The manifest agrees, and the loadable entrypoint the catalog requires is really there.
-        self.assertTrue(os.path.isfile(MANIFEST), "plugin/plugin.yaml has gone missing")
+        self.assertTrue(os.path.isfile(MANIFEST), "traders-desk/plugin.yaml has gone missing")
         manifest = _read(MANIFEST)
         self.assertIn("name: traders-desk", manifest)
         self.assertNotRegex(manifest, r"provides_tools:\s*\n\s+-",
                             "the manifest must not declare tools it does not register")
-        self.assertTrue(os.path.isfile(DESKTOP_ENTRY), "plugin/desktop/plugin.js has gone missing")
+        self.assertTrue(os.path.isfile(DESKTOP_ENTRY), "traders-desk/desktop/plugin.js has gone missing")
         # And the tools themselves are still documented where the agent reads them.
         self.assertIn("chart_objects", _read(MCP_TOOLS_DOC))
 

@@ -131,7 +131,7 @@ class Pins(unittest.TestCase):
 
 class PluginReveal(unittest.TestCase):
     def test_the_launch_reveal_waits_for_the_stored_choice_and_defaults_to_off(self):
-        src = (ROOT / "plugin" / "desktop" / "plugin.js").read_text(encoding="utf-8")
+        src = (ROOT / "traders-desk" / "desktop" / "plugin.js").read_text(encoding="utf-8")
         self.assertIn("autoRevealOn = value === true", src)
         self.assertIn("autoRevealReady.then(", src)
         self.assertNotIn("autoRevealOn = value !== false", src)

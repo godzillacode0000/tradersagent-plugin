@@ -21,7 +21,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const pluginDir = path.join(here, '..', 'plugin', 'desktop')
+const pluginDir = path.join(here, '..', 'traders-desk', 'desktop')
 const realPlugin = path.join(pluginDir, 'plugin.js')
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-plugin-selftest-'))
 

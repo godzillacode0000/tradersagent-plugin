@@ -11,7 +11,7 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-CODE = open(os.path.join(ROOT, "plugin/desktop/plugin.js"), encoding="utf-8").read()
+CODE = open(os.path.join(ROOT, "traders-desk/desktop/plugin.js"), encoding="utf-8").read()
 
 
 class RowToggle(unittest.TestCase):

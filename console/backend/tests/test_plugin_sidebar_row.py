@@ -17,7 +17,7 @@ import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-PLUGIN = os.path.join(ROOT, "plugin", "desktop", "plugin.js")
+PLUGIN = os.path.join(ROOT, "traders-desk", "desktop", "plugin.js")
 
 
 def plugin_source() -> str:
@@ -153,7 +153,7 @@ class TheManifestStaysHonest(unittest.TestCase):
         # plugin.expect.json is what tools/verify-plugin.mjs checks against the rendered output, and
         # the repo's own harness passes. Pinning the marker here catches a rename that would otherwise
         # only fail when a human ran the harness.
-        expect = os.path.join(ROOT, "plugin", "desktop", "plugin.expect.json")
+        expect = os.path.join(ROOT, "traders-desk", "desktop", "plugin.expect.json")
         with open(expect, encoding="utf-8") as fh:
             manifest = fh.read()
         self.assertIn("Chart docked on the right", manifest)
