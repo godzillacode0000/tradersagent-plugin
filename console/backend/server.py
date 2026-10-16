@@ -58,7 +58,10 @@ import library_thumbs
 # Constants
 # --------------------------------------------------------------------------
 
-SERVER_VERSION = "1.0.0"
+# Bump on release together with traders-desk/plugin.yaml and docs/plugin-catalog-entry.yaml:
+# test_docs_drift.OneVersionNumber fails while the three disagree. It is reported on /api/health,
+# in /api/build and in this server's own `Server:` header, so a stale value misinforms the agent.
+SERVER_VERSION = "1.3.0"
 DEFAULT_MCP_URL = "https://mcp.luxalgo.com/mcp"
 
 # --------------------------------------------------------------------------

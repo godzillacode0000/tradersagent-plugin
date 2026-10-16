@@ -22,6 +22,28 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Fixed
 
+- **The console stopped reporting a version it had not been since September.** `SERVER_VERSION` was typed
+  once at `1.0.0` and never touched again, so `/api/health`, `/api/build` and the server's own `Server:`
+  header all answered **1.0.0** while the repo shipped 1.3.0 — a number the agent, a bug report and
+  `./install.sh --doctor` all read and believe. The manifest had drifted the other way (`traders-desk/plugin.yaml`
+  said 1.2.0 against a v1.3.0 tag and a catalog entry claiming 1.3.0), so the file the catalog actually reads
+  disagreed with the entry pointing at it. All three now state **1.3.0**, and
+  `test_docs_drift.OneVersionNumber` fails while they disagree — the old drift test checked the manifest's
+  *name* and never its version, which is why nothing caught either one.
+- **`TRADERS_AGENT_ALLOWED_HOSTS` was an undocumented change to who can write.** Measured, not inferred: with a
+  name on the list, a request carrying it from loopback is handed the POST token and `POST /api/broker` answers
+  **200**. That is the intended trade (`tailscale serve` terminates here, so your phone arrives as 127.0.0.1),
+  but it means every device on that tailnet can approve paper orders, drive the chart and run Pine **with
+  `ALLOW_LAN` unset** — and the variable appeared in no document at all, while the README's `ALLOW_LAN` row
+  still promised "LAN peers get a read-only console", which stopped describing this path. The README now carries
+  the variable, says plainly that each name is a full-trust door, and corrects the `ALLOW_LAN` row; three live-socket
+  tests pin the token, the write and the still-refused unknown name (removing the name from the allowlist fails two
+  of them). No behaviour changed — only what the repository admits to.
+- **The package README documented an install that is no longer the short one** (`./console/start.sh` + `./install.sh`,
+  with no mention of `--all`), and the test counts disagreed across files (README ~1,130, `HANDOFF` 1,166). Both now
+  match a measured run: **1,188 tests, 9 skipped, 73 files**. The dated measurement block further down `HANDOFF.md`
+  keeps its own older number, because it is a record of one run and not a claim about today.
+
 - **The README still claimed Linux-only.** macOS support shipped on 13 Oct (`docs/MACOS.md`, the repo venv,
   `console/service-macos.sh` behind launchd), so the OS row, the service section and the platform bullet now
   say Linux + macOS, name the launchd counterpart of the systemd unit, and link the Mac setup. Windows stays

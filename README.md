@@ -410,7 +410,8 @@ bin/               register-mcp.sh (the MCP registration on its own) · is-enabl
 | `LUXALGO_CONSOLE` | `http://127.0.0.1:8787` | where the MCP server, `trader-chart` and `library-indicator` find the console (set it with `hermes mcp add … --env LUXALGO_CONSOLE=http://127.0.0.1:9000` when `PORT` is not 8787) |
 | `TRADER_CONSOLE_TOKEN_FILE` | `~/.local/state/traders-agent/console.token` | the POST token the console mints and the MCP server and CLI read |
 | `TRADERS_AGENT_WORKDIR` | `~/Projects/luxalgo-web` if it exists, else `console/agents` | the folder the in-app study bridge runs the agent CLI in (never taken from a request) |
-| `TRADERS_AGENT_ALLOW_LAN` | unset | with `--host 0.0.0.0`, let LAN peers receive the POST token; without it they get a read-only console |
+| `TRADERS_AGENT_ALLOW_LAN` | unset | with `--host 0.0.0.0`, let peers that reach the console **from their own address** receive the POST token; without it they get a read-only console. It does **not** govern a caller arriving through a local reverse proxy — see the row below |
+| `TRADERS_AGENT_ALLOWED_HOSTS` | unset | comma-separated extra `Host` names this console answers to, for a local reverse proxy that forwards the public name (`tailscale serve` does). **Every name you add here is a full-trust door:** the proxy terminates on this machine, so the caller arrives on loopback, is handed the POST token and can write — approve paper orders, drive the chart, run Pine — with `ALLOW_LAN` unset. Only add names that resolve to this machine inside an access-controlled network, and read it as “everyone on that tailnet is me”. Any other name is still refused |
 | `TRADER_PAPER_FILE` | `~/.local/state/traders-agent/paper.json` | the paper account (use another path for a second test console) |
 | `LUXALGO_AGENTS_DIR` | `console/agents` | runtime state: chart bridge files, study threads, shots |
 | `HERMES_CLI` | `hermes` on `PATH` | CLI the in-app study bridge shells out to |
@@ -454,6 +455,12 @@ it from `http://127.0.0.1:8787/api/library/thumb`: **~5 ms warm instead of ~2 s*
 - **The bridge is not a headless renderer.** `trader-chart` and the MCP tools only take effect while
   a chart view is mounted (the Hermes pane or a browser tab); with none attached they fail fast with
   "no chart view attached" rather than hanging. Commands are pushed, so a view answers in tens of ms.
+- **Reaching the console through a proxy widens who can write.** The trust model is “a loopback caller is
+  the human at this machine”. A local reverse proxy (`tailscale serve`) makes every device on that network a
+  loopback caller, so `TRADERS_AGENT_ALLOWED_HOSTS` turns that network into the trusted set — the approve
+  brake on paper orders is then only as strong as the network's own access control. Pinned by
+  `console/backend/tests/test_allowed_hosts_env.py`, which asserts an allowlisted name both receives the token
+  and writes.
 - **One console per machine** on one port. No real orders and no brokerage account exist: the only trading is a
   **simulated Binance spot paper account** (`broker_*`), where the agent can only propose and you approve. The account
   and the journal its fills keep (win rate, profit factor, the realised curve) are one surface — ⋯ → **Trader's desk**.
@@ -478,7 +485,7 @@ python3 -m compileall console/backend                                           
 
 The suite is stdlib-only on purpose — the study store, the chat bridge, the chart bridge and the push
 channel are covered without a browser, a network, or the app — and the MCP tool layer runs against a
-stub console. about 1,130 tests; the MCP ones skip themselves when `fastmcp` is absent (CI sets
+stub console. about 1,188 tests (73 files, 9 skipped on 16 Oct); the MCP ones skip themselves when `fastmcp` is absent (CI sets
 `TRADER_CHART_REQUIRE_MCP=1` so they cannot silently skip there).
 
 CI (`.github/workflows/ci.yml`) has three jobs: the plugin harness (Node 20 — the real plugin first,
