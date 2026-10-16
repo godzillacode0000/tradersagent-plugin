@@ -33,6 +33,18 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   1,549 ms (median of six, alternating runs) for +58 KB. `test_vela_doors` now finds Vela's drawings chunk by content, because its
   hashed file name changes with every release.
 
+- **The repo's own numbers match what ships.** Four places still named the version the vendors had
+  left behind: the vendoring comment in `index.html` and `THIRD-PARTY.md`'s Vela paragraph said
+  0.8.3 / vela-pinets 0.2.15 (0.8.1 in one line, three releases stale), and `docs/architecture-latest.html`
+  said 0.8.3 in a badge and four card texts. Two counts had drifted too: that page's badges promised
+  39 MCP tools and 293 backend tests (with a matching stat card further down), and `README.md` /
+  `docs/HANDOFF.md` said "about 1,050 / ~1,090 tests". Measured, not assumed: **Vela 0.8.4 +
+  vela-pinets 0.2.16** (npm `latest`, and the bytes the console serves — `vela.global.min.js` is
+  1,043,818 by both), **56 MCP tools** (56 `@.tool` registrations, 56 rows in `docs/MCP-TOOLS.md`,
+  8 of them `edgestats_*`), **1,133 backend tests, 1 skipped, 70 files, 114 s**. CI's two vendor gates
+  (`tools/vendor-sums.py --check`, `tools/modulepreload.py --check`) and the suite stay green; nothing
+  in `vendor/` moved.
+
 ### Fixed (the 8 Oct 2026 full audit: seven read-only lanes over `3c2ad34`, handed to Hermes as a report)
 
 - **The chart bridge no longer loses or duplicates commands.** Its three files were read-modify-written with no lock and one

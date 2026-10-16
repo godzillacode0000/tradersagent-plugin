@@ -323,10 +323,10 @@
     <span class="badge">SOLUSDT · 30m · 500 bars</span>
     <span class="badge">build 1790584678</span>
     <span class="badge">console 1.0.0</span>
-    <span class="badge">39 MCP tools</span>
+    <span class="badge">56 MCP tools</span>
     <span class="badge">pinets 0.11.0-fork (vendored)</span>
-    <span class="badge">Vela 0.8.3</span>
-    <span class="badge live">293 backend tests green</span>
+    <span class="badge">Vela 0.8.4</span>
+    <span class="badge live">1,133 backend tests green</span>
   </div>
 </header>
 
@@ -458,8 +458,8 @@
       </div>
       <div class="cards">
         <div class="card"><h4><span class="k">index.html</span> — two ways in</h4>
-          <p>Vela 0.8.3 and vela-pinets 0.2.15 arrive as vendored global scripts, and an import map then names the ESM builds. The map is also where the engine is pinned.</p>
-          <div class="meta"><span class="k">@luxalgo/vela@0.8.3</span><span class="k">/workspace</span><span class="k">/providers/binance</span></div></div>
+          <p>Vela 0.8.4 and vela-pinets 0.2.16 arrive as vendored global scripts, and an import map then names the ESM builds. The map is also where the engine is pinned.</p>
+          <div class="meta"><span class="k">@luxalgo/vela@0.8.4</span><span class="k">/workspace</span><span class="k">/providers/binance</span></div></div>
         <div class="card"><h4><span class="k">workspace.js</span> — the grid</h4>
           <p>The Vela workspace: real chart cells. Layouts <span class="k">1 · 2h · 2v · 4 · 8 · g&lt;cols&gt;x&lt;rows&gt;</span>. A grid already in page state wins over the boot preset, so a change made from chat survives a reload.</p></div>
         <div class="card"><h4><span class="k">app.js</span> — console shell</h4>
@@ -506,10 +506,10 @@
         <div class="layer-where">what draws, and<br>what computes<br><span class="k">two of three are LuxAlgo’s</span></div>
       </div>
       <div class="cards">
-        <div class="card"><h4>Vela 0.8.3 — the chart</h4>
+        <div class="card"><h4>Vela 0.8.4 — the chart</h4>
           <p>LuxAlgo’s chart package, vendored into the repo. This build ships ~80 natives. <span class="k">addNativeIndicator()</span> genuinely paints;
           <span class="k">drawings.add()</span> creates a real core-owned drawing and the renderer never paints it — measured on a bare chart and on a cell, after pan and resize.</p></div>
-        <div class="card"><h4>vela-pinets 0.2.15 — Vela’s Pine engine</h4>
+        <div class="card"><h4>vela-pinets 0.2.16 — Vela’s Pine engine</h4>
           <p>Loaded, registered, and unreliable on a live chart. It is the reason we run our own engine rather than calling theirs.</p></div>
         <div class="card"><h4>pinets 0.11.0-fork — our fork, vendored</h4>
           <p>Bundled <b>into the repo</b> now, not fetched from a CDN: the import map serves the repo’s copy, so the engine is pinned, works offline, and can carry fixes.</p>
@@ -770,7 +770,7 @@
     <div class="stat"><div class="v">588<small> ms</small></div><div class="l">median run</div><div class="sub">86 runs over 5 s · slowest 301 s</div></div>
     <div class="stat acc" style="--accent: var(--amber)"><div class="v">806</div><div class="l">Library indicators</div><div class="sub">+ 853 concepts · 17 families</div></div>
     <div class="stat"><div class="v">13,394</div><div class="l">lines of source</div><div class="sub">console + plugin + tools, tests excluded</div></div>
-    <div class="stat acc" style="--accent: var(--emerald)"><div class="v">293</div><div class="l">backend tests passing</div><div class="sub">38 skipped · 28 files · 2.7 s — guarding drift, floors and honesty</div></div>
+    <div class="stat acc" style="--accent: var(--emerald)"><div class="v">1,133</div><div class="l">backend tests passing</div><div class="sub">1 skipped · 70 files · 114 s — guarding drift, floors and honesty</div></div>
     <div class="stat"><div class="v">1<small> view</small></div><div class="l">attached right now</div><div class="sub">90 pushes · 0 refused claims</div></div>
     <div class="stat acc" style="--accent: var(--rose)"><div class="v">8<small> GB</small></div><div class="l">the whole budget</div><div class="sub">one JS thread · one core of headroom</div></div>
     <div class="stat"><div class="v">0</div><div class="l">hosted services</div><div class="sub">no accounts · no telemetry</div></div>
