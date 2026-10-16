@@ -1,0 +1,175 @@
+/* ============================================================================
+   Trader's desk — the sheet (16 Oct 2026).
+
+   The paper account and the journal it now keeps, in one surface, opened from ⋯ ("Trader's desk").
+   It replaces the small account popover broker.js used to paint: that popover could show the balance
+   but had nowhere to say what the account DID — no win rate, no profit factor, no curve.
+
+   Three views, one sheet (the tabs are the app's own chrome, not a router):
+     1. Paper   — what the account holds right now: equity, cash, realised, open P&L, positions, fills.
+     2. Journal — what the closed trades did: net, win rate, profit factor, avg win/loss, the curve.
+     3. Prop firms — the LuxAlgo directory and what is on offer. Directory data, never a ranking.
+
+   Same rules as edge.css (they are the console's rules): tokens only (--lx-*), motion is
+   transform/opacity only, focus is real, and NO rate is painted without its sample size next to it.
+   ============================================================================ */
+
+.desk-scrim {
+  position: fixed; inset: 0; z-index: calc(var(--lx-z-modal) - 2);
+  background: var(--lx-backdrop); opacity: 0; pointer-events: none;
+  transition: opacity 200ms var(--lx-ease);
+}
+.desk-scrim.is-open { opacity: 1; pointer-events: auto; }
+
+.desk-sheet {
+  /* the sheet's own type scale — it is a reading surface, not a toolbar */
+  --d-hero: 26px; --d-title: 17px; --d-body: 13.5px; --d-small: 12px; --d-cap: 11px;
+  --d-pad: 20px; --d-gap: 18px;
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: calc(var(--lx-z-modal) - 1);
+  width: min(560px, 100vw); display: flex; flex-direction: column;
+  background: var(--lx-surface-1); border-left: 1px solid var(--lx-border);
+  box-shadow: var(--lx-shadow-3);
+  transform: translateX(104%); opacity: .6; visibility: hidden;
+  transition: transform 260ms var(--lx-ease), opacity 200ms var(--lx-ease), visibility 0s linear 260ms;
+  font-size: var(--d-body); line-height: 1.45; color: var(--lx-fg);
+  font-family: var(--lx-font-ui);
+}
+.desk-sheet.is-open {
+  transform: translateX(0); opacity: 1; visibility: visible;
+  transition: transform 300ms var(--lx-ease-spring), opacity 200ms var(--lx-ease), visibility 0s;
+}
+
+/* ── head ─────────────────────────────────────────────────────────────────────────────────── */
+.desk__head {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 14px 14px 12px var(--d-pad); border-bottom: 1px solid var(--lx-border-soft);
+}
+.desk__title { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.desk__title strong { font-size: var(--d-title); font-weight: var(--lx-fw-semibold); letter-spacing: var(--lx-ls-tight); color: var(--lx-fg-bright); }
+.desk__title span { font-size: var(--d-small); color: var(--lx-fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.desk__x {
+  flex: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: var(--lx-radius-lg); background: transparent; color: var(--lx-fg-muted);
+  cursor: pointer; font-size: 15px;
+  transition: background var(--lx-dur-120) var(--lx-ease), color var(--lx-dur-120) var(--lx-ease);
+}
+.desk__x:hover, .desk__x:focus-visible { background: var(--lx-surface-3); color: var(--lx-fg); }
+
+/* ── tabs — the sheet's only navigation ───────────────────────────────────────────────────── */
+.desk__tabs {
+  flex: none; display: flex; gap: 2px; padding: 8px 12px 0 var(--d-pad);
+  border-bottom: 1px solid var(--lx-border-soft);
+}
+.desk__tab {
+  all: unset; box-sizing: border-box; cursor: pointer; position: relative;
+  padding: 8px 12px 10px; border-radius: var(--lx-radius-md) var(--lx-radius-md) 0 0;
+  font-size: var(--d-body); color: var(--lx-fg-muted);
+  transition: background var(--lx-dur-120) var(--lx-ease), color var(--lx-dur-120) var(--lx-ease);
+}
+.desk__tab:hover, .desk__tab:focus-visible { background: var(--lx-surface-2); color: var(--lx-fg); }
+.desk__tab[aria-selected="true"] { color: var(--lx-fg-bright); font-weight: var(--lx-fw-semibold); }
+.desk__tab[aria-selected="true"]::after {
+  content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px;
+  background: var(--lx-accent); border-radius: 2px;
+}
+.desk__tab .desk__dot {
+  display: inline-block; min-width: 16px; margin-left: 6px; padding: 0 4px; border-radius: var(--lx-radius-pill);
+  background: var(--lx-warn-soft); color: var(--lx-warn); font-size: 10px; text-align: center;
+}
+
+/* ── body ─────────────────────────────────────────────────────────────────────────────────── */
+.desk__body { flex: 1; min-height: 0; overflow: auto; padding: var(--d-gap) var(--d-pad) 28px; }
+.desk__body h3 {
+  margin: var(--d-gap) 0 8px; color: var(--lx-fg-muted); font-size: var(--d-cap);
+  text-transform: uppercase; letter-spacing: .07em; font-weight: var(--lx-fw-semibold);
+}
+.desk__body h3:first-child { margin-top: 0; }
+.desk__note { margin: 10px 0 0; color: var(--lx-fg-faint); font-size: var(--d-small); }
+.desk__empty { margin: 4px 0 0; color: var(--lx-fg-faint); font-size: var(--d-small); }
+
+/* KPI cards — the only raised things on the page, like the edge sheet's hero/ask cards */
+.desk__kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 0 0 6px; }
+.desk__kpi {
+  background: var(--lx-surface-2); border: 1px solid var(--lx-border-soft); border-radius: var(--lx-radius-lg);
+  padding: 12px 14px 11px; min-width: 0;
+}
+.desk__kpi dt { color: var(--lx-fg-faint); font-size: var(--d-cap); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 4px; }
+.desk__kpi dd { margin: 0; font-size: var(--d-hero); font-family: var(--lx-font-mono); letter-spacing: -.01em; color: var(--lx-fg-bright); }
+.desk__kpi dd small { display: block; margin-top: 3px; font-size: var(--d-small); font-family: var(--lx-font-ui); color: var(--lx-fg-faint); letter-spacing: 0; }
+.desk__kpi .is-up { color: var(--lx-profit); }
+.desk__kpi .is-down { color: var(--lx-loss); }
+
+/* rows — positions, fills, trades share one shape: name left, numbers right */
+.desk__rows { list-style: none; margin: 0; padding: 0; }
+.desk__row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 7px 0; border-bottom: 1px solid var(--lx-border-soft);
+}
+.desk__row:last-child { border-bottom: 0; }
+.desk__row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desk__row small { color: var(--lx-fg-faint); }
+.desk__row b { font-family: var(--lx-font-mono); font-weight: var(--lx-fw-regular, 400); white-space: nowrap; }
+.desk__row .is-up { color: var(--lx-profit); }
+.desk__row .is-down { color: var(--lx-loss); }
+
+/* trades table — a real table: five columns of numbers want one */
+.desk__table { width: 100%; border-collapse: collapse; font-size: var(--d-small); }
+.desk__table th {
+  text-align: right; padding: 4px 0 6px; color: var(--lx-fg-faint);
+  font-size: var(--d-cap); text-transform: uppercase; letter-spacing: .05em; font-weight: var(--lx-fw-semibold);
+  border-bottom: 1px solid var(--lx-border-soft);
+}
+.desk__table th:first-child, .desk__table td:first-child { text-align: left; }
+.desk__table td { text-align: right; padding: 6px 0; border-bottom: 1px solid var(--lx-border-soft); font-family: var(--lx-font-mono); white-space: nowrap; }
+.desk__table td:first-child { font-family: var(--lx-font-ui); color: var(--lx-fg-muted); }
+.desk__table tr:last-child td { border-bottom: 0; }
+.desk__table .is-up { color: var(--lx-profit); }
+.desk__table .is-down { color: var(--lx-loss); }
+
+/* the curve — one canvas, its own caption; drawn only while the sheet is open */
+.desk__curve {
+  background: var(--lx-surface-2); border: 1px solid var(--lx-border-soft); border-radius: var(--lx-radius-lg);
+  padding: 10px 12px 8px; margin: 2px 0 0;
+}
+.desk__curve canvas { display: block; width: 100%; height: 132px; }
+.desk__curve figcaption { margin-top: 6px; color: var(--lx-fg-faint); font-size: var(--d-small); }
+
+/* footer strip — the honest small print + Reset */
+.desk__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: var(--d-gap); padding-top: 12px; border-top: 1px solid var(--lx-border-soft);
+}
+.desk__foot small { color: var(--lx-fg-faint); }
+.desk__btn {
+  all: unset; box-sizing: border-box; cursor: pointer; padding: 5px 12px;
+  border-radius: var(--lx-radius-md); border: 1px solid var(--lx-border-strong); color: var(--lx-fg);
+  font-size: var(--d-small);
+  transition: background var(--lx-dur-fast) var(--lx-ease), opacity var(--lx-dur-fast) var(--lx-ease);
+}
+.desk__btn:hover, .desk__btn:focus-visible { background: var(--lx-surface-3); }
+.desk__btn[disabled] { opacity: .5; cursor: default; }
+
+/* prop firms — firm, its challenges, the offers strip */
+.desk__firm { padding: 10px 0 8px; border-bottom: 1px solid var(--lx-border-soft); }
+.desk__firm:last-child { border-bottom: 0; }
+.desk__firm > header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.desk__firm strong { color: var(--lx-fg-bright); }
+.desk__firm small { color: var(--lx-fg-faint); }
+.desk__chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.desk__chip {
+  border: 1px solid var(--lx-border-soft); border-radius: var(--lx-radius-pill);
+  padding: 2px 9px; font-size: var(--d-small); color: var(--lx-fg-muted); background: var(--lx-surface-2);
+}
+.desk__chip b { color: var(--lx-fg); font-weight: var(--lx-fw-semibold); }
+.desk__code {
+  font-family: var(--lx-font-mono); font-size: var(--d-small); background: var(--lx-surface-3);
+  border: 1px solid var(--lx-border-soft); border-radius: var(--lx-radius-sm, 4px); padding: 1px 6px; color: var(--lx-fg);
+}
+.desk__offer { padding: 9px 0; border-bottom: 1px solid var(--lx-border-soft); }
+.desk__offer:last-child { border-bottom: 0; }
+.desk__offer p { margin: 3px 0 0; color: var(--lx-fg-muted); font-size: var(--d-small); }
+.desk__bad { color: var(--lx-loss); font-size: var(--d-small); margin: 6px 0 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .desk-sheet, .desk-scrim, .desk__tab, .desk__btn, .desk__x { transition: none; }
+}

@@ -129,15 +129,17 @@ systemctl --user enable --now traders-agent.service
 
 | Where | What it does |
 |---|---|
-| Left sidebar → **Trader's Agent** | reveals the chart pane beside your chat, then hands you back to the chat you were on — your session is not switched |
+| Left sidebar → **Trader's Agent** | reveals the chart pane beside your chat — and, when no chat of yours is in front, opens Trader's Agent's own desk chat; a chat you are already in is not switched |
 | Status bar → **Trader's Agent** chip | same, from anywhere in the app |
 | `Ctrl+K` → **Trading: open Trader's Agent** | same, from the palette |
 | `Ctrl+K` → **Trading: toggle chart reveal on launch** | stop the console opening by itself at app start |
+| `Ctrl+K` → **Trading: toggle the desk chat on row click** | stop the row opening the desk chat when nothing else is in front (it stays reveal-only, exactly as it was before 16 Oct) |
 | Chart top bar → **⌗ Indicators** | opens the **drawer**: search the 806-row LuxAlgo catalogue, star favourites, mount Vela's built-ins, or open a Library row's Details (write-up, **full Pine source**, licence badge, **Run PineTS** / Add to chart) |
 | Chart top bar → **Layout** | Vela's own grid picker — presets and custom `g<cols>x<rows>` grids. The console boots at `2h` (two side by side); the same door is `chart_set_layout` / `trader-chart layout` |
 | Chart top bar → **<> Script** | the Pine script pane: write or paste Pine, **Run**, tweak the script's own **Settings**, save and reopen scripts |
 | Chart top bar → **⛶ Full screen** | Gives the chart the whole pane — and the whole display: the console's chrome, panels and statusbar step aside and the page asks the browser for fullscreen. `Esc` (or the floating `✕`, or the same button) comes back. Docked on Vela's own toolbar row beside `<> Script` and `☰ catalogue`; the door is `chart_fullscreen` / `trader-chart fullscreen [--off]` |
 | Chart ⋯ menu → **Edge Stats** | the Edge Stats sheet: ask a question, run one of the 42 catalogue reports, group by weekday / month / year, open any historical session on a chart. [Details below](#edge-stats--how-often-did-it-actually-happen) |
+| Chart ⋯ menu → **Trader's desk** | the desk sheet: **Paper** (equity, cash, realised, open P&L, positions, fills, Reset), **Journal** (net P&L, win rate, profit factor, avg win/loss, the realised-equity curve, the closed trades) and **Prop firms** (the LuxAlgo directory + what is on offer). A read surface — the only write is Reset, and approving an order still happens on its card, never here |
 | The chart's own bottom bar | Vela's range buttons, timezone clock and settings (not ours) |
 
 ### Chat beside the chart
@@ -146,9 +148,12 @@ The chart is a **pane docked to the right of the conversation** (`traders-desk:c
 until you ask for it — your call, 19 Sep: it does not open with the app), so the app's own composer
 keeps the left and the chart reads on the right — drag the divider to re-balance, or collapse the pane
 with the app's own control. Clicking the sidebar row re-opens it (`host.revealPane`, the app's door for
-"an explicit user action happened") and **leaves your session alone**: it used to jump to a dedicated
-desk chat on every click, which pulled you out of whatever you were doing. Any session can drive the
-chart through the tools — the pane is chart, not conversation.
+"an explicit user action happened") and **a chat you are in is never switched**: it used to jump to a
+dedicated desk chat on every click, which pulled you out of whatever you were doing, and that is still
+the failure this must not repeat. Since 16 Oct the row also opens **Trader's Agent's own desk chat** —
+but only when nothing of yours is in front (a cold boot, Settings, a first click), and the whole
+behaviour is one palette command away from off. Any session can drive the chart through the tools —
+the pane is chart, not conversation.
 
 That chat is the "connected, sees, understands" part, and it needs no bespoke composer: the tools
 below answer over the console's push channel, so the round trip is local.
@@ -245,7 +250,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_objects` | the **Object tree**: what is ON the chart (drawings back-to-front, then the indicators) and acting on it by id — `list`/`select`/`show`/`hide`/`lock`/`unlock`/`front`/`back`/`duplicate`/`delete`/`settings`/`price`, by `ids` or by `type`; every op reads the stack back |
 | `chart_data_window` | the **Data window**: the chart's own readout — time, OHLC + volume, one section per indicator — at the cursor's bar (or the latest bar when the cursor is off the plot) |
 | `chart_browse` | open the catalogue in the drawer (optional `family`) |
-| `broker_state` | the paper (simulated Binance) account: cash, equity, positions, orders waiting for you |
+| `broker_state` | the paper (simulated Binance) account: cash, equity, positions, orders waiting for you, and the journal its fills keep (closed trades, win rate, profit factor) |
 | `broker_propose` | propose a paper order — it only puts an Approve/Reject card on the chart; the agent cannot approve it |
 | `chart_draw` | run Pine and paint the boxes/lines/labels it builds on the chart overlay (optional `inputs`, as above) |
 | `chart_pine_inputs` | list a Pine script's settings — label, type, default, range/options — without running it or touching the chart |
@@ -405,8 +410,8 @@ it from `http://127.0.0.1:8787/api/library/thumb`: **~5 ms warm instead of ~2 s*
   a chart view is mounted (the Hermes pane or a browser tab); with none attached they fail fast with
   "no chart view attached" rather than hanging. Commands are pushed, so a view answers in tens of ms.
 - **One console per machine** on one port. No real orders and no brokerage account exist: the only trading is a
-  **simulated Binance spot paper account** (`broker_*`), where the agent can only propose and you approve. The rest is
-  market data plus rendering.
+  **simulated Binance spot paper account** (`broker_*`), where the agent can only propose and you approve. The account
+  and the journal its fills keep (win rate, profit factor, the realised curve) are one surface — ⋯ → **Trader's desk**.
 - **The Library is non-commercial.** Its content is CC BY-NC-SA 4.0 — fine to read and cite here, not
   to resell or ship inside a paid product.
 - **Linux only, on purpose.** Built and verified on Omarchy (Arch + Hyprland) with Hermes Desktop.

@@ -368,8 +368,9 @@ def bt_data_list() -> str:
 
 @mcp.tool(annotations=_ann("Paper account", read_only=True))
 def broker_state() -> str:
-    """The PAPER (simulated Binance spot) account: cash, equity, open positions with live P&L, and the
-    orders waiting for the operator's approval. Nothing here is real money."""
+    """The PAPER (simulated Binance spot) account: cash, equity, open positions with live P&L, the orders
+    waiting for the operator's approval, and the journal the fills keep (closed trades, win rate, profit
+    factor). Nothing here is real money."""
     try:
         d = _call("/api/broker", timeout=10.0)
     except RuntimeError as exc:
@@ -382,6 +383,11 @@ def broker_state() -> str:
         lines.append(f"  {p['symbol']} {p['qty']:g} @ {p['avg']:,.2f} → {p['mark']:,.2f} ({p['unrealized']:+,.2f})")
     for o in d["pending"]:
         lines.append(f"  ⏳ #{o['id']} {o['side']} {o['qty']:g} {o['symbol']} — waiting for the operator")
+    st = d.get("stats") or {}
+    if st.get("closed"):
+        pf = "∞" if st.get("profit_factor") is None else f"{st['profit_factor']:.2f}"
+        lines.append(f"  journal: {st['closed']} closed · {st['wins']}W/{st['losses']}L · "
+                     f"win {st['win_rate'] * 100:.1f}% · PF {pf} · net {st['net']:+,.2f}")
     return "\n".join(lines)
 
 

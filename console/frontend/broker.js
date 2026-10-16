@@ -1,17 +1,16 @@
 /* Paper broker — the Approve / Reject card (Phase 5).
 
    The agent PROPOSES an order; this card is the only place it can be approved. Closed by default:
-   nothing is on screen until an order is waiting, so the chart stays whole. The account (cash,
-   positions, history) is a small popover opened from the ⋯ menu — never a permanent pane.
+   nothing is on screen until an order is waiting, so the chart stays whole. The account itself — and
+   the journal its fills now keep — is the desk sheet (desk.js), opened from ⋯ → "Trader's desk".
 
    Source of truth is the server (/api/broker). The card paints from it on load and again on every
    `ta-broker` event the page stream delivers, so a reload or a second tab shows the same orders. */
 (function () {
   'use strict';
 
-  const state = { pending: [], account: null, busy: new Set(), open: false };
+  const state = { pending: [], account: null, busy: new Set() };
   let stack = null;
-  let panel = null;
 
   const money = (n) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const qty = (n) => String(+Number(n).toFixed(8));
@@ -140,61 +139,14 @@
     else if (btn.hasAttribute('data-reject')) decide(id, 'reject');
   }
 
-  /* ── the account popover (opened from ⋯) ─────────────────────────────────────────────────────── */
-  function accountHtml(a) {
-    const pos = a.positions.length
-      ? a.positions.map((p) => `<li><span>${esc(p.symbol)} <small>${esc(qty(p.qty))} @ ${money(p.avg)}</small></span>
-          <b class="${p.unrealized >= 0 ? 'is-up' : 'is-down'}">${p.unrealized >= 0 ? '+' : ''}${money(p.unrealized)}</b></li>`).join('')
-      : '<li class="ta-acct__none">No open positions</li>';
-    const hist = a.history.slice(0, 6).map((o) => `<li><span>${esc(o.side)} ${esc(qty(o.qty))} ${esc(o.symbol)}</span>
-          <small>${o.status === 'filled' ? 'at ' + money(o.price) : esc(o.status)}</small></li>`).join('');
-    return `<header class="ta-acct__head"><strong>Paper account</strong><span class="ta-order__tag">${a.replay && a.replay.active ? 'PAPER · REPLAY' : 'PAPER'}</span></header>
-      <dl class="ta-acct__nums">
-        <div><dt>Cash</dt><dd>${money(a.cash)}</dd></div>
-        <div><dt>Equity</dt><dd>${money(a.equity)}</dd></div>
-        <div><dt>Realised</dt><dd class="${a.realized >= 0 ? 'is-up' : 'is-down'}">${a.realized >= 0 ? '+' : ''}${money(a.realized)}</dd></div>
-      </dl>
-      <h4>Positions</h4><ul class="ta-acct__list">${pos}</ul>
-      ${hist ? `<h4>Recent</h4><ul class="ta-acct__list">${hist}</ul>` : ''}
-      <footer class="ta-acct__foot">
-        <small>Simulated Binance spot · 0.1% fee · start ${money(a.start_cash)}${a.replay && a.replay.active ? ' · replay pricing' : ''}</small>
-        <button type="button" class="ta-order__btn ta-order__btn--no" data-reset>Reset</button>
-      </footer>`;
-  }
-
-  function closePanel() {
-    if (panel) { panel.remove(); panel = null; }
-    document.removeEventListener('pointerdown', away, true);
-    document.removeEventListener('keydown', key, true);
-    state.open = false;
-  }
-  function away(ev) { if (panel && !panel.contains(ev.target)) closePanel(); }
-  function key(ev) { if (ev.key === 'Escape') { ev.stopPropagation(); closePanel(); } }
-
-  function paintPanel() {
-    if (!panel || !state.account) return;
-    panel.innerHTML = accountHtml(state.account);
-  }
-
-  async function open() {
-    if (panel) { closePanel(); return; }
-    await refresh();
-    if (!state.account) return;
-    panel = document.createElement('div');
-    panel.className = 'ta-acct';
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', 'Paper account');
-    panel.addEventListener('click', async (ev) => {
-      if (!ev.target.closest('[data-reset]')) return;
-      if (!window.confirm('Reset the paper account to its starting cash? Positions and history are cleared.')) return;
-      try { await call('/api/broker/reset', {}); say('Paper account reset'); } catch (err) { say(err.message, true); }
-      await refresh();
-    });
-    document.body.appendChild(panel);
-    paintPanel();
-    state.open = true;
-    document.addEventListener('pointerdown', away, true);
-    document.addEventListener('keydown', key, true);
+  /* ── the door (16 Oct): ⋯ → Trader's desk ──────────────────────────────────────────────────────
+     The account used to open as a small popover painted right here. It could show a balance but had
+     nowhere to say what the account DID — no win rate, no profit factor, no curve. Those live in the
+     desk sheet now (desk.js, tabs Paper · Journal · Prop firms), and this door opens it on Paper so
+     every existing caller keeps working. */
+  function open() {
+    if (window.taDesk) window.taDesk.open('paper');
+    else say('The desk sheet did not load — reload the console.', true);
   }
 
   /* ── sync ────────────────────────────────────────────────────────────────────────────────────── */
@@ -204,7 +156,6 @@
       state.account = a;
       state.pending = a.pending || [];
       paintCards();
-      paintPanel();
     } catch (err) {
       /* server down: leave the cards as they are — a stale card still can't fill without the server */
     }
@@ -216,6 +167,6 @@
     refresh();
   });
 
-  window.taBroker = { open, refresh, state: () => ({ pending: state.pending.length, open: state.open }) };
+  window.taBroker = { open, refresh, state: () => ({ pending: state.pending.length }) };
   refresh();
 })();

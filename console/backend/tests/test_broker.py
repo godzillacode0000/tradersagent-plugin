@@ -211,5 +211,110 @@ class ItIsPaperAndSaysSo(unittest.TestCase):
         self.assertEqual(b.state()["venue"], "binance")
 
 
+class TheJournalReadsTheFillsBack(unittest.TestCase):
+    """16 Oct: the paper account grew a journal half — closed trades, the rates, the realised curve.
+
+    The one invariant everything else rests on: **sum(sell pnl) == realized + the open positions'
+    entry fees**. If it ever breaks, the journal's numbers describe a different account than the one
+    the cards trade, so every script below re-asserts it rather than trusting one check.
+    """
+
+    def _journal_holds(self, b):
+        st = b.state()["stats"]
+        self.assertAlmostEqual(sum(t["pnl"] for t in st["trades"]),
+                               st["realized"] + st["open_fees"], places=9,
+                               msg="the journal has drifted from the account")
+
+    def _trade(self, b, side, qty, symbol="BTCUSDT"):
+        return b.approve(b.propose(symbol, side, qty)["id"])
+
+    def test_no_closed_trades_is_not_a_rate(self):
+        b, _ = make()
+        st = b.state()["stats"]
+        self.assertEqual(st["closed"], 0)
+        self.assertIsNone(st["win_rate"], "a rate with no sample is not a rate")
+        self.assertIsNone(st["profit_factor"])
+        self.assertIsNone(st["avg_win"])
+        self.assertIsNone(st["best"])
+        self.assertEqual(st["curve"], [])
+
+    def test_a_win_and_a_loss_give_the_rates(self):
+        prices = Prices(BTCUSDT=100.0)
+        b, _ = make(prices)
+        self._trade(b, "buy", 1)
+        prices.p["BTCUSDT"] = 110.0
+        win = self._trade(b, "sell", 1)
+        prices.p["BTCUSDT"] = 100.0
+        self._trade(b, "buy", 1)
+        prices.p["BTCUSDT"] = 90.0
+        loss = self._trade(b, "sell", 1)
+
+        st = b.state()["stats"]
+        self.assertEqual((st["closed"], st["wins"], st["losses"], st["breakeven"]), (2, 1, 1, 0))
+        self.assertAlmostEqual(st["win_rate"], 0.5)
+        self.assertAlmostEqual(st["gross_win"], win["pnl"])
+        self.assertAlmostEqual(st["gross_loss"], -loss["pnl"])
+        self.assertAlmostEqual(st["profit_factor"], win["pnl"] / -loss["pnl"])
+        self.assertAlmostEqual(st["net"], win["pnl"] + loss["pnl"])
+        self.assertAlmostEqual(st["curve"][-1]["equity"], st["start_cash"] + st["net"])
+        self._journal_holds(b)
+
+    def test_the_entry_fee_is_attributed_to_the_trade(self):
+        prices = Prices(BTCUSDT=100.0)
+        b, _ = make(prices)
+        self._trade(b, "buy", 2)                      # fee 0.2 on the lot
+        prices.p["BTCUSDT"] = 110.0
+        sell = self._trade(b, "sell", 1)              # half the lot: half the entry fee rides with it
+        self.assertAlmostEqual(sell["pnl"], (110.0 - 100.0) * 1 - 110.0 * 0.001 - 0.1, places=9)
+        self._journal_holds(b)
+
+    def test_a_partial_sale_leaves_the_rest_of_the_fee_on_the_position(self):
+        b, _ = make(Prices(BTCUSDT=100.0))
+        self._trade(b, "buy", 4)                      # fee 0.4
+        self._trade(b, "sell", 1)                     # takes a quarter of it
+        st = b.state()["stats"]
+        self.assertAlmostEqual(st["open_fees"], 0.3, places=9)
+        self._journal_holds(b)
+
+    def test_profit_factor_is_none_not_a_number_when_nothing_lost(self):
+        prices = Prices(BTCUSDT=100.0)
+        b, _ = make(prices)
+        self._trade(b, "buy", 1)
+        prices.p["BTCUSDT"] = 105.0
+        self._trade(b, "sell", 1)
+        st = b.state()["stats"]
+        self.assertEqual(st["losses"], 0)
+        self.assertAlmostEqual(st["win_rate"], 1.0)
+        self.assertIsNone(st["profit_factor"],
+                          "no losing trade is not a large factor — the sheet prints ∞ for None")
+        self._journal_holds(b)
+
+    def test_the_curve_carries_closed_trades_only(self):
+        prices = Prices(BTCUSDT=100.0)
+        b, _ = make(prices)
+        self._trade(b, "buy", 1)
+        prices.p["BTCUSDT"] = 120.0
+        self._trade(b, "sell", 1)
+        self._trade(b, "buy", 1)                      # open again: its fee is booked, not a curve point
+        st = b.state()["stats"]
+        self.assertEqual(len(st["curve"]), 1)
+        self.assertGreater(st["curve"][0]["at"], 0)
+        self.assertAlmostEqual(st["curve"][0]["equity"], st["start_cash"] + st["net"])
+        self.assertEqual(st["trades"][0]["symbol"], "BTCUSDT")
+        self._journal_holds(b)
+
+    def test_the_journal_survives_a_reload(self):
+        prices = Prices(BTCUSDT=100.0)
+        b, path = make(prices)
+        self._trade(b, "buy", 1)
+        prices.p["BTCUSDT"] = 130.0
+        self._trade(b, "sell", 1)
+        again = PaperBroker(path, prices)
+        st = again.state()["stats"]
+        self.assertEqual(st["closed"], 1)
+        self.assertAlmostEqual(st["win_rate"], 1.0)
+        self._journal_holds(again)
+
+
 if __name__ == "__main__":
     unittest.main()

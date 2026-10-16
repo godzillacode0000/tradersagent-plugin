@@ -1,14 +1,18 @@
-"""The sidebar row must put the chart beside the conversation, never switch the conversation.
+"""The sidebar row puts the chart beside the conversation — and the desk chat in front of it ONLY
+when no chat of the operator's own is there to displace.
 
-Why this is a test rather than only a comment: the behaviour was the opposite until 22 Sep, and the
-old behaviour was not visibly broken — it did *something* plausible (it opened a chat), so a
-regression would look like a working plugin. What it actually did was pull the operator out of the
-session he was in every time he pressed the row, which is the "I have to go hunting for it" complaint.
-Nothing about a wrong-but-quiet jump to another chat fails a smoke test, so it is pinned here.
+Why this is a test rather than only a comment: the row's behaviour has been wrong in both directions.
+Until 22 Sep it jumped into a dedicated desk chat on every click, which pulled the operator out of the
+session he was in ("I have to go hunting for it") — a regression that looks like a working plugin,
+because it does *something* plausible. The fix then made the row reveal-only in every case, which is
+not what he wanted either: with no chat of his own in front, the desk's own chat is where he wants to
+land. The 16 Oct call is policy 1 + 3 — open it only when the seat is empty, and put the off switch in
+the palette. Both halves are pinned here: what "empty" means, where the off switch is, and the fact
+that the desk session is *minted* (and remembered) rather than searched for.
 
 The plugin is browser JavaScript with no JS test runner in this repo, so the checks read the source.
-That is a deliberate trade: what must not change is a *shape* — a call that is not there, a session id
-that must not come back — and a source assertion is exactly the instrument for that.
+That is a deliberate trade: what must not change is a *shape* — a guard that must be there, a session
+id that must not come back — and a source assertion is exactly the instrument for that.
 """
 
 import os
@@ -31,28 +35,54 @@ def without_comments(source: str) -> str:
     return re.sub(r"^\s*//.*$", "", source, flags=re.M)
 
 
-class TheRowLeavesTheSessionAlone(unittest.TestCase):
+class TheRowOpensTheDeskChatOnlyWhenTheSeatIsEmpty(unittest.TestCase):
+    """Policy 1 + 3 (16 Oct). The guard comes first, the preference second, the session last."""
+
     def setUp(self):
         self.code = without_comments(plugin_source())
 
-    def test_the_page_does_not_open_another_chat(self):
-        for call in ("openDeskChat", "openSession", "newChat", "listPersistedSessions"):
-            self.assertNotIn(
-                call,
-                self.code,
-                f"landing on the row must not switch sessions, but it still calls {call}()",
-            )
+    def test_a_chat_in_front_short_circuits_the_desk_open(self):
+        # The 22 Sep failure in one line: a focused session must return before anything else runs.
+        self.assertIn("async function openDeskChatWhenEmpty(focused)", self.code)
+        self.assertRegex(self.code, r"if \(focused \|\| !deskChatOn\) return false")
 
-    def test_no_session_is_pinned_by_id_or_title(self):
-        # A hardcoded id or a title regex is how the old jump resolved its target; either one coming
-        # back means the row can leave the operator's session again.
+    def test_the_only_call_site_is_the_empty_seat_branch(self):
+        # The page must call it from the branch that runs when `sid` is falsy — never unconditionally,
+        # and never before the stored preference has been read (the launch reveal waits on its own
+        # read for the same reason).
+        self.assertRegex(self.code, r"\.then\(\(\) => openDeskChatWhenEmpty\(sid\)\)")
+        self.assertIn("deskChatReady", self.code)
+
+    def test_the_preference_defaults_on_and_persists(self):
+        self.assertIn("deskChatOn = value !== false", self.code)   # on unless explicitly turned off
+        self.assertIn("storeValue(DESK_PREF, deskChatOn)", self.code)
+
+    def test_the_palette_carries_the_off_switch(self):
+        self.assertIn("'tradingDesk.deskChat'", self.code)
+        self.assertIn("toggle the desk chat on row click", self.code)
+
+    def test_the_session_is_minted_never_pinned(self):
+        # The old jump carried a fixed id/title to resolve against. The desk session is created on
+        # first use now: no id in the source, and the create is idempotent so a retry cannot twin it.
         self.assertNotIn("DESK_SESSION_ID", self.code)
-        self.assertNotIn("DESK_TITLE", self.code)
-        self.assertNotRegex(
-            self.code,
-            r"\d{8}_\d{6}_[0-9a-f]{6}",
-            "a Hermes session id is hardcoded again",
-        )
+        self.assertNotRegex(self.code, r"\d{8}_\d{6}_[0-9a-f]{6}", "a Hermes session id is hardcoded")
+        self.assertIn("'session.create'", self.code)
+        self.assertIn("stored_session_id", self.code)       # the durable id, not the runtime one
+        self.assertIn("idempotency_key: DESK_IDEMPOTENCY", self.code)
+
+    def test_the_title_is_a_create_argument_never_a_search_key(self):
+        # `title` is what the new session is called. Looking one UP by title (or listing sessions to
+        # find one) is the old resolution path and must not come back.
+        self.assertNotIn("listPersistedSessions", self.code)
+        self.assertNotIn("'session.list'", self.code)
+        self.assertNotRegex(self.code, r"\.find\([^)]*DESK_TITLE")
+        self.assertNotRegex(self.code, r"DESK_TITLE\s*===?")
+
+    def test_older_builds_degrade_to_reveal_only(self):
+        # No request door (an older app) or no openSession door: the row must behave exactly as it
+        # did before this feature existed, not throw.
+        self.assertRegex(self.code, r"typeof host\.request !== 'function'")
+        self.assertRegex(self.code, r"typeof host\.openSession !== 'function'")
 
     def test_the_page_still_reveals_the_chart(self):
         # The one job the row kept. Without this the row does nothing at all.
@@ -70,17 +100,12 @@ class TheRowLeavesTheSessionAlone(unittest.TestCase):
         self.assertIn("ConsoleFrame", self.code)
         self.assertIn("PaneHint", self.code)
 
-    def test_the_card_says_the_chat_was_left_alone(self):
-        # The wording is the user-facing half of the promise, so it is asserted, not just the absence
-        # of a call.
-        self.assertRegex(
-            self.code,
-            r"Chart docked on the right",
-        )
-        self.assertRegex(
-            self.code,
-            r"your chat was left open",
-        )
+    def test_the_card_states_the_desk_chat_policy(self):
+        # A preference nobody can see is a preference nobody trusts: the docked card says which way
+        # the row is set, both ways.
+        self.assertRegex(self.code, r"Chart docked on the right")
+        self.assertIn("Desk chat: on", self.code)
+        self.assertIn("Desk chat: off", self.code)
 
 
 class TheLandingHandsTheWorkspaceBack(unittest.TestCase):
@@ -100,6 +125,11 @@ class TheLandingHandsTheWorkspaceBack(unittest.TestCase):
     def test_the_page_navigates_back_to_the_focused_chat(self):
         self.assertIn("host.state.focusedStoredSessionId", self.code)
         self.assertIn("host.navigate", self.code)
+
+    def test_a_focused_chat_still_wins_over_the_desk_chat(self):
+        # Policy 1 in the page itself: `sid` truthy means his conversation is on screen, so the
+        # bounce wins and the desk open is never reached.
+        self.assertRegex(self.code, r"if \(sid\) \{\s*backToChat\(sid\)")
 
     def test_the_id_read_is_reactive_not_one_shot(self):
         # The first bounce read the id exactly once at mount. Sessions restore asynchronously, so
@@ -157,6 +187,7 @@ class TheManifestStaysHonest(unittest.TestCase):
         with open(expect, encoding="utf-8") as fh:
             manifest = fh.read()
         self.assertIn("Chart docked on the right", manifest)
+        self.assertIn("Desk chat: on", manifest)
         self.assertIn("sidebar.nav", manifest)
 
 

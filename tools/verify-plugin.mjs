@@ -125,6 +125,19 @@ export const host = {
   state: {},
   notify: (m) => console.log('      host.notify:', typeof m === 'string' ? m : JSON.stringify(m)),
   navigate: () => {}, onEvent: () => () => {}, logs: () => [], restartGateway: async () => {},
+  /* The two session doors a plugin may use, stubbed from the real SDK (apps/desktop/src/sdk/index.ts):
+     request() is the gateway JSON-RPC door, openSession() opens a stored session. Both record their
+     calls so a plugin that mints or opens a session is visible in the harness output instead of
+     silently reaching an absent door. session.create answers the shape the gateway's contract
+     promises (tui_gateway/contracts/sessions.py: SessionCreateResult). */
+  request: async (method, params) => {
+    globalThis.__hermesRpcCalls = (globalThis.__hermesRpcCalls || []).concat([[method, params]])
+    if (method === 'session.create') return { session_id: 'rt-harness', stored_session_id: 'stored-harness' }
+    return {}
+  },
+  openSession: async (id, options) => {
+    globalThis.__hermesOpenSessionCalls = (globalThis.__hermesOpenSessionCalls || []).concat([[id, options]])
+  },
 }
 export const haptic = () => {}
 export const Switch = (props) => ({ type: 'Switch', props })

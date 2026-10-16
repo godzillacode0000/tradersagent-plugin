@@ -10,6 +10,7 @@
      system-first so first paint never waits on a font request. -->
 <link rel="stylesheet" href="./styles.css" />
 <link rel="stylesheet" href="./edge.css" />
+<link rel="stylesheet" href="./desk.css" />
 <!-- Warm the connections the first chart data needs, before the page has even built the chart (the module graph
      below takes over a second to arrive; the exchange handshakes happen in that time instead of after it). -->
 <link rel="preconnect" href="https://api.binance.com" crossorigin>
@@ -82,6 +83,20 @@
     </header>
     <div class="edge__bar" id="edge-bar" hidden></div>
     <div class="edge__body" id="edge-body"></div>
+  </aside>
+
+  <div class="desk-scrim" id="desk-scrim" aria-hidden="true"></div>
+  <!-- The desk sheet (16 Oct): the paper account and its journal, one surface, three views. It
+       replaced the small popover broker.js painted (the popover could show a balance but had nowhere
+       to say what the account did). Same chrome family as the Edge sheet: a right-hand sheet, a
+       scrim, Esc to close. Its door is ⋯ → "Trader's desk"; desk.js fills the tabs and the body. -->
+  <aside class="desk-sheet" id="desk-sheet" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Trader's desk">
+    <header class="desk__head">
+      <div class="desk__title"><strong>Trader's desk</strong><span id="desk-sub"></span></div>
+      <button type="button" class="desk__x" id="desk-close" aria-label="Close Trader's desk">✕</button>
+    </header>
+    <nav class="desk__tabs" id="desk-tabs" role="tablist" aria-label="Desk views"></nav>
+    <div class="desk__body" id="desk-body"></div>
   </aside>
 
   <main class="main">
@@ -466,6 +481,7 @@
 <script src="./script-highlight.js"></script>
 <script src="./drawer.js"></script>
 <script src="./broker.js"></script>
+<script src="./desk.js"></script>
 <!-- The replay control strip (Phase 6, 3 Oct): started from the ⋯ menu, hidden until replay is on.
      It also keeps the server's replay price in step, so a paper fill during replay uses the cursor. -->
 <script src="./replay.js"></script>

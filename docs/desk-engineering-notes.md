@@ -355,3 +355,67 @@ hint — relay it. `bad_query` carries the engine's suggestion and the character
 
 Changed console JS needs `chart_reload` / `bin/trader-chart reload`, not an app restart.
 MCP **new tools** need a **new session** (or `/reload-mcp`).
+
+## The row and the desk chat (16 Oct)
+
+**What the row does, in order:** `mountPane()` → `revealChart()` (adopt + reveal, twice) → then, only
+if `host.state.focusedStoredSessionId` is **falsy**, `openDeskChatWhenEmpty()` puts Trader's Agent's own
+session in front. A focused chat is never displaced — that was the 22 Sep complaint and it still is the
+failure to avoid. The preference (`deskChatOn`, ON by default, stored via `ctx.storage`) is read before
+the decision, and the palette command **Trading: toggle the desk chat on row click** is the off switch;
+the docked card prints `Desk chat: on/off` so the setting is visible.
+
+**How the session is made:** `host.request('session.create', {source:'desktop', title:"Trader's Agent —
+desk", idempotency_key:'traders-desk:desk-chat'})`. The reply carries `session_id` (runtime — gone after
+a restart) and **`stored_session_id`** (durable — what routes and `host.openSession` take); only the
+stored one is kept, in `ctx.storage` under `deskSessionId`. Then
+`host.openSession(storedId, {intent:'in-place'})`. Never resolve a session by title or id — the pre-22-Sep
+code did, and the guard tests forbid it coming back.
+
+**Why the two `typeof` probes matter:** `host.request` and `host.openSession` do not exist on older
+Desktop builds, and the CI harness has no gateway at all. Each step is guarded and fails to a no-op, so
+the row keeps its pre-16-Oct behaviour instead of throwing in a renderer nobody can see.
+
+**Proving it live (the scratch test):** the plugin beacons to `console.error` — which is the only log
+that reaches `~/.hermes/logs/desktop.log` (`console.log` does not). So: deploy, reload the plugin, click
+the row once with no chat in front, then read the log for `desk: minted <stored-id>` / `desk: opened
+<stored-id>`; a *focused* chat instead logs nothing (the guard took the other branch). Cross-check the
+session exists in Hermes' own store (`state.db`, recent rows) and that the pane is still docked right.
+Undo: the palette toggle, or delete the `deskSessionId` key from the plugin's storage.
+
+---
+
+## The desk sheet (16 Oct)
+
+**What changed and why.** The paper account used to open as a small popover (`.ta-acct`), painted by
+broker.js. It could show cash, equity and realised — and nothing about what the account *did*. LuxAlgo's
+own app puts the journal beside the account (trade-journal is the open-source half of that), so a trader
+there sees win rate and profit factor without leaving the chart. Ours could not, because the broker
+recorded no per-trade numbers: only a running `realized`.
+
+**The accounting, before the UI.** A sale now records `pnl` on its own order record —
+`(exit − average entry) × qty − exit fee − the entry fee's share for that qty`. The entry fee is carried
+on the position (`fees`) until a sale attributes its share, which keeps the identity exact:
+`sum(sell pnl) == realized + the open positions' entry fees`. Every journal number (win rate, profit
+factor, avg win/loss, the curve) is derived from those fills, and `test_broker.py`'s
+`TheJournalReadsTheFillsBack` re-asserts the identity after every script — a journal that drifts from
+the account is the one failure this design cannot tolerate.
+
+**Fills that predate the field.** `stats()` reads an order without `pnl` as 0.0 rather than guessing, so
+the curve is honest from the day the field shipped. (No paper account on this machine had fills when it
+shipped; the live one is at its starting cash.)
+
+**The sheet.** desk.js + desk.css, ⋯ → "Trader's desk". Same chrome family as the Edge sheet: right-hand,
+scrim, Esc, focus handed back, tokens only, transform/opacity motion. Three views —
+Paper (equity / cash / realised / open P&L, positions with marks, recent fills, Reset which asks first),
+Journal (the KPIs, a canvas curve with the starting-cash baseline dashed, the closed trades), and
+Prop firms (`/api/propfirms` + `/api/offers`, fetched the first time the tab opens).
+
+**The rules it keeps** (all pinned in `test_desk_sheet.py`): it can only post Reset — approve/reject stay
+on the card, because the brake is the card's; a rate with no sample prints —; a profit factor with no
+losing trade prints ∞; every rate carries its N; nothing opens a browser or a link (the offers are text
+and a promo code).
+
+**What is deliberately not in it yet** — see `docs/PLAN-desk-surfaces.md`: the market-trackers drawer
+(needs the market-trackers MCP registered with Hermes first), the prop-firm *simulator verdicts* (needs
+their engine run locally the way Edge Stats runs), and real-account read-only tools (broker-sdk).

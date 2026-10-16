@@ -1,4 +1,4 @@
-"""The row must not be described as switching chats, anywhere a reader will see it.
+"""The row must be described in prose the way it actually behaves — including its 16 Oct condition.
 
 The behaviour changed on 22 Sep (commit 446b6e1): the sidebar row docks the chart and leaves the
 session alone; it used to jump to a dedicated desk chat on every click. Six prose spots survived that
@@ -7,10 +7,16 @@ diagram and table, and plugin.js's own header — because the docs-drift tests o
 against the MCP server. Tool names stayed stable, so a hundred green runs said nothing about a README
 that promised behaviour the plugin no longer has.
 
+16 Oct sharpened it rather than reverting it: the row DOES open the desk chat now, but only when no
+chat of the operator's own is in front (policy 1), with a palette off switch (policy 3). So the lies
+are the *unconditional* forms — "opens the desk chat" as a flat promise, "leaves your session alone"
+as a flat promise, "session untouched" — and the truth that must be stated is the condition. Both
+halves are pinned below: the forbidden phrases are quoted from real stale prose, and the required
+phrases are what a reader is owed.
+
 That is the shape of the failure worth pinning: claims about what the row DOES, in files a stranger
-reads first. The forbidden phrases below are quoted from the stale text itself, so a revert of the
-22 Sep fix — or a well-meaning "it should bring the desk chat back" — fails here instead of quietly
-putting the lie back in front of users.
+reads first. A revert of either fix — or a "it should bring the desk chat back" that skips the guard —
+fails here instead of quietly putting a lie back in front of users.
 """
 
 import os
@@ -25,18 +31,20 @@ FORBIDDEN = [
     ("README.md", "brings the desk chat to the front"),
     ("README.md", "opens a full trading console in the main zone"),
     ("README.md", "620px, open by\ndefault"),
-    ("docs/HANDOFF.md", "opens the desk chat"),
+    ("README.md", "leaves your session alone"),
+    ("docs/HANDOFF.md", "session untouched"),
     ("traders-desk/desktop/plugin.js", "opens the desk chat"),
     ("traders-desk/desktop/plugin.js", "opens by default"),
 ]
 
 # What the reader is promised instead — asserted so a fix cannot delete the claim and pass.
 REQUIRED = [
-    ("README.md", "session is not switched"),
-    ("README.md", "leaves your session alone"),
+    ("README.md", "is not switched"),
+    ("README.md", "a chat you are in is never switched"),
     ("README.md", "collapsed"),
-    ("docs/HANDOFF.md", "session untouched"),
-    ("traders-desk/desktop/plugin.js", "leaves the session alone"),
+    ("docs/HANDOFF.md", "only when no chat is in front"),
+    ("traders-desk/desktop/plugin.js", "the desk chat opens only when"),
+    ("traders-desk/desktop/plugin.js", "Desk chat: on"),
 ]
 
 

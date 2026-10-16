@@ -4,6 +4,22 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- **The desk sheet — the paper account, its journal and the prop-firm directory in one surface** (16 Oct). ⋯ →
+  "Trader's desk" opens three views: **Paper** (equity, cash, realised, open P&L, positions with marks, recent
+  fills, Reset), **Journal** (net P&L, win rate, profit factor, avg win/loss, the realised-equity curve on a
+  canvas, the closed trades) and **Prop firms** (LuxAlgo's own directory + the live offers, through
+  `/api/propfirms` and `/api/offers` — rendered as text and a promo code, never a link: the plugin still has no
+  door out of Hermes). It replaces the small account popover, which could show a balance but had nowhere to say
+  what the account DID. The sheet is a reader: the only thing it can post is Reset (and it asks first), so the
+  approve/reject brake stays on the order card where it was.
+- **A journal under the paper broker.** A sale now records its own `pnl` — (exit − average entry) × qty − exit fee
+  − the entry fee's share for that qty, with the entry fee carried on the position until a sale attributes it — so
+  **sum(sell pnl) == realized + the open positions' entry fees**, asserted in the tests. `broker_state` reports the
+  closed-trade line; a rate with no sample prints —, a profit factor with no losing trade prints ∞, and no rate
+  ships without its N. 1,166 backend tests green (1 skipped, 71 files).
+
 ### Changed
 
 - **Vela 0.8.3 → 0.8.4** (`@luxalgo/vela`, published 13 Oct; vela-pinets moved with it, 0.2.15 → 0.2.16, the release built
@@ -44,6 +60,26 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   8 of them `edgestats_*`), **1,133 backend tests, 1 skipped, 70 files, 114 s**. CI's two vendor gates
   (`tools/vendor-sums.py --check`, `tools/modulepreload.py --check`) and the suite stay green; nothing
   in `vendor/` moved.
+
+### Added
+
+- **The row opens the desk's own chat — when the seat is empty, and never otherwise (16 Oct).** The
+  sidebar row reveals the chart pane as before; what is new is `openDeskChatWhenEmpty()` in
+  `traders-desk/desktop/plugin.js`: when **no chat of the operator's own is focused**
+  (`host.state.focusedStoredSessionId` falsy — a cold boot, a full page, a first click) it puts
+  Trader's Agent's own session in front, and when a chat IS focused it does exactly what it did before
+  (leave it alone; the chart docks beside it). That guard is the whole point: the pre-22-Sep row jumped
+  into a desk chat on *every* click and pulled the operator out of the conversation he was having.
+  The session is **minted, not resolved** — one `host.request('session.create', {title, source,
+  idempotency_key})` whose `stored_session_id` is remembered in `ctx.storage`, so it persists with its
+  transcript, a retry cannot twin it, and no id or title is ever hardcoded or searched for. Policy 3:
+  the palette command **Trading: toggle the desk chat on row click** turns the whole behaviour off
+  (stored preference, ON by default), and the docked card states which way it is set. Both session
+  doors are probed (`typeof host.request`/`host.openSession`) so an older app degrades to reveal-only
+  instead of throwing. Verified: the harness gained the two real SDK doors as stubs and
+  `plugin.expect.json` pins `Desk chat: on`; the sidebar-row guard tests were rewritten from "never
+  switches" to "opens only when the seat is empty, with the off switch", and the docs-drift prose
+  pins now forbid the *unconditional* claims while requiring the condition. 1,139 tests green.
 
 ### Fixed (the 8 Oct 2026 full audit: seven read-only lanes over `3c2ad34`, handed to Hermes as a report)
 

@@ -170,7 +170,7 @@ state.ready = (async () => {
     if (!ws) return;
     /* In Vela's compact mode (a pane under ~640 px — the plugin's default 620) the desktop row is
        0-width: querySelector still finds its ⋯ button, and a menu anchored to it landed at x < 0,
-       off-screen (measured 4 Oct: left = -168), so Alerts, Paper account, Data window, Object tree,
+       off-screen (measured 4 Oct: left = -168), so Alerts, the desk, Data window, Object tree,
        the screenshot and Edge Stats had no door. A hidden anchor is no anchor: the null path below
        places the menu top-right, where it can be seen. */
     if (anchor && anchor.getBoundingClientRect().width === 0) anchor = null;
@@ -184,7 +184,7 @@ state.ready = (async () => {
         if (p && p.catch) p.catch((err) => { if (window.taToast) window.taToast(String(err.message || err), true); });
       }],
       ['Alerts', () => ws.openAlertsMenu(anchor)],
-      ['Paper account', () => { if (window.taBroker) window.taBroker.open(); }],
+      ["Trader's desk", () => { if (window.taDesk) window.taDesk.open('paper'); else if (window.taBroker) window.taBroker.open(); }],
       ['Data window', () => ws.dock.toggle('dataWindow')],
       ['Object tree', () => ws.dock.toggle('objects')],
       ['Download screenshot', () => ws.downloadScreenshot()],

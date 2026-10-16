@@ -1386,26 +1386,11 @@ pre {
 .ta-order__btn--yes { background: var(--lx-accent); border-color: var(--lx-accent); color: #fff; }
 .ta-order__btn--yes:hover, .ta-order__btn--yes:focus-visible { background: var(--lx-accent-hover); }
 .ta-order__btn[disabled] { opacity: .5; cursor: default; }
-.ta-acct {
-  position: fixed; top: 96px; left: 64px; z-index: 60; width: 300px; max-height: 70vh; overflow: auto;
-  background: var(--lx-surface-2); border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-lg);
-  box-shadow: var(--lx-shadow-3); padding: var(--lx-space-3); color: var(--lx-fg); font-size: var(--lx-fs-sm);
-  animation: ta-order-in var(--lx-dur-fast) var(--lx-ease) both;
-}
-.ta-acct__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--lx-space-2); }
-.ta-acct__nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--lx-space-2); margin: 0 0 var(--lx-space-2); }
-.ta-acct__nums dt { color: var(--lx-fg-faint); font-size: var(--lx-fs-xs); }
-.ta-acct__nums dd { margin: 0; font-family: var(--lx-font-mono); }
-.ta-acct h4 { margin: var(--lx-space-3) 0 var(--lx-space-1); color: var(--lx-fg-muted); font-size: var(--lx-fs-xs); text-transform: uppercase; letter-spacing: .06em; }
-.ta-acct__list { list-style: none; margin: 0; padding: 0; }
-.ta-acct__list li { display: flex; justify-content: space-between; gap: var(--lx-space-2); padding: 2px 0; }
-.ta-acct__list small, .ta-acct__foot small { color: var(--lx-fg-faint); }
-.ta-acct__none { color: var(--lx-fg-faint); }
-.ta-acct__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--lx-space-2); margin-top: var(--lx-space-3); }
-.ta-acct .is-up { color: var(--lx-profit); }
-.ta-acct .is-down { color: var(--lx-loss); }
+/* The account popover (.ta-acct) is gone (16 Oct): the account and its journal are the desk sheet
+   now (desk.css), which can say what the account DID — win rate, profit factor, the curve — and the
+   popover had nowhere to put any of it. Its styles left with it; the cards above stay. */
 @keyframes ta-order-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .ta-order, .ta-acct { animation: none; } .ta-order__btn { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .ta-order { animation: none; } .ta-order__btn { transition: none; } }
 
 /* ── Replay (Phase 6, 3 Oct; restyled 4 Oct to Vela's v0.8.0 Bar-replay release graphic) ─────────
    The operator's call: the strip lives IN the chart ("jalur kawalan dalam chart"), bottom-centre —

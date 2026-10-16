@@ -6,6 +6,15 @@ Rules this module exists to enforce (the operator's decisions, 3 Oct 2026):
   * Spot: no shorting, no margin. Cash cannot go negative.
   * The account survives a restart (atomic write, mode 0600). A corrupt file is set aside, not trusted.
 
+Accounting (16 Oct 2026 — the journal needs per-trade numbers, not just a running total):
+  * A buy books its fee immediately and remembers it ON THE POSITION (`fees`), so the part of it that
+    belongs to a later sale can be attributed then.
+  * A sale records `pnl` on the order: (exit − average entry) × qty − exit fee − the entry-fee share
+    for that qty. Summed over every sale this equals the account's `realized` exactly — the identity
+    is asserted in the tests, so the journal can never drift from the account.
+  * `stats()` reads those fills back as closed trades (win rate, profit factor, average win/loss)
+    and builds the realised-equity curve. It is a READ: it never moves money and never fills gaps.
+
 No secrets live here and no network call is made by the engine itself: the price feed is injected
 (`price_of`), so tests control it and the live server hands it Binance's public ticker. Real orders
 (ccxt + vault keys) are a later step and would sit behind this same propose → approve gate.
@@ -167,20 +176,31 @@ class PaperBroker:
                                       f"needs {gross + fee:,.2f} but cash is {self._s['cash']:,.2f}")
                 self._s["cash"] -= gross + fee
                 # The entry fee is a cost the moment it is paid. It used to appear nowhere in P&L, so `realized`
-                # understated a round trip by it and never reconciled with equity (audit BE-3).
+                # understated a round trip by it and never reconciled with equity (audit BE-3). It is also
+                # remembered on the POSITION, so the sale that inherits this qty can attribute its share.
                 self._s["realized"] -= fee
                 if pos:
                     tot = pos["qty"] + o["qty"]
                     pos["avg"] = (pos["avg"] * pos["qty"] + px * o["qty"]) / tot
+                    pos["fees"] = float(pos.get("fees", 0.0)) + fee
                     pos["qty"] = tot
                 else:
-                    self._s["positions"][o["symbol"]] = {"qty": o["qty"], "avg": px}
+                    self._s["positions"][o["symbol"]] = {"qty": o["qty"], "avg": px, "fees": fee}
+                # This fill's own contribution to `realized`: the identity sum(fill deltas) == realized
+                # is what the journal's curve and totals rely on.
+                o["pnl"] = -fee
             else:
                 if not pos or pos["qty"] + self._dust(pos["qty"]) < o["qty"]:
                     have = pos["qty"] if pos else 0
                     raise BrokerError("insufficient_position", f"cannot sell {o['qty']} — holding {have} (spot, no shorting)")
+                held_fees = float(pos.get("fees", 0.0))
+                fee_share = held_fees * (o["qty"] / pos["qty"]) if pos["qty"] > 0 else 0.0
                 self._s["cash"] += gross - fee
                 self._s["realized"] += (px - pos["avg"]) * o["qty"] - fee
+                # The closed trade's own P&L: both legs' fees on this qty, so the journal's win rate and
+                # profit factor describe the trade, not half of it.
+                o["pnl"] = (px - pos["avg"]) * o["qty"] - fee - fee_share
+                pos["fees"] = max(0.0, held_fees - fee_share)
                 pos["qty"] -= o["qty"]
                 if pos["qty"] <= self._dust(o["qty"]):
                     del self._s["positions"][o["symbol"]]
@@ -209,6 +229,62 @@ class PaperBroker:
                     return dict(o)
         raise BrokerError("unknown_order", f"no order {order_id}")
 
+    def stats(self) -> dict:
+        """The journal's read (16 Oct 2026): closed trades off the fills, and the realised curve.
+
+        A closed trade is a filled SELL — spot has no shorts, so a sale closes qty a buy opened. Its
+        `pnl` already carries both legs' fees for that qty, so these numbers describe the trade and
+        not half of it. The identity to hold: **sum(sell pnl) == realized + the open positions' entry
+        fees** (an open position's fee is booked, but no sale has attributed it yet); the tests assert
+        it, so the journal can never drift from the account.
+
+        Nothing here guesses. With no closed trades the rates are None, not 0 % — a rate with no
+        sample is not a rate — and `fills_kept` reports how many fills the account still holds (it
+        trims old ones), so any rate can be read with its own N.
+        """
+        with self._lock:
+            orders = [dict(o) for o in self._s["orders"]]
+            start = float(self._s["start_cash"])
+            realized = float(self._s["realized"])
+            open_fees = sum(float(p.get("fees", 0.0)) for p in self._s["positions"].values())
+        sells = sorted((o for o in orders if o.get("status") == "filled" and o.get("side") == "sell"),
+                       key=lambda o: o.get("closed") or o.get("ts") or 0)
+        trades, curve, cum = [], [], start
+        for o in sells:
+            pnl = float(o.get("pnl") or 0.0)
+            at = o.get("closed") or o.get("ts")
+            cum += pnl
+            trades.append({"id": o.get("id"), "symbol": o.get("symbol"), "qty": o.get("qty"),
+                           "exit": o.get("price"), "pnl": pnl, "at": at})
+            curve.append({"at": at, "equity": cum})
+        wins = [t["pnl"] for t in trades if t["pnl"] > 0]
+        losses = [t["pnl"] for t in trades if t["pnl"] < 0]
+        gross_win = sum(wins)
+        gross_loss = -sum(losses)                     # a positive number; 0.0 when nothing lost yet
+        n = len(trades)
+        return {
+            "closed": n,
+            "wins": len(wins),
+            "losses": len(losses),
+            "breakeven": n - len(wins) - len(losses),
+            "win_rate": (len(wins) / n) if n else None,
+            "gross_win": gross_win,
+            "gross_loss": gross_loss,
+            # None means "no losing trade yet", which is NOT a very large factor: the sheet prints ∞.
+            "profit_factor": (gross_win / gross_loss) if gross_loss > 0 else None,
+            "avg_win": (gross_win / len(wins)) if wins else None,
+            "avg_loss": (-gross_loss / len(losses)) if losses else None,
+            "best": max((t["pnl"] for t in trades), default=None),
+            "worst": min((t["pnl"] for t in trades), default=None),
+            "net": sum(t["pnl"] for t in trades),
+            "start_cash": start,
+            "realized": realized,
+            "open_fees": open_fees,
+            "fills_kept": len(orders),
+            "trades": trades[-40:][::-1],             # newest first, bounded for the sheet
+            "curve": curve,                           # realised equity after each closed trade
+        }
+
     def state(self) -> dict:
         # Prices are read OUTSIDE the lock: one blocking ticker call per position under it made propose / approve
         # wait behind a slow exchange (audit BE-7).
@@ -228,11 +304,15 @@ class PaperBroker:
                                   "unrealized": (mark - p["avg"]) * p["qty"]})
                 equity += mark * p["qty"]
             orders = self._s["orders"]
-            return {"mode": "paper", "venue": "binance", "cash": self._s["cash"], "equity": equity,
-                    "start_cash": self._s["start_cash"], "realized": self._s["realized"],
-                    "positions": positions,
-                    "pending": [dict(o) for o in orders if o["status"] == "pending"],
-                    "history": [dict(o) for o in orders if o["status"] != "pending"][-self.keep:][::-1]}
+            out = {"mode": "paper", "venue": "binance", "cash": self._s["cash"], "equity": equity,
+                   "start_cash": self._s["start_cash"], "realized": self._s["realized"],
+                   "positions": positions,
+                   "pending": [dict(o) for o in orders if o["status"] == "pending"],
+                   "history": [dict(o) for o in orders if o["status"] != "pending"][-self.keep:][::-1]}
+        # The journal half (closed trades, win rate, profit factor, the realised curve). A pure read:
+        # it cannot move money, and a broker that cannot answer it is a bug, not a paper account.
+        out["stats"] = self.stats()
+        return out
 
     def reset(self) -> None:
         with self._lock:

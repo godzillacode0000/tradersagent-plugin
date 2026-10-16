@@ -6,13 +6,15 @@
  * agent-side, invoked on request — nothing here lists them.
  *
  * Contributions:
- *   PLUGIN_PAGE       the landing the row opens: reveals the chart pane, hands the workspace
- *                     back to your open chat — leaves the session alone
+ *   PLUGIN_PAGE       the landing the row opens: reveals the chart pane, and puts the desk's own chat
+ *                     in front when the workspace has no chat of its own to return to (policy 1,
+ *                     16 Oct — see the desk-chat block below; the palette has the off switch)
  *   PANES_AREA        the chart itself, docked to the right of the conversation
  *   SIDEBAR_NAV_AREA  the row itself
  *   PALETTE_AREA      commands: open the console · reload the chart pane · toggle the reveal on
- *                     launch — all in-app; the operator's rule (24 Sep) is that this plugin
- *                     never leaves Hermes, so no command or button opens an external browser
+ *                     launch · toggle the desk chat on the row click — all in-app; the operator's
+ *                     rule (24 Sep) is that this plugin never leaves Hermes, so no command or button
+ *                     opens an external browser
  *   STATUSBAR_AREAS   a chip that opens the console on click, and does the launch reveal
  *
  * One console, one view: when the chart pane is on screen the page shows a short status card instead
@@ -70,6 +72,25 @@ const REVEAL_DELAY_MS = 1500
    operator rejected on 17 Sep — a fresh id is a fresh placement, contributed collapsed so it only
    opens when the row is clicked (his call, 19 Sep). */
 const PANE_ID = 'traders-desk:chart'
+
+/* ── the desk chat (16 Oct 2026) ──────────────────────────────────────────────────────────────────
+ * Until 22 Sep the row called a helper that jumped into the desk's own session on every click, which
+ * pulled the operator out of whatever he was writing; the row was made reveal-only in reaction. This
+ * restores the intent with two brakes (his call, 16 Oct — "policy 1 + 3"):
+ *
+ *   POLICY 1 — the desk chat opens only when the workspace has NO chat of its own in front (a cold
+ *              boot, a full page like Settings, a first ever click). A chat you are in is never
+ *              taken away; the chart just docks beside it, exactly as before.
+ *   POLICY 3 — the whole behaviour has an off switch in the palette, and the preference is stored,
+ *              so the 18 Sep arrangement is one command away.
+ *
+ * The session is minted once per install and remembered; its id is what the app routes sessions by.
+ */
+const DESK_KEY = 'deskSessionId'
+const DESK_PREF = 'deskChatOn'
+const DESK_TITLE = "Trader's Agent — desk"
+/* A stable key, so a retried create returns the SAME session instead of minting a twin. */
+const DESK_IDEMPOTENCY = 'traders-desk:desk-chat'
 
 const S = {
   page: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 },
@@ -155,6 +176,12 @@ function unmountPane() {
 let autoRevealOn = false      /* off by default: the pane opens on a click, not at boot */
 let autoRevealReady = Promise.resolve()   /* resolves once the stored choice is read, so the launch reveal never decides on a guess */
 let reveal_attempted = false
+
+/* The desk chat's own state: policy 3 is ON by default (only an explicit false turns it off), and
+   deskMint holds an in-flight create so two renders cannot mint two sessions. */
+let deskChatOn = true
+let deskChatReady = Promise.resolve()
+let deskMint = null
 
 /* ONE console, ONE view — and it lives in the PAGE.
    The docked pane that some builds carried is gone (operator's call, 17 Sep: "I click Trader's Agent
@@ -398,16 +425,106 @@ function revealChart() {
  *
  * One job: reveal the chart pane. This click IS the explicit user action that justifies it.
  *
- * It deliberately does NOT switch the chat. Until 22 Sep this called openDeskChat(), which jumped the
- * operator into the desk's own session (resolved by id, then by title) every time the row was
- * clicked — so pressing "Trader's Agent" pulled him out of the conversation he was having, which is
- * the "I have to go hunting for it" complaint. The row now leaves his session exactly where it was and
- * only puts the chart beside it; the agent in whatever chat he is already using can read the chart,
+ * It never takes a chat away. Until 22 Sep this called openDeskChat(), which jumped the operator into
+ * the desk's own session (resolved by id, then by title) on every click — so pressing "Trader's
+ * Agent" pulled him out of the conversation he was having, the "I have to go hunting for it"
+ * complaint. The row was made reveal-only in reaction. Policy 1 (16 Oct) restores the desk chat for
+ * the one case that complaint was not about: when NO chat of his is in front, there is nothing to
+ * take away and the desk's own session is where he should land. A chat in front is still left
+ * exactly where it was — and the agent in whatever chat he is using can read the chart either way,
  * because the tools are server-side and not scoped to the desk session.
  *
  * If the pane cannot be shown, the page renders the console itself — so a click never lands on an
  * empty page (which is exactly how the 17 Sep version failed).
  */
+/* ── the desk chat: mint it once, and open it only when the seat is empty ───────────────────────── */
+
+/** A line in ~/.hermes/logs/desktop.log — the only channel that survives a silent renderer. */
+function beacon(line) {
+  try { console.error('[traders-desk] ' + line) } catch (err) { /* no console: nothing to say */ }
+}
+
+function storedValue(key) {
+  if (!ctx_storage) return Promise.resolve(undefined)
+  try { return Promise.resolve(ctx_storage.get(key)).catch(() => undefined) } catch (err) { return Promise.resolve(undefined) }
+}
+
+function storeValue(key, value) {
+  if (!ctx_storage) return
+  try { Promise.resolve(ctx_storage.set(key, value)).catch(() => {}) } catch (err) { /* storage full or absent */ }
+}
+
+/**
+ * This user's desk session, minted once and remembered.
+ *
+ * `host.request` is the SDK's gateway JSON-RPC door, and `session.create` is the app's own way of
+ * minting a session: it answers with BOTH ids, and the STORED one is what the app routes and reopens
+ * by — the runtime id is gone after a restart, so it is deliberately not what we keep. The session
+ * lives in Hermes' own state, so it keeps its transcript across restarts; only its id is ours.
+ *
+ * Older builds (and the CI harness without a gateway) have no request door or no session.create:
+ * every step is guarded and failing any of them is a no-op, not an error — the row keeps the
+ * behaviour it had before this feature existed.
+ */
+function ensureDeskSession() {
+  if (deskMint) return deskMint
+  deskMint = (async () => {
+    try {
+      const known = await storedValue(DESK_KEY)
+      if (known) return known
+      if (typeof host.request !== 'function') {
+        beacon('desk: this build has no host.request door — the row stays reveal-only')
+        return null
+      }
+      const reply = await host.request('session.create', {
+        source: 'desktop',
+        title: DESK_TITLE,
+        idempotency_key: DESK_IDEMPOTENCY
+      })
+      const sid = reply && (reply.stored_session_id || reply.storedSessionId)
+      if (!sid) {
+        beacon('desk: session.create answered without a stored id')
+        return null
+      }
+      storeValue(DESK_KEY, sid)
+      beacon('desk: minted ' + sid)
+      return sid
+    } catch (err) {
+      beacon('desk: session.create failed — ' + String((err && err.message) || err))
+      return null
+    } finally {
+      deskMint = null
+    }
+  })()
+  return deskMint
+}
+
+/**
+ * Policy 1: put the desk chat in front ONLY when the workspace has no chat of its own.
+ *
+ * `focused` is the focused stored session id at the moment of the click. Truthy means the operator
+ * is in a conversation (or one is on screen) — that is the 22 Sep case, and this must not take it
+ * away. Falsy means nothing of theirs is in front, which is exactly when landing in the desk is the
+ * help, not the theft. Returns whether the desk chat was opened.
+ */
+async function openDeskChatWhenEmpty(focused) {
+  if (focused || !deskChatOn) return false
+  if (typeof host.openSession !== 'function') {
+    beacon('desk: this build has no host.openSession door — the row stays reveal-only')
+    return false
+  }
+  const sid = await ensureDeskSession()
+  if (!sid) return false
+  try {
+    await host.openSession(sid, { intent: 'in-place' })
+    beacon('desk: opened ' + sid)
+    return true
+  } catch (err) {
+    beacon('desk: openSession failed — ' + String((err && err.message) || err))
+    return false
+  }
+}
+
 /* Leave the row's route after every click — to the focused chat, or a fresh one when there is none.
    Staying on /traders-agent meant the next click hit the SAME path, the page did not remount, and the
    row could not act as a switch (measured 3 Oct: second click did nothing). */
@@ -465,7 +582,22 @@ function TradersDeskPage() {
   const sid = useValue(host.state && host.state.focusedStoredSessionId)
   useEffect(() => {
     if (!paneUp) return
-    backToChat(sid)
+    /* A chat of his own is in front: leave it exactly where it is (the 22 Sep rule). */
+    if (sid) {
+      backToChat(sid)
+      return undefined
+    }
+    /* Nothing of his is in front: policy 1 says land in the desk's own chat. If that cannot happen
+       (the preference is off, or the build has no session door), fall back to the pre-16-Oct bounce
+       to a fresh chat — never left sitting on /traders-agent, which is what broke the 3 Oct switch.
+       deskChatReady is waited on first: deciding before the stored preference is read would guess
+       (the same reason the launch reveal waits on its own read). */
+    let live = true
+    deskChatReady
+      .then(() => openDeskChatWhenEmpty(sid))
+      .then((opened) => { if (live && !opened) backToChat(null) })
+      .catch(() => { if (live) backToChat(null) })
+    return () => { live = false }
   }, [paneUp, sid])
 
   /* Closed by this click: hand the workspace back to the chat, same bounce as the open path. */
@@ -552,6 +684,20 @@ function PaneHint({ onRetry }) {
   })
 }
 
+/**
+ * What the row does with the desk chat right now — stated on the card, because a preference nobody
+ * can see is a preference nobody trusts. Read at render (not reactive): the palette command toggles
+ * it with a toast, and the next mount repaints this line.
+ */
+function deskChatLine() {
+  if (!deskChatOn) {
+    return 'Desk chat: off — the row leaves your chat exactly where it is (⌘K: “Trading: toggle the ' +
+      'desk chat on row click”).'
+  }
+  return 'Desk chat: on — when no chat is in front, the row opens Trader’s Agent’s own chat; a chat ' +
+    'you are in is left alone.'
+}
+
 /** Shown when the chart is already docked right: the chat owns the left, and this says so. */
 function ChartDocked({ note }) {
   return jsxs('div', {
@@ -565,6 +711,7 @@ function ChartDocked({ note }) {
           'library_search) and commands land in tens of milliseconds.'
       }),
       jsx('div', { style: S.cardNote, children: note }),
+      jsx('div', { style: S.cardNote, children: deskChatLine() }),
       jsxs('div', {
         style: S.cardActions,
         children: [
@@ -621,6 +768,12 @@ export default {
       autoRevealReady = Promise.resolve(ctx.storage.get('autoReveal'))
         .then((value) => {
           autoRevealOn = value === true      /* only an explicit yes: a missing value is "off", as the README says */
+        })
+        .catch(() => {})
+      /* The desk chat is the opposite: ON unless it was explicitly turned off (policy 3). */
+      deskChatReady = Promise.resolve(ctx.storage.get(DESK_PREF))
+        .then((value) => {
+          deskChatOn = value !== false
         })
         .catch(() => {})
     }
@@ -725,6 +878,30 @@ export default {
               message: autoRevealOn
                 ? 'The console will open by itself when the app starts.'
                 : 'Launch reveal is off — the row and the chip still open the console.'
+            })
+          }
+        }
+      },
+      {
+        /* Policy 3 (16 Oct): the off switch for the desk chat, and the record of what the row does.
+           ON means "when no chat of yours is in front, land in the desk's own chat"; the chart always
+           docks right either way. */
+        id: 'toggleDeskChat',
+        area: PALETTE_AREA,
+        data: {
+          id: 'tradingDesk.deskChat',
+          label: 'Trading: toggle the desk chat on row click',
+          keywords: ['trading', 'trader', 'desk', 'chat', 'session', 'row', 'landing', 'composer'],
+          run: () => {
+            deskChatOn = !deskChatOn
+            storeValue(DESK_PREF, deskChatOn)
+            beacon('desk: preference ' + (deskChatOn ? 'on' : 'off'))
+            host.notify({
+              kind: 'info',
+              title: "Trader's Agent",
+              message: deskChatOn
+                ? 'The desk chat opens on the row click when no chat is in front of it.'
+                : 'The row leaves your chat exactly where it is — the chart still docks beside it.'
             })
           }
         }

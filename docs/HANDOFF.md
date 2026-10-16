@@ -47,7 +47,7 @@ native tools.
 
 Versions: Hermes Desktop 0.21.5, console `SERVER_VERSION = 1.0.0`. CI was red from
 28 Sep (`1f9d340`) to 2 Oct (`8df6e2e` — a stale MCP test only CI could see); green since `ab3708b`, and
-green on every ship below. **about 1,130 backend tests** (skips depend on `fastmcp`, node and a real Edge Stats engine; run the suite for the exact count), 8 plugin contributions across 5 areas.
+green on every ship below. **about 1,166 backend tests** (skips depend on `fastmcp`, node and a real Edge Stats engine; run the suite for the exact count), 9 plugin contributions across 5 areas.
 Shipped since this file was written: the paper broker (Phase 5), replay (6/6b), the top-bar one-door
 consolidation, the drawer as the single Library surface, and Phase 7 — three agent doors into Vela
 (`chart_drawing` 76 types / `chart_view` settings / `chart_marks`), 56 MCP tools (8 of them `edgestats_*`). 4 Oct: Edge Stats — the optional local engine, the sheet behind the `⋯` menu, the eight tools (see CHANGELOG; real Binance / Dukascopy downloads were never run from the build machine). Also 4 Oct: the top row
@@ -58,6 +58,11 @@ bars left | ✕, scrubber over the row, a date calendar behind the timestamp and
 whose spot persists) — with `--bars N` fixed to count minutes: the display timeframe
 writes "1M"/"30M" for minutes, and the old month branch clamped every bars-back start to the oldest
 bar ("9996 bars left" for `--bars 60`).
+16 Oct: **the desk sheet** — the paper account, the journal its fills keep and the prop-firm directory
+behind one ⋯ door ("Trader's desk"), replacing the old account popover (which had a balance but nowhere
+to put a win rate). The broker now records per-trade P&L with both legs' fees, so **sum(sell pnl) ==
+realized + the open positions' entry fees** — asserted in the tests — and the sheet prints — for a rate
+with no sample and ∞ for a profit factor with no loss. See `docs/desk-engineering-notes.md`.
 
 ---
 
@@ -67,7 +72,7 @@ bar ("9996 bars left" for `--bars 60`).
 flowchart TB
   subgraph SURFACE["Hermes Desktop · the operator's window"]
     ROW["Sidebar row: Trader's Agent"]
-    ROUTE["Route /traders-agent<br/>reveals the pane, session untouched"]
+    ROUTE["Route /traders-agent<br/>reveals the pane; opens the desk chat<br/>only when no chat is in front"]
     PANE["Pane traders-desk:chart<br/>iframe → 127.0.0.1:8787"]
     CHIP["Status chip"]
     PAL["Palette: open console · reload chart pane"]

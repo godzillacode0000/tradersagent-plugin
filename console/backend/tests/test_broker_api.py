@@ -184,8 +184,8 @@ class TheCard(unittest.TestCase):
 
     def test_the_account_is_reachable_from_the_more_menu(self):
         ws = (self.front / "workspace.js").read_text(encoding="utf-8")
-        self.assertIn("Paper account", ws)
-        self.assertIn("taBroker", ws)
+        self.assertIn("Trader's desk", ws)
+        self.assertIn("taDesk", ws)
 
     def test_posts_carry_the_console_token(self):
         """Live defect (3 Oct): Approve answered "missing console token". The page lives in an iframe where
@@ -205,16 +205,13 @@ class TheCard(unittest.TestCase):
         self.assertIsNotNone(m, "an offset literal keeps it clear of the axis")
         self.assertGreaterEqual(int(m.group(1)), 72, "the price axis is ~64px wide")
 
-    def test_the_account_popover_clears_the_axis_and_the_cards(self):
-        """Live defect (3 Oct): the popover at right:16px covered the price-axis labels. It sits on the LEFT of
-        the plot (clear of the ~48px drawing-tools column), so it can never meet the cards on the right."""
+    def test_the_popover_is_gone_and_its_styles_left_with_it(self):
+        """16 Oct: the account popover became the desk sheet (desk.css) — it could show a balance but had
+        nowhere to say what the account DID. Dead markup and dead styles both go; the cards stay."""
         css = (self.front / "styles.css").read_text(encoding="utf-8")
-        rule = re.search(r"\.ta-acct \{(.*?)\}", css, re.S).group(1)
-        self.assertNotRegex(rule, r"[^-]right:", "right-anchored = on the price axis")
-        m = re.search(r"left:\s*(\d+)px", rule)
-        self.assertIsNotNone(m)
-        self.assertGreaterEqual(int(m.group(1)), 56)
-        self.assertRegex(rule, r"top:\s*(9\d|1\d\d)px", "below the OHLC legend row")
+        self.assertNotRegex(css, r"(?m)^\.ta-acct", "the popover's rules are dead weight now")
+        self.assertNotIn("accountHtml", self.js)
+        self.assertIn("ta-order", css, "the order card it sat beside is not what left")
 
     def test_motion_is_transform_and_opacity_only_and_respects_reduced_motion(self):
         css = (self.front / "styles.css").read_text(encoding="utf-8")
