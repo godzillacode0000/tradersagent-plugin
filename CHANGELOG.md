@@ -20,6 +20,13 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   closed-trade line; a rate with no sample prints —, a profit factor with no losing trade prints ∞, and no rate
   ships without its N. 1,166 backend tests green (1 skipped, 71 files).
 
+### Fixed
+
+- **The README still claimed Linux-only.** macOS support shipped on 13 Oct (`docs/MACOS.md`, the repo venv,
+  `console/service-macos.sh` behind launchd), so the OS row, the service section and the platform bullet now
+  say Linux + macOS, name the launchd counterpart of the systemd unit, and link the Mac setup. Windows stays
+  out of scope, and `docs/HANDOFF.md`'s operator line now names both machines.
+
 ### Changed
 
 - **Vela 0.8.3 → 0.8.4** (`@luxalgo/vela`, published 13 Oct; vela-pinets moved with it, 0.2.15 → 0.2.16, the release built

@@ -49,7 +49,7 @@ MCP server) in one local web app — your chat session is left exactly where it 
 | **Network** | for LuxAlgo's MCP endpoint and the Binance data feed; with no market feed the chart stays empty (`chart_state` says `bars None`). The chart engine and Pine runtime are served locally |
 | **Node 20+** *(optional)* | only for [Edge Stats](#edge-stats--how-often-did-it-actually-happen) — `./install.sh --with-edge` installs LuxAlgo's engine (~300 MB with its dependencies) next to the console. Without it everything else works and the sheet explains what is missing |
 | **Preview resizer** *(optional)* | `libvips` (or ImageMagick, or `ffmpeg`) — see [Catalogue previews](#catalogue-previews-are-kept-on-your-machine). With none of them the console still shows every preview, just at the catalogue's original size |
-| **OS** | Linux — built and verified on Omarchy (Arch + Hyprland). macOS and Windows are out of scope. |
+| **OS** | Linux (built and verified on Omarchy / Arch + Hyprland) or **macOS** — Macs need the one-time venv + the launchd service; see [`docs/MACOS.md`](docs/MACOS.md). Windows is out of scope. |
 
 ## Install
 
@@ -123,6 +123,13 @@ WantedBy=default.target
 
 ```bash
 systemctl --user enable --now traders-agent.service
+```
+
+On macOS the same job is a launchd agent instead — one command, and it manages the venv
+interpreter itself (details in [`docs/MACOS.md`](docs/MACOS.md)):
+
+```bash
+./console/service-macos.sh install        # status · uninstall
 ```
 
 ## Using it
@@ -414,9 +421,10 @@ it from `http://127.0.0.1:8787/api/library/thumb`: **~5 ms warm instead of ~2 s*
   and the journal its fills keep (win rate, profit factor, the realised curve) are one surface — ⋯ → **Trader's desk**.
 - **The Library is non-commercial.** Its content is CC BY-NC-SA 4.0 — fine to read and cite here, not
   to resell or ship inside a paid product.
-- **Linux only, on purpose.** Built and verified on Omarchy (Arch + Hyprland) with Hermes Desktop.
-  macOS and Windows are out of scope, not merely untested: the ops story here is a systemd user unit
-  and a shell script, and the machine this desk was built for is the one running it.
+- **Linux and macOS.** Built and verified on Omarchy (Arch + Hyprland) and on a Mac mini with Hermes
+  Desktop (macOS; setup in [`docs/MACOS.md`](docs/MACOS.md) — a repo venv plus `console/service-macos.sh`,
+  the launchd counterpart of the systemd unit above). Everything here is stdlib Python and static JS, so
+  nothing else is platform-specific. **Windows is out of scope.**
 
 ## Development
 

@@ -2,8 +2,9 @@
 
 **Written for:** an outside agent/model picking this up cold (no access to the chat that built it).
 **Written by:** the previous agent session, 20 Sep 2026; **updated 4 Oct 2026**, repo `godzillacode0000/tradersagent-plugin` (this file lives at `docs/HANDOFF.md`; the exact commit is `git log -1`: a SHA typed here is stale the moment it is committed. Last full audit: 8 Oct 2026 over `3c2ad34`, see `CHANGELOG.md`).
-**Operator:** one user, Malay/English speaker, runs a single laptop (Omarchy/Arch, 8 GB RAM), drives it
-mostly from his phone over Telegram, wants short answers with commands explained plainly.
+**Operator:** one user, Malay/English speaker, runs it from two machines — the Omarchy laptop (Arch, 8 GB
+RAM) and a Mac mini (macOS; `docs/MACOS.md`) — and drives it mostly from his phone over Telegram, wanting
+short answers with commands explained plainly.
 
 ---
 
