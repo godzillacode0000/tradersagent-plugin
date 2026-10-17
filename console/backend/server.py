@@ -1332,9 +1332,11 @@ def _library_pairs(params: dict) -> list[tuple[str, str]]:
 
 
 WARM_PAGE_SIZE = 60
-# The card's own width: the modal takes the screen now, so a card is up to ~430 px wide and the
-# picture is asked for at 480. Warming a width nobody paints would just fill the disk twice.
-WARM_WIDTH = 480
+# The width the drawer's rows paint: `.drow__shot` is a 52×34 tile and drawer.js asks 160 for it, so
+# this is the same number — test_preview_cache pins them together. (The old full-screen modal's
+# ~430 px cards are gone; while this said 480 the warm cache held pictures nothing requested, and
+# every drawer open paid S3 ~1.4 s × sixty rows for its own width — measured 15 Oct.)
+WARM_WIDTH = 160
 # Guard rail, not a policy: the catalogue is 806 rows on this build, so 40 pages is room to grow.
 MAX_WARM_PAGES = 40
 # What the warmer is doing right now, for /api/library/thumbs. A cold machine warms the whole

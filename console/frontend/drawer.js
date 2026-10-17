@@ -107,6 +107,9 @@
     const isOn = !r.__native && on.includes(String(r.name || r.slug).trim().toLowerCase());
     const meta = r.__native ? ['built-in', r.cluster].filter(Boolean).join(' · ')
       : [famLabel(r.family || 'unfiled'), r.cluster].filter(Boolean).join(' · ');
+    /* 160 is not a taste: it is the width the boot warmer caches (server.py WARM_WIDTH), and
+       test_preview_cache pins the two numbers together. A mismatch is not a smaller picture — it is
+       every open paying S3 for all sixty rows (measured 15 Oct: 2.7 s to fill the first screen). */
     return `<li class="drow${running ? ' is-busy' : ''}${isOn ? ' is-on' : ''}" style="--i:${Math.min(i, 18)}" data-slug="${esc(r.slug)}">
       ${r.__native ? '<span class="drow__shot drow__shot--native" aria-hidden="true">ƒ</span>'
         : `<img class="drow__shot" src="${esc(thumbUrl(r.slug, r.image_url, 160))}" loading="lazy" decoding="async" alt="">`}

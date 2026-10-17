@@ -32,14 +32,17 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # Only LuxAlgo's own buckets are ever fetched: the URL arrives from the page, and a local tool that
-# fetches whatever it is handed is a hole, not a feature. Two of them show up in the catalogue —
-# the designed cards (`luxalgo-production`) and, for rows published before that pass, a raw screen
-# recording bucket whose keys contain SPACES (`luxalgo-images-production.s3.us-east-1.amazonaws.com`,
-# "Screenshot 2026-06-04 at 3.13.58 PM.png"). Measured 27 Sep: refusing the second host left four
-# cards on page one with no picture at all.
+# fetches whatever it is handed is a hole, not a feature. Three forms show up in the catalogue — the
+# designed cards (`luxalgo-production`), and the raw screen-recording bucket
+# (`luxalgo-images-production`) in both its regional form, whose keys contain SPACES
+# ("Screenshot 2026-06-04 at 3.13.58 PM.png"), and its global form. Measured 27 Sep: refusing the
+# regional form left four cards on page one with no picture. Measured 15 Oct: the global form was
+# still refused, and it is 104 of the 853 rows — eighteen per cent of the catalogue silently
+# picture-less, because a rejected host and an absent picture answer the same 404.
 ALLOWED_HOSTS = (
     "luxalgo-production.s3.amazonaws.com",
     "luxalgo-images-production.s3.us-east-1.amazonaws.com",
+    "luxalgo-images-production.s3.amazonaws.com",
 )
 MAX_BYTES = 4_000_000            # a card is ~30 KB; nothing legitimate here is bigger than a few MB
 
@@ -110,17 +113,39 @@ def cache_path(slug: str, url: str, width: int) -> Path:
     return CACHE_DIR / f"{_safe_slug(slug)}-{_tag(url)}-{_clamp(width)}.jpg"
 
 
+# A launchd/systemd service starts with a bare PATH, so `which` alone can miss a converter a login
+# shell finds (measured 17 Oct: the live service had none, and every thumb was the raw 1600×1000 PNG
+# — ~93 KB, ~2.6 s, and never cached, because the shrink is what writes the file). Two remedies:
+# TRADERS_AGENT_RESIZER names the converter explicitly (an absolute path or a command name), and the
+# usual absolute install dirs are probed when PATH does not answer.
+PROBE_DIRS = ("/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin")
+TEMPLATES = (
+    ("vips", ["vips", "thumbnail", "{src}", "{dst}", "{width}"]),
+    ("magick", ["magick", "{src}", "-resize", "{width}x", "-quality", "72", "{dst}"]),
+    ("convert", ["convert", "{src}", "-resize", "{width}x", "-quality", "72", "{dst}"]),
+    ("ffmpeg", ["ffmpeg", "-y", "-loglevel", "error", "-i", "{src}",
+                "-vf", "scale={width}:-1", "-q:v", "5", "{dst}"]),
+)
+
+
 def _converter() -> tuple[str, list[str]] | None:
     """The resizer this machine actually has, as (argv prefix, args template)."""
-    if shutil.which("vips"):
-        return "vips", ["vips", "thumbnail", "{src}", "{dst}", "{width}"]
-    if shutil.which("magick"):
-        return "magick", ["magick", "{src}", "-resize", "{width}x", "-quality", "72", "{dst}"]
-    if shutil.which("convert"):
-        return "convert", ["convert", "{src}", "-resize", "{width}x", "-quality", "72", "{dst}"]
-    if shutil.which("ffmpeg"):
-        return "ffmpeg", ["ffmpeg", "-y", "-loglevel", "error", "-i", "{src}",
-                          "-vf", "scale={width}:-1", "-q:v", "5", "{dst}"]
+    override = (os.environ.get("TRADERS_AGENT_RESIZER") or "").strip()
+    if override:
+        base = Path(override).name
+        for tool, template in TEMPLATES:
+            if base.startswith(tool):
+                return tool, [override, *template[1:]]
+    for tool, template in TEMPLATES:
+        exe = shutil.which(tool)
+        if not exe:
+            for d in PROBE_DIRS:
+                candidate = Path(d) / tool
+                if candidate.exists():
+                    exe = str(candidate)
+                    break
+        if exe:
+            return tool, [exe, *template[1:]]
     return None
 
 
