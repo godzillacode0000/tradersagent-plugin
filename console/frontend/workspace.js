@@ -437,6 +437,19 @@ state.ready = (async () => {
     console.warn('[workspace] restore from the console skipped:', err && err.message);
   }
 
+  /* The gridline preference, applied at boot (the door writes it; Vela's saved rendererConfig does
+     not carry it — measured 17 Oct: a reload brought the grid back). Same shape as readTheme(). */
+  try {
+    if (localStorage.getItem('luxalgo-web:gridlines') === '0') {
+      const chart0 = window.__wsApp.activeChart();
+      if (chart0 && chart0.renderer && typeof chart0.renderer.set === 'function') {
+        chart0.renderer.set('gridlines', false);
+      }
+    }
+  } catch (err) {
+    /* a preference, not a promise */
+  }
+
   window.dispatchEvent(new CustomEvent('ws-ready', { detail: { ws } }));
   return ws;
 })().catch((err) => {
