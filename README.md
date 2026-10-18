@@ -116,6 +116,9 @@ After=network-online.target
 ExecStart=%h/tradersagent-plugin/console/start.sh
 Restart=always
 WorkingDirectory=%h/tradersagent-plugin
+# Catalogue previews want an image converter (vips / ImageMagick / ffmpeg) and a service PATH
+# usually lacks one — name it here, or thumbnails are served at full size: slow, not wrong.
+# Environment=TRADERS_AGENT_RESIZER=/usr/bin/magick
 
 [Install]
 WantedBy=default.target
