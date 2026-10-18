@@ -233,10 +233,12 @@ function setOpen(on) {
       const data = await api('/api/source', { slug });
       if (!data.source) throw new Error('no Pine source for this script');
       await chartReady;
-      /* One study at a time: take OUR previous run off before this one lands. */
+      /* One study at a time: take OUR previous run off before this one lands — the CANVAS, that is.
+         The stored run keeps until the new one actually lands (unified.js reset { keep: true }): a
+         click on a script that fails to run must not cost the operator the indicator they had. */
       if (window.ChartOverlay) window.ChartOverlay.clear();
       if (window.PineTSPaint && window.PineTSPaint.clear) window.PineTSPaint.clear();
-      if (window.TraderRun.reset) window.TraderRun.reset();
+      if (window.TraderRun.reset) window.TraderRun.reset({ keep: true });
       const r = await window.TraderRun.run(data.source, label);
       if (!r.ok) {
         st.result[slug] = { ok: false, text: String(r.reason || 'did not run').slice(0, 90) };

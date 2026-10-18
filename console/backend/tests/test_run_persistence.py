@@ -31,9 +31,29 @@ class RunPersistence(unittest.TestCase):
         body = UNIFIED.split("function remember(", 1)[1].split("\n  }\n", 1)[0]
         self.assertIn("localStorage.setItem(RUN_KEY", body)
 
-    def test_reset_forgets_it(self):
-        body = UNIFIED.split("function reset()", 1)[1].split("\n  }\n", 1)[0]
+    def test_reset_forgets_it_only_when_asked(self):
+        body = UNIFIED.split("function reset(", 1)[1].split("\n  }", 1)[0]
         self.assertIn("localStorage.removeItem(RUN_KEY)", body)
+        # the drawer's Run flow clears the canvas while a new script lands; the stored run must
+        # survive that attempt (measured 18 Oct: a failed click cost the whole indicator)
+        self.assertIn("opts && opts.keep", body)
+
+    def test_a_bad_boot_does_not_delete_the_run(self):
+        body = UNIFIED.split("async function restore(", 1)[1].split("\n  }\n", 1)[0]
+        # three strikes, not one: a transient boot failure must not eat the operator's indicator
+        self.assertIn("saved.fails = (saved.fails || 0) + 1", body)
+        self.assertIn("saved.fails >= 3", body)
+        # a run outrun by a newer one is not a failure of the script
+        self.assertIn("superseded", body)
+
+    def test_the_drawer_keeps_the_stored_run_while_trying_a_new_one(self):
+        drawer = read("console/frontend/drawer.js")
+        self.assertIn("TraderRun.reset({ keep: true })", drawer)
+
+    def test_the_heartbeat_says_what_is_stored_for_restore(self):
+        bridge = read("console/frontend/chart-bridge.js")
+        self.assertIn("store: (() => {", bridge)
+        self.assertIn("luxalgo-web:last-run", bridge)
 
     def test_runner_exposes_restore(self):
         self.assertIn("async function restore(", UNIFIED)

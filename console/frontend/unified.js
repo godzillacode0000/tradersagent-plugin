@@ -523,28 +523,52 @@ window.TraderRun = (function () {
     return s;
   }
 
-  /* chart_clear clears the overlay — the legend and the badge must forget with it. */
-  function reset() {
+  /* chart_clear clears the overlay — the legend and the badge must forget with it. The STORE is a
+     different question: the drawer's Run clears the canvas BEFORE the next script lands, and when
+     that next script fails to land the old run is all the operator has left (measured 18 Oct — a
+     failed Library click left the pane with no indicator and nothing to restore). So reset()
+     forgets the stored run only when the clear is the operator's intent; a caller that is about to
+     try something new passes { keep: true }. */
+  function reset(opts) {
     applied.length = 0;
     announce();
-    try { localStorage.removeItem(RUN_KEY); } catch (err) { /* nothing stored */ }
+    if (!(opts && opts.keep)) { try { localStorage.removeItem(RUN_KEY); } catch (err) { /* nothing stored */ } }
     const legend = document.getElementById('script-legend');
     if (legend) { legend.hidden = true; legend.textContent = ''; legend.title = ''; }
   }
 
   /* Re-paint yesterday's run. Waits for bars (the chart fetches history after boot), runs once, and
-     never re-saves itself. A stored run that no longer lands is dropped so it cannot fail every boot. */
+     never re-saves itself. A stored run that no longer lands is dropped — but NOT on the first bad
+     boot. A pane can open while a restart is still settling, an engine worker is still waking, or
+     two page loads overlap (the pane loads the page twice on every toggle) — each of those fails
+     once without the script being wrong. Measured 18 Oct: a single failed boot deleted the
+     operator's indicator outright, and every later open had nothing left to restore. The run now
+     keeps a `fails` count and is dropped only after three CONSECUTIVE failed boots — enough to
+     ride out a transient, few enough that a broken script cannot toast every boot forever. A run
+     outrun by a newer one (superseded) is not a failure of the script and earns no strike. */
   async function restore() {
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(RUN_KEY) || 'null'); } catch (err) { saved = null; }
     if (!saved || !saved.pine) return { ok: false, reason: 'nothing to restore' };
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 120; i++) {
       const bars = (typeof window.chartBars === 'function') ? await window.chartBars() : [];
       if (bars && bars.length >= 30) break;
       await new Promise((r) => setTimeout(r, 500));
     }
     const r = await run(saved.pine, saved.name, Object.assign({}, saved.opts || {}, { restoring: true }));
-    if (!r.ok) { try { localStorage.removeItem(RUN_KEY); } catch (err) { /* ignore */ } }
+    try {
+      if (r.ok) {
+        saved.fails = 0;                     // a landing restore says the script is fine
+        localStorage.setItem(RUN_KEY, JSON.stringify(saved));
+      } else if (r.superseded) {
+        /* nothing to count: a newer run simply outran this one */
+      } else {
+        saved.fails = (saved.fails || 0) + 1;
+        saved.lastFail = { at: Date.now(), reason: String(r.reason || '').slice(0, 160) };
+        if (saved.fails >= 3) localStorage.removeItem(RUN_KEY);
+        else localStorage.setItem(RUN_KEY, JSON.stringify(saved));
+      }
+    } catch (err) { /* private mode: nothing to keep */ }
     return r;
   }
 

@@ -259,6 +259,18 @@
         layout: 'workspace',
         build: BUILD,              // the frontend files this frame loaded (see /api/build)
         viewer: VIEWER,            // which console instance this is — a stale frame says so
+        /* What the page has STORED for the next boot, read the way restore() reads it (18 Oct):
+           `studies` above says what is live; this says what will come back if the pane closes now.
+           The two disagreeing is exactly the state that used to be invisible until the operator
+           reopened the pane and found nothing. Never a mutation — a reader. */
+        store: (() => {
+          try {
+            const raw = localStorage.getItem('luxalgo-web:last-run');
+            if (!raw) return { run: null };
+            const s = JSON.parse(raw) || {};
+            return { run: String(s.name || '').slice(0, 60) || null, at: s.at || null, fails: s.fails || 0 };
+          } catch (err) { return { run: 'unreadable' }; }
+        })(),
         /* Why the heartbeat reads what it reads: after the workspace swap a page can fall back to the
            bare chart and still look healthy (the pane paints, the bridge says "—"), so the reason is
            part of the state instead of a guess. */

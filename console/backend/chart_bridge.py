@@ -154,6 +154,11 @@ def _save_state(root: str | Path, payload: dict) -> dict:
                      if isinstance(a, (str, bytes)) and str(a).strip()]
                     if isinstance(payload.get("actions"), (list, tuple)) else []),
         "timeframe_reported": payload.get("timeframe_reported"),
+        # What the page has STORED for its next boot (frontend/chart-bridge.js): the one run the
+        # overlay can bring back. `studies` above is what is live; this is what survives a pane
+        # close. The two disagreeing used to be invisible until the operator reopened the pane and
+        # found nothing (18 Oct), so the page publishes it and it rides the state like the rest.
+        "store": payload.get("store"),
         # The page's own explanation of why it reads what it reads (workspace ready? cells? the error
         # that dropped it to the bare chart?). Passthrough, never interpreted here — a heartbeat that
         # says "—" with a healthy pane is exactly the case this exists to end.
