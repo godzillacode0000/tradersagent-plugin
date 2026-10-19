@@ -192,7 +192,14 @@ class MCPUnavailable(ApiError):
 
 
 class TTLCache:
-    """Tiny thread-safe LRU-ish TTL cache. Errors are never stored here."""
+    """Tiny thread-safe LRU-ish TTL cache. Errors are never stored here.
+
+    Two deadlines per entry (19 Oct latency pass): `fresh_at` is when the value is due a refresh,
+    `keep_at` is when it is finally dropped. Between the two the entry may be served STALE while one
+    background refresh runs (see `mcp_call`) — that is what stops a read after a pause from paying the
+    WAN round trip again. `get` keeps its old meaning (fresh hits only); `get_stale` is the reader the
+    revalidating path uses.
+    """
 
     def __init__(self, max_entries: int = CACHE_MAX_ENTRIES):
         self._data: OrderedDict = OrderedDict()
@@ -208,20 +215,44 @@ class TTLCache:
             if item is None:
                 self.misses += 1
                 return None
-            expires, value = item
-            if expires < now:
+            fresh_at, keep_at, value = item
+            if keep_at < now:
                 del self._data[key]
                 self.misses += 1
+                return None
+            if fresh_at < now:
+                self.misses += 1          # stale: still kept for get_stale, but not a hit
                 return None
             self._data.move_to_end(key)
             self.hits += 1
             return value
 
-    def set(self, key, value, ttl: float):
+    def get_stale(self, key):
+        """(value, fresh) — the value even past its refresh deadline; None once past `keep`."""
+        now = time.monotonic()
+        with self._lock:
+            item = self._data.get(key)
+            if item is None:
+                self.misses += 1
+                return None
+            fresh_at, keep_at, value = item
+            if keep_at < now:
+                del self._data[key]
+                self.misses += 1
+                return None
+            self._data.move_to_end(key)
+            if fresh_at >= now:
+                self.hits += 1
+                return value, True
+            return value, False
+
+    def set(self, key, value, ttl: float, keep: float | None = None):
+        """ttl: when it is due a refresh. keep: when it is dropped (defaults to ttl)."""
         if ttl <= 0:
             return
+        now = time.monotonic()
         with self._lock:
-            self._data[key] = (time.monotonic() + ttl, value)
+            self._data[key] = (now + ttl, now + max(ttl, keep or ttl), value)
             self._data.move_to_end(key)
             while len(self._data) > self._max:
                 self._data.popitem(last=False)
@@ -244,21 +275,36 @@ CATALOGUE_PAGE = 100
 CATALOGUE_MAX_PAGES = 20
 CATALOGUE_TTL = 12 * 3600
 
-# Per-endpoint TTLs (seconds). 500ms-2s as required.
+# Per-endpoint TTLs (seconds): when a cached answer is due a REFRESH — not when it dies. Past this the
+# answer is served once more (instantly) while one background refresh runs, stale-while-revalidate; see
+# mcp_call. The old 1.5–2 s table made every click after a short pause a fresh WAN round trip to
+# LuxAlgo's MCP (measured 19 Oct: 0.45–0.68 s per call, and the drawer's first open cost 3.4 s).
 TTL = {
-    "search": 1.5,
-    "indicators": 2.0,
-    "indicator": 2.0,
-    "source": 2.0,
-    "concept": 2.0,
-    "families": 2.0,
-    "concepts": 2.0,
-    "edge_presets": 2.0,
-    "edge_report": 1.0,
-    "edge_symbols": 2.0,
-    "propfirms": 2.0,
-    "offers": 2.0,
+    "search": 30.0,        # one query's results; the Library gains scripts on a scale of days
+    "indicators": 600.0,   # catalogue pages (the catalogue itself keeps its own 12 h disk copy)
+    "indicator": 900.0,    # one indicator's sheet
+    "source": 3600.0,      # an indicator's Pine source: immutable in practice
+    "concept": 3600.0,
+    "families": 3600.0,
+    "concepts": 3600.0,
+    "edge_presets": 3600.0,
+    "edge_report": 300.0,  # a measured report: deterministic given its data
+    "edge_symbols": 900.0,
+    "propfirms": 1800.0,
+    "offers": 300.0,       # promos do move; half an hour is the concession
 }
+
+# How long past its refresh deadline a cached answer may still be SERVED while a refresh runs behind
+# it. Twenty refresh periods, floored at ten minutes and capped at six hours: generous, because the
+# refresh is started on the same read and usually lands in under a second — the long tail only exists
+# so a flapping upstream degrades into "slightly old numbers", not "the drawer waits".
+STALE_KEEP_FACTOR = 20
+STALE_KEEP_MIN = 600.0
+STALE_KEEP_MAX = 6 * 3600.0
+
+
+def _keep_for(ttl: float) -> float:
+    return min(max(ttl * STALE_KEEP_FACTOR, STALE_KEEP_MIN), STALE_KEEP_MAX)
 
 
 # --------------------------------------------------------------------------
@@ -495,17 +541,54 @@ class MCPBridge:
 BRIDGE: MCPBridge = MCPBridge(DEFAULT_MCP_URL)
 
 
+# One background refresh per key at a time. The reader that noticed the staleness already has its
+# answer; this set only stops five concurrent readers from each starting their own refresh.
+_REFRESHING: set = set()
+_REFRESH_LOCK = threading.Lock()
+
+
+def _refresh_behind(tool: str, args: dict, ctx_key: str, cache_key, ttl: float) -> None:
+    """Re-fetch one key off the request path (stale-while-revalidate's second half)."""
+    with _REFRESH_LOCK:
+        if cache_key in _REFRESHING:
+            return
+        _REFRESHING.add(cache_key)
+
+    def run():
+        try:
+            call_args = dict(args)
+            call_args["context"] = CONTEXT[ctx_key]
+            payload, raw = BRIDGE.call(tool, call_args)
+            CACHE.set(cache_key, (payload, raw), ttl, keep=_keep_for(ttl))
+        except Exception as exc:  # noqa: BLE001 - the stale copy stays; the next read tries again
+            log(f"background refresh of '{tool}' failed: {type(exc).__name__}: {exc}")
+        finally:
+            with _REFRESH_LOCK:
+                _REFRESHING.discard(cache_key)
+
+    threading.Thread(target=run, name="mcp-refresh", daemon=True).start()
+
+
 def mcp_call(tool: str, args: dict, ctx_key: str, cache_key, ttl: float) -> tuple:
-    """Cached bridge call. Returns (payload, raw_text, cached_bool)."""
+    """Cached bridge call. Returns (payload, raw_text, cached_bool).
+
+    Stale-while-revalidate (19 Oct): a fresh entry answers directly; an entry past its TTL still
+    answers — instantly, flagged cached — and one background refresh is started so the NEXT reader
+    gets a fresh one. Only a true miss waits on the bridge. That is the difference between a drawer
+    click costing 0 ms after a pause instead of a 0.45 s WAN round trip.
+    """
     if cache_key is not None:
-        hit = CACHE.get(cache_key)
+        hit = CACHE.get_stale(cache_key)
         if hit is not None:
-            return hit[0], hit[1], True
-    args = dict(args)
-    args["context"] = CONTEXT[ctx_key]
-    payload, raw = BRIDGE.call(tool, args)
+            (payload, raw), fresh = hit
+            if not fresh:
+                _refresh_behind(tool, args, ctx_key, cache_key, ttl)
+            return payload, raw, True
+    call_args = dict(args)
+    call_args["context"] = CONTEXT[ctx_key]
+    payload, raw = BRIDGE.call(tool, call_args)
     if cache_key is not None:
-        CACHE.set(cache_key, (payload, raw), ttl)
+        CACHE.set(cache_key, (payload, raw), ttl, keep=_keep_for(ttl))
     return payload, raw, False
 
 
@@ -764,6 +847,36 @@ def _stale(saved: dict, ttl: float) -> bool:
         return (time.time() - float(saved.get("fetched_at") or 0)) > ttl
     except (TypeError, ValueError):
         return True
+
+
+def warm_catalogue(wait_for_bridge: float = 60.0) -> None:
+    """Walk the catalogue once, in the background, when the disk copy is missing or past its TTL.
+
+    The walk is nine-plus serial MCP calls (16.5 s measured cold on 19 Oct) and every drawer open
+    after the 12 h TTL used to pay it on the operator's click. Warm it while nobody is looking; a
+    reader that arrives during the walk waits on the same lock and then finds it on disk (BE-11's
+    contract, unchanged). Fails soft: no MCP session, no warm, one log line.
+    """
+    path = os.path.join(AGENTS_ROOT, "catalogue.json")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            saved = json.load(fh)
+        if isinstance(saved, dict) and saved.get("rows") and not _stale(saved, CATALOGUE_TTL):
+            return
+    except (OSError, ValueError):
+        pass
+    deadline = time.time() + wait_for_bridge
+    while time.time() < deadline and not BRIDGE.connected:
+        time.sleep(2.0)
+    if not BRIDGE.connected:
+        log("catalogue warm skipped: no MCP session")
+        return
+    try:
+        started = time.time()
+        ep_catalogue({})
+        log(f"catalogue warm done in {time.time() - started:.1f}s")
+    except Exception as exc:  # noqa: BLE001 - a warm that fails is a warm that never happened
+        log(f"catalogue warm failed: {type(exc).__name__}: {exc}")
 
 
 def ep_indicator(params: dict) -> dict:
@@ -1652,6 +1765,37 @@ API_INDEX = {
 # Static file serving
 # --------------------------------------------------------------------------
 
+# A name that carries its own content hash can be cached forever — a new build is a new name. Vela's
+# bundler emits `chunk-UNUVPQFW.js` (eight uppercase alphanumerics), and the uppercase-only shape is
+# what keeps this rule away from the app's own lowercase names (`script-highlight.js`, `chart-bridge.js`
+# — nine and six letters after the dash, and they must stay revalidated because they change per commit).
+_HASHED_NAME = re.compile(r"-[A-Z0-9]{8,12}\.(?:js|mjs|css)$")
+
+
+def static_cache_control(name: str) -> str:
+    """The Cache-Control for one static file (19 Oct latency pass).
+
+    Before this, EVERY static response said `no-store` — so each pane open re-downloaded the whole
+    vendored graph (180 assets, 7.2 MB measured) and V8's code cache was never reusable.
+    """
+    if name == "index.html":
+        return "no-store"        # the document must always be the current build
+    if _HASHED_NAME.search(name):
+        return "public, max-age=31536000, immutable"
+    return "no-cache"            # revalidate: a 304 reuses the bytes AND the compiled script
+
+
+def _etag_matches(header: str | None, etag: str) -> bool:
+    """If-None-Match with comma-separated tags and `*`. Our tags are strong, so exact matches only."""
+    if not header:
+        return False
+    for part in header.split(","):
+        part = part.strip()
+        if part == "*" or part == etag:
+            return True
+    return False
+
+
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".htm": "text/html; charset=utf-8",
@@ -2430,14 +2574,33 @@ class Handler(BaseHTTPRequestHandler):
 
         ext = os.path.splitext(target)[1].lower()
         ctype = CONTENT_TYPES.get(ext) or "application/octet-stream"
+        name = os.path.basename(target)
+        cache = static_cache_control(name)
+        try:
+            stat = os.stat(target)
+        except OSError as exc:
+            self._fail(f"Could not read {target}: {exc}", 500, "io_error", head_only=head_only)
+            return
+        # A weak-in-form-but-stable tag: mtime + size changes whenever the file does, costs no read, and
+        # lets a reload revalidate everything for ~1 ms instead of re-downloading it (see static_cache_control).
+        etag = f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
+        if cache != "no-store" and _etag_matches(self.headers.get("If-None-Match"), etag):
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", cache)
+            for key, value in self._cors_headers().items():
+                self.send_header(key, value)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            return
         try:
             with open(target, "rb") as handle:
                 body = handle.read()
         except OSError as exc:
             self._fail(f"Could not read {target}: {exc}", 500, "io_error", head_only=head_only)
             return
-        extra = {"Cache-Control": "no-store"}
-        if os.path.basename(target) == "index.html":
+        extra = {"Cache-Control": cache, "ETag": etag}
+        if name == "index.html":
             # The page's own POSTs carry this cookie; a cross-site request never does (SameSite=Strict). A LAN peer is
             # not handed it either (see _session_ok).
             if self._peer_is_local() or ALLOW_LAN:
@@ -2650,6 +2813,10 @@ def main(argv=None) -> int:
                 log(f"WARNING: MCP session not ready after {MCP_CONNECT_WAIT:.0f}s "
                     f"({BRIDGE.last_error}); the server will keep retrying in the background")
         threading.Thread(target=connect_mcp, name="mcp-connect", daemon=True).start()
+
+        # The catalogue's cold walk belongs to nobody's click (19 Oct): warm it in the background as
+        # soon as a session exists, so the first drawer open of the day is a disk read.
+        threading.Thread(target=warm_catalogue, name="catalogue-warm", daemon=True).start()
 
     # `systemctl stop` sends SIGTERM, which used to end the process with no cleanup (the Edge Stats engine was
     # left running). Treat it like Ctrl-C so the finally block below runs.

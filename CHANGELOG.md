@@ -18,7 +18,7 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   − the entry fee's share for that qty, with the entry fee carried on the position until a sale attributes it — so
   **sum(sell pnl) == realized + the open positions' entry fees**, asserted in the tests. `broker_state` reports the
   closed-trade line; a rate with no sample prints —, a profit factor with no losing trade prints ∞, and no rate
-  ships without its N. 1,166 backend tests green (1 skipped, 71 files).
+  ships without its N. 1,187 backend tests green (1 skipped, 72 files).
 
 ### Fixed
 
@@ -29,6 +29,18 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Changed
 
+- **The latency pass** (19 Oct): three measured causes of "the chart loads slowly", each fixed where it lived.
+  *Static files said `Cache-Control: no-store`* — so every pane open re-downloaded the whole vendored graph
+  (180 assets, 7.2 MB measured) and V8's code cache could never help. Now: `index.html` stays `no-store`
+  (a new build must always land), content-hashed chunks (`chunk-UNUVPQFW.js`) are `immutable`, everything else
+  revalidates with an `ETag` — a 304 costs 0.7 ms and re-sends nothing (verified live). *Library reads re-asked
+  upstream every 1.5–2 s* (0.45–0.68 s per WAN round trip measured) — the TTLs are now when an answer is due a
+  REFRESH, and past it the answer is served instantly while one background refresh runs (stale-while-revalidate,
+  single-flight, and a failing refresh never takes the stale read with it). *The catalogue's cold walk (16.5 s,
+  nine-plus serial MCP calls) belonged to whoever opened the drawer first* — the server now warms it in the
+  background at start-up when the disk copy is missing or past its 12 h TTL. `test_latency_and_cache.py` holds
+  all three, plus their edges: app files must keep revalidating (`script-highlight.js` may not be frozen for a
+  year by a sloppy hash rule) and the warm must never walk when the copy is fresh.
 - **Vela 0.8.3 → 0.8.4** (`@luxalgo/vela`, published 13 Oct; vela-pinets moved with it, 0.2.15 → 0.2.16, the release built
   against it — it still inlines PineTS 0.11.0, so the patched PineTS fork below is untouched). The vendored copy of 0.8.3 was
   an exact tarball subset, byte for byte, and so is this one: the ES modules, the Binance / Coinbase / Hyperliquid providers
