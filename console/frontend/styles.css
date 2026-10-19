@@ -1146,6 +1146,19 @@ pre {
 }
 .statusbar.has-stale { display: flex; }   /* a stale frame is worth showing the bar for */
 
+/* The passive-view banner (19 Oct): this console is alive but another view owns the desk. Same
+   shape as the stale pill — a state, not a message; the button inside takes the desk back. */
+.passive-view {
+  align-items: center; gap: 4px; cursor: pointer;
+  margin-inline-start: 10px; padding: 1px 8px; border-radius: 999px;
+  color: var(--lx-warn); border: 1px solid currentColor; background: none;
+  font: inherit; font-size: 11px; line-height: 1.5;
+}
+.passive-view[hidden] { display: none; }
+.passive-view b { text-decoration: underline; text-underline-offset: 2px; }
+.passive-view:hover, .passive-view:focus-visible { color: var(--lx-fg-bright); }
+.statusbar.has-passive { display: flex; }  /* a passive view is worth showing the bar for */
+
 /* `hidden` has to mean hidden. A `<button class="btn">` carries an author `display`, and an author
    `display` beats the UA sheet's `[hidden]` — so a hidden control kept painting under a list that
    had its own doors (found in a screenshot, not in the code). */

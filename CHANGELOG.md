@@ -6,6 +6,17 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **The desk has one owner, and commands are routed to it** (19 Oct). Several console views can be
+  alive at once (the Hermes pane, a second tab, a standalone window) and the old rule was "first claim
+  wins" — so a background tab with no bars could consume a command and answer "the chart did not
+  answer … within 45s" while the operator's pane stood ready. The owner is now decided from the
+  heartbeats: **the newest visible view with bars**; a hidden or bar-less view can never take the desk
+  from a working one. A view that is not the owner executes nothing and shows a passive banner —
+  "Another desk view is driving the chart — **use this view**" — whose button takes the desk back
+  deliberately. `chart_commands` names the owner, the claim door refuses non-owners with a reason, and
+  a pane with no view record keeps the old single-view behaviour. The plugin's frame watchdog also
+  stops prompting a remount when no pane is mounted (a closed pane is not a dead frame).
+  Suite 1,207 tests OK (1 skipped, 73 files).
 - **The desk sheet — the paper account, its journal and the prop-firm directory in one surface** (16 Oct). ⋯ →
   "Trader's desk" opens three views: **Paper** (equity, cash, realised, open P&L, positions with marks, recent
   fills, Reset), **Journal** (net P&L, win rate, profit factor, avg win/loss, the realised-equity curve on a

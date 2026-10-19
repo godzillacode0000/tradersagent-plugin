@@ -71,6 +71,8 @@ from chat import run_agent
 from chart_bridge import (save_state as save_chart_state, load_state as load_chart_state,
                           enqueue as enqueue_chart_command,
                           commands_since as chart_commands_since,
+                          owner_of as chart_owner,
+                          take_ownership as chart_take_ownership,
                           record_result as record_chart_result, get_result as get_chart_result)
 from chart_stream import ChartStream
 import edgestats
@@ -1380,9 +1382,13 @@ def ep_bars(params: dict) -> dict:
 
 
 def ep_chart_commands(params: dict) -> dict:
-    """Commands the chart page has not executed yet (it passes the last id it handled)."""
+    """Commands the chart page has not executed yet (it passes the last id it handled).
+
+    `owner` rides along (19 Oct): the view the desk belongs to, decided from the heartbeats. A page
+    that is not the owner shows its passive banner instead of executing — routing, not a race.
+    """
     since = _int_param(params, "since")
-    return {"commands": chart_commands_since(AGENTS_ROOT, since)}
+    return {"commands": chart_commands_since(AGENTS_ROOT, since), "owner": chart_owner(AGENTS_ROOT)}
 
 
 def ep_chart_result(params: dict) -> dict:
@@ -2304,13 +2310,30 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/chart/claim":
                 # Several consoles can be alive at once (the Hermes pane, the HUD's pane, a browser
-                # tab). They all get the same push, so one of them must win the right to execute it.
+                # tab). They all get the same push, so one of them must win the right to execute it —
+                # and since 19 Oct the winner is ROUTED, not raced: the desk's owner is the newest
+                # visible heartbeat with bars (see chart_bridge._owner_from_views). A view that is not
+                # the owner is refused with the owner's id, which is what its passive banner shows.
                 try:
                     rid = int(payload.get("id"))
                 except (TypeError, ValueError, OverflowError):
                     raise ApiError("claim needs the integer id of a command", 400, "bad_request") from None
                 viewer = str(payload.get("viewer") or "")
-                self._ok({"id": rid, "claimed": STREAM.claim(rid, viewer, once=STREAM.is_once(rid)), "viewer": viewer})
+                owner = chart_owner(AGENTS_ROOT)
+                if owner and viewer and owner != viewer:
+                    self._ok({"id": rid, "claimed": False, "viewer": viewer, "owner": owner,
+                              "reason": "another desk view owns the chart"})
+                    return
+                self._ok({"id": rid, "claimed": STREAM.claim(rid, viewer, once=STREAM.is_once(rid)),
+                          "viewer": viewer, "owner": owner or viewer})
+                return
+            if path == "/api/chart/owner":
+                # The passive banner's button: "use this view". Deliberate, so it outranks the
+                # newest-heartbeat rule until another view's heartbeat or claim moves it again.
+                viewer = str(payload.get("viewer") or "")
+                if not viewer:
+                    raise ApiError("owner needs a viewer id", 400, "bad_request")
+                self._ok({"owner": chart_take_ownership(AGENTS_ROOT, viewer), "viewer": viewer})
                 return
             self._fail(f"Unknown endpoint '{path}'", HTTPStatus.NOT_FOUND, "unknown_endpoint")
         except ApiError as exc:

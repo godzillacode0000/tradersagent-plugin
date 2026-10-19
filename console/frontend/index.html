@@ -238,6 +238,11 @@
     <!-- Phase 1.3 — a stale legend is not a message, it is a state: the chart is drawing studies the
          console cannot name. It stays until the frame is reloaded, so it gets its own slot. -->
     <span id="stale-legend" class="stale-legend" title=""></span>
+    <!-- Passive view (19 Oct): this console is alive, but ANOTHER view owns the desk — the backend
+         routes commands to the owner (newest visible heartbeat with bars), and a view that is not
+         the owner executes nothing. The button takes the desk back deliberately. -->
+    <button type="button" id="passive-view" class="passive-view" hidden
+            title="Another view is driving the chart — click to use this view instead">Another desk view is driving the chart — <b>use this view</b></button>
     <span id="toast" class="toast" role="status"></span>
   </footer>
 </div>

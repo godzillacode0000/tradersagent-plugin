@@ -293,6 +293,7 @@ function startChartWatchdog() {
       if (!at) return                          // nothing ever painted: not ours to fix
       const age = Date.now() / 1000 - at
       if (age <= WATCHDOG_DEAD_S) return
+      if (!paneReloaders.size) return          // nothing mounted here: a closed pane, not a dead frame
       if (Date.now() - watchdogLastBump < 60000) return
       watchdogLastBump = Date.now()
       console.warn('[traders-desk] chart frame silent for ' + Math.round(age) + 's — remounting the pane')
