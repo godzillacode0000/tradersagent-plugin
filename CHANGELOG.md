@@ -6,6 +6,20 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **The prop-firm simulator is wired in** (19 Oct): LuxAlgo's `@luxalgo/prop-firm-sim-cli` (MIT) runs
+  locally and the desk sheet's Prop-firms view grows a **Simulate** button on every challenge. The
+  card is the engine's own answer, verbatim: pass probability per attempt with its Wilson 95% CI,
+  per-step rates with min-days and the failing rule counts, funded-within-N, attempts, expected cost,
+  days to funded, payout probability, blow-up risk and the EV block — plus the engine's disclaimer,
+  simplification flags and its **engine version, paths and seed** (same inputs, same numbers). The
+  form (win rate, avg win/loss in R, risk per trade, trades per day) feeds the CLI's parametric model;
+  the engine's own rules come from LuxAlgo's public directory, keyless, at run time. New
+  `console/backend/propfirmsim.py` (the Edge Stats bridge pattern: subprocess, JSON, cached by
+  identical question), `/api/propfirmsim/status` and `/api/propfirmsim/simulate`, and
+  `./install.sh --with-prop` installs the engine (Node 20+, ~10 MB) with the same prove-it-starts
+  rule the Edge Stats block uses. A machine without it gets the install command, not an error.
+  Suite 1,218 tests OK (1 skipped, 74 files).
+
 - **The desk has one owner, and commands are routed to it** (19 Oct). Several console views can be
   alive at once (the Hermes pane, a second tab, a standalone window) and the old rule was "first claim
   wins" — so a background tab with no bars could consume a command and answer "the chart did not

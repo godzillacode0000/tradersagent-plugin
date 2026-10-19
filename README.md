@@ -47,7 +47,7 @@ MCP server) in one local web app — your chat session is left exactly where it 
 | **Hermes Desktop** | v0.21.3 or newer (the plugin uses the `sidebar.nav` + `routes` contribution areas) |
 | **Python** | 3.11+ with the `mcp` client: `pip install mcp` (a venv is fine — point `PY=` at it) |
 | **Network** | for LuxAlgo's MCP endpoint and the Binance data feed; with no market feed the chart stays empty (`chart_state` says `bars None`). The chart engine and Pine runtime are served locally |
-| **Node 20+** *(optional)* | only for [Edge Stats](#edge-stats--how-often-did-it-actually-happen) — `./install.sh --with-edge` installs LuxAlgo's engine (~300 MB with its dependencies) next to the console. Without it everything else works and the sheet explains what is missing |
+| **Node 20+** *(optional)* | for [Edge Stats](#edge-stats--how-often-did-it-actually-happen) (`./install.sh --with-edge`, ~300 MB) and the prop-firm simulator (`./install.sh --with-prop`, ~10 MB) — both LuxAlgo engines, both local. Without them everything else works and each sheet says what is missing |
 | **Preview resizer** *(optional)* | `libvips` (or ImageMagick, or `ffmpeg`) — see [Catalogue previews](#catalogue-previews-are-kept-on-your-machine). With none of them the console still shows every preview, just at the catalogue's original size |
 | **OS** | Linux (built and verified on Omarchy / Arch + Hyprland) or **macOS** — Macs need the one-time venv + the launchd service; see [`docs/MACOS.md`](docs/MACOS.md). Windows is out of scope. |
 
@@ -61,6 +61,9 @@ cd tradersagent-plugin
 ./install.sh              # the plugin -> ~/.hermes/desktop-plugins/traders-desk/
                           #   and the desk skill -> ~/.hermes/skills/trading/trader-desk/
 ```
+
+Optional engines (each is LuxAlgo's own, MIT, fetched once): `./install.sh --with-prop` (prop-firm
+simulator, ~10 MB) and `./install.sh --with-edge` (Edge Stats, ~300 MB) — both need Node 20+.
 
 Then in Hermes Desktop:
 
@@ -149,7 +152,7 @@ interpreter itself (details in [`docs/MACOS.md`](docs/MACOS.md)):
 | Chart top bar → **<> Script** | the Pine script pane: write or paste Pine, **Run**, tweak the script's own **Settings**, save and reopen scripts |
 | Chart top bar → **⛶ Full screen** | Gives the chart the whole pane — and the whole display: the console's chrome, panels and statusbar step aside and the page asks the browser for fullscreen. `Esc` (or the floating `✕`, or the same button) comes back. Docked on Vela's own toolbar row beside `<> Script` and `☰ catalogue`; the door is `chart_fullscreen` / `trader-chart fullscreen [--off]` |
 | Chart ⋯ menu → **Edge Stats** | the Edge Stats sheet: ask a question, run one of the 42 catalogue reports, group by weekday / month / year, open any historical session on a chart. [Details below](#edge-stats--how-often-did-it-actually-happen) |
-| Chart ⋯ menu → **Trader's desk** | the desk sheet: **Paper** (equity, cash, realised, open P&L, positions, fills, Reset), **Journal** (net P&L, win rate, profit factor, avg win/loss, the realised-equity curve, the closed trades) and **Prop firms** (the LuxAlgo directory + what is on offer). A read surface — the only write is Reset, and approving an order still happens on its card, never here |
+| Chart ⋯ menu → **Trader's desk** | the desk sheet: **Paper** (equity, cash, realised, open P&L, positions, fills, Reset), **Journal** (net P&L, win rate, profit factor, avg win/loss, the realised-equity curve, the closed trades) and **Prop firms** (the LuxAlgo directory + what is on offer, and **Simulate** on any challenge — LuxAlgo's own Monte-Carlo engine plays 10,000 journeys through that firm's exact ruleset and the card shows its verdict: pass odds with a 95% CI, failures, cost, days, payout odds and EV). A read surface — the only write is Reset, and approving an order still happens on its card, never here |
 | The chart's own bottom bar | Vela's range buttons, timezone clock and settings (not ours) |
 
 ### Chat beside the chart

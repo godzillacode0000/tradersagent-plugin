@@ -76,6 +76,7 @@ from chart_bridge import (save_state as save_chart_state, load_state as load_cha
                           record_result as record_chart_result, get_result as get_chart_result)
 from chart_stream import ChartStream
 import edgestats
+import propfirmsim
 
 # The push channel: chart views attach to /api/chart/stream and commands are pushed down it, so an
 # agent command no longer waits for the page's 2s poll (see chart_stream.py).
@@ -1206,6 +1207,28 @@ def ep_offers(params: dict) -> dict:
     }
 
 
+def ep_propfirmsim_status(params: dict) -> dict:
+    """Is LuxAlgo's prop-firm simulator installed, which engine and node. Never runs the engine."""
+    return propfirmsim.status()
+
+
+def ep_propfirmsim_simulate(params: dict) -> dict:
+    """One simulation through LuxAlgo's own engine (console/backend/propfirmsim.py).
+
+    Every number comes from the engine — pass probability with its Wilson CI, per-step rates, failure
+    reasons, attempts, cost, days, EV — and the answer carries the engine's own assumptions block
+    (paths, seed, engine version, provenance, what is not simulated). A read: nothing moves.
+    """
+    flat = {key: _one(params, key) for key in
+            ("firm", "challenge", "winrate", "avg_win", "avg_loss", "trades_per_day",
+             "risk", "risk_mode", "paths", "seed", "attempt_cap", "funded_horizon", "no_funded")}
+    try:
+        return propfirmsim.simulate(flat)
+    except propfirmsim.SimError as exc:
+        status_code = 409 if exc.code in ("not_installed", "no_node", "old_node") else 400
+        raise ApiError(exc.message, status_code, exc.code, exc.as_detail()) from None
+
+
 def ep_agents(params: dict) -> dict:
     """The study list the dock renders: id, name, brief, session id, counters."""
     studies = list_studies(AGENTS_ROOT)
@@ -1732,6 +1755,8 @@ ROUTES = {
     "/api/edge/symbols": (ep_edge_symbols, TTL["edge_symbols"]),
     "/api/propfirms": (ep_propfirms, TTL["propfirms"]),
     "/api/offers": (ep_offers, TTL["offers"]),
+    "/api/propfirmsim/status": (ep_propfirmsim_status, 0.0),
+    "/api/propfirmsim/simulate": (ep_propfirmsim_simulate, 0.0),
     # Preview thumbnails are made and cached locally (backend/library_thumbs.py): the catalogue's own
     # pictures are small but ~0.8 s away, and sixty of them over six browser connections is what made
     # the Indicators modal look empty while it waited.

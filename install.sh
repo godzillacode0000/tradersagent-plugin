@@ -11,6 +11,9 @@
 #   ./install.sh --with-edge        also install LuxAlgo's open-source Edge Stats engine (MIT, pinned
 #                                   commit) into ~/.local/share/traders-agent/edge/engine (~300 MB,
 #                                   needs Node 20+ and git; the pane's Edge Stats view uses it)
+#   ./install.sh --with-prop        also install LuxAlgo's open-source prop-firm simulator (MIT, npm)
+#                                   into ~/.local/share/traders-agent/propfirmsim (~10 MB, needs
+#                                   Node 20+; the desk sheet's Prop-firms view grows a Simulate button)
 #   ./install.sh --help             this text
 #   HERMES_HOME=/path ./install.sh  install into another Hermes home
 #   PORT=9000 ./install.sh          point the installed plugin at a console on another port
@@ -42,7 +45,7 @@ CONSOLE_URL="${LUXALGO_CONSOLE:-http://127.0.0.1:$PORT}"
 
 usage() { sed -n '2,/^# listening on/p' "$0" | sed 's/^# \{0,1\}//'; }
 
-DOCTOR=0 UNINSTALL=0 WITH_BT=0 WITH_EDGE=0 NO_MCP=0
+DOCTOR=0 UNINSTALL=0 WITH_BT=0 WITH_EDGE=0 WITH_PROP=0 NO_MCP=0
 for arg in "$@"; do
   case "$arg" in
     -h|--help)       usage; exit 0 ;;
@@ -50,6 +53,7 @@ for arg in "$@"; do
     --uninstall)     UNINSTALL=1 ;;
     --with-backtest) WITH_BT=1 ;;
     --with-edge)     WITH_EDGE=1 ;;
+    --with-prop)     WITH_PROP=1 ;;
     --no-mcp)        NO_MCP=1 ;;
     --vendor)        echo "install.sh: --vendor was removed (it rewrote committed files without checking them); see console/frontend/vendor/VENDORING.md" >&2; exit 2 ;;
     *)               echo "install.sh: unknown option '$arg'" >&2; usage >&2; exit 2 ;;
@@ -235,6 +239,38 @@ if [[ $WITH_EDGE -eq 1 ]]; then
     echo "Edge Stats engine installed -> $EDGE_DIR"
   fi
   echo "next: open the pane, ⋯ -> Edge Stats, and load the demo data (or download BTCUSDT)"
+fi
+
+if [[ $WITH_PROP -eq 1 ]]; then
+  # Prop-firm simulator (19 Oct): LuxAlgo/prop-firm-sim (MIT) — the same engine their hosted
+  # simulator runs, installed from npm into its own folder. Needs Node 20+, no key: the firm rules
+  # are read at run time from LuxAlgo's public directory (keyless), the same source the Prop-firms
+  # view already shows. The desk sheet grows a Simulate button per challenge and renders the
+  # engine's verdict verbatim (pass odds with CI, EV, cost, days — see console/backend/propfirmsim.py).
+  PROP_HOME="${TRADERS_SIM_HOME:-$HOME/.local/share/traders-agent/propfirmsim}"
+  if ! command -v node >/dev/null 2>&1; then
+    echo "the prop-firm simulator needs Node.js 20 or newer (https://nodejs.org) — install it, then run this again" >&2
+    exit 1
+  fi
+  NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
+  if [[ "$NODE_MAJOR" -lt 20 ]]; then
+    echo "the prop-firm simulator needs Node.js 20 or newer; found $(node --version) — upgrade it, then run this again" >&2
+    exit 1
+  fi
+  if [[ -x "$PROP_HOME/node_modules/.bin/prop-firm-sim" ]]; then
+    echo "prop-firm simulator already installed at $PROP_HOME ($("$PROP_HOME/node_modules/.bin/prop-firm-sim" --version 2>/dev/null || echo '?')) — skipping"
+  else
+    echo "installing the prop-firm simulator (@luxalgo/prop-firm-sim-cli, MIT) into $PROP_HOME — needs the network once"
+    mkdir -p "$PROP_HOME"
+    (cd "$PROP_HOME" && { [[ -f package.json ]] || npm init -y >/dev/null 2>&1; } && npm install --no-audit --no-fund @luxalgo/prop-firm-sim-cli)
+    # Prove it starts before saying it is installed (same rule as the Edge Stats block above).
+    if ! "$PROP_HOME/node_modules/.bin/prop-firm-sim" --version >/dev/null 2>&1; then
+      echo "the simulator installed but does not start — try: $PROP_HOME/node_modules/.bin/prop-firm-sim --version" >&2
+      exit 1
+    fi
+    echo "prop-firm simulator installed -> $PROP_HOME"
+  fi
+  echo "next: open the pane, ⋯ -> Trader's desk -> Prop firms, and press Simulate on a challenge"
 fi
 
 # Restart the console if a user unit is running it.

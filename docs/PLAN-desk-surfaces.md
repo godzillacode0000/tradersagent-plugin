@@ -13,7 +13,7 @@ our column filled in, so nothing on the list is forgotten and nothing is claimed
 | Edge analytics ("how often did this happen") | edge-stats (MIT) | **Shipped** — the Edge sheet + 8 `edgestats_*` tools, local engine |
 | Paper account + paper trading | hosted (their bundle: `api/trading/paper/*`) | **Shipped** — the paper broker (`broker_*`: propose → the card approves) + **the desk sheet's Paper view (16 Oct)** |
 | Journal — metrics, calendar, Edge Score | trade-journal (MIT) | **Partly shipped (16 Oct)** — the desk sheet's Journal view: net P&L, win rate, profit factor, avg win/loss, the realised curve, the closed trades, off the broker's own fills. Still missing: the P&L calendar, the per-day breakdown, Edge Score |
-| Prop-firm directory + offers | propfirm-sim (MIT) + the hosted directory | **Directory shipped (16 Oct)** — the desk sheet's Prop firms view (`/api/propfirms`, `/api/offers`). **Not yet: the simulator verdicts** (pass rates, EV per attempt) — that needs their engine run locally, the way Edge Stats runs |
+| Prop-firm directory + offers | propfirm-sim (MIT) + the hosted directory | **Shipped (19 Oct)** — the desk sheet's Prop firms view: the directory (`/api/propfirms`, `/api/offers`) **and the simulator** — `@luxalgo/prop-firm-sim-cli` run locally through `console/backend/propfirmsim.py` (`/api/propfirmsim/*`, `./install.sh --with-prop`), with a Simulate button on every challenge and the engine's verdict card (pass odds + CI, failures, attempts, cost, days, payout odds, EV, flags). Parametric inputs only so far |
 | Market trackers (Congress, insiders, contracts, lobbying) | market-trackers (MIT, data CC0) | **Not built.** Needs the market-trackers MCP registered with Hermes, then a Trackers view in the desk sheet — the same shape as Prop firms: read, cite the source, no links out |
 | Real broker accounts (read-only) | broker-sdk (MIT, 23 brokers) | **Not built, deliberately last.** Read-only balances/positions would have to come through this console's own backend; keys stay in the local MCP config |
 | Whale options flow | whale-options (MIT) | **Not built.** An options vertical only makes sense once the trackers drawer exists |
@@ -31,6 +31,9 @@ Tests: `test_broker.py::TheJournalReadsTheFillsBack` (the accounting identity),
 
 1. **Journal calendar + per-day P&L** (fits the existing sheet; no new data source — the fills carry
    `closed` timestamps, so the calendar is a view over what the broker already records).
+2b. **Simulator phase 2** — feed the desk's own closed trades to the engine (`--trade-log` +
+   `--import-risk`, the engine's documented path for P&L without R-multiples), and expose the whole
+   simulator to the agent as MCP tools so "what are my odds on this challenge?" is one prompt.
 2. **Prop-firm simulator verdicts** — port the pattern Edge Stats already uses: run
    `@luxalgo/prop-firm-sim-core` locally through a small Python bridge (`console/backend/propfirmsim.py`,
    mirroring `edgestats.py`), feed it the console's own bars, and render its verdict grid in the sheet's
