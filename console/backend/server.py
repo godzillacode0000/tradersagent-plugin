@@ -77,6 +77,7 @@ from chart_bridge import (save_state as save_chart_state, load_state as load_cha
 from chart_stream import ChartStream
 import edgestats
 import propfirmsim
+import fxdata
 
 # The push channel: chart views attach to /api/chart/stream and commands are pushed down it, so an
 # agent command no longer waits for the page's 2s poll (see chart_stream.py).
@@ -1207,6 +1208,36 @@ def ep_offers(params: dict) -> dict:
     }
 
 
+def ep_fx_bars(params: dict) -> dict:
+    """OHLCV bars for one FX pair, from Dukascopy's free public feed (console/backend/fxdata.py).
+
+    The desk's chart is a Binance crypto feed; a strategy written for GBPUSD/EURUSD needs its own
+    bars. This endpoint is the door the browser's FX provider reads: `pair`, `timeframe` (1, 5, 15,
+    30, 60, 240, D) and `limit`. The first request for a date range downloads one small file per
+    hour and caches it; repeats are local. Prices are the mid of the published bid/ask.
+    """
+    pair = _one(params, "pair") or _one(params, "symbol")
+    timeframe = _one(params, "timeframe") or "30"
+    limit = _limit(params.get("limit"), 500, 1, 20000)
+    try:
+        rows = fxdata.bars(pair, timeframe, limit)
+    except fxdata.FxError as exc:
+        raise ApiError(str(exc), 400, exc.code) from None
+    # Provenance comes from the loader, never from this line: `bars()` falls back to Yahoo when
+    # Dukascopy throttles, and an endpoint that always said "dukascopy" would be lying about the
+    # numbers it just served (measured 20 Oct — the first live call was Yahoo data labelled dukascopy).
+    coverage = dict(fxdata.LAST)
+    return {"pair": fxdata._clean_pair(pair), "timeframe": str(timeframe).upper(), "bars": rows,
+            "symbol": fxdata.symbol_info(pair), "count": len(rows),
+            "source": coverage.get("source", "unknown"), "coverage": coverage,
+            "prices": "mid of bid/ask"}
+
+
+def ep_fx_status(params: dict) -> dict:
+    """What FX data is cached, and which pairs the loader knows. Never fetches."""
+    return fxdata.status()
+
+
 def ep_propfirmsim_status(params: dict) -> dict:
     """Is LuxAlgo's prop-firm simulator installed, which engine and node. Never runs the engine."""
     return propfirmsim.status()
@@ -1755,6 +1786,8 @@ ROUTES = {
     "/api/edge/symbols": (ep_edge_symbols, TTL["edge_symbols"]),
     "/api/propfirms": (ep_propfirms, TTL["propfirms"]),
     "/api/offers": (ep_offers, TTL["offers"]),
+    "/api/fx/bars": (ep_fx_bars, 0.0),
+    "/api/fx/status": (ep_fx_status, 0.0),
     "/api/propfirmsim/status": (ep_propfirmsim_status, 0.0),
     "/api/propfirmsim/simulate": (ep_propfirmsim_simulate, 0.0),
     # Preview thumbnails are made and cached locally (backend/library_thumbs.py): the catalogue's own

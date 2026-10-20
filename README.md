@@ -200,6 +200,33 @@ engine (Vela 0.8.5 · vela-pinets 0.2.17 · our PineTS fork of 0.12.0) and reads
   actually paid — never as "none". The curve is labelled as cumulative closed-trade P&L, not an
   intra-bar equity path.
 
+### Forex pairs — GBPUSD, EURUSD, and the SMT pair
+
+A `strategy()` for forex cannot use the chart's bars (the pane charts Binance crypto), and PineTS
+answers `request.security("EURUSD", …)` with the chart's own series when it has no other source — a
+comparison of a market with itself. Two lines at the top of a script fix that:
+
+```pine
+//@version=5
+//@fx GBPUSD
+//@tf 60
+```
+
+The runner sees `//@fx`, routes the run to the console's FX provider, and `request.security("EURUSD")`
+fetches a **different** symbol — verified: GBPUSD 1.33 vs EURUSD 1.12 in the same run.
+
+Data comes from **Dukascopy's free tick feed** (no key, ~20 KB per instrument-hour, decoded from its
+LZMA `>IIIff` records in `console/backend/fxdata.py`), cached under
+`~/.local/share/traders-agent/fx/`. When Dukascopy throttles (it does: 429s, and its free window lags
+~two weeks) the loader falls back to Yahoo FX and the answer's `source` says `yahoo` — the numbers are
+never relabelled. `GET /api/fx/bars?pair=GBPUSD&timeframe=30&limit=500` is the door; `…/api/fx/status`
+says what is cached.
+
+`examples/strategies/nyam-smt-gbpusd.pine` is a worked example: NY-AM session, SMT vs EURUSD, a
+liquidity sweep, a limit at the 50% of the displacement leg, **1–2% risk per trade**, 2R target. Read
+its header before trusting it — on 2 years of GBPUSD 1h it is **PF 0.88**, which is the honest result
+of those rules on that pair, not a recommendation.
+
 ### Edge Stats — how often did it actually happen?
 
 LuxAlgo's open-source **Edge Stats** engine measures *P(outcome | conditions)* on historical sessions:

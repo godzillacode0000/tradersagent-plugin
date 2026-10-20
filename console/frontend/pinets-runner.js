@@ -428,6 +428,52 @@
     };
   }
 
+  /**
+   * `//@fx GBPUSD` (and optional `//@tf 30`) at the top of a script: run it on the console's FX
+   * provider instead of the chart's bars.
+   *
+   * A strategy written for a forex pair cannot use the chart's own series — the pane charts Binance
+   * crypto — and PineTS's custom-bars form answers `request.security("EURUSD", …)` with the chart's
+   * series (measured 20 Oct: BTC 68778 returned for an ETH request). So a script that names its
+   * market gets that market: bars from console/backend/fxdata.py, served at /api/fx/bars, read
+   * through fx-provider.js. No directive → the old path, unchanged.
+   */
+  function fxOf(source) {
+    const head = String(source || '').slice(0, 600);
+    const m = /^\s*(?:\/\/\s*|;\s*)?@fx\s+([A-Za-z]{6})\b/m.exec(head);
+    if (!m) return null;
+    const t = /^\s*(?:\/\/\s*|;\s*)?@tf\s+([0-9]+|[DdWw])\b/m.exec(head);
+    return { pair: m[1].toUpperCase(), timeframe: t ? String(t[1]).toUpperCase() : '30' };
+  }
+
+  async function runFx(fx, source, opts, timeoutMs, label, t0) {
+    if (!window.TraderFXProvider) {
+      return { ok: false, reason: 'not runnable: the FX provider is not loaded (fx-provider.js)',
+               error: classify('the FX provider is not loaded', 'ENGINE_UNAVAILABLE') };
+    }
+    let mod;
+    try {
+      mod = await loadPineTS();
+    } catch (err) {
+      const why = 'PineTS unavailable: ' + ((err && err.message) || err);
+      return { ok: false, reason: why, error: classify(why, 'ENGINE_UNAVAILABLE') };
+    }
+    const engine = new mod.PineTS(window.TraderFXProvider, fx.pair, fx.timeframe, 20000);
+    const target = opts.inputs && Object.keys(opts.inputs).length && typeof mod.Indicator === 'function'
+      ? new mod.Indicator(source, opts.inputs) : source;
+    try {
+      /* A backtest over years of bars is a long run: give it more room than an indicator gets. */
+      const out = await withTimeout(engine.run(target), Math.max(timeoutMs, 90000), label);
+      const strategy = toStrategy(out);
+      publishStrategy(strategy, source);
+      return { ok: true, ms: Math.round(performance.now() - t0), series: [], strategy: strategy,
+               drawings: [], ctor: 'fx-provider', context: fx.pair + '@' + fx.timeframe, raw: out };
+    } catch (err) {
+      const why = String((err && err.message) || err);
+      return { ok: false, reason: 'PineTS error: ' + why, error: classify(why), ctor: 'fx-provider' };
+    }
+  }
+
   /** A declaration argument, read from the engine's config (names are PineTS's own). */
   function cfg(s, typeKey, valueKey) {
     const c = s.config;
@@ -538,6 +584,13 @@
     }
     const reason = runnable(source);
     if (reason) return { ok: false, reason: 'not runnable: ' + reason, error: classify(reason) };
+
+    /* A script that names its own market (`//@fx GBPUSD`) runs on that market's bars, not the chart's. */
+    const fx = fxOf(source);
+    if (fx) {
+      const label0 = 'PineTS' + (opts.name ? ` (${opts.name})` : '');
+      return runFx(fx, source, opts, opts.timeoutMs || DEFAULT_TIMEOUT_MS, label0, performance.now());
+    }
 
     const count = Array.isArray(bars) ? bars.length : 0;
     if (count < 30) {

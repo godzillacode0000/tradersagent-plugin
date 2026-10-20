@@ -78,7 +78,7 @@ class MissingDataLooksMissing(unittest.TestCase):
 
 class EveryRunPublishes(unittest.TestCase):
     def test_both_engine_paths_reach_the_strip(self):
-        self.assertEqual(RUNNER.count("publishStrategy("), 3, "definition + worker + main-thread")
+        self.assertEqual(RUNNER.count("publishStrategy("), 4, "definition + worker + main-thread + fx-provider")
 
     def test_a_worker_summary_without_config_still_gets_its_title(self):
         self.assertIn("declaredTitle", RUNNER)
