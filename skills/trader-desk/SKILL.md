@@ -283,6 +283,7 @@ new rule, update the docs in the same change, and expect the suite to be red unt
 The suite failing there is the feature — it is what keeps a quiet regression from looking like a
 working plugin.
 
+**Commit only what improves the plugin for ANOTHER installer** — design and system upgrades: engines, data feeds, tools, surfaces, shipped skills, and the docs that explain them. An operator's own strategy, a study of somebody else's app, a scratch capture, or an experiment that never became a feature stays untracked/local, even when it is what proved the feature works (measured 20 Oct: a GBPUSD strategy rode into an FX commit and had to be removed the same day — the capability was the contribution, the strategy was his). Ask of every file: would a stranger installing this plugin be better off with it?
 **How the operator wants repo progress reported:** one line per change, grouped by date, taken from
 `git log --since=… --pretty='%h|%ad|%s' --date=format:'%m-%d %H:%M' --shortstat` plus `--name-only` for
 scope — never from memory, never as prose paragraphs, and don't narrate a commit the message already
