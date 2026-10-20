@@ -234,7 +234,7 @@ def _ledger_line(strategy) -> str:
     if dd is not None:
         bits.append(f"max DD {abs(dd):,.2f}" + (f" ({ddp:.2f}%)" if ddp is not None else ""))
     if gross is not None and loss is not None:
-        pf = "∞" if loss == 0 and gross > 0 else (f"{gross / abs(loss):.2f}" if loss else "—")
+        pf = "∞" if abs(loss or 0) == 0 and gross > 0 else (f"{gross / abs(loss):.2f}" if loss else "—")
         bits.append(f"PF {pf}")
     decl = strategy.get("commission") if isinstance(strategy.get("commission"), dict) else {}
     if decl.get("value") is not None:

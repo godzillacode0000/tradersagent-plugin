@@ -105,6 +105,13 @@ class TheAgentReadsTheLedger(unittest.TestCase):
                                  "grossprofit": 100, "grossloss": 0})
         self.assertIn("PF ∞", line)
 
+    def test_a_positive_engine_grossloss_is_a_number_not_infinity(self):
+        # PineTS reports grossloss as a positive magnitude; only a zero loss may print ∞.
+        line = mcp._ledger_line({"netprofit": 81.46, "closedtrades": 11, "wintrades": 5, "losstrades": 6,
+                                 "grossprofit": 144.07, "grossloss": 62.62})
+        self.assertIn("PF 2.30", line)
+        self.assertNotIn("∞", line)
+
     def test_no_sample_says_so(self):
         line = mcp._ledger_line({"netprofit": 0, "closedtrades": 3, "wintrades": 0, "losstrades": 0})
         self.assertIn("no decided sample", line)

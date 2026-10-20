@@ -61,7 +61,11 @@
     const loss = fromEngine ? engineLoss : (trades.length ? book.down : null);
     let pf = null;
     if (gross != null && loss != null) {
-      if (loss < 0) pf = gross / Math.abs(loss);
+      /* PineTS reports `grossloss` as a POSITIVE magnitude, while a ledger sum is negative — so the
+         denominator is |loss| either way. Reading only `loss < 0` made a 6-loss strategy print
+         "∞" (measured 20 Oct on the NY-AM strategy: gross 144.07 / loss 62.62 → PF 2.30). */
+      const denom = Math.abs(loss);
+      if (denom > 0) pf = gross / denom;
       else if (gross > 0) pf = Infinity;          // no losing trade: not a number, a fact
     }
     const closed = Array.isArray(st.trades) ? trades.length : (Number(st.closedtrades) || 0);
