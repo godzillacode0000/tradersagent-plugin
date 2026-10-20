@@ -1,4 +1,4 @@
-import { parseSymbol, priceStyleIds, BUILTIN_PRICE_STYLES, SecondClock, isGroupRow, defaultMemberOf, groupKeyOf, groupMembers, LEGEND_AT_TOP_ATTR, normalizeSession, Vela, TypedEventBus, timeframeToMs, MultiProviderFeed, registerBuiltinChartTypes, resolveTheme, buildToolbar, createCustomMark, createAttributionMark, DrawingToolbar, applyAttributionMarkTheme, sharedBarStore, CANDLE_OVERRIDE_KEYS } from './chunk-UNUVPQFW.js';
+import { parseSymbol, priceStyleIds, BUILTIN_PRICE_STYLES, SecondClock, isGroupRow, defaultMemberOf, groupKeyOf, groupMembers, LEGEND_AT_TOP_ATTR, normalizeSession, Vela, TypedEventBus, timeframeToMs, MultiProviderFeed, registerBuiltinChartTypes, resolveTheme, buildToolbar, createCustomMark, createAttributionMark, DrawingToolbar, applyAttributionMarkTheme, sharedBarStore, CANDLE_OVERRIDE_KEYS } from './chunk-QYIO37K7.js';
 import { chartType, resolveTopbarComposition, topbarActionOverride, TOPBAR_BUILTIN_IDS, widgetActions, tzButtonLabel, resolveTimezone, timezoneMenuRows, SidePanel, sidePanels, DEFAULT_PANEL_ORDER, symbolRanking, paneScaleAt, composeMenu, priceAxisItems, scaleChoiceOf, timeAxisItems, bodyItems, scaleWrites, invertWrite, settingsSectionOf, resolveEngines, legendActionsProviderFor, legendCalloutsProviderFor, normalizeTimezone, isExchangeTimezone, statePersistenceHandlers, topbarHas, rendererDefaults, mobilePlacement, widgetAttachments, getDrawingType, inputDeltas } from './chunk-ALTGHKIM.js';
 import { Tooltip, KeymapManager, isEditableTarget, Drawer } from './chunk-AUOB7A5Y.js';
 import { Menu, Dialog, CalloutBubble, applyPlotOverlayTokens, ensureUIHost } from './chunk-WY5H4S4I.js';
@@ -1435,9 +1435,14 @@ function paneItems(snap, pane, units) {
     return [...unitItems, ...rows2];
   }
   const zOf = new Map(snap.zOrder.map((e) => [e.id, e.z]));
-  const rows = pane.indicators.map((i) => ({ item: { kind: "row", row: indicatorRow(i) }, z: zOf.get(i.id) ?? 0 }));
-  if (pane.kind === "price") rows.push({ item: { kind: "row", row: priceRow() }, z: snap.candleZ });
-  rows.sort((a, b) => b.z - a.z);
+  const rank = new Map(snap.zOrder.map((e, i) => [e.id, i]));
+  const rows = pane.indicators.map((i) => ({
+    item: { kind: "row", row: indicatorRow(i) },
+    z: zOf.get(i.id) ?? 0,
+    rank: rank.get(i.id) ?? -1
+  }));
+  if (pane.kind === "price") rows.push({ item: { kind: "row", row: priceRow() }, z: snap.candleZ, rank: -Infinity });
+  rows.sort((a, b) => b.z - a.z || b.rank - a.rank);
   if (!snap.interleave) return [...unitItems, ...rows.map((r) => r.item)];
   const entries = [...rows, ...units.map((unit) => ({ item: { kind: "unit", unit }, z: unitZ(unit) }))];
   entries.sort((a, b) => a.z === b.z ? Number(a.item.kind === "unit") - Number(b.item.kind === "unit") : b.z - a.z);
@@ -1734,6 +1739,7 @@ var ObjectTree = class extends SidePanel {
     for (const ev of REFRESH_EVENTS) {
       this.unsubs.push(chart.on(ev, () => this.refresh()));
     }
+    this.unsubs.push(chart.renderer.onConfigChanged(() => this.refresh()));
     this.unsubs.push(
       chart.on("drawing:selected", ({ ids }) => {
         this.selectedDrawings = new Set(ids);
@@ -3973,6 +3979,20 @@ function sanitizeDrawingTools(raw) {
   if (typeof r.stay === "boolean") out.stay = r.stay;
   return Object.keys(out).length > 0 ? out : null;
 }
+function successorNative(entry) {
+  const type = typeof entry === "string" ? entry : entry.type;
+  if (type !== "linear-regression") return entry;
+  const hidden = typeof entry === "object" && entry.hidden === true;
+  const { mode, lineColor, ...rest } = typeof entry === "object" ? entry.inputs ?? {} : {};
+  const slope = mode === "Slope";
+  const inputs = slope ? { ...rest, ...lineColor !== void 0 ? { lineColor } : {} } : (
+    // Saved deltas omit the curve's 100-bar default, which the LSMA's default is not.
+    { length: 100, ...rest, ...lineColor !== void 0 ? { neutralColor: lineColor } : {} }
+  );
+  const next = slope ? "linear-regression-slope" : "lsma";
+  const hasInputs = Object.keys(inputs).length > 0;
+  return hasInputs || hidden ? { type: next, ...hasInputs ? { inputs } : {}, ...hidden ? { hidden } : {} } : next;
+}
 function sanitizeCell(raw) {
   if (raw == null || typeof raw !== "object") return null;
   const c = raw;
@@ -4012,7 +4032,7 @@ function sanitizeCell(raw) {
         return [inputs || hidden ? { type: e.type, ...inputs ? { inputs } : {}, ...hidden ? { hidden } : {} } : e.type];
       }
       return [];
-    }) : [];
+    }).map(successorNative) : [];
     out.indicators = { manifest, natives };
   }
   const ext = sanitizeExt(c.ext);
@@ -4887,7 +4907,7 @@ var Watermark = class {
 // src/widget/context-menu.ts
 var PRICE_AXIS_W = 60;
 var TIME_AXIS_H = 26;
-var OFF_PLOT = { price: null, time: null, paneKind: null };
+var OFF_PLOT = { price: null, time: null, paneKind: null, paneId: null };
 var ChartContextMenu = class {
   constructor(host, cbs) {
     this.cbs = cbs;
@@ -4930,7 +4950,7 @@ var ChartContextMenu = class {
     this.chart = chart;
     this.crosshair = OFF_PLOT;
     this.offCrosshair = chart.renderer.onCrosshairMove((e) => {
-      this.crosshair = { price: e.price, time: e.time, paneKind: e.paneKind ?? null };
+      this.crosshair = { price: e.price, time: e.time, paneKind: e.paneKind ?? null, paneId: e.paneId ?? null };
     });
   }
   destroy() {

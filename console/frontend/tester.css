@@ -1,0 +1,78 @@
+/* ── The Strategy tester (19 Oct) ──────────────────────────────────────────────────────────────
+   A strip across the bottom of the pane, above the status bar: the five numbers, a closed-trade
+   curve, and (on demand) the engine's round-trip ledger. It floats over the chart, so it never
+   changes the chart's own layout while it is visible. Tokens are the console's (--lx-*), so the
+   light theme repaints it without a second rule set. */
+.tester {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 26px;                       /* the status bar sits under it */
+  z-index: 45;                        /* below the desk sheet (60) and its scrim (50) */
+  background: color-mix(in srgb, var(--lx-surface-1, #101013) 96%, transparent);
+  border-top: 1px solid var(--lx-border-strong, #34353b);
+  box-shadow: 0 -10px 28px rgba(0, 0, 0, .35);
+  color: var(--lx-fg, #f4f4f4);
+  font-size: 12px;
+  backdrop-filter: blur(6px);
+}
+.tester__bar { display: flex; align-items: center; gap: 16px; padding: 7px 12px; min-height: 46px; }
+.tester__name { display: flex; align-items: center; gap: 7px; min-width: 9ch; max-width: min(30ch, 26vw); flex: 0 1 auto; }
+.tester__name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.tester__name small {
+  flex: 0 0 auto; font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--lx-fg-faint, #82828b); border: 1px solid var(--lx-border, #222228);
+  border-radius: 999px; padding: 1px 6px;
+}
+.tester__dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+.tester__stats { display: flex; gap: 22px; margin: 0; min-width: 0; }
+.tester__stats > div { display: flex; flex-direction: column; gap: 1px; }
+.tester__stats dt {
+  font-size: 10px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--lx-fg-faint, #82828b); white-space: nowrap;
+}
+.tester__stats dd { margin: 0; font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.tester__stats dd small { font-weight: 400; font-size: 10px; color: var(--lx-fg-faint, #82828b); }
+.tester__spark { flex: 1 1 auto; min-width: 60px; display: flex; justify-content: flex-end; }
+.tester__canvas { width: 220px; height: 40px; max-width: 100%; }
+.tester__acts { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.tester__more, .tester__x {
+  font: inherit; font-size: 11px; color: var(--lx-fg-muted, #9c9ca6);
+  background: var(--lx-surface-3, #1b1b20); border: 1px solid var(--lx-border, #222228);
+  border-radius: 6px; padding: 3px 9px; cursor: pointer;
+}
+.tester__more:hover, .tester__x:hover, .tester__more:focus-visible, .tester__x:focus-visible {
+  color: var(--lx-fg-bright, #f0f3fa); border-color: var(--lx-accent, #2e8bd6);
+}
+.tester__x { padding: 2px 8px; font-size: 14px; line-height: 1; }
+.tester__foot {
+  margin: 0; padding: 0 12px 7px; font-size: 10.5px;
+  color: var(--lx-fg-faint, #82828b); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tester__sheet {
+  max-height: 42vh; overflow: auto; border-top: 1px solid var(--lx-border-soft, #1e1e24);
+  background: var(--lx-surface-2, #131317);
+}
+.tester__table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.tester__table th {
+  position: sticky; top: 0; background: var(--lx-surface-2, #131317); text-align: left;
+  font-size: 10px; letter-spacing: .05em; text-transform: uppercase; font-weight: 500;
+  color: var(--lx-fg-faint, #82828b); padding: 7px 10px; border-bottom: 1px solid var(--lx-border, #222228);
+}
+.tester__table td { padding: 5px 10px; border-bottom: 1px solid var(--lx-border-faint, rgba(244,244,244,.08)); white-space: nowrap; }
+.tester__table tbody tr:hover { background: var(--lx-surface-3, #1b1b20); }
+.tester__side { text-transform: uppercase; font-size: 10px; letter-spacing: .04em; }
+.tester__side--long { color: #2ecc71; }
+.tester__side--short { color: #ff5c5c; }
+.tester__dim { color: var(--lx-fg-faint, #82828b); }
+.tester .is-up { color: #2ecc71; }
+.tester .is-down { color: #ff5c5c; }
+.tester__note { margin: 0; padding: 8px 12px 10px; font-size: 10.5px; color: var(--lx-fg-faint, #82828b); }
+
+@media (max-width: 900px) {
+  .tester__stats { gap: 12px; }
+  .tester__spark { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tester { transition: none; }
+}

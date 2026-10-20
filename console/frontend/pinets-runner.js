@@ -405,8 +405,51 @@
       max_drawdown: s.max_drawdown,
       sharpe: s.sharpe_ratio,
       cagr: s.cagr,
-      open_trades: Array.isArray(s.opentrades) ? s.opentrades.length : null
+      open_trades: Array.isArray(s.opentrades) ? s.opentrades.length : null,
+      /* The broker emulator's own ledger (19 Oct, PineTS 0.12.0): the update rebuilt it on an
+         intrabar model, so these are not estimates — gross/loss, the equity path's drawdown, the
+         per-trade excursions above, and the declaration's commission/slippage/margin all come
+         straight from the engine. The tester strip reads them; the agent reads them through
+         `strategy` on chart_apply's result. */
+      grossprofit: s.grossprofit,
+      grossloss: s.grossloss,
+      max_drawdown_pct: s.max_drawdown_percent_value,
+      max_runup: s.max_runup,
+      equity: s.equity,
+      initial_capital: s.initial_capital,
+      currency: (s.config && s.config.currency) || s.account_currency || '',
+      title: (s.config && (s.config.title || s.config.shorttitle)) || '',
+      commission: cfg(s, 'commission_type', 'commission_value'),
+      slippage: s.config ? s.config.slippage : undefined,
+      margin_long: s.config ? s.config.margin_long : undefined,
+      margin_short: s.config ? s.config.margin_short : undefined,
+      pyramiding: s.config ? s.config.pyramiding : undefined,
+      process_orders_on_close: s.config ? s.config.process_orders_on_close : undefined,
     };
+  }
+
+  /** A declaration argument, read from the engine's config (names are PineTS's own). */
+  function cfg(s, typeKey, valueKey) {
+    const c = s.config;
+    if (!c) return null;
+    return { type: c[typeKey], value: c[valueKey] };
+  }
+
+  /** The declared title, read from the source: the worker's summary does not carry `config`. */
+  function declaredTitle(source) {
+    const m = /\bstrategy\s*\(\s*['"]([^'"]+)['"]/.exec(String(source || ''));
+    return m ? m[1] : '';
+  }
+
+  /** Hand a finished strategy run to the tester strip. A reader must never break a run. */
+  function publishStrategy(strategy, source) {
+    try {
+      if (!strategy) return;
+      if (!strategy.title) strategy.title = declaredTitle(source);
+      if (window.TraderTester) window.TraderTester.show(strategy);
+    } catch (err) {
+      /* the strip is a view; a view failing is not the run failing */
+    }
   }
 
   /**
@@ -521,9 +564,11 @@
         /* `raw` must carry the same shape the main-thread path returns, because flatten() and
          * engineRows() read `raw.plots`. Without it every worker run painted nothing at all — the
          * drawings and the script's own series were computed and then dropped on the floor. */
+        const workerStrategy = toStrategy({ strategy: viaWorker.strategy });
+        publishStrategy(workerStrategy, source);
         return { ok: true, ms: ms, series: toSeries({ plots: viaWorker.plots }),
                  raw: { plots: viaWorker.plots, strategy: viaWorker.strategy },
-                 strategy: toStrategy({ strategy: viaWorker.strategy }),
+                 strategy: workerStrategy,
                  drawings: viaWorker.drawings, mtf: viaWorker.mtf || null, ctor: 'worker', context: context };
       }
       /* a worker that could not start falls through to the old main-thread path */
@@ -554,7 +599,9 @@
         out = await withTimeout(built.engine.run(target), timeoutMs, label);
       }
       const ms = Math.round(performance.now() - t0);
-      return { ok: true, ms, series: toSeries(out), strategy: toStrategy(out),
+      const strategy = toStrategy(out);
+      publishStrategy(strategy, source);
+      return { ok: true, ms, series: toSeries(out), strategy: strategy,
                drawings: out && out.plots ? Object.keys(out.plots).filter((k) => k.startsWith('__')) : [],
                ctor: built.ctor, context: built.context, raw: out };
     } catch (err) {

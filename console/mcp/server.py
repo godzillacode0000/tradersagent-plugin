@@ -198,6 +198,56 @@ def _page_age() -> float | None:
     return float(age) if isinstance(age, (int, float)) else None
 
 
+def _ledger_line(strategy) -> str:
+    """The broker emulator's ledger, in one line, for the answer to `chart_apply`.
+
+    A strategy() run is not only "metrics ran" — since PineTS 0.12 the engine returns a real ledger
+    (intrabar fills, commission, per-trade excursions). An agent that asked "backtest this" should
+    read the numbers, not a sentence saying numbers exist. Each figure is labelled; a rate with no
+    sample and a profit factor with no losing trade are printed as `—` and `∞`, never as 0.
+    """
+    if not isinstance(strategy, dict) or not strategy:
+        return ""
+    def num(v):
+        return v if isinstance(v, (int, float)) else None
+    net, closed = num(strategy.get("netprofit")), num(strategy.get("closedtrades"))
+    wins, losses = num(strategy.get("wintrades")), num(strategy.get("losstrades"))
+    dd, ddp = num(strategy.get("max_drawdown")), num(strategy.get("max_drawdown_pct"))
+    cur = strategy.get("currency") or ""
+    trades = strategy.get("trades") if isinstance(strategy.get("trades"), list) else []
+    gross, loss = num(strategy.get("grossprofit")), num(strategy.get("grossloss"))
+    if gross is None and trades:
+        gross = sum(t.get("profit", 0) for t in trades if num(t.get("profit")) is not None and t["profit"] >= 0)
+    if loss is None and trades:
+        loss = sum(t.get("profit", 0) for t in trades if num(t.get("profit")) is not None and t["profit"] < 0)
+    fees = sum(t.get("commission", 0) for t in trades if num(t.get("commission")) is not None)
+    bits = []
+    if net is not None:
+        bits.append(f"net {net:,.2f}{(' ' + cur) if cur else ''}")
+    if closed is not None:
+        bits.append(f"{int(closed)} trades")
+    decided = (wins or 0) + (losses or 0)
+    if decided:
+        bits.append(f"win {100.0 * wins / decided:.1f}% (n={int(decided)})")
+    elif closed:
+        bits.append("win — (no decided sample)")
+    if dd is not None:
+        bits.append(f"max DD {abs(dd):,.2f}" + (f" ({ddp:.2f}%)" if ddp is not None else ""))
+    if gross is not None and loss is not None:
+        pf = "∞" if loss == 0 and gross > 0 else (f"{gross / abs(loss):.2f}" if loss else "—")
+        bits.append(f"PF {pf}")
+    decl = strategy.get("commission") if isinstance(strategy.get("commission"), dict) else {}
+    if decl.get("value") is not None:
+        bits.append(f"commission {decl.get('value')}{'%' if decl.get('type') == 'percent' else ' ' + str(decl.get('type'))}")
+    elif fees:
+        bits.append(f"commission {fees:,.2f} paid")
+    if strategy.get("slippage"):
+        bits.append(f"slippage {strategy['slippage']}")
+    if not bits:
+        return ""
+    return "  ledger: " + " · ".join(bits) + " · intrabar fills"
+
+
 def _command(action: str, timeout: float = INLINE_WAIT + 8.0, **fields) -> str:
     """Queue one chart command and wait for the page's answer (push channel → same round trip).
 
@@ -249,6 +299,9 @@ def _command(action: str, timeout: float = INLINE_WAIT + 8.0, **fields) -> str:
         line += f"\n  {head}{where}: {err.get('message')}"
         if err.get("hint"):
             line += f"\n  → {err['hint']}"
+    ledger = _ledger_line(result.get("strategy"))
+    if ledger:
+        line += "\n" + ledger
     return line
 
 

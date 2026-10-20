@@ -6,6 +6,25 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Strategy backtests on the new intrabar broker emulator** (20 Oct): LuxAlgo's 19 Oct update — Vela
+  **0.8.5**, vela-pinets **0.2.17**, PineTS **0.12.0** — is vendored, and our PineTS fork's three
+  patches are rebased onto 0.12.0 (upstream moved the declaration-init walker into
+  `walkInitExpression`, so patch 2's visitor lives there now; branch `fix/p1-p8-on-0.12`). A
+  `strategy()` script's fills and exits are now resolved *inside* the bar with commission, slippage,
+  margin and trailing stops, and TradingView's tick-grid snapping (`setFillsOnTickGrid`), instead of
+  at the signal bar's close — measured on the same 400 synthetic bars, the old engine filled zero
+  trades where 0.12 fills four with per-trade commission and excursions.
+  **The tester strip** (`console/frontend/tester.js` + `tester.css`) reads the engine's ledger: net
+  profit, trades, win rate with its N, max drawdown (money and %), profit factor, a closed-trade P&L
+  curve and, on demand, the round trips (side, qty, entry/exit fills, commission, P&L, per-trade
+  excursion). Missing data looks missing (`—` for no sample, `∞` for no losing trade); when the
+  worker's summary omits the account totals the ratio is computed from the ledger and the footer says
+  so; commission the worker dropped is reported as what the fills paid, never "none". Every run
+  publishes to the strip on both engine paths, and the declaration's title is recovered from the
+  source. **The agent reads the same ledger**: `chart_apply_pine`'s answer gains a `ledger:` line
+  (`console/mcp/server.py::_ledger_line`). 18 new tests (`test_tester_strip.py`). Suite **1,236
+  tests OK** (1 skipped, 75 files).
+
 - **The prop-firm simulator is wired in** (19 Oct): LuxAlgo's `@luxalgo/prop-firm-sim-cli` (MIT) runs
   locally and the desk sheet's Prop-firms view grows a **Simulate** button on every challenge. The
   card is the engine's own answer, verbatim: pass probability per attempt with its Wilson 95% CI,

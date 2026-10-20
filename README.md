@@ -180,6 +180,26 @@ reports what actually happened rather than pretending. (A heavy script can be ru
 thread instead with `?engine=worker` on the console URL, or localStorage `luxalgo-web:pine-engine` =
 `worker` — at the cost of running vela-pinets' copy, which does not carry the patches.)
 
+### Strategy backtests — the intrabar broker emulator
+
+LuxAlgo rebuilt Vela's broker emulator on an **intrabar model** (19 Oct): a Pine `strategy()` script's
+fills and exits are resolved *inside* the bar, with commission, slippage, margin, trailing stops and
+TradingView's tick-grid snapping, instead of "the close of the signal bar". This console ships that
+engine (Vela 0.8.5 · vela-pinets 0.2.17 · our PineTS fork of 0.12.0) and reads its ledger:
+
+- **The tester strip** appears at the bottom of the pane when a `strategy()` script runs: net profit,
+  trades, win rate (with its N), max drawdown (money and %), profit factor — plus a curve of the
+  closed-trade P&L and, on **Trades**, the engine's own round trips (side, size, entry/exit fills,
+  commission, P&L, per-trade excursion).
+- **The agent reads the same ledger**: `chart_apply_pine` on a strategy answers with a `ledger:` line
+  (`net −189.55 USD · 11 trades · win 27.3% (n=11) · max DD 194.15 (2.38%) · PF 0.08 · commission
+  21.73 paid · intrabar fills`), so "backtest this on BTC 30m" returns numbers in chat.
+- **Honesty rules**: a rate with no sample prints `—`, a profit factor with no losing trade prints `∞`,
+  and the strip says whether the ratio came from the engine's totals or from the closed trades. When
+  the worker's smaller summary drops the declaration, the commission is reported as what the fills
+  actually paid — never as "none". The curve is labelled as cumulative closed-trade P&L, not an
+  intra-bar equity path.
+
 ### Edge Stats — how often did it actually happen?
 
 LuxAlgo's open-source **Edge Stats** engine measures *P(outcome | conditions)* on historical sessions:
@@ -246,7 +266,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_studies` | everything **on** the chart, each row labelled with the reader that saw it — ask this before calling a chart clean |
 | `chart_state` | symbol, timeframe, last price, bars, indicators on the chart |
 | `chart_shot` | one PNG of the chart (returned as an image, plus the path) |
-| `chart_apply_pine` | run Pine over the chart's live bars and paint a matching native; optional `inputs` sets the script's own settings by label (`{"Length": 50}`) |
+| `chart_apply_pine` | run Pine over the chart's live bars and paint a matching native; a `strategy()` script backtests on the intrabar emulator and answers with its ledger; optional `inputs` sets the script's own settings by label (`{"Length": 50}`) |
 | `chart_add_indicator` | add a Vela native (`ema`, `supertrend`, `donchian-channels`, …) |
 | `chart_remove_indicator` | take indicators **off** the chart — one by name, or `all` for every study (reports the chart's before → after list) |
 | `chart_set_market` | switch symbol / timeframe |

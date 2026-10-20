@@ -48,7 +48,7 @@ native tools.
 
 Versions: Hermes Desktop 0.21.5, console `SERVER_VERSION = 1.0.0`. CI was red from
 28 Sep (`1f9d340`) to 2 Oct (`8df6e2e` — a stale MCP test only CI could see); green since `ab3708b`, and
-green on every ship below. **about 1,166 backend tests** (skips depend on `fastmcp`, node and a real Edge Stats engine; run the suite for the exact count), 9 plugin contributions across 5 areas.
+green on every ship below. **about 1,236 backend tests** (skips depend on `fastmcp`, node and a real Edge Stats engine; run the suite for the exact count), 9 plugin contributions across 5 areas.
 Shipped since this file was written: the paper broker (Phase 5), replay (6/6b), the top-bar one-door
 consolidation, the drawer as the single Library surface, and Phase 7 — three agent doors into Vela
 (`chart_drawing` 76 types / `chart_view` settings / `chart_marks`), 56 MCP tools (8 of them `edgestats_*`). 4 Oct: Edge Stats — the optional local engine, the sheet behind the `⋯` menu, the eight tools (see CHANGELOG; real Binance / Dukascopy downloads were never run from the build machine). Also 4 Oct: the top row

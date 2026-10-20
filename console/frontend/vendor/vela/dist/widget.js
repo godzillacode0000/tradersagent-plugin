@@ -1,6 +1,6 @@
-import { VelaWorkspace } from './chunk-MOJ4T26N.js';
-export { Bottombar, ChartContextMenu, DataWindow, IndicatorPicker, ObjectTree, PanelDock, RANGE_PRESETS, ShortcutsHelp, Statusline, SymbolPicker, TimeframeQuick, Topbar, Watermark, dataWindowSections, decimalsFor, decodeState, encodeState, filterSymbols, fmtChange, fmtPrice, localStorageAdapter, parseTimeframe, priceStyleLabel, resolveIndicators, sanitizeState, timeframeLabel, timeframeMs } from './chunk-MOJ4T26N.js';
-import './chunk-UNUVPQFW.js';
+import { VelaWorkspace } from './chunk-BN4DNS3O.js';
+export { Bottombar, ChartContextMenu, DataWindow, IndicatorPicker, ObjectTree, PanelDock, RANGE_PRESETS, ShortcutsHelp, Statusline, SymbolPicker, TimeframeQuick, Topbar, Watermark, dataWindowSections, decimalsFor, decodeState, encodeState, filterSymbols, fmtChange, fmtPrice, localStorageAdapter, parseTimeframe, priceStyleLabel, resolveIndicators, sanitizeState, timeframeLabel, timeframeMs } from './chunk-BN4DNS3O.js';
+import './chunk-QYIO37K7.js';
 export { CONTEXT_MENU_BUILTIN_ORDER, DEFAULT_PANEL_MAX_WIDTH, DEFAULT_PANEL_MIN_WIDTH, DEFAULT_PANEL_ORDER, DEFAULT_PANEL_WIDTH, OVERRIDABLE_TOPBAR_IDS, SidePanel, TIMEZONES, TOPBAR_BUILTIN_IDS, TOPBAR_DEFAULT_LEFT, TOPBAR_DEFAULT_RIGHT, clampPanelWidth, normalizeTimezone, pinnedTopbarActionIds, registerSidePanel, registerStatePersistence, registerSymbolRanking, registerWidgetAction, registerWidgetAttachment, resolveTopbarComposition, sidePanels, statePersistenceHandlers, symbolRanking, topbarActionOverride, topbarHas, tzButtonLabel, tzMenuLabel, tzOffset, unregisterSidePanel, unregisterStatePersistence, unregisterWidgetAction, unregisterWidgetAttachment, widgetActions, widgetAttachments } from './chunk-ALTGHKIM.js';
 import './chunk-AUOB7A5Y.js';
 import './chunk-WY5H4S4I.js';

@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="./styles.css" />
 <link rel="stylesheet" href="./edge.css" />
 <link rel="stylesheet" href="./desk.css" />
+<link rel="stylesheet" href="./tester.css" />
 <!-- Warm the connections the first chart data needs, before the page has even built the chart (the module graph
      below takes over a second to arrive; the exchange handshakes happen in that time instead of after it). -->
 <link rel="preconnect" href="https://api.binance.com" crossorigin>
@@ -252,8 +253,8 @@
      workspace module dies with "process is not defined" and the page falls back to the bare chart. -->
 <script>window.process = window.process || { env: { NODE_ENV: 'production' } };</script>
 
-<!-- LuxAlgo's own browser builds — vendored from their published packages (vela 0.8.4, vela-pinets
-     0.2.16) instead of fetched from jsDelivr: the chart surface the agent drives no longer depends on a
+<!-- LuxAlgo's own browser builds — vendored from their published packages (vela 0.8.5, vela-pinets
+     0.2.17) instead of fetched from jsDelivr: the chart surface the agent drives no longer depends on a
      CDN being reachable, and the bytes on disk are the bytes that were verified. Licences beside them. -->
 <script src="./vendor/vela/dist/vela.global.min.js"></script>
 <script src="./vendor/vela-pinets/dist/vela-pinets.global.min.js"></script>
@@ -264,6 +265,7 @@
 <script src="./script-tools.js"></script>
 <script src="./script-store.js"></script>
 <script src="./pinets-layer.js"></script>
+<script src="./tester.js"></script>
 <script src="./pinets-runner.js"></script>
 <script src="./overlay.js"></script>
 <!-- unified.js: the ONE landasan (window.TraderRun) every door runs through —
@@ -325,9 +327,9 @@
 <link rel="modulepreload" href="./vendor/vela-pinets/dist/index.js">
 <link rel="modulepreload" href="./vendor/vela/dist/chunk-ALTGHKIM.js">
 <link rel="modulepreload" href="./vendor/vela/dist/chunk-AUOB7A5Y.js">
+<link rel="modulepreload" href="./vendor/vela/dist/chunk-BN4DNS3O.js">
 <link rel="modulepreload" href="./vendor/vela/dist/chunk-I2U4NZD2.js">
-<link rel="modulepreload" href="./vendor/vela/dist/chunk-MOJ4T26N.js">
-<link rel="modulepreload" href="./vendor/vela/dist/chunk-UNUVPQFW.js">
+<link rel="modulepreload" href="./vendor/vela/dist/chunk-QYIO37K7.js">
 <link rel="modulepreload" href="./vendor/vela/dist/chunk-W4EJWLEO.js">
 <link rel="modulepreload" href="./vendor/vela/dist/chunk-W5YPYZ2P.js">
 <link rel="modulepreload" href="./vendor/vela/dist/chunk-WY5H4S4I.js">
