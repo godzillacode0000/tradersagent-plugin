@@ -17,11 +17,9 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   doors (`/api/fx/bars`, `/api/fx/status`) and a browser provider (`fx-provider.js`) make that the
   engine's data source for both the main symbol and `request.security`'s secondary one. A script opts
   in with `//@fx GBPUSD` + `//@tf 60` (`pinets-runner.js`), which routes the run to the FX provider
-  (`ctor: 'fx-provider'`) instead of the chart. `examples/strategies/nyam-smt-gbpusd.pine` is the
-  NY-AM / SMT / sweep / 50% fib strategy with **1–2% risk sizing**, and its header carries its own
-  measured results — on 2 years of GBPUSD 1h it returns 68 trades and **PF 0.88**, i.e. the mechanics
-  work and the edge does not yet: 1R is +40.53 (PF 1.01), SMT halves the 2R loss, and with
-  `margin_long=100` every risk-sized order is rejected (85 placed, zero fills — hence 0 on purpose).
+  (`ctor: 'fx-provider'`) instead of the chart, and a strategy sizes itself in R (1–2% of equity per
+  trade) without any plugin change. Measured while wiring it: with `margin_long=100` every risk-sized
+  FX order is rejected (85 placed, zero fills) — the emulator needs `0` to size by risk, not notional.
   15 new tests (`test_fxdata.py`). Suite **1,252 tests OK** (1 skipped, 77 files).
 
 - **Strategy backtests on the new intrabar broker emulator** (20 Oct): LuxAlgo's 19 Oct update — Vela

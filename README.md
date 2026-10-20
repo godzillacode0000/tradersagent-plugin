@@ -222,10 +222,9 @@ LZMA `>IIIff` records in `console/backend/fxdata.py`), cached under
 never relabelled. `GET /api/fx/bars?pair=GBPUSD&timeframe=30&limit=500` is the door; `…/api/fx/status`
 says what is cached.
 
-`examples/strategies/nyam-smt-gbpusd.pine` is a worked example: NY-AM session, SMT vs EURUSD, a
-liquidity sweep, a limit at the 50% of the displacement leg, **1–2% risk per trade**, 2R target. Read
-its header before trusting it — on 2 years of GBPUSD 1h it is **PF 0.88**, which is the honest result
-of those rules on that pair, not a recommendation.
+Your own strategy is the script itself: session filter, SMT via `request.security`, a sweep test, a
+resting limit at the 50% of the leg, and risk-sized `qty` — no plugin code changes. Strategies are
+personal, so none ship in this repository; the directive is the whole integration.
 
 ### Edge Stats — how often did it actually happen?
 
@@ -480,6 +479,13 @@ it from `http://127.0.0.1:8787/api/library/thumb`: **~5 ms warm instead of ~2 s*
   nothing else is platform-specific. **Windows is out of scope.**
 
 ## Development
+
+**What belongs in a commit:** design changes and system upgrades that make the plugin better for
+anyone who installs it — engines, data sources, the agent surface, the sheet, the docs that describe
+them. Personal material stays out: a strategy you trade, a study of someone else's app, scratch data,
+experiments that did not become a feature. If a change only makes sense with your own account, your
+own pair or your own opinions in it, it is not a plugin change.
+
 
 ```bash
 node tools/verify-plugin.mjs traders-desk/desktop/plugin.js                                      # plugin harness (same check CI runs)

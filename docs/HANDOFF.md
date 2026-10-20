@@ -378,6 +378,10 @@ print(json.loads(urllib.request.urlopen(req,timeout=30).read()))
 PY
 ```
 
+Commit scope: **design and system upgrades only** — anything that improves the plugin for another
+installer (engines, data feeds, tools, the sheet, the docs that explain them). Personal strategies,
+studies of other apps, scratch captures and experiments that never became a feature stay untracked.
+
 Do **not**: commit Library Pine source; add LuxAlgo branding; add any trade execution/order path (this is
 read/style/draw/compute only); print or commit credentials from `~/.hermes/config.yaml`; hardcode the
 page's action list in the backend; assume a clean API return means the chart changed.
