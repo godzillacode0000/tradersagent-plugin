@@ -30,11 +30,13 @@
     ['paper', 'Paper'],
     ['journal', 'Journal'],
     ['propfirms', 'Prop firms'],
+    ['data', 'Data'],
   ];
   const SUB = {
     paper: 'Binance spot · simulated · every fill waits for your approval',
     journal: 'closed trades only — what the account actually did',
     propfirms: 'the directory and what is on offer — data, not a ranking',
+    data: 'where the bars come from — the local tick store first, nothing substituted',
   };
   const FIRMS_SHOWN = 30;                       // long lists slow this machine down; the count says what is cut
 
@@ -42,6 +44,7 @@
     tab: 'paper', open: false, busy: false,
     account: null, accountErr: null,
     firms: null, offers: null, propErr: null, propBusy: false, propAsked: false, firmsNote: '',
+    data: { status: null, err: null, busy: false, asked: false },
     sim: {                                        // the prop-firm simulator (19 Oct)
       stats: { winrate: 48, avg_win: 1.6, avg_loss: 1, risk: 1, trades_per_day: 4, paths: 10000, seed: 42 },
       status: null, busy: false, err: null, result: null, target: null,
@@ -340,6 +343,46 @@
     }
   }
 
+  /* ── the data card: what actually feeds the chart ─────────────────────────────────────────── */
+  const int = (n) => (Number(n) || 0).toLocaleString('en-US');
+  const size = (b) => {
+    const n = Number(b) || 0;
+    return n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : `${(n / 1e6).toFixed(1)} MB`;
+  };
+
+  function dataHtml() {
+    const d = S.data;
+    if (d.err) return `<p class="desk__bad">${esc(d.err)}</p>`;
+    const st = (d.status && d.status.ticks) || null;
+    if (!st) return '<p class="desk__empty">Reading the tick store…</p>';
+    const rows = Object.entries(st.symbols || {}).sort((a, b) => a[0].localeCompare(b[0]));
+    if (!rows.length) return '<p class="desk__empty">No ticks on disk yet. Run: python3 tools/fx-fetch.py --years 2</p>';
+    return `
+      <p class="desk__note"><b>Dukascopy ticks</b> on disk · ${int(st.hours)} instrument-hours · ${size(st.bytes)} ·
+        mid-price bars with real volume and median spread · <b>Yahoo off</b>, nothing substituted</p>
+      <table class="desk__table">
+        <thead><tr><th scope="col">Symbol</th><th scope="col">Hours</th><th scope="col">From</th>
+          <th scope="col">To</th><th scope="col">Size</th></tr></thead>
+        <tbody>${rows.map(([sym, v]) => `<tr><td>${esc(sym)}</td><td>${int(v.hours)}</td>
+          <td>${esc(v.from)}</td><td>${esc(v.to)}</td><td>${size(v.bytes)}</td></tr>`).join('')}</tbody>
+      </table>`;
+  }
+
+  async function pullData() {
+    if (S.data.busy) return;
+    S.data.busy = true;
+    S.data.err = null;
+    render();
+    try {
+      S.data.status = await call('/api/fx/status');
+    } catch (err) {
+      S.data.err = `The tick store could not be read: ${err.message}`;
+    } finally {
+      S.data.busy = false;
+      render();
+    }
+  }
+
   /* ── the sheet ──────────────────────────────────────────────────────────────────────────────── */
   function renderTabs() {
     tabsEl.innerHTML = TABS.map(([id, label]) => {
@@ -356,6 +399,7 @@
     if (subEl) subEl.textContent = SUB[S.tab] || '';
     let html;
     if (S.tab === 'propfirms') html = propHtml();
+    else if (S.tab === 'data') html = dataHtml();
     else if (!S.account) html = S.accountErr
       ? `<p class="desk__bad">${esc(S.accountErr)}</p><p class="desk__note"><button type="button" class="desk__btn" data-retry>Try again</button></p>`
       : '<p class="desk__empty">Reading the paper account…</p>';
@@ -450,6 +494,7 @@
     if (TABS.some(([id]) => id === tab)) S.tab = tab;
     render();
     if (S.tab === 'propfirms' && !S.propAsked) { S.propAsked = true; pullPropFirms(); }
+    if (S.tab === 'data' && !S.data.asked) { S.data.asked = true; pullData(); }
   }
 
   function open(tab) {

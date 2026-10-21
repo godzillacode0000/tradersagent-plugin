@@ -6,6 +6,11 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **A Data tab in the desk sheet** (21 Oct), so the source is visible instead of inferred: it reads
+  `/api/fx/status` and lists every instrument in the tick store with hours, coverage and size, under
+  one line that says what the bars are (mid-price, real volume, median spread) and that **Yahoo is
+  off**. Pinned by four tests in `test_desk_sheet.py`.
+
 - **Metals and index CFDs are first-class symbols now** (21 Oct): `NAS100`, `SP500`, `XAUUSD` and
   `XAGUSD` live in the same tick store as the FX pairs, but `_clean_pair` only accepted six letters, so
   the provider refused them with "not a six-letter FX pair". The four now carry their own precision

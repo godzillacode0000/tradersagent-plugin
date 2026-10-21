@@ -132,3 +132,25 @@ class TheSkinIsTheConsolesSkin(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheDataCard(unittest.TestCase):
+    """The Data tab says what actually feeds the chart, so the operator never has to guess the source."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.js = (Path(__file__).resolve().parents[2] / "frontend/desk.js").read_text(encoding="utf-8")
+
+    def test_data_is_a_tab(self):
+        self.assertIn("['data', 'Data']", self.js)
+
+    def test_it_reads_the_tick_store_endpoint(self):
+        self.assertIn("call('/api/fx/status')", self.js)
+        self.assertIn("status.ticks", self.js)
+
+    def test_it_says_yahoo_is_off(self):
+        # the operator's ruling: no silent substitution, and the card has to say so
+        self.assertIn("Yahoo off", self.js)
+
+    def test_symbols_are_escaped(self):
+        self.assertIn("esc(sym)", self.js)
