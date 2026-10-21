@@ -200,6 +200,11 @@ engine (Vela 0.8.5 · vela-pinets 0.2.17 · our PineTS fork of 0.12.0) and reads
   actually paid — never as "none". The curve is labelled as cumulative closed-trade P&L, not an
   intra-bar equity path.
 
+Bars served to the chart come from this store first (`fxticks.py` → `fxdata._bars`): mid-price OHLC,
+`volume` = ticks in the bar, `spread` = median bid/ask. `/api/fx/bars` labels the answer
+`source: "dukascopy-ticks"` and includes the coverage it used. Yahoo is disabled unless
+`TRADERS_FX_ALLOW_YAHOO=1`.
+
 ### Tick data for the seven instruments
 
 `tools/fx-fetch.py` walks Dukascopy's **v1 tick API** and keeps one gzipped JSON per instrument-hour

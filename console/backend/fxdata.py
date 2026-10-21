@@ -249,6 +249,42 @@ def _yahoo(pair: str, timeframe: str = "30", limit: int = 500):
     return rows, meta
 
 
+def _from_ticks(pair: str, tf: str, want: int, wanted_end: dt.datetime):
+    """Rows from the local Dukascopy tick store, or (None, None) when it cannot serve the window.
+
+    The store is the preferred source: it is on disk, it carries bid/ask (so bars have a real spread)
+    and a true tick count, and it is the data the operator asked to download. It is not a fallback —
+    a short or missing store falls through to the network loader, which labels itself separately.
+    """
+    try:
+        import fxticks
+    except Exception:                                   # module not deployed (old live tree)
+        return None, None
+    try:
+        if not fxticks.has(pair):
+            return None, None
+        rows, meta = fxticks.bars(pair, tf, want, wanted_end)
+    except Exception:                                   # noqa: BLE001 - a store problem must not 500
+        return None, None
+    if len(rows) < min(want, 30):                       # too thin to be the answer
+        return None, None
+    return rows, meta
+
+
+def _fallback(pair: str, tf: str, want: int):
+    """Yahoo is OFF unless TRADERS_FX_ALLOW_YAHOO=1: the operator ruled it out for backtests.
+
+    Kept because it is a working read-only probe and some tests exercise its shaping, but it must never
+    answer silently: unset, the call fails with the reason instead of substituting mid prices that have
+    no volume and no spread (and which once got labelled "dukascopy").
+    """
+    if os.environ.get("TRADERS_FX_ALLOW_YAHOO", "").strip() not in ("1", "true", "yes"):
+        raise FxError("no local ticks for this pair and the Dukascopy feed is unreachable; "
+                      "Yahoo is disabled (set TRADERS_FX_ALLOW_YAHOO=1 to allow the labelled fallback)",
+                      "no_local_ticks")
+    return _yahoo(pair, tf, want)
+
+
 def _bars(pair: str, timeframe: str = "30", limit: int = 500, end: dt.datetime | None = None):
     """The last `limit` bars of `pair` at `timeframe`, ending now (or at `end`).
 
@@ -265,12 +301,16 @@ def _bars(pair: str, timeframe: str = "30", limit: int = 500, end: dt.datetime |
         raise FxError("limit must be a number", "bad_limit")
     wanted_end = (end or dt.datetime.now(dt.timezone.utc)).astimezone(dt.timezone.utc).replace(
         minute=0, second=0, microsecond=0)
+    # 1. the tick store on disk (tools/fx-fetch.py): no network, real spread, real tick counts
+    rows, meta = _from_ticks(pair, tf, want, wanted_end)
+    if rows is not None:
+        return rows, meta
     try:
         newest = latest_available(pair, wanted_end + dt.timedelta(hours=1))
     except FxError:
         newest = None                             # throttled or unreachable: fall back, and say so
     if newest is None:
-        return _yahoo(pair, tf, want)                 # throttled or unreachable: fall back, and say so
+        return _fallback(pair, tf, want)          # labelled, and only if explicitly allowed
     end = newest + dt.timedelta(hours=1)
     minutes = TIMEFRAMES[tf]
     need_minutes = want * minutes
@@ -344,8 +384,14 @@ def status() -> dict:
         pairs[d.name] = {"hours": n, "bytes": b}
         total_h += n
         total_b += b
-    return {"home": str(CACHE), "pairs": pairs, "hours": total_h, "bytes": total_b,
-            "feed": FEED, "pairs_supported": list(PAIRS)}
+    out = {"home": str(CACHE), "pairs": pairs, "hours": total_h, "bytes": total_b,
+           "feed": FEED, "pairs_supported": list(PAIRS)}
+    try:
+        import fxticks
+        out["ticks"] = fxticks.status()
+    except Exception:                                   # noqa: BLE001 - status must always answer
+        out["ticks"] = {"home": None, "symbols": {}, "hours": 0, "bytes": 0}
+    return out
 
 
 def _main(argv: list[str]) -> int:

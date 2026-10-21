@@ -6,6 +6,15 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **The market-data provider now prefers the tick store** (21 Oct): `console/backend/fxticks.py` builds
+  bars from the downloaded Dukascopy ticks (`tools/fx-fetch.py`), and `fxdata._bars` asks it first — no
+  network, real **volume** (tick count per bar) and a real **spread** (median bid/ask per minute, so one
+  bad print cannot widen a 30-minute bar). `/api/fx/bars` reports `source: "dukascopy-ticks"` and a
+  `store` block with the coverage behind it; `/api/fx/status` counts the store per symbol. Yahoo is now
+  **off** unless `TRADERS_FX_ALLOW_YAHOO=1`, per the operator's ruling — without local ticks and with the
+  feed unreachable the call fails with the reason instead of substituting mid prices that have neither
+  volume nor spread. Bars are mid-price OHLC. Pinned by `test_fxticks.py` (8 tests).
+
 - **A tick downloader for the seven instruments** (21 Oct): `tools/fx-fetch.py` walks Dukascopy's
   **v1 tick API** (`/v1/ticks/<CODE>/<Y>/<M>/<D>/<H>`) — the modern JSON endpoint, far more tolerant of
   a bulk walk than the `/datafeed/` host that kept resetting us. Codes carry a dash and a class
