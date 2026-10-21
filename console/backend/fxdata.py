@@ -50,14 +50,30 @@ class FxError(Exception):
         self.code = code
 
 
+# Instruments that are not six-letter FX pairs but live in the same tick store, with their precision
+# (measured: every one of them quotes to 3 decimals on this feed) and the kind `syminfo` should report.
+NON_FX = {
+    "XAUUSD": ("commodity", 3, "Gold vs US Dollar"),
+    "XAGUSD": ("commodity", 3, "Silver vs US Dollar"),
+    "NAS100": ("index", 3, "US 100 Tech Index"),
+    "SP500": ("index", 3, "US 500 Index"),
+}
+
+
 def digits(pair: str) -> int:
-    return DIGITS_JPY if pair.upper().endswith("JPY") else 5
+    p = pair.upper()
+    if p in NON_FX:
+        return NON_FX[p][1]
+    return DIGITS_JPY if p.endswith("JPY") else 5
 
 
 def _clean_pair(pair: str) -> str:
     p = str(pair or "").upper().replace("/", "").replace("=X", "").strip()
+    if p in NON_FX:
+        return p
     if len(p) != 6 or not p.isalpha():
-        raise FxError(f"{pair!r} is not a six-letter FX pair (GBPUSD, EURUSD, …)", "bad_pair")
+        raise FxError(f"{pair!r} is not a six-letter FX pair (GBPUSD, EURUSD, …) or one of "
+                      f"{', '.join(NON_FX)}", "bad_pair")
     return p
 
 
@@ -354,9 +370,12 @@ def symbol_info(pair: str) -> dict:
     """What the Pine engine's `syminfo.*` reads. mintick follows the pair's own precision."""
     pair = _clean_pair(pair)
     mintick = 10 ** -digits(pair)
+    kind, _d, described = NON_FX.get(pair, ("forex", 5, f"{pair[:3]} / {pair[3:]}"))
     return {
-        "ticker": pair, "tickerid": f"FX:{pair}", "prefix": "FX", "root": pair,
-        "description": f"{pair[:3]} / {pair[3:]}", "type": "forex", "main_tickerid": f"FX:{pair}",
+        "ticker": pair, "tickerid": f"{'IDX' if kind == 'index' else 'FX'}:{pair}",
+        "prefix": "IDX" if kind == "index" else "FX", "root": pair,
+        "description": described, "type": kind,
+        "main_tickerid": f"{'IDX' if kind == 'index' else 'FX'}:{pair}",
         "current_contract": "", "isin": "", "basecurrency": pair[:3], "currency": pair[3:],
         "timezone": "Etc/UTC", "country": "", "mintick": mintick, "pricescale": 10 ** digits(pair),
         "minmove": 1, "pointvalue": 1, "mincontract": 0.01, "session": "24x5", "volumetype": "base",

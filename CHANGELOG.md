@@ -6,6 +6,13 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Metals and index CFDs are first-class symbols now** (21 Oct): `NAS100`, `SP500`, `XAUUSD` and
+  `XAGUSD` live in the same tick store as the FX pairs, but `_clean_pair` only accepted six letters, so
+  the provider refused them with "not a six-letter FX pair". The four now carry their own precision
+  (3 dp, measured on the feed), `syminfo` type (`index` for NAS100/SP500, `commodity` for metals — so
+  `tickerid` is `IDX:NAS100`, not `FX:`), and descriptions. Verified live: all seven answer
+  `source: "dukascopy-ticks"` with real volume.
+
 - **The market-data provider now prefers the tick store** (21 Oct): `console/backend/fxticks.py` builds
   bars from the downloaded Dukascopy ticks (`tools/fx-fetch.py`), and `fxdata._bars` asks it first — no
   network, real **volume** (tick count per bar) and a real **spread** (median bid/ask per minute, so one
