@@ -200,6 +200,24 @@ engine (Vela 0.8.5 · vela-pinets 0.2.17 · our PineTS fork of 0.12.0) and reads
   actually paid — never as "none". The curve is labelled as cumulative closed-trade P&L, not an
   intra-bar equity path.
 
+### Tick data for the seven instruments
+
+`tools/fx-fetch.py` walks Dukascopy's **v1 tick API** and keeps one gzipped JSON per instrument-hour
+under `~/.local/share/traders-agent/fx/ticks-v1/<SYMBOL>/<YYYY-MM-DD>/<HH>.json.gz` (plus a `.empty`
+marker for shut hours, so a resume does not re-ask). It is resumable, retries resets/429s, and reports
+ETA:
+
+```bash
+python3 tools/fx-fetch.py --years 2 --workers 5      # GBPUSD EURUSD GBPJPY XAUUSD XAGUSD NAS100 SP500
+python3 tools/fx-fetch.py --days 3 --instruments GBPUSD,XAUUSD
+python3 tools/fx-fetch.py --report                    # hours, empty hours, MB, coverage per symbol
+```
+
+Two conventions worth knowing before touching it: the v1 API's month is **1-based** (unlike the older
+`/datafeed/` paths, which are 0-based), and `times`/`bids`/`asks` are **cumulative deltas** — decode
+with a running sum (`decode_hour`, pinned by `test_fx_ticks.py`). Codes carry a dash and the class:
+`GBP-USD`, `XAU-USD`, `USATECH.IDX-USD` (Nasdaq-100), `USA500.IDX-USD` (S&P 500).
+
 ### Forex pairs — GBPUSD, EURUSD, and the SMT pair
 
 A `strategy()` for forex cannot use the chart's bars (the pane charts Binance crypto), and PineTS

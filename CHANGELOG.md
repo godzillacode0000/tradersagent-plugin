@@ -6,6 +6,18 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **A tick downloader for the seven instruments** (21 Oct): `tools/fx-fetch.py` walks Dukascopy's
+  **v1 tick API** (`/v1/ticks/<CODE>/<Y>/<M>/<D>/<H>`) — the modern JSON endpoint, far more tolerant of
+  a bulk walk than the `/datafeed/` host that kept resetting us. Codes carry a dash and a class
+  (`GBP-USD`, `XAU-USD`, `USATECH.IDX-USD`, `USA500.IDX-USD`); the v1 month is **1-based**, the
+  opposite of `/datafeed/`'s 0-based paths. Two facts that would silently corrupt a download are pinned
+  by `test_fx_ticks.py`: `times`/`bids`/`asks` are **cumulative deltas** (a running sum, not absolute
+  values), and the hour's `timestamp` is the base every offset counts from. Storage is one gzipped JSON
+  per instrument-hour plus `.empty` markers for shut hours, so the walk resumes; measured 12 hours/s
+  with 5 workers, ~33 KB per hour on disk. Fetched data is TODAY's: 4,547 ticks for 08:00 with a 0.4-pip
+  spread, monotonic over exactly 60 minutes — further proof the "lag" reported on 20 Oct was the
+  0-based month bug, not the feed.
+
 - **Audit fixes (21 Oct)** — four bugs from an external read of `630e3ef`, plus version and install
   hygiene. **The Dukascopy month was off by one:** the tick path is 0-based in months (September =
   `/08/`), so a 1-based URL read the *following* month and stamped those prices with the requested
