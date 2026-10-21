@@ -23,7 +23,7 @@
 # To re-pin later (rule 4): a new PR that bumps sha+version together.
 name: tradersagent-plugin
 repo: https://github.com/godzillacode0000/tradersagent-plugin
-sha: 42a3a1d92fe029a92b96cd4467eb5b8228cce0cb
+sha: "5028dff8b24a7da5475ae0fcdd53558fcae81564"
 subdir: traders-desk
 version: "1.3.0"
 description: >-
