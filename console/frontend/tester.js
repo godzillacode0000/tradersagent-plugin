@@ -17,12 +17,20 @@
 (function () {
   'use strict';
 
+  /* Every engine- or script-sourced string goes through here before it touches innerHTML.
+     `strategy("…")` is written by whoever authored the script — a Library paste, a shared file, an
+     agent — so it is untrusted text. Measured 20 Oct: a title of `Breakout <img src=x onerror=…>`
+     executed in the console's origin, where the paper-broker approve door lives. desk.js escaped
+     every field from day one; this file was the sink that forgot. */
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
   const money = (v, cur) => {
     if (v == null || !Number.isFinite(Number(v))) return '—';
     const n = Number(v);
     const sign = n < 0 ? '−' : '';
     return sign + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 }) +
-      (cur && cur !== 'NONE' ? ' ' + cur : '');
+      (cur && cur !== 'NONE' ? ' ' + esc(cur) : '');
   };
   const compact = (v) => {
     if (v == null || !Number.isFinite(Number(v))) return '—';
@@ -168,9 +176,9 @@
     root.hidden = false;
     root.innerHTML = `
       <div class="tester__bar">
-        <div class="tester__name" title="${st.title ? String(st.title).replace(/"/g, '&quot;') : 'strategy'}">
+        <div class="tester__name" title="${esc(st.title || 'strategy')}">
           <span class="tester__dot" style="background:${colour}"></span>
-          <b>${st.title ? st.title : 'strategy'}</b>
+          <b>${esc(st.title || 'strategy')}</b>
           <small>intrabar fills</small>
         </div>
         <dl class="tester__stats">

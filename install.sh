@@ -262,7 +262,7 @@ if [[ $WITH_PROP -eq 1 ]]; then
   else
     echo "installing the prop-firm simulator (@luxalgo/prop-firm-sim-cli, MIT) into $PROP_HOME — needs the network once"
     mkdir -p "$PROP_HOME"
-    (cd "$PROP_HOME" && { [[ -f package.json ]] || npm init -y >/dev/null 2>&1; } && npm install --no-audit --no-fund @luxalgo/prop-firm-sim-cli)
+    (cd "$PROP_HOME" && { [[ -f package.json ]] || npm init -y >/dev/null 2>&1; } && npm install --no-audit --no-fund --save-exact @luxalgo/prop-firm-sim-cli@1.2.0)
     # Prove it starts before saying it is installed (same rule as the Edge Stats block above).
     if ! "$PROP_HOME/node_modules/.bin/prop-firm-sim" --version >/dev/null 2>&1; then
       echo "the simulator installed but does not start — try: $PROP_HOME/node_modules/.bin/prop-firm-sim --version" >&2

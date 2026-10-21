@@ -12,7 +12,6 @@ import os
 import stat
 import sys
 import tempfile
-import textwrap
 import threading
 import unittest
 import urllib.error

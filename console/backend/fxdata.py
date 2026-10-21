@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 FEED = "https://datafeed.dukascopy.com/datafeed"
-CACHE = Path(os.environ.get("TRADERS_FX_HOME") or Path.home() / ".local/share/traders-agent/fx")
+CACHE = Path(os.environ.get("TRADERS_FX_HOME") or Path.home() / ".local/share/traders-agent/fx/v2")
 DIGITS_JPY = 3          # EURUSD 1.12309 (5), USDJPY 147.123 (3)
 RECORD = struct.Struct(">IIIff")
 PER_HOUR = 3600 * 1000
@@ -40,9 +40,6 @@ PAIRS = ("GBPUSD", "EURUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "
 TIMEFRAMES = {"1": 1, "5": 5, "15": 15, "30": 30, "60": 60, "120": 120, "240": 240, "D": 1440}
 
 UA = {"User-Agent": "Mozilla/5.0 (traders-agent fx loader)"}
-
-
-LAST: dict = {}          # coverage of the most recent bars() call (source, span, lag)
 
 
 class FxError(Exception):
@@ -65,6 +62,7 @@ def _clean_pair(pair: str) -> str:
 
 
 def hour_path(pair: str, when: dt.datetime) -> Path:
+    """Local cache path — OUR naming (1-based month, readable), not the feed's layout."""
     return CACHE / pair / when.strftime("%Y-%m-%d") / f"{when.hour:02d}h.bi5"
 
 
@@ -73,7 +71,13 @@ def _download(pair: str, when: dt.datetime) -> bytes:
     path = hour_path(pair, when)
     if path.exists():
         return path.read_bytes()
-    url = f"{FEED}/{pair}/{when.year}/{when.month:02d}/{when.day:02d}/{when.hour:02d}h_ticks.bi5"
+    # Dukascopy's tick path is 0-BASED IN MONTHS (January = 00, October = 09, December = 11) —
+    # the single most expensive gotcha in this feed. Python's `month` is 1-based, so without the
+    # `- 1` every request reads the FOLLOWING month and the decoder relabels its ticks with the
+    # requested timestamps: a silent, plausible-looking wrong-month backtest. Measured 20 Oct:
+    # /2026/09/24/ → 404 while /2026/08/24/ (September) → 27,285 bytes.
+    url = (f"{FEED}/{pair}/{when.year}/{when.month - 1:02d}/{when.day:02d}/"
+           f"{when.hour:02d}h_ticks.bi5")
     # The feed resets connections when a burst arrives (measured 20 Oct: 8 parallel workers → Errno 54
     # on the first request). Retry with a growing pause instead of failing the whole load; a 404 is a
     # real answer (no file that hour) and is not retried.
@@ -84,9 +88,8 @@ def _download(pair: str, when: dt.datetime) -> bytes:
             break
         except urllib.error.HTTPError as exc:
             if exc.code == 404:
-                # No file for that hour. Either the market was shut (weekend) or the feed has not
-                # published that date yet — Dukascopy's free window lags, measured 20 Oct: a date two
-                # weeks back is served, "today" answers 404. Not an error: the caller reports coverage.
+                # No file for that hour: the market was shut (weekend/holiday), the date is in the
+                # future, or Dukascopy has not published it yet. Not an error — coverage says so.
                 raw = b""
                 break
             if exc.code == 429:
@@ -94,7 +97,7 @@ def _download(pair: str, when: dt.datetime) -> bytes:
                 time.sleep(2.0 + attempt * 2.0)
                 continue
             raise FxError(f"Dukascopy answered {exc.code} for {pair} {when:%Y-%m-%d %H}h", "feed_error")
-        except (urllib.error.URLError, ConnectionResetError, TimeoutError, OSError) as exc:
+        except (urllib.error.URLError, ConnectionResetError, TimeoutError, OSError):
             time.sleep(0.5 * (attempt + 1))
     else:
         raise FxError(f"the Dukascopy feed stayed unavailable for {pair} {when:%Y-%m-%d %H}h", "feed_unreachable")
@@ -181,10 +184,11 @@ def _resample(m1: dict[int, dict], minutes: int) -> list[dict]:
 def latest_available(pair: str, end: dt.datetime | None = None, max_days: int = 60) -> dt.datetime | None:
     """The newest hour the feed actually serves for `pair`.
 
-    Dukascopy's free window lags reality (measured 20 Oct 2026: hours from two weeks back answer 200,
-    "today" answers 404), and the feed rate-limits a burst of probes (429). So the search is coarse
-    first — one probe per candidate day at midday — and only then refines the day it found, instead of
-    walking hour by hour from now.
+    It exists for future `end` values, weekends, holidays and hours Dukascopy has not published yet —
+    not for a publication delay, which an earlier version of this file wrongly assumed (the "lag" was
+    the 0-based month bug reading the following month's folder). Coarse first — one probe per candidate
+    day at midday — then refine that day, so a probe costs a handful of requests rather than one per
+    hour.
     """
     pair = _clean_pair(pair)
     now = (end or dt.datetime.now(dt.timezone.utc)).astimezone(dt.timezone.utc)
@@ -206,7 +210,7 @@ YAHOO_TF = {"1": ("1m", "7d"), "5": ("5m", "60d"), "15": ("15m", "60d"), "30": (
 YAHOO = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}=X"
 
 
-def yahoo_bars(pair: str, timeframe: str = "30", limit: int = 500) -> list[dict]:
+def _yahoo(pair: str, timeframe: str = "30", limit: int = 500):
     """Fallback bars from Yahoo's public chart endpoint (no key), used when Dukascopy throttles.
 
     Same shape as `bars()`, same mid-price convention (Yahoo publishes one price series, so mid = it),
@@ -239,14 +243,13 @@ def yahoo_bars(pair: str, timeframe: str = "30", limit: int = 500) -> list[dict]
         rows.append({"openTime": int(t) * 1000, "closeTime": int(t) * 1000 + step,
                      "open": o, "high": h, "low": l, "close": c, "volume": v or 0})
     rows = rows[-max(1, min(int(limit), 20000)):]
-    LAST.clear()
-    LAST.update({"pair": pair, "timeframe": tf, "count": len(rows),
-                 "from": rows[0]["openTime"] if rows else None,
-                 "to": rows[-1]["openTime"] if rows else None, "source": "yahoo"})
-    return rows
+    meta = {"pair": pair, "timeframe": tf, "count": len(rows), "source": "yahoo",
+            "from": rows[0]["openTime"] if rows else None,
+            "to": rows[-1]["openTime"] if rows else None}
+    return rows, meta
 
 
-def bars(pair: str, timeframe: str = "30", limit: int = 500, end: dt.datetime | None = None) -> list[dict]:
+def _bars(pair: str, timeframe: str = "30", limit: int = 500, end: dt.datetime | None = None):
     """The last `limit` bars of `pair` at `timeframe`, ending now (or at `end`).
 
     FX is closed at weekends, so a fixed lookback would silently return half a week of bars on a
@@ -267,7 +270,7 @@ def bars(pair: str, timeframe: str = "30", limit: int = 500, end: dt.datetime | 
     except FxError:
         newest = None                             # throttled or unreachable: fall back, and say so
     if newest is None:
-        return yahoo_bars(pair, tf, want)
+        return _yahoo(pair, tf, want)                 # throttled or unreachable: fall back, and say so
     end = newest + dt.timedelta(hours=1)
     minutes = TIMEFRAMES[tf]
     need_minutes = want * minutes
@@ -280,15 +283,31 @@ def bars(pair: str, timeframe: str = "30", limit: int = 500, end: dt.datetime | 
             break
         span += dt.timedelta(days=1)
     rows = out[-want:]
-    LAST.clear()
-    LAST.update({"pair": pair, "timeframe": tf, "count": len(rows),
-                 "from": rows[0]["openTime"] if rows else None,
-                 "to": rows[-1]["openTime"] if rows else None,
-                 "requested_end": int(wanted_end.timestamp() * 1000),
-                 "feed_end": int(newest.timestamp() * 1000),
-                 "lag_hours": round((wanted_end - newest).total_seconds() / 3600.0, 1),
-                 "source": "dukascopy"})
-    return rows
+    meta = {"pair": pair, "timeframe": tf, "count": len(rows), "source": "dukascopy",
+            "from": rows[0]["openTime"] if rows else None,
+            "to": rows[-1]["openTime"] if rows else None,
+            "requested_end": int(wanted_end.timestamp() * 1000),
+            "feed_end": int(newest.timestamp() * 1000),
+            "lag_hours": round((wanted_end - newest).total_seconds() / 3600.0, 1)}
+    return rows, meta
+
+
+def bars(pair: str, timeframe: str = "30", limit: int = 500, end: dt.datetime | None = None) -> list[dict]:
+    """The last `limit` bars of `pair` at `timeframe` (this module's own CLI/test door)."""
+    return _bars(pair, timeframe, limit, end)[0]
+
+
+def bars_with_meta(pair: str, timeframe: str = "30", limit: int = 500,
+                   end: dt.datetime | None = None) -> dict:
+    """`{"bars": [...], "coverage": {...}}` for one call.
+
+    The coverage dict travels WITH the rows. It used to live in a module global (`LAST`), and two
+    concurrent requests — which `request.security` makes routine: the main symbol and the secondary
+    pair at once — could each read the other's source/lag, labelling Yahoo bars "dukascopy" or
+    attaching a span to the wrong series. A shared mutable global cannot describe two answers.
+    """
+    rows, meta = _bars(pair, timeframe, limit, end)
+    return {"bars": rows, "coverage": meta}
 
 
 def symbol_info(pair: str) -> dict:
@@ -309,7 +328,10 @@ def symbol_info(pair: str) -> dict:
 def status() -> dict:
     """How much is cached, so a caller can say 'first load takes a minute' honestly."""
     if not CACHE.exists():
-        return {"home": str(CACHE), "pairs": {}, "hours": 0, "bytes": 0}
+        # One shape always: the empty-cache branch used to omit `pairs_supported`/`feed`, and a test
+        # that read it passed or failed by whether this machine's cache dir happened to exist.
+        return {"home": str(CACHE), "pairs": {}, "hours": 0, "bytes": 0,
+                "feed": FEED, "pairs_supported": list(PAIRS)}
     pairs: dict[str, dict] = {}
     total_h = total_b = 0
     for d in sorted(CACHE.iterdir()):

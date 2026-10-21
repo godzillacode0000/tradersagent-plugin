@@ -13,7 +13,6 @@ per-view record exists (older pages, the CLI, tests).
 """
 
 import json
-import os
 import sys
 import tempfile
 import threading

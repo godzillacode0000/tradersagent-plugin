@@ -8,7 +8,7 @@
 # agent's chart tools come the same way — ./bin/register-mcp.sh registers the traders-chart MCP
 # server with Hermes; the plugin itself registers UI, not tools (so `provides_tools` stays empty).
 name: traders-desk
-version: 1.2.0
+version: 1.3.0
 description: >-
   A chart-first Trader's Agent for Hermes Desktop: one sidebar row docks a live Vela chart (the
   LuxAlgo engine this repo vendors) beside your conversation, with replay, 76 drawing tools, the

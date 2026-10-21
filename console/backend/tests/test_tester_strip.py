@@ -49,6 +49,15 @@ class TheStripExists(unittest.TestCase):
             self.assertIn(label, JS, f"the strip never prints {label}")
         self.assertIn("intrabar fills", JS, "the update's own claim, on the strip")
 
+    def test_the_strategy_title_is_escaped_before_it_touches_html(self):
+        # A strategy title is authored text (a Library paste, a shared file, an agent). Measured
+        # 20 Oct: `strategy("x <img src=x onerror=...>")` executed in the console's own origin, where
+        # the paper-broker approve door lives. Every interpolation of engine text must go through esc.
+        self.assertIn("const esc =", JS)
+        self.assertIn("esc(st.title || 'strategy')", JS)
+        self.assertNotIn("${st.title ? st.title", JS)
+        self.assertIn("esc(cur)", JS, "the currency field rides the same rule")
+
     def test_the_curve_says_what_it_is(self):
         self.assertIn("cumulative closed-trade", JS)
         self.assertIn("not an intra-bar equity path", JS)

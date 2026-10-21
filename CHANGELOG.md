@@ -6,6 +6,24 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Audit fixes (21 Oct)** — four bugs from an external read of `630e3ef`, plus version and install
+  hygiene. **The Dukascopy month was off by one:** the tick path is 0-based in months (September =
+  `/08/`), so a 1-based URL read the *following* month and stamped those prices with the requested
+  timestamps — a plausible, silently wrong backtest. Measured: `/2026/09/24/` 404 vs `/2026/08/24/`
+  27,285 bytes; the "two-week publication lag" recorded on 20 Oct was this bug, not a lag. The cache
+  root moved to `fx/`**v2**` so wrong-month empty markers cannot shadow real hours. **XSS in the tester
+  strip:** the `strategy()` title was interpolated raw into `innerHTML`, so a crafted title executed in
+  the console's origin (where the paper-broker approve door lives) — every engine string now goes
+  through `esc()`, with a pin. **Coverage no longer lives in a module global:** `bars_with_meta()` returns
+  `{"bars", "coverage"}` per call, so two concurrent requests (`request.security` fetches the secondary
+  pair alongside the main) can no longer swap their source/lag. **CI's lint is green again** (four unused
+  imports), `status()` has one shape with or without a cache, and that test is hermetic. The prop-firm
+  engine is pinned (`@luxalgo/prop-firm-sim-cli@1.2.0`, `--save-exact`) like the Edge Stats block, and
+  **one `VERSION` file** now drives the console, `plugin.yaml` and the catalog entry (they disagreed:
+  1.0.0 / 1.2.0 / 1.3.0) — `test_versions.py` keeps them in step. `TRADERS_AGENT_ALLOWED_HOSTS` is
+  documented, and the `ALLOW_LAN` row no longer claims LAN peers are read-only when the token lets them
+  drive the console. Suite **1,259 tests OK** (1 skipped, 77 files).
+
 - **Forex data for backtests, and a strategy that names its own market** (20 Oct): the pane charts a
   Binance crypto feed, so a GBPUSD/EURUSD strategy had nothing to run on — and worse,
   `request.security("EURUSD", …)` on custom bars silently returns the chart's own series (measured:

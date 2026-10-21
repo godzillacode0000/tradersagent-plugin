@@ -58,7 +58,24 @@ import library_thumbs
 # Constants
 # --------------------------------------------------------------------------
 
-SERVER_VERSION = "1.0.0"
+def _repo_version() -> str:
+    """The ONE version, from the repo's VERSION file.
+
+    Three different numbers used to ship at once — `/api/health` said 1.0.0, the plugin manifest
+    1.2.0, the catalog entry 1.3.0 — so "which version is this?" had no answer. A file next to the
+    repo's root is the only place they can agree, and `test_versions.py` keeps the four in step.
+    """
+    for candidate in (Path(__file__).resolve().parents[2] / "VERSION", Path("VERSION")):
+        try:
+            text = candidate.read_text(encoding="utf-8").strip()
+            if text:
+                return text
+        except OSError:
+            continue
+    return "0.0.0"
+
+
+SERVER_VERSION = _repo_version()
 DEFAULT_MCP_URL = "https://mcp.luxalgo.com/mcp"
 
 # --------------------------------------------------------------------------
@@ -1220,13 +1237,14 @@ def ep_fx_bars(params: dict) -> dict:
     timeframe = _one(params, "timeframe") or "30"
     limit = _limit(params.get("limit"), 500, 1, 20000)
     try:
-        rows = fxdata.bars(pair, timeframe, limit)
+        answer = fxdata.bars_with_meta(pair, timeframe, limit)
     except fxdata.FxError as exc:
         raise ApiError(str(exc), 400, exc.code) from None
-    # Provenance comes from the loader, never from this line: `bars()` falls back to Yahoo when
-    # Dukascopy throttles, and an endpoint that always said "dukascopy" would be lying about the
-    # numbers it just served (measured 20 Oct — the first live call was Yahoo data labelled dukascopy).
-    coverage = dict(fxdata.LAST)
+    rows = answer["bars"]
+    # Provenance comes from THIS call, never from a module global: `bars_with_meta` falls back to
+    # Yahoo when Dukascopy throttles, and request.security fetches the secondary pair concurrently —
+    # a shared global let two answers swap their source/lag (the audit's #4).
+    coverage = answer["coverage"]
     return {"pair": fxdata._clean_pair(pair), "timeframe": str(timeframe).upper(), "bars": rows,
             "symbol": fxdata.symbol_info(pair), "count": len(rows),
             "source": coverage.get("source", "unknown"), "coverage": coverage,

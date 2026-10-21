@@ -424,7 +424,8 @@ bin/               register-mcp.sh (the MCP registration on its own) · is-enabl
 | `LUXALGO_CONSOLE` | `http://127.0.0.1:8787` | where the MCP server, `trader-chart` and `library-indicator` find the console (set it with `hermes mcp add … --env LUXALGO_CONSOLE=http://127.0.0.1:9000` when `PORT` is not 8787) |
 | `TRADER_CONSOLE_TOKEN_FILE` | `~/.local/state/traders-agent/console.token` | the POST token the console mints and the MCP server and CLI read |
 | `TRADERS_AGENT_WORKDIR` | `~/Projects/luxalgo-web` if it exists, else `console/agents` | the folder the in-app study bridge runs the agent CLI in (never taken from a request) |
-| `TRADERS_AGENT_ALLOW_LAN` | unset | with `--host 0.0.0.0`, let LAN peers receive the POST token; without it they get a read-only console |
+| `TRADERS_AGENT_ALLOW_LAN` | unset | with `--host 0.0.0.0`, non-loopback peers may receive the POST token — i.e. they can DRIVE the console, not just read it. Unset, a non-loopback peer can read but every write is refused |
+| `TRADERS_AGENT_ALLOWED_HOSTS` | unset | comma-separated extra hostnames/IPs treated as "this machine" by the Origin check (e.g. a tailscale name, so a page served over it can drive the console). It widens who may act through a browser page — add only names you control |
 | `TRADER_PAPER_FILE` | `~/.local/state/traders-agent/paper.json` | the paper account (use another path for a second test console) |
 | `LUXALGO_AGENTS_DIR` | `console/agents` | runtime state: chart bridge files, study threads, shots |
 | `HERMES_CLI` | `hermes` on `PATH` | CLI the in-app study bridge shells out to |

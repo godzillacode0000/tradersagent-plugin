@@ -13,11 +13,11 @@ are exercised with `fxdata.bars` stubbed. What is being held here:
 
 import datetime as dt
 import lzma
-import os
 import struct
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -104,6 +104,27 @@ class TheCacheAndTheFeed(unittest.TestCase):
             self.assertEqual(fxdata._download("GBPUSD", when), b"PAYLOAD")
         self.assertEqual(len(self.calls), 1, "one fetch, then the cache")
 
+    def test_the_feed_url_uses_a_zero_based_month(self):
+        # /2026/09/24/ is the FOLLOWING month on Dukascopy's tick path; September is /08/.
+        # Measured 20 Oct: 09/24 → 404, 08/24 → 27,285 bytes. A 1-based URL silently reads the
+        # next month and relabels its ticks with the requested timestamps.
+        seen = {}
+
+        def capture(req, timeout=0, **kw):
+            seen["url"] = req.full_url
+            raise urllib.error.HTTPError(req.full_url, 404, "no", {}, None)
+
+        with mock.patch("urllib.request.urlopen", capture):
+            fxdata._download("GBPUSD", dt.datetime(2026, 9, 24, 10, tzinfo=dt.timezone.utc))
+        self.assertIn("/2026/08/24/10h_ticks.bi5", seen["url"])
+        self.assertNotIn("/2026/09/24/", seen["url"])
+
+    def test_status_has_one_shape_with_or_without_a_cache(self):
+        with mock.patch.object(fxdata, "CACHE", Path(self.tmp.name) / "absent"):
+            empty = fxdata.status()
+        self.assertEqual(set(empty), {"home", "pairs", "hours", "bytes", "feed", "pairs_supported"})
+        self.assertIn("GBPUSD", empty["pairs_supported"])
+
     def test_a_404_is_an_answer_and_is_cached(self):
         when = dt.datetime(2026, 10, 15, 10, tzinfo=dt.timezone.utc)
         with mock.patch("urllib.request.urlopen", self.fake(code=404)):
@@ -173,10 +194,26 @@ class TheBars(unittest.TestCase):
         body.__enter__ = lambda s: s
         body.__exit__ = lambda *a: False
         with mock.patch("urllib.request.urlopen", lambda *a, **k: body):
-            rows = fxdata.yahoo_bars("GBPUSD", "30", 10)
+            rows, meta = fxdata._yahoo("GBPUSD", "30", 10)
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]["openTime"], 1000 * 1000)
-        self.assertEqual(fxdata.LAST["source"], "yahoo")
+        self.assertEqual(meta["source"], "yahoo")
+
+    def test_coverage_travels_with_its_own_call(self):
+        # audit #4: two concurrent requests must not swap their source. The API that makes that
+        # impossible is the one pinned here — coverage is RETURNED, never read from a module global.
+        def fake(pair, tf, limit, end=None):
+            time.sleep(0.01 if pair == "GBPUSD" else 0.0)
+            return [{"openTime": 0}], {"pair": pair, "source": "dukascopy" if pair == "GBPUSD" else "yahoo"}
+        out = {}
+        with mock.patch.object(fxdata, "_bars", fake):
+            threads = [threading.Thread(target=lambda p=p: out.__setitem__(p, fxdata.bars_with_meta(p, "30", 10)))
+                       for p in ("GBPUSD", "EURUSD")]
+            [t.start() for t in threads]
+            [t.join() for t in threads]
+        self.assertEqual(out["GBPUSD"]["coverage"]["source"], "dukascopy")
+        self.assertEqual(out["EURUSD"]["coverage"]["source"], "yahoo")
+        self.assertFalse(hasattr(fxdata, "LAST"), "no shared global may come back")
 
     def test_symbol_info_precision_follows_the_pair(self):
         self.assertAlmostEqual(fxdata.symbol_info("GBPUSD")["mintick"], 0.00001)
@@ -193,7 +230,9 @@ class TheDoors(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.patches = [mock.patch.object(srv, "CONSOLE_TOKEN", TOKEN),
-                       mock.patch.object(srv, "AGENTS_ROOT", cls.tmp.name)]
+                       mock.patch.object(srv, "AGENTS_ROOT", cls.tmp.name),
+                       # hermetic: without this the status test reads the real ~/.local/share cache
+                       mock.patch.object(fxdata, "CACHE", Path(cls.tmp.name) / "fx")]
         for p in cls.patches:
             p.start()
         cls.httpd = srv.Server(("127.0.0.1", 0), srv.Handler)
@@ -222,11 +261,10 @@ class TheDoors(unittest.TestCase):
         rows = [{"openTime": 0, "closeTime": 1800000, "open": 1.3, "high": 1.31, "low": 1.29,
                  "close": 1.305, "volume": 1.0}]
         def fake_bars(pair, tf, limit):
-            fxdata.LAST.clear()
-            fxdata.LAST.update({"pair": pair, "timeframe": tf, "count": len(rows), "source": "dukascopy"})
-            return rows
+            return {"bars": rows, "coverage": {"pair": pair, "timeframe": tf,
+                                                "count": len(rows), "source": "dukascopy"}}
 
-        with mock.patch.object(fxdata, "bars", fake_bars):
+        with mock.patch.object(fxdata, "bars_with_meta", fake_bars):
             out = self.get("/api/fx/bars?pair=GBPUSD&timeframe=30&limit=10")
         data = out.get("data") or out
         self.assertEqual(data["count"], 1)
