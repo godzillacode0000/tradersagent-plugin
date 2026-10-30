@@ -6,6 +6,24 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Changed
 
+- **The DeepSeek Harness gets a desk of its own** (30 Oct). The operator: a desk opened in dsh "should stay in
+  DeepSeek Harness only — not linked or connected" to the Hermes one.
+  - **Before:** the dsh adapter pointed its MCP server at the Hermes console on 8787. Both agents shared one chart,
+    one paper account, one write token and one set of studies, and dsh's in-app study chat ran through the Hermes CLI.
+  - **Now:** `TRADERS_AGENT_INSTANCE=NAME` (`console/backend/instance.py`) gives a console its own token, paper
+    account, chart and study files under `~/.local/state/traders-agent/instances/NAME/`. It also gets its own Edge
+    Stats workspace and engine on the console's port + 2, and no Hermes chat unless `HERMES_CLI` is set.
+  - A named desk runs on its own port, and the browser keeps per origin, so saved scripts, layout and theme are
+    separate too.
+  - `install-dsh.sh` defaults to desk `dsh` on 8788. New options: `--console` runs that desk, and `--service`
+    installs it as its own service (`traders-agent-dsh.service` / `com.traders-agent.console.dsh`). `--doctor`
+    fails if the console on dsh's port is another desk. `--shared` is the explicit way back to one desk.
+  - Unset, nothing changes for Hermes.
+  - Market data stays shared on purpose.
+  - Pinned by `test_instances.py`, which runs two real consoles side by side: different tokens, a token refused
+    across desks, a chart command that never reaches the other chart, and the chat refused on the dsh desk. Also
+    pinned by adapter and service tests.
+
 - **The replay strip is a glass capsule** (30 Oct), the operator's pick of two designs. One frosted
   pill, about 430 px: the scrubber is its top edge (white playhead, the range's first and last bar fade
   in on hover), Play is the one bright control and turns into Pause, back-to-start and next-bar flank

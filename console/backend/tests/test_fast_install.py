@@ -104,6 +104,23 @@ class ServiceLinux(unittest.TestCase):
                        'ExecStart=/bin/bash "%s"' % (ROOT / "console" / "start.sh")):
             self.assertIn(needle, r.stdout)
 
+    def test_a_named_desk_gets_its_own_unit_and_state(self):
+        # 30 Oct: dsh's console runs beside the Hermes one, never replacing its unit or its pid file
+        r = subprocess.run(["bash", str(SERVICE), "print", "--port", "8788", "--instance", "dsh"],
+                           capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('Environment="TRADERS_AGENT_INSTANCE=dsh"', r.stdout)
+        st = subprocess.run(["bash", str(SERVICE), "status", "--port", "1", "--instance", "dsh"],
+                            capture_output=True, text=True, timeout=30)
+        self.assertIn("traders-agent-dsh.service", st.stdout)
+        self.assertIn("instances/dsh/console.log", st.stdout)
+        bad = subprocess.run(["bash", str(SERVICE), "print", "--instance", "../x"], capture_output=True, text=True)
+        self.assertEqual(bad.returncode, 2)
+
+    def test_the_default_unit_is_unchanged(self):
+        st = subprocess.run(["bash", str(SERVICE), "status", "--port", "1"], capture_output=True, text=True, timeout=30)
+        self.assertIn("journalctl --user -u traders-agent.service", st.stdout)
+
     def test_bad_port_and_unknown_command(self):
         self.assertEqual(subprocess.run(["bash", str(SERVICE), "print", "--port", "abc"], capture_output=True, text=True).returncode, 2)
         self.assertEqual(subprocess.run(["bash", str(SERVICE), "frobnicate"], capture_output=True, text=True).returncode, 2)

@@ -9,6 +9,9 @@
 # (launchd KeepAlive ≈ systemd Restart=always). Label: com.traders-agent.console
 # Plist: ~/Library/LaunchAgents/com.traders-agent.console.plist
 # Logs:  ~/.local/state/traders-agent/console.out.log / console.err.log
+#
+# TRADERS_AGENT_INSTANCE=NAME (backend/instance.py) runs a separate desk beside the default one: label
+# com.traders-agent.console.NAME, its own plist and logs under ~/.local/state/traders-agent/instances/NAME/.
 set -euo pipefail
 
 [[ "$(uname -s)" == "Darwin" ]] || { echo "service-macos.sh: macOS only (Linux uses the systemd unit in the README)" >&2; exit 2; }
@@ -16,9 +19,16 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 LABEL="com.traders-agent.console"
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 STATE_DIR="$HOME/.local/state/traders-agent"
 PORT="${PORT:-8787}"
+INSTANCE="${TRADERS_AGENT_INSTANCE:-}"
+[[ "$INSTANCE" == "default" ]] && INSTANCE=""
+if [[ -n "$INSTANCE" ]]; then
+  [[ "$INSTANCE" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || { echo "service-macos.sh: TRADERS_AGENT_INSTANCE must be 1-32 lowercase letters, digits or dashes, got '$INSTANCE'" >&2; exit 2; }
+  LABEL="$LABEL.$INSTANCE"
+  STATE_DIR="$STATE_DIR/instances/$INSTANCE"
+fi
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
 # launchd services get a minimal PATH, but the console shells out: `node` drives the Edge Stats
 # sidecar, and `hermes` is what the in-app study bridge starts. Bake the node directory (and the
@@ -102,6 +112,8 @@ cmd_install() {
   <dict>
     <key>PORT</key>
     <string>$PORT</string>
+    <key>TRADERS_AGENT_INSTANCE</key>
+    <string>$(xml_escape "$INSTANCE")</string>
     <key>PY</key>
     <string>$(xml_escape "$PY_RESOLVED")</string>
     <key>TRADERS_AGENT_ALLOWED_HOSTS</key>

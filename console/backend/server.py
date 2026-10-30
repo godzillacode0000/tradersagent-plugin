@@ -52,6 +52,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+import instance
+
+# Which desk this is (instance.py): unset is the Hermes desk as it always was; a named desk keeps its
+# token, paper account, chart and study files apart and does not call Hermes. A bad name stops here,
+# before any module below (edgestats registers an exit hook) reads a path from it.
+try:
+    instance.name()
+except instance.InstanceError as _exc:
+    sys.stderr.write(f"server.py: {_exc}\n")
+    raise SystemExit(2) from None
+
 import library_thumbs
 
 # --------------------------------------------------------------------------
@@ -103,9 +114,10 @@ CHART_INLINE_WAIT_MAX = 30.0
 
 AGENTS_ROOT = os.path.abspath(os.environ.get(
     "LUXALGO_AGENTS_DIR",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agents")))
-CHAT_CLI = os.environ.get("HERMES_CLI") or os.path.expanduser(
-    "~/.hermes/hermes-agent/venv/bin/hermes")
+    str(instance.state_dir() / "agents") if instance.name()
+    else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agents")))
+CHAT_CLI = os.environ.get("HERMES_CLI") or ("" if instance.name() else os.path.expanduser(
+    "~/.hermes/hermes-agent/venv/bin/hermes"))
 DEFAULT_PORT = 8787
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_FRONTEND = "../frontend"
@@ -648,6 +660,7 @@ def ep_health(params: dict) -> dict:
     data = {
         "status": "ok" if BRIDGE.connected else "degraded",
         "version": SERVER_VERSION,
+        "instance": instance.label(),
         "mcp": BRIDGE.stats(),
         "cache": CACHE.stats(),
         "endpoints": sorted(ROUTES.keys()),
@@ -1655,8 +1668,7 @@ def get_broker() -> PaperBroker:
     global _BROKER
     with _BROKER_LOCK:
         if _BROKER is None:
-            path = os.environ.get("TRADER_PAPER_FILE") or str(
-                Path(os.path.expanduser("~")) / ".local/state/traders-agent/paper.json")
+            path = os.environ.get("TRADER_PAPER_FILE") or str(instance.state_dir() / "paper.json")
             _BROKER = PaperBroker(path, broker_price)
         return _BROKER
 
@@ -2044,7 +2056,7 @@ def cors_origin(origin: str | None, host: str | None) -> str | None:
 # The token lives beside the runtime state at mode 0600; delete the file to mint a new one.
 TOKEN_PATH = Path(os.environ.get(
     "TRADER_CONSOLE_TOKEN_FILE",
-    str(Path(os.path.expanduser("~")) / ".local/state/traders-agent/console.token"),
+    str(instance.state_dir() / "console.token"),
 ))
 
 
@@ -2435,6 +2447,11 @@ class Handler(BaseHTTPRequestHandler):
                        detail={"available": ids})
             return
         agent = load_study(AGENTS_ROOT, agent_id)
+        if not CHAT_CLI:
+            self._fail(f"the study chat is off on the '{instance.label()}' desk: it would run through the Hermes CLI, "
+                       "and this desk is kept apart from Hermes. Talk to this desk's agent through its MCP tools, "
+                       "or set HERMES_CLI to a CLI on purpose.", HTTPStatus.SERVICE_UNAVAILABLE, "chat_unavailable")
+            return
 
         # `fresh` starts the study over: the CLI is called WITHOUT --resume, and the new session id
         # replaces the stored one (the reply path below already persists a changed session).
@@ -2861,6 +2878,8 @@ def _agent_workdir() -> str:
     env = os.environ.get("TRADERS_AGENT_WORKDIR")
     if env:
         return env
+    if instance.name():
+        return str(AGENTS_ROOT)
     legacy = os.path.expanduser("~/Projects/luxalgo-web")
     return legacy if os.path.isdir(legacy) else str(AGENTS_ROOT)
 
@@ -2875,6 +2894,9 @@ def _env_int(name: str, default: int) -> int:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    # A named desk runs its own Edge Stats engine beside its own console (port + 2), never the default's.
+    if instance.name():
+        os.environ.setdefault("TRADERS_EDGE_PORT", str(instance.edge_port(args.port)))
 
     frontend_root = os.path.abspath(
         args.frontend if os.path.isabs(args.frontend) else os.path.join(os.getcwd(), args.frontend)
@@ -2898,7 +2920,7 @@ def main(argv=None) -> int:
     except (OSError, OverflowError) as exc:
         log(f"cannot listen on {args.host}:{args.port}: {exc}")
         return 2
-    log(f"listening on http://{args.host}:{args.port}  (Ctrl-C to stop)")
+    log(f"listening on http://{args.host}:{args.port}  (Ctrl-C to stop) · desk: {instance.label()}")
 
     if args.no_mcp:
         log("starting WITHOUT an MCP session (--no-mcp)")
