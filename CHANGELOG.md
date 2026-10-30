@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- **`AGENTS.md`: give an agent the repo link and it installs the plugin** (30 Oct). A file written for AI agents
+  and signposted at the top of the README ("If you are an AI agent ..."). It covers:
+  - telling the user what will happen, before running anything;
+  - checking the machine and working out the host (Hermes, DeepSeek Harness, other);
+  - the exact install commands for each host, and the line that means success;
+  - the two warnings an install can print (no `hermes` on PATH, no systemd) and what to do about each;
+  - verifying with the doctor and `/api/health`;
+  - what to tell the user at the end, since an agent cannot click inside their app;
+  - a troubleshooting table that quotes the real error lines;
+  - update and uninstall.
+
+  Its rules: no sudo, no optional extras unless asked, stop on failure. `test_agents_guide.py` fails if a flag it
+  runs or a message it waits for stops existing in the scripts. A fresh-home dry run of the guide took 7 s to a
+  console answering on 8787 (Hermes) and 8788 (dsh, doctor: all checks passed).
+
 ### Changed
 
 - **The DeepSeek Harness gets a desk of its own** (30 Oct). The operator: a desk opened in dsh "should stay in
@@ -37,6 +54,11 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   `test_replay.py`.
 
 ### Fixed
+
+- **`./install.sh --doctor` failed a working install.** The install started the console with the Python that has
+  the `mcp` client, but the doctor checked the first Python 3.11+ on PATH, a 3.14 without it, and said FAIL. It
+  now prefers an interpreter with `mcp`, the same order as the service and `bin/setup-python.sh`. Found by
+  following `AGENTS.md` on a fresh home.
 
 - **The chart sprang back to its right edge after a drag, in replay and out** (30 Oct). Two faults in
   `nudgeChart()` (app.js): its repaint dispatched a window `resize`, and the resize handler called

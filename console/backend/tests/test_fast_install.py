@@ -132,6 +132,24 @@ class ServiceLinux(unittest.TestCase):
         self.assertIn('echo $! > "$PIDFILE"', src)
 
 
+class TheDoctorChecksTheInterpreterTheInstallUsed(unittest.TestCase):
+    """30 Oct, a fresh-home run of `./install.sh --all` then `--doctor`: the install started the console with the
+    python that HAS the mcp client (3.11), the doctor checked the first 3.11+ on PATH (a 3.14 without it) and
+    reported FAIL on a working install — the first thing an agent following AGENTS.md would chase."""
+
+    @unittest.skipIf((ROOT / ".venv").exists(), "a repo .venv wins over PATH; this pins the PATH order")
+    def test_a_python_with_mcp_beats_a_newer_one_without(self):
+        with tempfile.TemporaryDirectory() as d:
+            stub = Path(d)
+            (stub / "python3.14").write_text('#!/bin/sh\ncase "$*" in *"import mcp"*) exit 1;; esac\nexit 0\n')
+            (stub / "python3.11").write_text("#!/bin/sh\nexit 0\n")
+            for f in stub.iterdir():
+                f.chmod(0o755)
+            env = {"HOME": d, "PATH": f"{stub}:/usr/bin:/bin", "TERM": "dumb", "PORT": "1"}
+            r = subprocess.run(["bash", str(INSTALL), "--doctor"], capture_output=True, text=True, env=env, timeout=60)
+            self.assertIn(f"console python: {stub}/python3.11", r.stdout, r.stdout)
+
+
 class InstallAllFlag(unittest.TestCase):
     def test_help_lists_the_one_command_install(self):
         r = subprocess.run(["bash", str(INSTALL), "--help"], capture_output=True, text=True, timeout=30)

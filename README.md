@@ -13,6 +13,11 @@
 
 </div>
 
+> [!IMPORTANT]
+> **If you are an AI agent asked to install this for your user, follow [`AGENTS.md`](AGENTS.md).** It covers
+> Hermes, DeepSeek Harness and other agents: exact commands, what success looks like, how to verify, and what to
+> tell your user at the end.
+
 A sidebar entry that docks a full trading console **beside your conversation**: **Vela**-rendered
 candlesticks and the **LuxAlgo Library** (800+ concepts and indicators, served live by LuxAlgo's own
 MCP server) in one local web app — your chat session is left exactly where it was.
@@ -52,6 +57,9 @@ MCP server) in one local web app — your chat session is left exactly where it 
 | **OS** | Linux (built and verified on Omarchy / Arch + Hyprland) or **macOS** — Macs need the one-time venv + the launchd service; see [`docs/MACOS.md`](docs/MACOS.md). Windows is out of scope. |
 
 ## Install
+
+**Let your agent do it:** give Hermes (or DeepSeek Harness) this repository's link and ask it to install it. It
+reads [`AGENTS.md`](AGENTS.md) and runs the steps below, then tells you the two clicks left in the app.
 
 **One command** (Linux and macOS; about a minute with [uv](https://docs.astral.sh/uv/), a few without it):
 
