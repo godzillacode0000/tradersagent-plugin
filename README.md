@@ -567,7 +567,7 @@ python3 -m compileall console/backend                                           
 
 The suite is stdlib-only on purpose — the study store, the chat bridge, the chart bridge and the push
 channel are covered without a browser, a network, or the app — and the MCP tool layer runs against a
-stub console. about 1,188 tests (73 files, 9 skipped on 16 Oct); the MCP ones skip themselves when `fastmcp` is absent (CI sets
+stub console. about 1,314 tests (81 files, 9 skipped on 30 Oct); the MCP ones skip themselves when `fastmcp` is absent (CI sets
 `TRADER_CHART_REQUIRE_MCP=1` so they cannot silently skip there).
 
 CI (`.github/workflows/ci.yml`) has three jobs: the plugin harness (Node 20 — the real plugin first,

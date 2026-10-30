@@ -133,3 +133,106 @@ class FxDataPrefersTheStore(unittest.TestCase):
         rows, meta = fxdata._bars("GBPUSD", "30", 10)
         self.assertEqual(meta["source"], "dukascopy-ticks")
         self.assertTrue(rows)
+
+
+def _weekday_store(root: Path, symbol: str, last_day: dt.datetime, weekdays: int) -> int:
+    """`weekdays` trading days ending on `last_day`, two ticks an hour; returns the hour-files written."""
+    n, day = 0, last_day
+    while n < weekdays * 24:
+        if day.weekday() < 5:
+            for hour in range(24):
+                write_hour(root, symbol, day.replace(hour=hour),
+                           [(1_000, 1.30000, 1.30020), (2_000, 1.30010, 1.30030)])
+                n += 1
+        day -= dt.timedelta(days=1)
+    return n
+
+
+class LongWindows(unittest.TestCase):
+    """A 4h or daily request covers months of calendar time. The window has to be sized from the
+    timeframe once — not grown a day at a time, which re-read every hour on every pass, gave up after
+    60 passes and returned fewer bars than asked for without saying so (500 x 4h came back as ~400)."""
+
+    WEEKDAYS = 230
+    END = dt.datetime(2026, 10, 24, tzinfo=dt.timezone.utc)          # a Saturday: Friday is the last day
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.tmp.name)
+        cls.files = _weekday_store(cls.root, "GBPUSD", dt.datetime(2026, 10, 23, tzinfo=dt.timezone.utc),
+                                   cls.WEEKDAYS)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def setUp(self):
+        self._old = fxticks.TICKS
+        fxticks.TICKS = self.root
+        fxticks._hour.cache_clear()
+        self.addCleanup(setattr, fxticks, "TICKS", self._old)
+        self.addCleanup(fxticks._hour.cache_clear)
+        self.passes = 0
+        real = fxticks._minute_bars
+
+        def counted(*a, **k):
+            self.passes += 1
+            return real(*a, **k)
+
+        fxticks._minute_bars = counted
+        self.addCleanup(setattr, fxticks, "_minute_bars", real)
+
+    def test_500_four_hour_bars_are_500(self):
+        rows, meta = fxticks.bars("GBPUSD", "240", 500, self.END)
+        self.assertEqual(len(rows), 500)
+        self.assertEqual(meta["count"], 500)
+
+    def test_150_daily_bars_are_150(self):
+        rows, _ = fxticks.bars("GBPUSD", "D", 150, self.END)
+        self.assertEqual(len(rows), 150)
+
+    def test_the_hours_are_read_in_at_most_two_passes(self):
+        fxticks.bars("GBPUSD", "240", 500, self.END)
+        self.assertLessEqual(self.passes, 2)
+
+    def test_asking_past_the_store_returns_the_store_and_stops_at_its_first_day(self):
+        rows, meta = fxticks.bars("GBPUSD", "D", 1000, self.END)
+        self.assertEqual(len(rows), self.WEEKDAYS)          # every day there is, not a guess
+        self.assertEqual(meta["count"], self.WEEKDAYS)
+        self.assertLessEqual(self.passes, 2)                # and no walking into years with no files
+
+
+class TheHourCache(unittest.TestCase):
+    """The decoded-hour cache is what makes a second request cheap; it must not hold raw ticks. A busy
+    hour is thousands of ticks — at thousands of cached hours that was gigabytes of tuples."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self._old = fxticks.TICKS
+        fxticks.TICKS = self.root
+        fxticks._hour.cache_clear()
+        self.addCleanup(setattr, fxticks, "TICKS", self._old)
+        self.addCleanup(fxticks._hour.cache_clear)
+
+    def test_an_hour_is_cached_as_at_most_sixty_minute_bars(self):
+        when = dt.datetime(2026, 10, 20, 10, tzinfo=dt.timezone.utc)
+        write_hour(self.root, "GBPUSD", when,
+                   [(i * 100, 1.30000 + (i % 7) * 1e-5, 1.30020 + (i % 7) * 1e-5) for i in range(3000)])
+        cached = fxticks.hour_minutes("GBPUSD", when)
+        self.assertLessEqual(len(cached), 60)
+        self.assertEqual(sum(m[5] for m in cached), 3000)    # every tick still counted in volume
+
+    def test_a_truncated_hour_is_skipped_not_fatal(self):
+        # tools/fx-fetch.py interrupted mid-write used to leave a half gzip that broke every window
+        # containing it — the provider then fell through to the network for the whole request
+        day = dt.datetime(2026, 10, 20, tzinfo=dt.timezone.utc)
+        write_hour(self.root, "GBPUSD", day.replace(hour=10), [(1_000, 1.30000, 1.30020)])
+        write_hour(self.root, "GBPUSD", day.replace(hour=11), [(1_000, 1.30100, 1.30120)])
+        bad = self.root / "GBPUSD" / "2026-10-20" / "11.json.gz"
+        bad.write_bytes(bad.read_bytes()[:12])
+        rows, meta = fxticks.bars("GBPUSD", "60", 10, day.replace(hour=12))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(meta["unreadable_hours"], 1)

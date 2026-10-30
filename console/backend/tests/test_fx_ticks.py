@@ -72,3 +72,63 @@ class TheInstrumentMap(unittest.TestCase):
     def test_storage_layout_is_symbol_day_hour(self):
         path = fxf.hour_path("GBPUSD", dt.datetime(2026, 9, 24, 10, tzinfo=dt.timezone.utc))
         self.assertTrue(str(path).endswith("GBPUSD/2026-09-24/10.json.gz"))
+
+
+class TheWriteIsAtomic(unittest.TestCase):
+    """An interrupted walk must not leave a half-written hour that a resume then calls 'cached'."""
+
+    def setUp(self):
+        import tempfile
+        from unittest import mock
+        self.mock = mock
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        p = mock.patch.object(fxf, "HOME", Path(self.tmp.name))
+        p.start()
+        self.addCleanup(p.stop)
+        self.when = dt.datetime(2026, 9, 24, 10, tzinfo=dt.timezone.utc)
+
+    def test_a_failed_write_leaves_no_hour_behind(self):
+        with self.mock.patch.object(fxf, "_fetch", return_value=("ok", b'{"timestamp": 0}')), \
+             self.mock.patch("os.replace", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                fxf.fetch_one("GBPUSD", "GBP-USD", self.when)
+        self.assertFalse(fxf.hour_path("GBPUSD", self.when).exists())
+
+    def test_a_good_write_lands_whole_with_no_temp_file(self):
+        with self.mock.patch.object(fxf, "_fetch", return_value=("ok", b'{"timestamp": 0}')):
+            self.assertEqual(fxf.fetch_one("GBPUSD", "GBP-USD", self.when)[0], "ok")
+        day = fxf.hour_path("GBPUSD", self.when).parent
+        self.assertEqual(sorted(p.name for p in day.iterdir()), ["10.json.gz"])
+
+
+class RecentHoursAreNotFinal(unittest.TestCase):
+    """The walk used to end at the CURRENT hour: a partial hour was then cached as whole, and an hour the
+    feed had not published yet got an `.empty` marker — a permanent hole a resume never re-asks."""
+
+    def setUp(self):
+        import tempfile
+        from unittest import mock
+        self.mock = mock
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        p = mock.patch.object(fxf, "HOME", Path(self.tmp.name))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_the_walk_ends_at_the_last_complete_hour(self):
+        now = dt.datetime(2026, 10, 30, 14, 25, tzinfo=dt.timezone.utc)
+        self.assertEqual(fxf.last_complete_hour(now), dt.datetime(2026, 10, 30, 13, tzinfo=dt.timezone.utc))
+
+    def test_a_recent_404_is_not_marked_empty(self):
+        recent = dt.datetime.now(dt.timezone.utc).replace(minute=0, second=0, microsecond=0) \
+            - dt.timedelta(hours=3)
+        with self.mock.patch.object(fxf, "_fetch", return_value=("empty", b"")):
+            fxf.fetch_one("GBPUSD", "GBP-USD", recent)
+        self.assertFalse(fxf.marker_path("GBPUSD", recent).exists())
+
+    def test_an_old_404_is_marked_empty(self):
+        old = dt.datetime(2026, 1, 1, 3, tzinfo=dt.timezone.utc)
+        with self.mock.patch.object(fxf, "_fetch", return_value=("empty", b"")):
+            fxf.fetch_one("GBPUSD", "GBP-USD", old)
+        self.assertTrue(fxf.marker_path("GBPUSD", old).exists())

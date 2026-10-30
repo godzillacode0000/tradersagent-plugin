@@ -4,6 +4,31 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Fixed
+
+- **Long tick-store windows came back short and slow** (30 Oct): `fxticks.bars` grew its window a day
+  per pass from a 0.4x guess, re-reading every hour on every pass and giving up after 60. On a two-year
+  store 500 x 4h returned 404 bars in 12 s and 500 x D returned 186 in 67 s, with no sign anything was
+  missing. The window is now sized once from the timeframe (1.5x the trading time plus a long weekend,
+  one wider pass for holidays, never before the store's first day): 500 and 500, in 0.8 s and 4.9 s.
+  Same bars as before wherever the old walk did reach. Weekends cost one stat instead of 24.
+- **The hour cache held raw ticks**: 4,096 decoded hours of a busy pair ran to gigabytes. Each hour is
+  now packed as at most 60 minute bars (~4 KB), so 20,000 hours stay under ~80 MB. The docstring's
+  promise of an on-disk `fx/bars-v1` cache, which never existed, is gone, along with the unused
+  `TRADERS_FX_BARS`.
+- **One truncated hour sank the whole request**: a download cut off mid-write left a half gzip that
+  raised inside `bars()`, so the provider dropped the store and went to the network. Unreadable hours
+  are now skipped and counted (`unreadable_hours` in the meta). `tools/fx-fetch.py` writes each hour to a
+  `.part` file and renames it, so it no longer leaves them.
+- **`tools/fx-fetch.py` cached hours that were not final**: the walk ended at the current hour (cached
+  half-full for good), and a 404 the feed had simply not published yet became a permanent `.empty` hole.
+  It now stops at the last complete hour and marks a 404 empty only once it is a day old.
+- **The Data tab could read "Reading the tick store…" forever**: `fxdata.status()` returned early when
+  the network cache folder did not exist and dropped the `ticks` block, which is exactly the case for an
+  operator who has only run `fx-fetch.py`. One shape always now, plus a `yahoo` flag. The card's Yahoo
+  line follows the server instead of a constant, and it re-reads the store on every visit.
+- **CI was red on `main`**: an unused `import json` in `tools/fx-fetch.py` failed the ruff gate.
+
 ### Added
 
 - **A Data tab in the desk sheet** (21 Oct), so the source is visible instead of inferred: it reads

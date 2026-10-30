@@ -152,5 +152,13 @@ class TheDataCard(unittest.TestCase):
         # the operator's ruling: no silent substitution, and the card has to say so
         self.assertIn("Yahoo off", self.js)
 
+    def test_the_yahoo_line_follows_the_server_not_a_constant(self):
+        # with TRADERS_FX_ALLOW_YAHOO=1 the card used to keep saying "Yahoo off"
+        self.assertIn("status.yahoo", self.js)
+
+    def test_the_card_rereads_the_store_each_time_the_tab_opens(self):
+        # a download finished while the console ran was invisible until a page reload
+        self.assertNotIn("S.data.asked", self.js)
+
     def test_symbols_are_escaped(self):
         self.assertIn("esc(sym)", self.js)

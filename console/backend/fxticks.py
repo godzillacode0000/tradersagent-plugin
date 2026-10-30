@@ -15,24 +15,25 @@ What the bars mean:
 Storage read: `~/.local/share/traders-agent/fx/ticks-v1/<SYMBOL>/<YYYY-MM-DD>/<HH>.json.gz`, the shape
 `tools/fx-fetch.py` writes (v1 JSON, whole hour, cumulative deltas). `.empty` markers are shut hours.
 
-Resampled bars are cached per symbol/timeframe/month under `fx/bars-v1/…` so a 500-bar request costs one
-pass over the hours, not one pass per request.
+Each hour is decoded once and kept in memory as at most 60 packed minute bars (~3 KB), keyed by path and
+mtime, so a repeat request is a resample, not a re-read. There is no on-disk bar cache: the first daily or
+4h request over a long window still decodes every hour in it once.
 """
 
 from __future__ import annotations
 
+import array
 import datetime as dt
 import gzip
 import json
 import os
 import statistics
+import zlib
 from functools import lru_cache
 from pathlib import Path
 
 TICKS = Path(os.environ.get("TRADERS_FX_TICKS")
              or Path.home() / ".local/share/traders-agent/fx/ticks-v1")
-BARS = Path(os.environ.get("TRADERS_FX_BARS")
-            or Path.home() / ".local/share/traders-agent/fx/bars-v1")
 
 SYMBOLS = ("GBPUSD", "EURUSD", "GBPJPY", "XAUUSD", "XAGUSD", "NAS100", "SP500")
 TIMEFRAMES = {"1": 1, "5": 5, "15": 15, "30": 30, "60": 60, "120": 120, "240": 240, "D": 1440}
@@ -82,61 +83,97 @@ def _decode(doc: dict):
     return out
 
 
-@lru_cache(maxsize=4096)
+_FIELDS = 7          # epoch minute, open, high, low, close, ticks, median spread
+
+
+@lru_cache(maxsize=20000)            # ~2 years of one symbol's hours at ~3 KB each
 def _hour(path_str: str, mtime_ns: int):
-    """One instrument-hour, decoded and cached by (path, mtime) so a re-run sees fresh bytes."""
-    with gzip.open(path_str, "rb") as fh:
-        return tuple(_decode(json.loads(fh.read())))
+    """One instrument-hour as packed minute bars, cached by (path, mtime) so a re-run sees fresh bytes.
+
+    Minute bars, not ticks: a busy hour is thousands of ticks, and holding thousands of hours of tick
+    tuples ran to gigabytes. None when the file cannot be read (a download cut off mid-write).
+    """
+    try:
+        with gzip.open(path_str, "rb") as fh:
+            ticks = _decode(json.loads(fh.read()))
+    except (OSError, EOFError, ValueError, KeyError, TypeError, zlib.error):
+        return None
+    minutes: dict[int, list] = {}
+    for ms, bid, ask, _bv, _av in ticks:
+        mid = (bid + ask) / 2.0
+        minute = ms // 60000                      # epoch MINUTES
+        bar = minutes.get(minute)
+        if bar is None:
+            minutes[minute] = [mid, mid, mid, mid, 1, [ask - bid]]
+        else:
+            bar[1] = max(bar[1], mid)
+            bar[2] = min(bar[2], mid)
+            bar[3] = mid
+            bar[4] += 1
+            bar[5].append(ask - bid)
+    packed = array.array("d")
+    for minute in sorted(minutes):
+        o, h, low, c, v, spreads = minutes[minute]
+        # Each minute keeps its MEDIAN spread, so one bad print cannot widen a 30m bar.
+        packed.extend((minute, o, h, low, c, v, statistics.median(spreads)))
+    return packed
 
 
-def hour_ticks(symbol: str, when: dt.datetime) -> tuple:
-    path = TICKS / symbol / when.strftime("%Y-%m-%d") / f"{when.hour:02d}.json.gz"
-    if not path.exists() or path.stat().st_size == 0:
-        return ()
-    return _hour(str(path), path.stat().st_mtime_ns)
+def _hour_path(symbol: str, when: dt.datetime) -> Path:
+    return TICKS / symbol / when.strftime("%Y-%m-%d") / f"{when.hour:02d}.json.gz"
 
 
-def _minute_bars(symbol: str, start: dt.datetime, end: dt.datetime) -> dict[int, dict]:
-    """M1 bars keyed by epoch-minute, built from ticks."""
-    out: dict[int, dict] = {}
+def _packed(symbol: str, when: dt.datetime):
+    """The hour's packed minutes; empty when the hour is not on disk, None when it is unreadable."""
+    path = _hour_path(symbol, when)
+    try:
+        st = path.stat()
+    except OSError:
+        return array.array("d")
+    if st.st_size == 0:
+        return array.array("d")
+    return _hour(str(path), st.st_mtime_ns)
+
+
+def hour_minutes(symbol: str, when: dt.datetime) -> list[tuple]:
+    """`(epoch_minute, open, high, low, close, ticks, median_spread)` per minute of one hour."""
+    packed = _packed(clean_pair(symbol), when) or ()
+    return [tuple(packed[i:i + _FIELDS]) for i in range(0, len(packed), _FIELDS)]
+
+
+def _minute_bars(symbol: str, start: dt.datetime, end: dt.datetime) -> tuple[dict[int, tuple], int]:
+    """(M1 bars keyed by epoch-minute, hours that could not be read) between two hours, inclusive."""
+    out: dict[int, tuple] = {}
+    unreadable = 0
     cur = start.replace(minute=0, second=0, microsecond=0)
     while cur <= end:
-        for ms, bid, ask, _bv, _av in hour_ticks(symbol, cur):
-            mid = (bid + ask) / 2.0
-            minute = ms // 60000                      # epoch MINUTES
-            bar = out.get(minute)
-            spread = ask - bid
-            if bar is None:
-                out[minute] = {"t": minute * 60000, "o": mid, "h": mid, "l": mid, "c": mid,
-                               "v": 1, "s": [spread]}
-            else:
-                bar["h"] = max(bar["h"], mid)
-                bar["l"] = min(bar["l"], mid)
-                bar["c"] = mid
-                bar["v"] += 1
-                bar["s"].append(spread)
+        if not (TICKS / symbol / cur.strftime("%Y-%m-%d")).is_dir():   # a weekend: one stat, not 24
+            cur = cur.replace(hour=0) + dt.timedelta(days=1)
+            continue
+        packed = _packed(symbol, cur)
+        if packed is None:
+            unreadable += 1
+        else:
+            for i in range(0, len(packed), _FIELDS):
+                out[int(packed[i])] = tuple(packed[i + 1:i + _FIELDS])
         cur += dt.timedelta(hours=1)
-    return out
+    return out, unreadable
 
 
-def _resample(m1: dict[int, dict], minutes: int) -> list[dict]:
+def _resample(m1: dict[int, tuple], minutes: int) -> list[dict]:
     buckets: dict[int, dict] = {}
-    order = sorted(m1)
-    for key in order:
-        bar = m1[key]
+    for key in sorted(m1):
+        o, h, low, c, v, minute_spread = m1[key]
         slot = key // minutes * minutes           # epoch minutes, bucketed
         agg = buckets.get(slot)
-        # Each minute contributes its MEDIAN spread, so one bad print cannot widen a 30m bar.
-        minute_spread = statistics.median(bar["s"]) if bar["s"] else 0.0
         if agg is None:
-            buckets[slot] = {"openTime": slot * 60000, "open": bar["o"], "high": bar["h"],
-                             "low": bar["l"], "close": bar["c"], "volume": bar["v"],
-                             "spread": minute_spread, "_n": 1}
+            buckets[slot] = {"openTime": slot * 60000, "open": o, "high": h, "low": low, "close": c,
+                             "volume": int(v), "spread": minute_spread, "_n": 1}
         else:
-            agg["high"] = max(agg["high"], bar["h"])
-            agg["low"] = min(agg["low"], bar["l"])
-            agg["close"] = bar["c"]
-            agg["volume"] += bar["v"]
+            agg["high"] = max(agg["high"], h)
+            agg["low"] = min(agg["low"], low)
+            agg["close"] = c
+            agg["volume"] += int(v)
             agg["spread"] += minute_spread
             agg["_n"] += 1
     rows = []
@@ -160,28 +197,28 @@ def bars(pair: str, timeframe: str = "30", limit: int = 500,
     tf = str(timeframe or "30").upper()
     if tf not in TIMEFRAMES:
         raise TickError(f"{timeframe!r} is not one of {', '.join(TIMEFRAMES)}")
-    if not has(symbol):
-        raise TickError(f"no local ticks for {symbol}")
     minutes = TIMEFRAMES[tf]
     wanted_end = (end or dt.datetime.now(dt.timezone.utc)).astimezone(dt.timezone.utc)
     wanted_end = wanted_end.replace(minute=0, second=0, microsecond=0)
-    cov = coverage(symbol) or {}
-    newest_day = cov.get("to")
-    if not newest_day:
+    cov = coverage(symbol)
+    if not cov:
         raise TickError(f"no local ticks for {symbol}")
+    first_day = dt.datetime.strptime(cov["from"], "%Y-%m-%d").replace(tzinfo=dt.timezone.utc)
 
     want = max(1, min(int(limit), 20000))
-    # Walk back a day at a time until the resample yields enough bars; weekends/holidays cost ~40%.
-    span = dt.timedelta(days=1)
+    # Size the window from the timeframe once: markets trade about 5 days in 7, so read 1.5x the trading
+    # time plus a long weekend. A holiday or a gap in the store gets one wider pass. Never read before
+    # the store's first day — there is nothing there, and a short store answers with what it holds.
+    span = dt.timedelta(minutes=want * minutes) * 1.5 + dt.timedelta(days=4)
     rows: list[dict] = []
-    start = wanted_end
-    for _ in range(60):
-        start = wanted_end - span - dt.timedelta(minutes=want * minutes * 0.4)
-        m1 = _minute_bars(symbol, start, wanted_end)
+    unreadable = 0
+    for _ in range(2):
+        start = max(first_day, wanted_end - span)
+        m1, unreadable = _minute_bars(symbol, start, wanted_end)
         rows = _resample(m1, minutes)
-        if len(rows) >= want:
+        if len(rows) >= want or start == first_day:
             break
-        span += dt.timedelta(days=1)
+        span *= 3
     rows = rows[-want:]
     if not rows:
         raise TickError(f"the tick store has no bars for {symbol} in that window")
@@ -192,6 +229,7 @@ def bars(pair: str, timeframe: str = "30", limit: int = 500,
             "lag_hours": round((wanted_end - dt.datetime.fromtimestamp(
                 rows[-1]["openTime"] / 1000, dt.timezone.utc)).total_seconds() / 3600.0, 1),
             "store": {"from": cov.get("from"), "to": cov.get("to"), "hours": cov.get("hours")},
+            "unreadable_hours": unreadable,
             "spread_mean": round(sum(r["spread"] for r in rows) / len(rows), 8)}
     return rows, meta
 

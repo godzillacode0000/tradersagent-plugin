@@ -122,8 +122,23 @@ class TheCacheAndTheFeed(unittest.TestCase):
     def test_status_has_one_shape_with_or_without_a_cache(self):
         with mock.patch.object(fxdata, "CACHE", Path(self.tmp.name) / "absent"):
             empty = fxdata.status()
-        self.assertEqual(set(empty), {"home", "pairs", "hours", "bytes", "feed", "pairs_supported"})
+        self.assertEqual(set(empty), {"home", "pairs", "hours", "bytes", "feed", "pairs_supported",
+                                      "ticks", "yahoo"})
         self.assertIn("GBPUSD", empty["pairs_supported"])
+
+    def test_status_reports_the_tick_store_even_without_a_network_cache(self):
+        # an operator who only ran tools/fx-fetch.py has no bi5 cache; the early return dropped `ticks`
+        # and the desk's Data tab sat on "Reading the tick store..." for good
+        with mock.patch.object(fxdata, "CACHE", Path(self.tmp.name) / "absent"):
+            out = fxdata.status()
+        self.assertIn("symbols", out["ticks"])
+
+    def test_status_says_whether_yahoo_may_answer(self):
+        with mock.patch.object(fxdata, "CACHE", Path(self.tmp.name) / "absent"):
+            with mock.patch.dict("os.environ", {"TRADERS_FX_ALLOW_YAHOO": "1"}):
+                self.assertTrue(fxdata.status()["yahoo"])
+            with mock.patch.dict("os.environ", {"TRADERS_FX_ALLOW_YAHOO": ""}):
+                self.assertFalse(fxdata.status()["yahoo"])
 
     def test_a_404_is_an_answer_and_is_cached(self):
         when = dt.datetime(2026, 10, 15, 10, tzinfo=dt.timezone.utc)

@@ -44,7 +44,7 @@
     tab: 'paper', open: false, busy: false,
     account: null, accountErr: null,
     firms: null, offers: null, propErr: null, propBusy: false, propAsked: false, firmsNote: '',
-    data: { status: null, err: null, busy: false, asked: false },
+    data: { status: null, err: null, busy: false },
     sim: {                                        // the prop-firm simulator (19 Oct)
       stats: { winrate: 48, avg_win: 1.6, avg_loss: 1, risk: 1, trades_per_day: 4, paths: 10000, seed: 42 },
       status: null, busy: false, err: null, result: null, target: null,
@@ -359,7 +359,9 @@
     if (!rows.length) return '<p class="desk__empty">No ticks on disk yet. Run: python3 tools/fx-fetch.py --years 2</p>';
     return `
       <p class="desk__note"><b>Dukascopy ticks</b> on disk · ${int(st.hours)} instrument-hours · ${size(st.bytes)} ·
-        mid-price bars with real volume and median spread · <b>Yahoo off</b>, nothing substituted</p>
+        mid-price bars with real volume and median spread · ${d.status.yahoo
+          ? '<b>Yahoo fallback ON</b> (TRADERS_FX_ALLOW_YAHOO), its bars are labelled'
+          : '<b>Yahoo off</b>, nothing substituted'}</p>
       <table class="desk__table">
         <thead><tr><th scope="col">Symbol</th><th scope="col">Hours</th><th scope="col">From</th>
           <th scope="col">To</th><th scope="col">Size</th></tr></thead>
@@ -494,7 +496,7 @@
     if (TABS.some(([id]) => id === tab)) S.tab = tab;
     render();
     if (S.tab === 'propfirms' && !S.propAsked) { S.propAsked = true; pullPropFirms(); }
-    if (S.tab === 'data' && !S.data.asked) { S.data.asked = true; pullData(); }
+    if (S.tab === 'data') pullData();                // every visit: a download may have finished since
   }
 
   function open(tab) {

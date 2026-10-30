@@ -21,7 +21,10 @@ that drift, so the decoder here is a single function with a test.
 Storage: one gzipped JSON per instrument-hour under
 `~/.local/share/traders-agent/fx/ticks-v1/<SYMBOL>/<YYYY-MM-DD>/<HH>.json.gz`, plus a small `.empty`
 marker for hours that answer 404 (market shut/holiday) so a resume does not re-ask. The raw payload is
-kept, not a re-encoding: a decoder bug can always be re-run over the bytes.
+kept, not a re-encoding: a decoder bug can always be re-run over the bytes. Each hour is written to a
+`.part` file and renamed into place, so an interrupted walk never leaves a half hour that a resume would
+call cached. The walk stops at the last COMPLETE hour, and a 404 younger than a day is not marked: the
+feed may simply not have published it yet.
 
 Usage:
     python3 tools/fx-fetch.py --years 2 --workers 4            # the full walk
@@ -34,7 +37,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import gzip
-import json
 import os
 import sys
 import threading
@@ -58,6 +60,7 @@ INSTRUMENTS = {
     "SP500": "USA500.IDX-USD",
 }
 HOURS_PER_DAY = 24
+SETTLE = dt.timedelta(hours=24)        # a 404 younger than this may be publishing lag, not a shut market
 
 _print_lock = threading.Lock()
 
@@ -68,6 +71,11 @@ def hour_path(symbol: str, when: dt.datetime) -> Path:
 
 def marker_path(symbol: str, when: dt.datetime) -> Path:
     return HOME / symbol / when.strftime("%Y-%m-%d") / f"{when.hour:02d}.empty"
+
+
+def last_complete_hour(now: dt.datetime) -> dt.datetime:
+    """The newest hour that has ended — the current one is still being written by the feed."""
+    return now.replace(minute=0, second=0, microsecond=0) - dt.timedelta(hours=1)
 
 
 def decode_hour(doc: dict) -> list[tuple[int, float, float, float, float]]:
@@ -123,11 +131,17 @@ def fetch_one(symbol: str, code: str, when: dt.datetime) -> tuple[str, str, int]
         if not payload:
             marker_path(symbol, when).write_bytes(b"")
             return "empty", symbol, 0
-        with gzip.open(path, "wb", compresslevel=6) as fh:
-            fh.write(payload)
+        part = path.with_name(path.name + ".part")
+        try:
+            with gzip.open(part, "wb", compresslevel=6) as fh:
+                fh.write(payload)
+            os.replace(part, path)
+        finally:
+            part.unlink(missing_ok=True)
         return "ok", symbol, len(payload)
     if status == "empty":
-        marker_path(symbol, when).write_bytes(b"")
+        if dt.datetime.now(dt.timezone.utc) - when >= SETTLE:
+            marker_path(symbol, when).write_bytes(b"")
         return "empty", symbol, 0
     return status, symbol, 0
 
@@ -218,7 +232,7 @@ def main(argv: list[str]) -> int:
     if bad:
         print("unknown instruments:", ", ".join(bad), "· known:", ", ".join(INSTRUMENTS))
         return 2
-    end = dt.datetime.now(dt.timezone.utc).replace(minute=0, second=0, microsecond=0)
+    end = last_complete_hour(dt.datetime.now(dt.timezone.utc))
     back = dt.timedelta(days=a.days) if a.days else dt.timedelta(days=365.25 * a.years)
     walk(symbols, end - back, end, a.workers)
     return 0

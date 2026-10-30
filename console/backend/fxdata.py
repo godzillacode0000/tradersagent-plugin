@@ -287,6 +287,10 @@ def _from_ticks(pair: str, tf: str, want: int, wanted_end: dt.datetime):
     return rows, meta
 
 
+def _yahoo_allowed() -> bool:
+    return os.environ.get("TRADERS_FX_ALLOW_YAHOO", "").strip() in ("1", "true", "yes")
+
+
 def _fallback(pair: str, tf: str, want: int):
     """Yahoo is OFF unless TRADERS_FX_ALLOW_YAHOO=1: the operator ruled it out for backtests.
 
@@ -294,7 +298,7 @@ def _fallback(pair: str, tf: str, want: int):
     answer silently: unset, the call fails with the reason instead of substituting mid prices that have
     no volume and no spread (and which once got labelled "dukascopy").
     """
-    if os.environ.get("TRADERS_FX_ALLOW_YAHOO", "").strip() not in ("1", "true", "yes"):
+    if not _yahoo_allowed():
         raise FxError("no local ticks for this pair and the Dukascopy feed is unreachable; "
                       "Yahoo is disabled (set TRADERS_FX_ALLOW_YAHOO=1 to allow the labelled fallback)",
                       "no_local_ticks")
@@ -385,15 +389,14 @@ def symbol_info(pair: str) -> dict:
 
 
 def status() -> dict:
-    """How much is cached, so a caller can say 'first load takes a minute' honestly."""
-    if not CACHE.exists():
-        # One shape always: the empty-cache branch used to omit `pairs_supported`/`feed`, and a test
-        # that read it passed or failed by whether this machine's cache dir happened to exist.
-        return {"home": str(CACHE), "pairs": {}, "hours": 0, "bytes": 0,
-                "feed": FEED, "pairs_supported": list(PAIRS)}
+    """How much is cached, so a caller can say 'first load takes a minute' honestly.
+
+    One shape always, with or without a network cache: the empty-cache branch once returned early and
+    dropped `ticks`, so an operator who had only run tools/fx-fetch.py saw an endless "Reading…" card.
+    """
     pairs: dict[str, dict] = {}
     total_h = total_b = 0
-    for d in sorted(CACHE.iterdir()):
+    for d in (sorted(CACHE.iterdir()) if CACHE.exists() else ()):
         if not d.is_dir():
             continue
         n = b = 0
@@ -404,7 +407,7 @@ def status() -> dict:
         total_h += n
         total_b += b
     out = {"home": str(CACHE), "pairs": pairs, "hours": total_h, "bytes": total_b,
-           "feed": FEED, "pairs_supported": list(PAIRS)}
+           "feed": FEED, "pairs_supported": list(PAIRS), "yahoo": _yahoo_allowed()}
     try:
         import fxticks
         out["ticks"] = fxticks.status()
