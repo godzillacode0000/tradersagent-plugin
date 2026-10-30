@@ -104,6 +104,23 @@ class ServiceLinux(unittest.TestCase):
                        'ExecStart=/bin/bash "%s"' % (ROOT / "console" / "start.sh")):
             self.assertIn(needle, r.stdout)
 
+    def test_a_named_desk_gets_its_own_unit_and_state(self):
+        # 30 Oct: dsh's console runs beside the Hermes one, never replacing its unit or its pid file
+        r = subprocess.run(["bash", str(SERVICE), "print", "--port", "8788", "--instance", "dsh"],
+                           capture_output=True, text=True, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn('Environment="TRADERS_AGENT_INSTANCE=dsh"', r.stdout)
+        st = subprocess.run(["bash", str(SERVICE), "status", "--port", "1", "--instance", "dsh"],
+                            capture_output=True, text=True, timeout=30)
+        self.assertIn("traders-agent-dsh.service", st.stdout)
+        self.assertIn("instances/dsh/console.log", st.stdout)
+        bad = subprocess.run(["bash", str(SERVICE), "print", "--instance", "../x"], capture_output=True, text=True)
+        self.assertEqual(bad.returncode, 2)
+
+    def test_the_default_unit_is_unchanged(self):
+        st = subprocess.run(["bash", str(SERVICE), "status", "--port", "1"], capture_output=True, text=True, timeout=30)
+        self.assertIn("journalctl --user -u traders-agent.service", st.stdout)
+
     def test_bad_port_and_unknown_command(self):
         self.assertEqual(subprocess.run(["bash", str(SERVICE), "print", "--port", "abc"], capture_output=True, text=True).returncode, 2)
         self.assertEqual(subprocess.run(["bash", str(SERVICE), "frobnicate"], capture_output=True, text=True).returncode, 2)
@@ -113,6 +130,24 @@ class ServiceLinux(unittest.TestCase):
         src = SERVICE.read_text()
         self.assertIn('exec env PORT="$PORT"', src)
         self.assertIn('echo $! > "$PIDFILE"', src)
+
+
+class TheDoctorChecksTheInterpreterTheInstallUsed(unittest.TestCase):
+    """30 Oct, a fresh-home run of `./install.sh --all` then `--doctor`: the install started the console with the
+    python that HAS the mcp client (3.11), the doctor checked the first 3.11+ on PATH (a 3.14 without it) and
+    reported FAIL on a working install — the first thing an agent following AGENTS.md would chase."""
+
+    @unittest.skipIf((ROOT / ".venv").exists(), "a repo .venv wins over PATH; this pins the PATH order")
+    def test_a_python_with_mcp_beats_a_newer_one_without(self):
+        with tempfile.TemporaryDirectory() as d:
+            stub = Path(d)
+            (stub / "python3.14").write_text('#!/bin/sh\ncase "$*" in *"import mcp"*) exit 1;; esac\nexit 0\n')
+            (stub / "python3.11").write_text("#!/bin/sh\nexit 0\n")
+            for f in stub.iterdir():
+                f.chmod(0o755)
+            env = {"HOME": d, "PATH": f"{stub}:/usr/bin:/bin", "TERM": "dumb", "PORT": "1"}
+            r = subprocess.run(["bash", str(INSTALL), "--doctor"], capture_output=True, text=True, env=env, timeout=60)
+            self.assertIn(f"console python: {stub}/python3.11", r.stdout, r.stdout)
 
 
 class InstallAllFlag(unittest.TestCase):

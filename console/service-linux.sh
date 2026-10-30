@@ -5,12 +5,14 @@
 #   ./console/service-linux.sh uninstall            stop it and remove the unit (or stop the detached console)
 #   ./console/service-linux.sh status               unit state, is the console answering, where are the logs
 #   ./console/service-linux.sh print                print the unit file and change nothing
+#   ... --instance NAME                              a separate desk (TRADERS_AGENT_INSTANCE, see backend/instance.py):
+#                                                    its own unit traders-agent-NAME.service, state, pid and log
 #
 # Unit: ~/.config/systemd/user/traders-agent.service (the same name the README documents).
 # Without a systemd user session (a container, WSL without systemd, an SSH-less box) it starts the
 # console detached instead (nohup, pid file in the state dir) and says plainly that this does NOT
 # survive a reboot. A console that is already answering and that this script did not start is left alone.
-# Logs: ~/.local/state/traders-agent/console.log
+# Logs: ~/.local/state/traders-agent/console.log (a named desk: .../traders-agent/instances/NAME/console.log)
 #
 # Bash 3.2 safe: no arrays, no mapfile.
 set -euo pipefail
@@ -26,6 +28,7 @@ STATE_DIR="$HOME/.local/state/traders-agent"
 PIDFILE="$STATE_DIR/console.pid"
 LOG="$STATE_DIR/console.log"
 PORT="${PORT:-8787}"
+INSTANCE="${TRADERS_AGENT_INSTANCE:-}"
 
 # Environment baked into the unit: a systemd user service gets a minimal PATH, but the console shells
 # out (`node` drives the Edge Stats sidecar, `hermes` starts the in-app study bridge).
@@ -71,6 +74,7 @@ After=network-online.target
 
 [Service]
 Environment="PORT=$PORT"
+Environment="TRADERS_AGENT_INSTANCE=$INSTANCE"
 Environment="PY=$(unit_escape "$1")"
 Environment="PATH=$(unit_escape "$SVC_PATH")"
 WorkingDirectory=$(unit_escape "$ROOT")
@@ -128,7 +132,7 @@ cmd_install() {
     echo "note: no systemd user session here — starting the console detached (it will NOT survive a reboot)"
     # exec inside the subshell: the recorded pid is the console itself (not a wrapper), and nothing keeps
     # the caller's stdout open (a lingering wrapper made `./install.sh --all | tee log` hang until the console died).
-    ( cd "$ROOT" && exec env PORT="$PORT" PY="$PYR" PATH="$SVC_PATH:$PATH" nohup bash "$ROOT/console/start.sh" >>"$LOG" 2>&1 < /dev/null ) &
+    ( cd "$ROOT" && exec env PORT="$PORT" TRADERS_AGENT_INSTANCE="$INSTANCE" PY="$PYR" PATH="$SVC_PATH:$PATH" nohup bash "$ROOT/console/start.sh" >>"$LOG" 2>&1 < /dev/null ) &
     echo $! > "$PIDFILE"
     if wait_health; then
       echo "ok  console running detached on port $PORT (pid $(cat "$PIDFILE"); logs: $LOG)"
@@ -167,11 +171,22 @@ cmd="${1:-}"; [[ $# -gt 0 ]] && shift || true
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --port) [[ $# -ge 2 ]] || { echo "service-linux.sh: --port needs a number" >&2; exit 2; }; PORT="$2"; shift ;;
+    --instance) [[ $# -ge 2 ]] || { echo "service-linux.sh: --instance needs a name" >&2; exit 2; }; INSTANCE="$2"; shift ;;
     *) echo "service-linux.sh: unknown option '$1'" >&2; exit 2 ;;
   esac
   shift
 done
 [[ "$PORT" =~ ^[0-9]{1,5}$ ]] || { echo "service-linux.sh: PORT must be a number, got '$PORT'" >&2; exit 2; }
+# A named desk gets its own unit, state, pid and log, so it never stops or replaces the default one.
+[[ "$INSTANCE" == "default" ]] && INSTANCE=""
+if [[ -n "$INSTANCE" ]]; then
+  [[ "$INSTANCE" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || { echo "service-linux.sh: instance must be 1-32 lowercase letters, digits or dashes, got '$INSTANCE'" >&2; exit 2; }
+  UNIT_NAME="traders-agent-$INSTANCE.service"
+  UNIT="$UNIT_DIR/$UNIT_NAME"
+  STATE_DIR="$STATE_DIR/instances/$INSTANCE"
+  PIDFILE="$STATE_DIR/console.pid"
+  LOG="$STATE_DIR/console.log"
+fi
 
 case "$cmd" in
   install)   cmd_install ;;

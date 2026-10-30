@@ -13,6 +13,11 @@
 
 </div>
 
+> [!IMPORTANT]
+> **If you are an AI agent asked to install this for your user, follow [`AGENTS.md`](AGENTS.md).** It covers
+> Hermes, DeepSeek Harness and other agents: exact commands, what success looks like, how to verify, and what to
+> tell your user at the end.
+
 A sidebar entry that docks a full trading console **beside your conversation**: **Vela**-rendered
 candlesticks and the **LuxAlgo Library** (800+ concepts and indicators, served live by LuxAlgo's own
 MCP server) in one local web app — your chat session is left exactly where it was.
@@ -52,6 +57,9 @@ MCP server) in one local web app — your chat session is left exactly where it 
 | **OS** | Linux (built and verified on Omarchy / Arch + Hyprland) or **macOS** — Macs need the one-time venv + the launchd service; see [`docs/MACOS.md`](docs/MACOS.md). Windows is out of scope. |
 
 ## Install
+
+**Let your agent do it:** give Hermes (or DeepSeek Harness) this repository's link and ask it to install it. It
+reads [`AGENTS.md`](AGENTS.md) and runs the steps below, then tells you the two clicks left in the app.
 
 **One command** (Linux and macOS; about a minute with [uv](https://docs.astral.sh/uv/), a few without it):
 
@@ -414,22 +422,54 @@ is still not a headless renderer: with no view attached, commands fail fast and 
 
 ### Using it from the DeepSeek Harness (dsh)
 
-The chart pane is Hermes-only, but the desk is not: the same MCP server (56 tools) and the same skill work from dsh,
-and the agent drives the console's chart exactly as it does from Hermes. Open `http://127.0.0.1:8787/` in a browser tab
-to watch it.
+The chart pane is Hermes-only, but the desk is not: the same MCP server (56 tools) and the same skill work from dsh.
+**dsh gets a desk of its own.** It runs a second console on `127.0.0.1:8788` (`TRADERS_AGENT_INSTANCE=dsh`, see
+`console/backend/instance.py`). Nothing the dsh agent does reaches the Hermes desk on 8787, and nothing Hermes does
+reaches dsh's desk.
 
 ```bash
-./console/start.sh                                   # the console must be running
 ./adapters/dsh/install-dsh.sh --mcp-file PATH        # PATH: the JSON file where your dsh lists MCP servers
-./adapters/dsh/install-dsh.sh --doctor               # skill, launcher, a real MCP handshake, the console
+./adapters/dsh/install-dsh.sh --console              # run dsh's console (or --service: start it at login)
+./adapters/dsh/install-dsh.sh --doctor               # skill, launcher, a real MCP handshake, and that 8788 is dsh's desk
 ```
 
-It copies the skill to `~/.agents/skills/trader-desk` (`--skills-dir` or `DSH_SKILLS_DIR` to change it) and writes a
-stdio entry into the file you name (it runs `console/mcp/server.py` with `PY`, the repo's `.venv` or a python that has the `mcp` client, same order as `bin/register-mcp.sh`; else `uvx fastmcp run`; `--venv` forces a private venv),
-keeping your other servers and a `.bak-traders` copy. Without `--mcp-file` it prints the entry for you to paste.
-`PORT=9000` points the entry at a console on another port. It reads nothing from dsh itself and writes nowhere else, so
-check your dsh's own docs for the config path. Not verified against a real dsh install yet: the handshake is tested with
-the MCP client, and dsh's skill and config locations are as reported by third-party dsh plugins.
+Open `http://127.0.0.1:8788/` in a browser tab to watch the dsh agent drive its chart.
+
+| | Hermes desk | dsh desk |
+|---|---|---|
+| console | `127.0.0.1:8787` | `127.0.0.1:8788` |
+| chart and agent commands | its own | its own |
+| write token | its own | its own |
+| paper account | its own | its own |
+| studies | its own | its own |
+| saved scripts, layout, theme | its own | its own |
+| Edge Stats engine and workspace | `8789` | `8790` |
+| in-app study chat | the Hermes CLI | off (the dsh agent talks through its MCP tools) |
+| service | `traders-agent.service` / `com.traders-agent.console` | `traders-agent-dsh.service` / `com.traders-agent.console.dsh` |
+| state | `~/.local/state/traders-agent/` | `~/.local/state/traders-agent/instances/dsh/` |
+| market data | shared | shared |
+
+Market data is shared on purpose: the tick store, candle caches, downloaded data, thumbnails and the prop-firm
+simulator describe the market, not a desk.
+
+The doctor fails if the console on dsh's port turns out to be another desk. `--shared` is the explicit way back to one
+desk: the entry points at the Hermes console on 8787, the same chart and paper account.
+
+The installer copies the skill to `~/.agents/skills/trader-desk` (`--skills-dir` or `DSH_SKILLS_DIR` to change it). It
+writes a stdio entry into the file you name. That entry runs `console/mcp/server.py` with the first of these that
+works:
+1. `PY`, the repo's `.venv`, or a python that has the `mcp` client (the same order as `bin/register-mcp.sh`);
+2. `uvx fastmcp run`.
+
+`--venv` forces a private venv instead. Your other servers are kept, and a `.bak-traders` copy is saved. Without
+`--mcp-file` the installer prints the entry for you to paste.
+
+`PORT=9000` moves dsh's console to another port. `--uninstall` removes the skill and dsh's service. It never touches
+the Hermes console and keeps dsh's desk state.
+
+The installer reads nothing from dsh itself and writes nowhere else, so check your dsh's own docs for the config path.
+This is not verified against a real dsh install yet. The handshake is tested with the MCP client, and the two desks
+are tested side by side as real consoles. dsh's skill and config locations are as reported by third-party dsh plugins.
 
 ## Screenshots
 
@@ -486,6 +526,7 @@ bin/               register-mcp.sh (the MCP registration on its own) · is-enabl
 | `TRADER_CONSOLE_TOKEN_FILE` | `~/.local/state/traders-agent/console.token` | the POST token the console mints and the MCP server and CLI read |
 | `TRADERS_AGENT_WORKDIR` | `~/Projects/luxalgo-web` if it exists, else `console/agents` | the folder the in-app study bridge runs the agent CLI in (never taken from a request) |
 | `TRADERS_AGENT_ALLOW_LAN` | unset | with `--host 0.0.0.0`, let peers that reach the console **from their own address** receive the POST token; without it they get a read-only console. It does **not** govern a caller arriving through a local reverse proxy — see the row below |
+| `TRADERS_AGENT_INSTANCE` | unset | runs a separate desk: its own token, paper account, chart and study files under `~/.local/state/traders-agent/instances/NAME/`, its own Edge Stats engine (the console's port + 2), and no Hermes study chat unless `HERMES_CLI` is set. Unset is the Hermes desk. The dsh adapter uses `dsh` |
 | `TRADERS_AGENT_ALLOWED_HOSTS` | unset | comma-separated extra `Host` names this console answers to, for a local reverse proxy that forwards the public name (`tailscale serve` does). **Every name you add here is a full-trust door:** the proxy terminates on this machine, so the caller arrives on loopback, is handed the POST token and can write — approve paper orders, drive the chart, run Pine — with `ALLOW_LAN` unset. Only add names that resolve to this machine inside an access-controlled network, and read it as “everyone on that tailnet is me”. Any other name is still refused |
 | `TRADER_PAPER_FILE` | `~/.local/state/traders-agent/paper.json` | the paper account (use another path for a second test console) |
 | `LUXALGO_AGENTS_DIR` | `console/agents` | runtime state: chart bridge files, study threads, shots |

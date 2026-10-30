@@ -38,6 +38,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+import instance
+
 # The commit the installer checks out and the tests pin (install.sh carries the same string; a test
 # fails if the two drift). Bumping it is a deliberate act with its own verification, never a side effect.
 PINNED_COMMIT = "a48259887962d0f67a27d2b0815e2df9a52efca5"
@@ -118,8 +120,8 @@ class EdgeError(Exception):
 
 
 def home() -> Path:
-    return Path(os.environ.get("TRADERS_EDGE_HOME")
-                or Path.home() / ".local" / "share" / "traders-agent" / "edge")
+    # per desk (instance.py): two consoles must not share one engine's workspace
+    return Path(os.environ.get("TRADERS_EDGE_HOME") or instance.share_dir() / "edge")
 
 
 def engine_dir() -> Path:

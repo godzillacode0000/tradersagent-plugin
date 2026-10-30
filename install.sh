@@ -71,22 +71,26 @@ for arg in "$@"; do
 done
 if ! [[ "$PORT" =~ ^[0-9]{1,5}$ ]]; then echo "install.sh: PORT must be a number, got '$PORT'" >&2; exit 2; fi
 
-# Resolve the console's interpreter the same way start.sh does: PY wins, then the repo's .venv,
-# then the first python3.11+ on PATH. macOS ships python3 as 3.9, so checking the bare name
-# "python3" would fail a healthy install there.
+# Resolve the console's interpreter the way the service and bin/setup-python.sh do: PY wins, then the
+# repo's .venv, then the first python3.11+ on PATH that HAS the mcp client, and only then the first
+# 3.11+ without it (so the doctor can say what is missing). Checking a newer python without mcp
+# while the service ran an older one with it made `--doctor` FAIL a working install (30 Oct).
+# macOS ships python3 as 3.9, so checking the bare name "python3" would fail a healthy install there.
 resolve_py() {
   # Probes run with PYTHONPATH/PYTHONHOME scrubbed: an agent session can export a PYTHONPATH that
   # points at a DIFFERENT interpreter's site-packages, shadowing the probe's own packages (on
   # macOS this made a healthy venv report "no mcp"). PY= still wins.
   if [[ -n "${PY:-}" ]]; then echo "$PY"; return 0; fi
   if [[ -x "$HERE/.venv/bin/python" ]]; then echo "$HERE/.venv/bin/python"; return 0; fi
-  local cand
+  local cand first=""
   for cand in python3.14 python3.13 python3.12 python3.11 python3; do
     if command -v "$cand" >/dev/null 2>&1 \
        && env -u PYTHONPATH -u PYTHONHOME "$cand" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
-      command -v "$cand"; return 0
+      if env -u PYTHONPATH -u PYTHONHOME "$cand" -c 'import mcp' >/dev/null 2>&1; then command -v "$cand"; return 0; fi
+      [[ -n "$first" ]] || first="$(command -v "$cand")"
     fi
   done
+  [[ -n "$first" ]] && { echo "$first"; return 0; }
   return 1
 }
 
