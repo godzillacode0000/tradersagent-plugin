@@ -8,7 +8,10 @@
    N bars left | ✕, with a scrubber over the row. Asked for the rest of the graphic ("Nak"): the
    timestamp opens a CALENDAR (month nav + day grid, a date/time footer) that seeks to a picked day,
    and the row carries a drag handle (⠿) so the strip can be moved out of the way — the spot
-   persists across reloads. Vela ships the ENGINE and no such strip (no "Start bar" string anywhere
+   persists across reloads.
+   30 Oct, the operator picked the "Capsule" redesign: one frosted-glass pill, the scrubber is its top
+   edge (the range ends show on hover), Play is the one bright control, the cursor time reads as date
+   over clock, and a ring beside "N bars left" fills as this replay advances. Vela ships the ENGINE and no such strip (no "Start bar" string anywhere
    in the vendored dist), so the design is ours to paint; the glyphs are inline SVGs because the row
    is rebuilt from a string.
    While replay is on, every paper fill uses the REPLAY cursor price: this file pushes it to the
@@ -29,7 +32,7 @@
   let speed = 1;
   let origin = null;                      // the earliest cursor of this replay — where "Start bar" lands
   let el = null, label = null, left = null, playBtn = null, speedBtn = null, speedText = null;
-  let timeBtn = null, dragBtn = null, dragPos = null;
+  let timeBtn = null, dragBtn = null, dragPos = null, clock = null, leftN = null, ring = null;
   let range = null, startLabel = null, endLabel = null, speedsMenu = null;
   let calPop = null, calMonth = null, calTitle = null, calGrid = null, calDate = null, calTime = null;
   let lastPush = '';
@@ -43,19 +46,22 @@
 
   /* The row is built from a string, so the glyphs ride in it — Vela's icon registry paints ITS row,
      not ours. Shapes follow the release graphic: a 2×3 dot grip, skip-to-start (bar + left
-     triangle), play, pause, skip-forward (right triangle + bar), month chevrons, a chevron on the
-     speed control, a thin ✕. */
+     triangle), play, pause, skip-forward (right triangle + bar), month chevrons, a thin ✕, and
+     the progress ring. */
   const GLYPH = {
     grip: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="5.6" cy="4" r="1.15"/><circle cx="10.4" cy="4" r="1.15"/><circle cx="5.6" cy="8" r="1.15"/><circle cx="10.4" cy="8" r="1.15"/><circle cx="5.6" cy="12" r="1.15"/><circle cx="10.4" cy="12" r="1.15"/></svg>',
-    start: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.4 3h1.5v10H3.4zM12.6 3.4v9.2L6.2 8z"/></svg>',
-    play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.8 3.2v9.6L12.6 8z"/></svg>',
-    pause: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.4 3.2h2.5v9.6H4.4zM9.1 3.2h2.5v9.6H9.1z"/></svg>',
-    step: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.1 3h1.5v10h-1.5zM3.4 3.4v9.2L9.8 8z"/></svg>',
-    chev: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.4 6.4 8 10l3.6-3.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    start: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 3h1.6v10H3.2zM13 3.6v8.8a.6.6 0 0 1-.9.5L6.1 8.5a.6.6 0 0 1 0-1l6-4.4a.6.6 0 0 1 .9.5z"/></svg>',
+    play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.6 3.1v9.8a.7.7 0 0 0 1.05.6l7.8-4.9a.7.7 0 0 0 0-1.2L5.65 2.5a.7.7 0 0 0-1.05.6z"/></svg>',
+    pause: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="3" width="2.8" height="10" rx=".8"/><rect x="9.2" y="3" width="2.8" height="10" rx=".8"/></svg>',
+    step: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.2 3h1.6v10h-1.6zM3 3.6v8.8a.6.6 0 0 0 .9.5l6-4.4a.6.6 0 0 0 0-1l-6-4.4a.6.6 0 0 0-.9.5z"/></svg>',
     prev: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.8 3.8 5.6 8l4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     next: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.2 3.8 10.4 8l-4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    close: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.3 4.3l7.4 7.4M11.7 4.3l-7.4 7.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    close: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.3 4.3l7.4 7.4M11.7 4.3l-7.4 7.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    /* how far this replay has come: the second circle's dash is set from sync() */
+    ring: '<svg class="ta-replay__ring" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7"/><circle cx="9" cy="9" r="7" data-ring/></svg>',
   };
+  const RING = 2 * Math.PI * 7;
+  const fmtDate = (ms) => (ms ? new Date(ms).toLocaleString([], { month: 'short', day: 'numeric' }) : '—');
 
   function engine() {
     const ws = (window.__wsApp || {}).ws;
@@ -134,18 +140,20 @@
       <div class="ta-replay__row">
         <button type="button" class="ta-replay__drag" data-drag title="Drag the strip out of the way"
           aria-label="Drag the strip">${GLYPH.grip}</button>
-        <button type="button" class="ta-replay__btn ta-replay__btn--start" data-act="start"
-          title="Back to the bar this replay started on">${GLYPH.start}<span>Start bar</span></button>
-        <button type="button" class="ta-replay__btn" data-act="play" title="Play / pause">${GLYPH.play}</button>
-        <button type="button" class="ta-replay__btn" data-act="step" title="Reveal the next bar">${GLYPH.step}</button>
+        <button type="button" class="ta-replay__btn ta-replay__btn--icon" data-act="start"
+          title="Start bar — back to the bar this replay started on" aria-label="Start bar">${GLYPH.start}</button>
+        <button type="button" class="ta-replay__btn ta-replay__btn--play" data-act="play" title="Play" aria-label="Play">${GLYPH.play}</button>
+        <button type="button" class="ta-replay__btn ta-replay__btn--icon" data-act="step"
+          title="Reveal the next bar" aria-label="Next bar">${GLYPH.step}</button>
         <span class="ta-replay__sep" aria-hidden="true"></span>
+        <button type="button" class="ta-replay__btn ta-replay__btn--time" data-act="time" title="Jump to a date">
+          <span class="ta-replay__label" data-label>—</span><span class="ta-replay__clock" data-clock></span></button>
+        <span class="ta-replay__sep" aria-hidden="true"></span>
+        <span class="ta-replay__left">${GLYPH.ring}<b data-left>—</b><small data-left-word> bars left</small></span>
         <button type="button" class="ta-replay__btn ta-replay__btn--speed" data-act="speed"
-          title="Playback speed" aria-haspopup="menu"><span data-speed>1×</span>${GLYPH.chev}</button>
-        <span class="ta-replay__sep" aria-hidden="true"></span>
-        <button type="button" class="ta-replay__btn ta-replay__btn--time" data-act="time"
-          title="Jump to a date"><span class="ta-replay__label" data-label>—</span></button>
-        <span class="ta-replay__left" data-left></span>
-        <button type="button" class="ta-replay__btn ta-replay__btn--x" data-act="exit" title="Leave replay">${GLYPH.close}</button>
+          title="Playback speed" aria-haspopup="menu"><span data-speed>1×</span></button>
+        <button type="button" class="ta-replay__btn ta-replay__btn--x" data-act="exit" title="Leave replay"
+          aria-label="Leave replay">${GLYPH.close}</button>
       </div>`;
     el.addEventListener('click', onClick);
     range = el.querySelector('[data-scrub]');
@@ -154,7 +162,10 @@
     dragBtn.addEventListener('pointerdown', onDragDown);
     document.body.appendChild(el);
     label = el.querySelector('[data-label]');
+    clock = el.querySelector('[data-clock]');
     left = el.querySelector('[data-left]');
+    leftN = el.querySelector('[data-left-word]');
+    ring = el.querySelector('[data-ring]');
     playBtn = el.querySelector('[data-act="play"]');
     speedBtn = el.querySelector('[data-act="speed"]');
     speedText = el.querySelector('[data-speed]');
@@ -209,11 +220,26 @@
        (`start({from})` again; the changelog's own rule: calling start() while replaying jumps). */
     if (state.cursorTime != null && (origin === null || state.cursorTime < origin)) origin = state.cursorTime;
     const px = await priceAtCursor(state.cursorTime);
-    label.textContent = fmtTime(state.cursorTime);
-    label.title = (px != null ? 'Cursor price ' + money(px) + ' — ' : '') + 'the bar a paper fill right now would use';
-    left.textContent = state.remaining === 1 ? '1 bar left' : state.remaining + ' bars left';
+    label.textContent = fmtDate(state.cursorTime);
+    clock.textContent = state.cursorTime != null ? fmtClock(state.cursorTime) : '';
+    timeBtn.title = fmtTime(state.cursorTime) + (px != null ? ' · cursor price ' + money(px) : '')
+      + ' — the bar a paper fill right now would use. Click to jump to a date.';
+    left.textContent = String(state.remaining);
+    leftN.textContent = state.remaining === 1 ? ' bar left' : ' bars left';
+    left.parentElement.title = state.remaining + (state.remaining === 1 ? ' bar' : ' bars') + ' still hidden';
+    /* the ring: how far THIS replay has come, from where it began to the newest loaded bar */
+    let done = 0;
+    try {
+      const b = engine().bounds;
+      if (b && origin != null && state.cursorTime != null && b.last > origin) done = (state.cursorTime - origin) / (b.last - origin);
+      else if (state.remaining === 0) done = 1;
+    } catch (err) { done = 0; }
+    done = Math.max(0, Math.min(1, done));
+    ring.setAttribute('stroke-dasharray', (RING * done).toFixed(2) + ' ' + RING.toFixed(2));
     playBtn.innerHTML = state.playing ? GLYPH.pause : GLYPH.play;
     playBtn.title = state.playing ? 'Pause' : 'Play';
+    playBtn.setAttribute('aria-label', playBtn.title);
+    playBtn.classList.toggle('is-playing', !!state.playing);
     speedText.textContent = speed + '×';
     syncScrub(r);
     if (calPop) calMark();
@@ -381,7 +407,7 @@
     } catch (err) { /* private mode: the drag still holds for this session */ }
   }
 
-  /* The speed control: a small menu (the release graphic's chevron), not a blind cycle. */
+  /* The speed control: a chip that opens a small menu, not a blind cycle. */
   const speedsAway = (ev) => { if (el && !el.contains(ev.target)) closeSpeeds(); };
   const speedsKey = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeSpeeds(); } };
   function closeSpeeds() {

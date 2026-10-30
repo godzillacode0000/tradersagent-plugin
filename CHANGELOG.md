@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Changed
+
+- **The replay strip is a glass capsule** (30 Oct), the operator's pick of two designs. One frosted
+  pill, about 430 px: the scrubber is its top edge (white playhead, the range's first and last bar fade
+  in on hover), Play is the one bright control and turns into Pause, back-to-start and next-bar flank
+  it as icons, the cursor time reads as date over clock (still the door to the calendar), a ring beside
+  "N bars left" fills as this replay advances, and the speed is a chip that opens the same menu. The
+  speed menu and the calendar take the same glass. Everything the strip did still works: seek on
+  release, Start bar, the drag handle and its saved spot, the paper broker's replay price. Icon-only
+  buttons carry names for screen readers; focus is visible; the count has a fixed width so the pill
+  does not wobble during playback. In a narrow Hermes pane the words "bars left" drop and the number
+  and ring stay. Verified in Chromium at 1150, 620 and 420 px, dark and light. Eight tests in
+  `test_replay.py`.
+
 ### Fixed
 
 - **The chart sprang back to its right edge after a drag, in replay and out** (30 Oct). Two faults in
