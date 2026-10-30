@@ -285,9 +285,12 @@ Vela's toolbar row carry. Two halves, and only the first is guaranteed:
   `engine stored N raw row(s) but none survived the filters`. Translate with the bars' own time
   (`barAt`/`toBarIndex` in `unified.js`) for box `left`/`right`, line `x1`/`x2`, label `x`, and drop
   only what cannot be placed. Trust what the overlay *drew*, never what the engine stored.
-- **Never open the console in your own browser while the operator's pane is live**: a second view
-  attaches to the backend and commands can be routed to the tab that has no bars (`the chart did not
-  answer command … within 45s`). Confirm with `trader-chart state` afterwards.
+- **A second desk view is safe now — it goes passive** (19 Oct). The backend routes each command to
+  the desk's OWNER: the newest visible view with bars (or one the operator claimed via the banner). A
+  view that is not the owner executes nothing and shows "Another desk view is driving the chart". The
+  old race — a second view consuming a command and answering `the chart did not answer command …
+  within 45s` while the pane stood ready — is gone; the claim door names the owner instead. Confirm
+  with `trader-chart state` (`owner` is on it).
 
 ## Edge Stats — how often did it actually happen (4 Oct)
 

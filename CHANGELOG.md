@@ -6,6 +6,117 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **A Data tab in the desk sheet** (21 Oct), so the source is visible instead of inferred: it reads
+  `/api/fx/status` and lists every instrument in the tick store with hours, coverage and size, under
+  one line that says what the bars are (mid-price, real volume, median spread) and that **Yahoo is
+  off**. Pinned by four tests in `test_desk_sheet.py`.
+
+- **Metals and index CFDs are first-class symbols now** (21 Oct): `NAS100`, `SP500`, `XAUUSD` and
+  `XAGUSD` live in the same tick store as the FX pairs, but `_clean_pair` only accepted six letters, so
+  the provider refused them with "not a six-letter FX pair". The four now carry their own precision
+  (3 dp, measured on the feed), `syminfo` type (`index` for NAS100/SP500, `commodity` for metals — so
+  `tickerid` is `IDX:NAS100`, not `FX:`), and descriptions. Verified live: all seven answer
+  `source: "dukascopy-ticks"` with real volume.
+
+- **The market-data provider now prefers the tick store** (21 Oct): `console/backend/fxticks.py` builds
+  bars from the downloaded Dukascopy ticks (`tools/fx-fetch.py`), and `fxdata._bars` asks it first — no
+  network, real **volume** (tick count per bar) and a real **spread** (median bid/ask per minute, so one
+  bad print cannot widen a 30-minute bar). `/api/fx/bars` reports `source: "dukascopy-ticks"` and a
+  `store` block with the coverage behind it; `/api/fx/status` counts the store per symbol. Yahoo is now
+  **off** unless `TRADERS_FX_ALLOW_YAHOO=1`, per the operator's ruling — without local ticks and with the
+  feed unreachable the call fails with the reason instead of substituting mid prices that have neither
+  volume nor spread. Bars are mid-price OHLC. Pinned by `test_fxticks.py` (8 tests).
+
+- **A tick downloader for the seven instruments** (21 Oct): `tools/fx-fetch.py` walks Dukascopy's
+  **v1 tick API** (`/v1/ticks/<CODE>/<Y>/<M>/<D>/<H>`) — the modern JSON endpoint, far more tolerant of
+  a bulk walk than the `/datafeed/` host that kept resetting us. Codes carry a dash and a class
+  (`GBP-USD`, `XAU-USD`, `USATECH.IDX-USD`, `USA500.IDX-USD`); the v1 month is **1-based**, the
+  opposite of `/datafeed/`'s 0-based paths. Two facts that would silently corrupt a download are pinned
+  by `test_fx_ticks.py`: `times`/`bids`/`asks` are **cumulative deltas** (a running sum, not absolute
+  values), and the hour's `timestamp` is the base every offset counts from. Storage is one gzipped JSON
+  per instrument-hour plus `.empty` markers for shut hours, so the walk resumes; measured 12 hours/s
+  with 5 workers, ~33 KB per hour on disk. Fetched data is TODAY's: 4,547 ticks for 08:00 with a 0.4-pip
+  spread, monotonic over exactly 60 minutes — further proof the "lag" reported on 20 Oct was the
+  0-based month bug, not the feed.
+
+- **Audit fixes (21 Oct)** — four bugs from an external read of `630e3ef`, plus version and install
+  hygiene. **The Dukascopy month was off by one:** the tick path is 0-based in months (September =
+  `/08/`), so a 1-based URL read the *following* month and stamped those prices with the requested
+  timestamps — a plausible, silently wrong backtest. Measured: `/2026/09/24/` 404 vs `/2026/08/24/`
+  27,285 bytes; the "two-week publication lag" recorded on 20 Oct was this bug, not a lag. The cache
+  root moved to `fx/`**v2**` so wrong-month empty markers cannot shadow real hours. **XSS in the tester
+  strip:** the `strategy()` title was interpolated raw into `innerHTML`, so a crafted title executed in
+  the console's origin (where the paper-broker approve door lives) — every engine string now goes
+  through `esc()`, with a pin. **Coverage no longer lives in a module global:** `bars_with_meta()` returns
+  `{"bars", "coverage"}` per call, so two concurrent requests (`request.security` fetches the secondary
+  pair alongside the main) can no longer swap their source/lag. **CI's lint is green again** (four unused
+  imports), `status()` has one shape with or without a cache, and that test is hermetic. The prop-firm
+  engine is pinned (`@luxalgo/prop-firm-sim-cli@1.2.0`, `--save-exact`) like the Edge Stats block, and
+  **one `VERSION` file** now drives the console, `plugin.yaml` and the catalog entry (they disagreed:
+  1.0.0 / 1.2.0 / 1.3.0) — `test_versions.py` keeps them in step. `TRADERS_AGENT_ALLOWED_HOSTS` is
+  documented, and the `ALLOW_LAN` row no longer claims LAN peers are read-only when the token lets them
+  drive the console. Suite **1,259 tests OK** (1 skipped, 77 files).
+
+- **Forex data for backtests, and a strategy that names its own market** (20 Oct): the pane charts a
+  Binance crypto feed, so a GBPUSD/EURUSD strategy had nothing to run on — and worse,
+  `request.security("EURUSD", …)` on custom bars silently returns the chart's own series (measured:
+  BTC 68778 for an "ETH" request), which would make an SMT pair compare a market with itself.
+  `console/backend/fxdata.py` builds FX bars from **Dukascopy's free tick files** (LZMA `>IIIff`
+  records, ~20 KB per instrument-hour, no key): tick decode verified at 4,457 ticks/hour, hour-file
+  cache under `~/.local/share/traders-agent/fx/`, M1 → any timeframe, and a **Yahoo FX fallback** that
+  labels its own output when Dukascopy throttles (measured 429s and a ~2-week publication lag). Two
+  doors (`/api/fx/bars`, `/api/fx/status`) and a browser provider (`fx-provider.js`) make that the
+  engine's data source for both the main symbol and `request.security`'s secondary one. A script opts
+  in with `//@fx GBPUSD` + `//@tf 60` (`pinets-runner.js`), which routes the run to the FX provider
+  (`ctor: 'fx-provider'`) instead of the chart, and a strategy sizes itself in R (1–2% of equity per
+  trade) without any plugin change. Measured while wiring it: with `margin_long=100` every risk-sized
+  FX order is rejected (85 placed, zero fills) — the emulator needs `0` to size by risk, not notional.
+  15 new tests (`test_fxdata.py`). Suite **1,252 tests OK** (1 skipped, 77 files).
+
+- **Strategy backtests on the new intrabar broker emulator** (20 Oct): LuxAlgo's 19 Oct update — Vela
+  **0.8.5**, vela-pinets **0.2.17**, PineTS **0.12.0** — is vendored, and our PineTS fork's three
+  patches are rebased onto 0.12.0 (upstream moved the declaration-init walker into
+  `walkInitExpression`, so patch 2's visitor lives there now; branch `fix/p1-p8-on-0.12`). A
+  `strategy()` script's fills and exits are now resolved *inside* the bar with commission, slippage,
+  margin and trailing stops, and TradingView's tick-grid snapping (`setFillsOnTickGrid`), instead of
+  at the signal bar's close — measured on the same 400 synthetic bars, the old engine filled zero
+  trades where 0.12 fills four with per-trade commission and excursions.
+  **The tester strip** (`console/frontend/tester.js` + `tester.css`) reads the engine's ledger: net
+  profit, trades, win rate with its N, max drawdown (money and %), profit factor, a closed-trade P&L
+  curve and, on demand, the round trips (side, qty, entry/exit fills, commission, P&L, per-trade
+  excursion). Missing data looks missing (`—` for no sample, `∞` for no losing trade); when the
+  worker's summary omits the account totals the ratio is computed from the ledger and the footer says
+  so; commission the worker dropped is reported as what the fills paid, never "none". Every run
+  publishes to the strip on both engine paths, and the declaration's title is recovered from the
+  source. **The agent reads the same ledger**: `chart_apply_pine`'s answer gains a `ledger:` line
+  (`console/mcp/server.py::_ledger_line`). 18 new tests (`test_tester_strip.py`). Suite **1,236
+  tests OK** (1 skipped, 75 files).
+
+- **The prop-firm simulator is wired in** (19 Oct): LuxAlgo's `@luxalgo/prop-firm-sim-cli` (MIT) runs
+  locally and the desk sheet's Prop-firms view grows a **Simulate** button on every challenge. The
+  card is the engine's own answer, verbatim: pass probability per attempt with its Wilson 95% CI,
+  per-step rates with min-days and the failing rule counts, funded-within-N, attempts, expected cost,
+  days to funded, payout probability, blow-up risk and the EV block — plus the engine's disclaimer,
+  simplification flags and its **engine version, paths and seed** (same inputs, same numbers). The
+  form (win rate, avg win/loss in R, risk per trade, trades per day) feeds the CLI's parametric model;
+  the engine's own rules come from LuxAlgo's public directory, keyless, at run time. New
+  `console/backend/propfirmsim.py` (the Edge Stats bridge pattern: subprocess, JSON, cached by
+  identical question), `/api/propfirmsim/status` and `/api/propfirmsim/simulate`, and
+  `./install.sh --with-prop` installs the engine (Node 20+, ~10 MB) with the same prove-it-starts
+  rule the Edge Stats block uses. A machine without it gets the install command, not an error.
+  Suite 1,218 tests OK (1 skipped, 74 files).
+
+- **The desk has one owner, and commands are routed to it** (19 Oct). Several console views can be
+  alive at once (the Hermes pane, a second tab, a standalone window) and the old rule was "first claim
+  wins" — so a background tab with no bars could consume a command and answer "the chart did not
+  answer … within 45s" while the operator's pane stood ready. The owner is now decided from the
+  heartbeats: **the newest visible view with bars**; a hidden or bar-less view can never take the desk
+  from a working one. A view that is not the owner executes nothing and shows a passive banner —
+  "Another desk view is driving the chart — **use this view**" — whose button takes the desk back
+  deliberately. `chart_commands` names the owner, the claim door refuses non-owners with a reason, and
+  a pane with no view record keeps the old single-view behaviour. The plugin's frame watchdog also
+  stops prompting a remount when no pane is mounted (a closed pane is not a dead frame).
+  Suite 1,207 tests OK (1 skipped, 73 files).
 - **The desk sheet — the paper account, its journal and the prop-firm directory in one surface** (16 Oct). ⋯ →
   "Trader's desk" opens three views: **Paper** (equity, cash, realised, open P&L, positions with marks, recent
   fills, Reset), **Journal** (net P&L, win rate, profit factor, avg win/loss, the realised-equity curve on a
@@ -18,18 +129,10 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   − the entry fee's share for that qty, with the entry fee carried on the position until a sale attributes it — so
   **sum(sell pnl) == realized + the open positions' entry fees**, asserted in the tests. `broker_state` reports the
   closed-trade line; a rate with no sample prints —, a profit factor with no losing trade prints ∞, and no rate
-  ships without its N. 1,166 backend tests green (1 skipped, 71 files).
+  ships without its N. 1,187 backend tests green (1 skipped, 72 files).
 
 ### Fixed
 
-- **The console stopped reporting a version it had not been since September.** `SERVER_VERSION` was typed
-  once at `1.0.0` and never touched again, so `/api/health`, `/api/build` and the server's own `Server:`
-  header all answered **1.0.0** while the repo shipped 1.3.0 — a number the agent, a bug report and
-  `./install.sh --doctor` all read and believe. The manifest had drifted the other way (`traders-desk/plugin.yaml`
-  said 1.2.0 against a v1.3.0 tag and a catalog entry claiming 1.3.0), so the file the catalog actually reads
-  disagreed with the entry pointing at it. All three now state **1.3.0**, and
-  `test_docs_drift.OneVersionNumber` fails while they disagree — the old drift test checked the manifest's
-  *name* and never its version, which is why nothing caught either one.
 - **`TRADERS_AGENT_ALLOWED_HOSTS` was an undocumented change to who can write.** Measured, not inferred: with a
   name on the list, a request carrying it from loopback is handed the POST token and `POST /api/broker` answers
   **200**. That is the intended trade (`tailscale serve` terminates here, so your phone arrives as 127.0.0.1),
@@ -40,9 +143,7 @@ All notable changes to this project are documented here. Format: [Keep a Changel
   tests pin the token, the write and the still-refused unknown name (removing the name from the allowlist fails two
   of them). No behaviour changed — only what the repository admits to.
 - **The package README documented an install that is no longer the short one** (`./console/start.sh` + `./install.sh`,
-  with no mention of `--all`), and the test counts disagreed across files (README ~1,130, `HANDOFF` 1,166). Both now
-  match a measured run: **1,188 tests, 9 skipped, 73 files**. The dated measurement block further down `HANDOFF.md`
-  keeps its own older number, because it is a record of one run and not a claim about today.
+  with no mention of `--all`); it now leads with `./install.sh --all`.
 
 - **The README still claimed Linux-only.** macOS support shipped on 13 Oct (`docs/MACOS.md`, the repo venv,
   `console/service-macos.sh` behind launchd), so the OS row, the service section and the platform bullet now
@@ -63,6 +164,18 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Changed
 
+- **The latency pass** (19 Oct): three measured causes of "the chart loads slowly", each fixed where it lived.
+  *Static files said `Cache-Control: no-store`* — so every pane open re-downloaded the whole vendored graph
+  (180 assets, 7.2 MB measured) and V8's code cache could never help. Now: `index.html` stays `no-store`
+  (a new build must always land), content-hashed chunks (`chunk-UNUVPQFW.js`) are `immutable`, everything else
+  revalidates with an `ETag` — a 304 costs 0.7 ms and re-sends nothing (verified live). *Library reads re-asked
+  upstream every 1.5–2 s* (0.45–0.68 s per WAN round trip measured) — the TTLs are now when an answer is due a
+  REFRESH, and past it the answer is served instantly while one background refresh runs (stale-while-revalidate,
+  single-flight, and a failing refresh never takes the stale read with it). *The catalogue's cold walk (16.5 s,
+  nine-plus serial MCP calls) belonged to whoever opened the drawer first* — the server now warms it in the
+  background at start-up when the disk copy is missing or past its 12 h TTL. `test_latency_and_cache.py` holds
+  all three, plus their edges: app files must keep revalidating (`script-highlight.js` may not be frozen for a
+  year by a sloppy hash rule) and the warm must never walk when the copy is fresh.
 - **Vela 0.8.3 → 0.8.4** (`@luxalgo/vela`, published 13 Oct; vela-pinets moved with it, 0.2.15 → 0.2.16, the release built
   against it — it still inlines PineTS 0.11.0, so the patched PineTS fork below is untouched). The vendored copy of 0.8.3 was
   an exact tarball subset, byte for byte, and so is this one: the ES modules, the Binance / Coinbase / Hyperliquid providers

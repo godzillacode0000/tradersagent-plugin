@@ -405,8 +405,97 @@
       max_drawdown: s.max_drawdown,
       sharpe: s.sharpe_ratio,
       cagr: s.cagr,
-      open_trades: Array.isArray(s.opentrades) ? s.opentrades.length : null
+      open_trades: Array.isArray(s.opentrades) ? s.opentrades.length : null,
+      /* The broker emulator's own ledger (19 Oct, PineTS 0.12.0): the update rebuilt it on an
+         intrabar model, so these are not estimates — gross/loss, the equity path's drawdown, the
+         per-trade excursions above, and the declaration's commission/slippage/margin all come
+         straight from the engine. The tester strip reads them; the agent reads them through
+         `strategy` on chart_apply's result. */
+      grossprofit: s.grossprofit,
+      grossloss: s.grossloss,
+      max_drawdown_pct: s.max_drawdown_percent_value,
+      max_runup: s.max_runup,
+      equity: s.equity,
+      initial_capital: s.initial_capital,
+      currency: (s.config && s.config.currency) || s.account_currency || '',
+      title: (s.config && (s.config.title || s.config.shorttitle)) || '',
+      commission: cfg(s, 'commission_type', 'commission_value'),
+      slippage: s.config ? s.config.slippage : undefined,
+      margin_long: s.config ? s.config.margin_long : undefined,
+      margin_short: s.config ? s.config.margin_short : undefined,
+      pyramiding: s.config ? s.config.pyramiding : undefined,
+      process_orders_on_close: s.config ? s.config.process_orders_on_close : undefined,
     };
+  }
+
+  /**
+   * `//@fx GBPUSD` (and optional `//@tf 30`) at the top of a script: run it on the console's FX
+   * provider instead of the chart's bars.
+   *
+   * A strategy written for a forex pair cannot use the chart's own series — the pane charts Binance
+   * crypto — and PineTS's custom-bars form answers `request.security("EURUSD", …)` with the chart's
+   * series (measured 20 Oct: BTC 68778 returned for an ETH request). So a script that names its
+   * market gets that market: bars from console/backend/fxdata.py, served at /api/fx/bars, read
+   * through fx-provider.js. No directive → the old path, unchanged.
+   */
+  function fxOf(source) {
+    const head = String(source || '').slice(0, 600);
+    const m = /^\s*(?:\/\/\s*|;\s*)?@fx\s+([A-Za-z]{6})\b/m.exec(head);
+    if (!m) return null;
+    const t = /^\s*(?:\/\/\s*|;\s*)?@tf\s+([0-9]+|[DdWw])\b/m.exec(head);
+    return { pair: m[1].toUpperCase(), timeframe: t ? String(t[1]).toUpperCase() : '30' };
+  }
+
+  async function runFx(fx, source, opts, timeoutMs, label, t0) {
+    if (!window.TraderFXProvider) {
+      return { ok: false, reason: 'not runnable: the FX provider is not loaded (fx-provider.js)',
+               error: classify('the FX provider is not loaded', 'ENGINE_UNAVAILABLE') };
+    }
+    let mod;
+    try {
+      mod = await loadPineTS();
+    } catch (err) {
+      const why = 'PineTS unavailable: ' + ((err && err.message) || err);
+      return { ok: false, reason: why, error: classify(why, 'ENGINE_UNAVAILABLE') };
+    }
+    const engine = new mod.PineTS(window.TraderFXProvider, fx.pair, fx.timeframe, 20000);
+    const target = opts.inputs && Object.keys(opts.inputs).length && typeof mod.Indicator === 'function'
+      ? new mod.Indicator(source, opts.inputs) : source;
+    try {
+      /* A backtest over years of bars is a long run: give it more room than an indicator gets. */
+      const out = await withTimeout(engine.run(target), Math.max(timeoutMs, 90000), label);
+      const strategy = toStrategy(out);
+      publishStrategy(strategy, source);
+      return { ok: true, ms: Math.round(performance.now() - t0), series: [], strategy: strategy,
+               drawings: [], ctor: 'fx-provider', context: fx.pair + '@' + fx.timeframe, raw: out };
+    } catch (err) {
+      const why = String((err && err.message) || err);
+      return { ok: false, reason: 'PineTS error: ' + why, error: classify(why), ctor: 'fx-provider' };
+    }
+  }
+
+  /** A declaration argument, read from the engine's config (names are PineTS's own). */
+  function cfg(s, typeKey, valueKey) {
+    const c = s.config;
+    if (!c) return null;
+    return { type: c[typeKey], value: c[valueKey] };
+  }
+
+  /** The declared title, read from the source: the worker's summary does not carry `config`. */
+  function declaredTitle(source) {
+    const m = /\bstrategy\s*\(\s*['"]([^'"]+)['"]/.exec(String(source || ''));
+    return m ? m[1] : '';
+  }
+
+  /** Hand a finished strategy run to the tester strip. A reader must never break a run. */
+  function publishStrategy(strategy, source) {
+    try {
+      if (!strategy) return;
+      if (!strategy.title) strategy.title = declaredTitle(source);
+      if (window.TraderTester) window.TraderTester.show(strategy);
+    } catch (err) {
+      /* the strip is a view; a view failing is not the run failing */
+    }
   }
 
   /**
@@ -496,6 +585,13 @@
     const reason = runnable(source);
     if (reason) return { ok: false, reason: 'not runnable: ' + reason, error: classify(reason) };
 
+    /* A script that names its own market (`//@fx GBPUSD`) runs on that market's bars, not the chart's. */
+    const fx = fxOf(source);
+    if (fx) {
+      const label0 = 'PineTS' + (opts.name ? ` (${opts.name})` : '');
+      return runFx(fx, source, opts, opts.timeoutMs || DEFAULT_TIMEOUT_MS, label0, performance.now());
+    }
+
     const count = Array.isArray(bars) ? bars.length : 0;
     if (count < 30) {
       const why = `only ${count} bars available (need at least 30)`;
@@ -521,9 +617,11 @@
         /* `raw` must carry the same shape the main-thread path returns, because flatten() and
          * engineRows() read `raw.plots`. Without it every worker run painted nothing at all — the
          * drawings and the script's own series were computed and then dropped on the floor. */
+        const workerStrategy = toStrategy({ strategy: viaWorker.strategy });
+        publishStrategy(workerStrategy, source);
         return { ok: true, ms: ms, series: toSeries({ plots: viaWorker.plots }),
                  raw: { plots: viaWorker.plots, strategy: viaWorker.strategy },
-                 strategy: toStrategy({ strategy: viaWorker.strategy }),
+                 strategy: workerStrategy,
                  drawings: viaWorker.drawings, mtf: viaWorker.mtf || null, ctor: 'worker', context: context };
       }
       /* a worker that could not start falls through to the old main-thread path */
@@ -554,7 +652,9 @@
         out = await withTimeout(built.engine.run(target), timeoutMs, label);
       }
       const ms = Math.round(performance.now() - t0);
-      return { ok: true, ms, series: toSeries(out), strategy: toStrategy(out),
+      const strategy = toStrategy(out);
+      publishStrategy(strategy, source);
+      return { ok: true, ms, series: toSeries(out), strategy: strategy,
                drawings: out && out.plots ? Object.keys(out.plots).filter((k) => k.startsWith('__')) : [],
                ctor: built.ctor, context: built.context, raw: out };
     } catch (err) {

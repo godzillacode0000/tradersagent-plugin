@@ -173,3 +173,25 @@
 @media (prefers-reduced-motion: reduce) {
   .desk-sheet, .desk-scrim, .desk__tab, .desk__btn, .desk__x { transition: none; }
 }
+
+/* ── the prop-firm simulator (19 Oct) ──────────────────────────────────────────────────────────
+   The form is an input row; the verdict is a raised card under it. Every number on that card comes
+   from LuxAlgo's engine — the sheet computes nothing and rounds nothing the engine did not say. */
+.desk__form { display: flex; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 10px; }
+.desk__field { display: flex; flex-direction: column; gap: 3px; font-size: var(--d-cap); color: var(--lx-fg-faint); }
+.desk__field input { width: 78px; }
+.desk__verdict {
+  background: var(--lx-surface-2); border: 1px solid var(--lx-border-soft);
+  border-radius: var(--lx-radius-lg); padding: 12px 14px; margin: 4px 0 8px;
+}
+.desk__verdict > .desk__row:first-child { padding-top: 0; border-bottom: 0; }
+.desk__more { margin: 8px 0 4px; color: var(--lx-fg-muted); font-size: var(--d-small); }
+.desk__more summary { cursor: pointer; }
+.desk__more ul { margin: 6px 0 0; padding-left: 18px; }
+.desk__chip--go { cursor: pointer; font: inherit; font-size: var(--d-small); text-align: left; }
+.desk__chip--go:hover, .desk__chip--go:focus-visible { border-color: var(--lx-accent); color: var(--lx-fg-bright); }
+.desk__chip--go.is-off { opacity: .5; cursor: progress; }
+/* The verdict's rows are prose+numbers, not a one-line list: let them wrap (the generic .desk__row
+   span ellipsizes, which cut "fails: max-loss 372" down to "max-loss …" on the 560px sheet). */
+.desk__verdict .desk__row > span { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.desk__verdict .desk__row { align-items: flex-start; }

@@ -58,10 +58,24 @@ import library_thumbs
 # Constants
 # --------------------------------------------------------------------------
 
-# Bump on release together with traders-desk/plugin.yaml and docs/plugin-catalog-entry.yaml:
-# test_docs_drift.OneVersionNumber fails while the three disagree. It is reported on /api/health,
-# in /api/build and in this server's own `Server:` header, so a stale value misinforms the agent.
-SERVER_VERSION = "1.3.0"
+def _repo_version() -> str:
+    """The ONE version, from the repo's VERSION file.
+
+    Three different numbers used to ship at once — `/api/health` said 1.0.0, the plugin manifest
+    1.2.0, the catalog entry 1.3.0 — so "which version is this?" had no answer. A file next to the
+    repo's root is the only place they can agree, and `test_versions.py` keeps the four in step.
+    """
+    for candidate in (Path(__file__).resolve().parents[2] / "VERSION", Path("VERSION")):
+        try:
+            text = candidate.read_text(encoding="utf-8").strip()
+            if text:
+                return text
+        except OSError:
+            continue
+    return "0.0.0"
+
+
+SERVER_VERSION = _repo_version()
 DEFAULT_MCP_URL = "https://mcp.luxalgo.com/mcp"
 
 # --------------------------------------------------------------------------
@@ -74,9 +88,13 @@ from chat import run_agent
 from chart_bridge import (save_state as save_chart_state, load_state as load_chart_state,
                           enqueue as enqueue_chart_command,
                           commands_since as chart_commands_since,
+                          owner_of as chart_owner,
+                          take_ownership as chart_take_ownership,
                           record_result as record_chart_result, get_result as get_chart_result)
 from chart_stream import ChartStream
 import edgestats
+import propfirmsim
+import fxdata
 
 # The push channel: chart views attach to /api/chart/stream and commands are pushed down it, so an
 # agent command no longer waits for the page's 2s poll (see chart_stream.py).
@@ -195,7 +213,14 @@ class MCPUnavailable(ApiError):
 
 
 class TTLCache:
-    """Tiny thread-safe LRU-ish TTL cache. Errors are never stored here."""
+    """Tiny thread-safe LRU-ish TTL cache. Errors are never stored here.
+
+    Two deadlines per entry (19 Oct latency pass): `fresh_at` is when the value is due a refresh,
+    `keep_at` is when it is finally dropped. Between the two the entry may be served STALE while one
+    background refresh runs (see `mcp_call`) — that is what stops a read after a pause from paying the
+    WAN round trip again. `get` keeps its old meaning (fresh hits only); `get_stale` is the reader the
+    revalidating path uses.
+    """
 
     def __init__(self, max_entries: int = CACHE_MAX_ENTRIES):
         self._data: OrderedDict = OrderedDict()
@@ -211,20 +236,44 @@ class TTLCache:
             if item is None:
                 self.misses += 1
                 return None
-            expires, value = item
-            if expires < now:
+            fresh_at, keep_at, value = item
+            if keep_at < now:
                 del self._data[key]
                 self.misses += 1
+                return None
+            if fresh_at < now:
+                self.misses += 1          # stale: still kept for get_stale, but not a hit
                 return None
             self._data.move_to_end(key)
             self.hits += 1
             return value
 
-    def set(self, key, value, ttl: float):
+    def get_stale(self, key):
+        """(value, fresh) — the value even past its refresh deadline; None once past `keep`."""
+        now = time.monotonic()
+        with self._lock:
+            item = self._data.get(key)
+            if item is None:
+                self.misses += 1
+                return None
+            fresh_at, keep_at, value = item
+            if keep_at < now:
+                del self._data[key]
+                self.misses += 1
+                return None
+            self._data.move_to_end(key)
+            if fresh_at >= now:
+                self.hits += 1
+                return value, True
+            return value, False
+
+    def set(self, key, value, ttl: float, keep: float | None = None):
+        """ttl: when it is due a refresh. keep: when it is dropped (defaults to ttl)."""
         if ttl <= 0:
             return
+        now = time.monotonic()
         with self._lock:
-            self._data[key] = (time.monotonic() + ttl, value)
+            self._data[key] = (now + ttl, now + max(ttl, keep or ttl), value)
             self._data.move_to_end(key)
             while len(self._data) > self._max:
                 self._data.popitem(last=False)
@@ -247,21 +296,36 @@ CATALOGUE_PAGE = 100
 CATALOGUE_MAX_PAGES = 20
 CATALOGUE_TTL = 12 * 3600
 
-# Per-endpoint TTLs (seconds). 500ms-2s as required.
+# Per-endpoint TTLs (seconds): when a cached answer is due a REFRESH — not when it dies. Past this the
+# answer is served once more (instantly) while one background refresh runs, stale-while-revalidate; see
+# mcp_call. The old 1.5–2 s table made every click after a short pause a fresh WAN round trip to
+# LuxAlgo's MCP (measured 19 Oct: 0.45–0.68 s per call, and the drawer's first open cost 3.4 s).
 TTL = {
-    "search": 1.5,
-    "indicators": 2.0,
-    "indicator": 2.0,
-    "source": 2.0,
-    "concept": 2.0,
-    "families": 2.0,
-    "concepts": 2.0,
-    "edge_presets": 2.0,
-    "edge_report": 1.0,
-    "edge_symbols": 2.0,
-    "propfirms": 2.0,
-    "offers": 2.0,
+    "search": 30.0,        # one query's results; the Library gains scripts on a scale of days
+    "indicators": 600.0,   # catalogue pages (the catalogue itself keeps its own 12 h disk copy)
+    "indicator": 900.0,    # one indicator's sheet
+    "source": 3600.0,      # an indicator's Pine source: immutable in practice
+    "concept": 3600.0,
+    "families": 3600.0,
+    "concepts": 3600.0,
+    "edge_presets": 3600.0,
+    "edge_report": 300.0,  # a measured report: deterministic given its data
+    "edge_symbols": 900.0,
+    "propfirms": 1800.0,
+    "offers": 300.0,       # promos do move; half an hour is the concession
 }
+
+# How long past its refresh deadline a cached answer may still be SERVED while a refresh runs behind
+# it. Twenty refresh periods, floored at ten minutes and capped at six hours: generous, because the
+# refresh is started on the same read and usually lands in under a second — the long tail only exists
+# so a flapping upstream degrades into "slightly old numbers", not "the drawer waits".
+STALE_KEEP_FACTOR = 20
+STALE_KEEP_MIN = 600.0
+STALE_KEEP_MAX = 6 * 3600.0
+
+
+def _keep_for(ttl: float) -> float:
+    return min(max(ttl * STALE_KEEP_FACTOR, STALE_KEEP_MIN), STALE_KEEP_MAX)
 
 
 # --------------------------------------------------------------------------
@@ -498,17 +562,54 @@ class MCPBridge:
 BRIDGE: MCPBridge = MCPBridge(DEFAULT_MCP_URL)
 
 
+# One background refresh per key at a time. The reader that noticed the staleness already has its
+# answer; this set only stops five concurrent readers from each starting their own refresh.
+_REFRESHING: set = set()
+_REFRESH_LOCK = threading.Lock()
+
+
+def _refresh_behind(tool: str, args: dict, ctx_key: str, cache_key, ttl: float) -> None:
+    """Re-fetch one key off the request path (stale-while-revalidate's second half)."""
+    with _REFRESH_LOCK:
+        if cache_key in _REFRESHING:
+            return
+        _REFRESHING.add(cache_key)
+
+    def run():
+        try:
+            call_args = dict(args)
+            call_args["context"] = CONTEXT[ctx_key]
+            payload, raw = BRIDGE.call(tool, call_args)
+            CACHE.set(cache_key, (payload, raw), ttl, keep=_keep_for(ttl))
+        except Exception as exc:  # noqa: BLE001 - the stale copy stays; the next read tries again
+            log(f"background refresh of '{tool}' failed: {type(exc).__name__}: {exc}")
+        finally:
+            with _REFRESH_LOCK:
+                _REFRESHING.discard(cache_key)
+
+    threading.Thread(target=run, name="mcp-refresh", daemon=True).start()
+
+
 def mcp_call(tool: str, args: dict, ctx_key: str, cache_key, ttl: float) -> tuple:
-    """Cached bridge call. Returns (payload, raw_text, cached_bool)."""
+    """Cached bridge call. Returns (payload, raw_text, cached_bool).
+
+    Stale-while-revalidate (19 Oct): a fresh entry answers directly; an entry past its TTL still
+    answers — instantly, flagged cached — and one background refresh is started so the NEXT reader
+    gets a fresh one. Only a true miss waits on the bridge. That is the difference between a drawer
+    click costing 0 ms after a pause instead of a 0.45 s WAN round trip.
+    """
     if cache_key is not None:
-        hit = CACHE.get(cache_key)
+        hit = CACHE.get_stale(cache_key)
         if hit is not None:
-            return hit[0], hit[1], True
-    args = dict(args)
-    args["context"] = CONTEXT[ctx_key]
-    payload, raw = BRIDGE.call(tool, args)
+            (payload, raw), fresh = hit
+            if not fresh:
+                _refresh_behind(tool, args, ctx_key, cache_key, ttl)
+            return payload, raw, True
+    call_args = dict(args)
+    call_args["context"] = CONTEXT[ctx_key]
+    payload, raw = BRIDGE.call(tool, call_args)
     if cache_key is not None:
-        CACHE.set(cache_key, (payload, raw), ttl)
+        CACHE.set(cache_key, (payload, raw), ttl, keep=_keep_for(ttl))
     return payload, raw, False
 
 
@@ -767,6 +868,36 @@ def _stale(saved: dict, ttl: float) -> bool:
         return (time.time() - float(saved.get("fetched_at") or 0)) > ttl
     except (TypeError, ValueError):
         return True
+
+
+def warm_catalogue(wait_for_bridge: float = 60.0) -> None:
+    """Walk the catalogue once, in the background, when the disk copy is missing or past its TTL.
+
+    The walk is nine-plus serial MCP calls (16.5 s measured cold on 19 Oct) and every drawer open
+    after the 12 h TTL used to pay it on the operator's click. Warm it while nobody is looking; a
+    reader that arrives during the walk waits on the same lock and then finds it on disk (BE-11's
+    contract, unchanged). Fails soft: no MCP session, no warm, one log line.
+    """
+    path = os.path.join(AGENTS_ROOT, "catalogue.json")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            saved = json.load(fh)
+        if isinstance(saved, dict) and saved.get("rows") and not _stale(saved, CATALOGUE_TTL):
+            return
+    except (OSError, ValueError):
+        pass
+    deadline = time.time() + wait_for_bridge
+    while time.time() < deadline and not BRIDGE.connected:
+        time.sleep(2.0)
+    if not BRIDGE.connected:
+        log("catalogue warm skipped: no MCP session")
+        return
+    try:
+        started = time.time()
+        ep_catalogue({})
+        log(f"catalogue warm done in {time.time() - started:.1f}s")
+    except Exception as exc:  # noqa: BLE001 - a warm that fails is a warm that never happened
+        log(f"catalogue warm failed: {type(exc).__name__}: {exc}")
 
 
 def ep_indicator(params: dict) -> dict:
@@ -1094,6 +1225,59 @@ def ep_offers(params: dict) -> dict:
     }
 
 
+def ep_fx_bars(params: dict) -> dict:
+    """OHLCV bars for one FX pair, from Dukascopy's free public feed (console/backend/fxdata.py).
+
+    The desk's chart is a Binance crypto feed; a strategy written for GBPUSD/EURUSD needs its own
+    bars. This endpoint is the door the browser's FX provider reads: `pair`, `timeframe` (1, 5, 15,
+    30, 60, 240, D) and `limit`. The first request for a date range downloads one small file per
+    hour and caches it; repeats are local. Prices are the mid of the published bid/ask.
+    """
+    pair = _one(params, "pair") or _one(params, "symbol")
+    timeframe = _one(params, "timeframe") or "30"
+    limit = _limit(params.get("limit"), 500, 1, 20000)
+    try:
+        answer = fxdata.bars_with_meta(pair, timeframe, limit)
+    except fxdata.FxError as exc:
+        raise ApiError(str(exc), 400, exc.code) from None
+    rows = answer["bars"]
+    # Provenance comes from THIS call, never from a module global: `bars_with_meta` falls back to
+    # Yahoo when Dukascopy throttles, and request.security fetches the secondary pair concurrently —
+    # a shared global let two answers swap their source/lag (the audit's #4).
+    coverage = answer["coverage"]
+    return {"pair": fxdata._clean_pair(pair), "timeframe": str(timeframe).upper(), "bars": rows,
+            "symbol": fxdata.symbol_info(pair), "count": len(rows),
+            "source": coverage.get("source", "unknown"), "coverage": coverage,
+            "prices": "mid of bid/ask"}
+
+
+def ep_fx_status(params: dict) -> dict:
+    """What FX data is cached, and which pairs the loader knows. Never fetches."""
+    return fxdata.status()
+
+
+def ep_propfirmsim_status(params: dict) -> dict:
+    """Is LuxAlgo's prop-firm simulator installed, which engine and node. Never runs the engine."""
+    return propfirmsim.status()
+
+
+def ep_propfirmsim_simulate(params: dict) -> dict:
+    """One simulation through LuxAlgo's own engine (console/backend/propfirmsim.py).
+
+    Every number comes from the engine — pass probability with its Wilson CI, per-step rates, failure
+    reasons, attempts, cost, days, EV — and the answer carries the engine's own assumptions block
+    (paths, seed, engine version, provenance, what is not simulated). A read: nothing moves.
+    """
+    flat = {key: _one(params, key) for key in
+            ("firm", "challenge", "winrate", "avg_win", "avg_loss", "trades_per_day",
+             "risk", "risk_mode", "paths", "seed", "attempt_cap", "funded_horizon", "no_funded")}
+    try:
+        return propfirmsim.simulate(flat)
+    except propfirmsim.SimError as exc:
+        status_code = 409 if exc.code in ("not_installed", "no_node", "old_node") else 400
+        raise ApiError(exc.message, status_code, exc.code, exc.as_detail()) from None
+
+
 def ep_agents(params: dict) -> dict:
     """The study list the dock renders: id, name, brief, session id, counters."""
     studies = list_studies(AGENTS_ROOT)
@@ -1270,9 +1454,13 @@ def ep_bars(params: dict) -> dict:
 
 
 def ep_chart_commands(params: dict) -> dict:
-    """Commands the chart page has not executed yet (it passes the last id it handled)."""
+    """Commands the chart page has not executed yet (it passes the last id it handled).
+
+    `owner` rides along (19 Oct): the view the desk belongs to, decided from the heartbeats. A page
+    that is not the owner shows its passive banner instead of executing — routing, not a race.
+    """
     since = _int_param(params, "since")
-    return {"commands": chart_commands_since(AGENTS_ROOT, since)}
+    return {"commands": chart_commands_since(AGENTS_ROOT, since), "owner": chart_owner(AGENTS_ROOT)}
 
 
 def ep_chart_result(params: dict) -> dict:
@@ -1335,9 +1523,11 @@ def _library_pairs(params: dict) -> list[tuple[str, str]]:
 
 
 WARM_PAGE_SIZE = 60
-# The card's own width: the modal takes the screen now, so a card is up to ~430 px wide and the
-# picture is asked for at 480. Warming a width nobody paints would just fill the disk twice.
-WARM_WIDTH = 480
+# The width the drawer's rows paint: `.drow__shot` is a 52×34 tile and drawer.js asks 160 for it, so
+# this is the same number — test_preview_cache pins them together. (The old full-screen modal's
+# ~430 px cards are gone; while this said 480 the warm cache held pictures nothing requested, and
+# every drawer open paid S3 ~1.4 s × sixty rows for its own width — measured 15 Oct.)
+WARM_WIDTH = 160
 # Guard rail, not a policy: the catalogue is 806 rows on this build, so 40 pages is room to grow.
 MAX_WARM_PAGES = 40
 # What the warmer is doing right now, for /api/library/thumbs. A cold machine warms the whole
@@ -1614,6 +1804,10 @@ ROUTES = {
     "/api/edge/symbols": (ep_edge_symbols, TTL["edge_symbols"]),
     "/api/propfirms": (ep_propfirms, TTL["propfirms"]),
     "/api/offers": (ep_offers, TTL["offers"]),
+    "/api/fx/bars": (ep_fx_bars, 0.0),
+    "/api/fx/status": (ep_fx_status, 0.0),
+    "/api/propfirmsim/status": (ep_propfirmsim_status, 0.0),
+    "/api/propfirmsim/simulate": (ep_propfirmsim_simulate, 0.0),
     # Preview thumbnails are made and cached locally (backend/library_thumbs.py): the catalogue's own
     # pictures are small but ~0.8 s away, and sixty of them over six browser connections is what made
     # the Indicators modal look empty while it waited.
@@ -1652,6 +1846,37 @@ API_INDEX = {
 # --------------------------------------------------------------------------
 # Static file serving
 # --------------------------------------------------------------------------
+
+# A name that carries its own content hash can be cached forever — a new build is a new name. Vela's
+# bundler emits `chunk-UNUVPQFW.js` (eight uppercase alphanumerics), and the uppercase-only shape is
+# what keeps this rule away from the app's own lowercase names (`script-highlight.js`, `chart-bridge.js`
+# — nine and six letters after the dash, and they must stay revalidated because they change per commit).
+_HASHED_NAME = re.compile(r"-[A-Z0-9]{8,12}\.(?:js|mjs|css)$")
+
+
+def static_cache_control(name: str) -> str:
+    """The Cache-Control for one static file (19 Oct latency pass).
+
+    Before this, EVERY static response said `no-store` — so each pane open re-downloaded the whole
+    vendored graph (180 assets, 7.2 MB measured) and V8's code cache was never reusable.
+    """
+    if name == "index.html":
+        return "no-store"        # the document must always be the current build
+    if _HASHED_NAME.search(name):
+        return "public, max-age=31536000, immutable"
+    return "no-cache"            # revalidate: a 304 reuses the bytes AND the compiled script
+
+
+def _etag_matches(header: str | None, etag: str) -> bool:
+    """If-None-Match with comma-separated tags and `*`. Our tags are strong, so exact matches only."""
+    if not header:
+        return False
+    for part in header.split(","):
+        part = part.strip()
+        if part == "*" or part == etag:
+            return True
+    return False
+
 
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -2161,13 +2386,30 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/chart/claim":
                 # Several consoles can be alive at once (the Hermes pane, the HUD's pane, a browser
-                # tab). They all get the same push, so one of them must win the right to execute it.
+                # tab). They all get the same push, so one of them must win the right to execute it —
+                # and since 19 Oct the winner is ROUTED, not raced: the desk's owner is the newest
+                # visible heartbeat with bars (see chart_bridge._owner_from_views). A view that is not
+                # the owner is refused with the owner's id, which is what its passive banner shows.
                 try:
                     rid = int(payload.get("id"))
                 except (TypeError, ValueError, OverflowError):
                     raise ApiError("claim needs the integer id of a command", 400, "bad_request") from None
                 viewer = str(payload.get("viewer") or "")
-                self._ok({"id": rid, "claimed": STREAM.claim(rid, viewer, once=STREAM.is_once(rid)), "viewer": viewer})
+                owner = chart_owner(AGENTS_ROOT)
+                if owner and viewer and owner != viewer:
+                    self._ok({"id": rid, "claimed": False, "viewer": viewer, "owner": owner,
+                              "reason": "another desk view owns the chart"})
+                    return
+                self._ok({"id": rid, "claimed": STREAM.claim(rid, viewer, once=STREAM.is_once(rid)),
+                          "viewer": viewer, "owner": owner or viewer})
+                return
+            if path == "/api/chart/owner":
+                # The passive banner's button: "use this view". Deliberate, so it outranks the
+                # newest-heartbeat rule until another view's heartbeat or claim moves it again.
+                viewer = str(payload.get("viewer") or "")
+                if not viewer:
+                    raise ApiError("owner needs a viewer id", 400, "bad_request")
+                self._ok({"owner": chart_take_ownership(AGENTS_ROOT, viewer), "viewer": viewer})
                 return
             self._fail(f"Unknown endpoint '{path}'", HTTPStatus.NOT_FOUND, "unknown_endpoint")
         except ApiError as exc:
@@ -2431,14 +2673,33 @@ class Handler(BaseHTTPRequestHandler):
 
         ext = os.path.splitext(target)[1].lower()
         ctype = CONTENT_TYPES.get(ext) or "application/octet-stream"
+        name = os.path.basename(target)
+        cache = static_cache_control(name)
+        try:
+            stat = os.stat(target)
+        except OSError as exc:
+            self._fail(f"Could not read {target}: {exc}", 500, "io_error", head_only=head_only)
+            return
+        # A weak-in-form-but-stable tag: mtime + size changes whenever the file does, costs no read, and
+        # lets a reload revalidate everything for ~1 ms instead of re-downloading it (see static_cache_control).
+        etag = f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
+        if cache != "no-store" and _etag_matches(self.headers.get("If-None-Match"), etag):
+            self.send_response(HTTPStatus.NOT_MODIFIED)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", cache)
+            for key, value in self._cors_headers().items():
+                self.send_header(key, value)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.end_headers()
+            return
         try:
             with open(target, "rb") as handle:
                 body = handle.read()
         except OSError as exc:
             self._fail(f"Could not read {target}: {exc}", 500, "io_error", head_only=head_only)
             return
-        extra = {"Cache-Control": "no-store"}
-        if os.path.basename(target) == "index.html":
+        extra = {"Cache-Control": cache, "ETag": etag}
+        if name == "index.html":
             # The page's own POSTs carry this cookie; a cross-site request never does (SameSite=Strict). A LAN peer is
             # not handed it either (see _session_ok).
             if self._peer_is_local() or ALLOW_LAN:
@@ -2651,6 +2912,10 @@ def main(argv=None) -> int:
                 log(f"WARNING: MCP session not ready after {MCP_CONNECT_WAIT:.0f}s "
                     f"({BRIDGE.last_error}); the server will keep retrying in the background")
         threading.Thread(target=connect_mcp, name="mcp-connect", daemon=True).start()
+
+        # The catalogue's cold walk belongs to nobody's click (19 Oct): warm it in the background as
+        # soon as a session exists, so the first drawer open of the day is a disk read.
+        threading.Thread(target=warm_catalogue, name="catalogue-warm", daemon=True).start()
 
     # `systemctl stop` sends SIGTERM, which used to end the process with no cleanup (the Edge Stats engine was
     # left running). Treat it like Ctrl-C so the finally block below runs.

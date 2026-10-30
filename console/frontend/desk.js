@@ -30,11 +30,13 @@
     ['paper', 'Paper'],
     ['journal', 'Journal'],
     ['propfirms', 'Prop firms'],
+    ['data', 'Data'],
   ];
   const SUB = {
     paper: 'Binance spot · simulated · every fill waits for your approval',
     journal: 'closed trades only — what the account actually did',
     propfirms: 'the directory and what is on offer — data, not a ranking',
+    data: 'where the bars come from — the local tick store first, nothing substituted',
   };
   const FIRMS_SHOWN = 30;                       // long lists slow this machine down; the count says what is cut
 
@@ -42,6 +44,11 @@
     tab: 'paper', open: false, busy: false,
     account: null, accountErr: null,
     firms: null, offers: null, propErr: null, propBusy: false, propAsked: false, firmsNote: '',
+    data: { status: null, err: null, busy: false, asked: false },
+    sim: {                                        // the prop-firm simulator (19 Oct)
+      stats: { winrate: 48, avg_win: 1.6, avg_loss: 1, risk: 1, trades_per_day: 4, paths: 10000, seed: 42 },
+      status: null, busy: false, err: null, result: null, target: null,
+    },
     back: null,
   };
 
@@ -157,6 +164,90 @@
   }
 
   /* ── rendering: Prop firms ──────────────────────────────────────────────────────────────────── */
+  const pct1 = (v) => (v == null ? '—' : (v * 100).toFixed(1) + '%');
+  const ci = (pair) => (pair && pair.low != null ? `95% CI ${pct1(pair.low)}–${pct1(pair.high)}` : '');
+  const money0 = (n) => (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+  function simFormHtml() {
+    const st = S.sim.status;
+    if (st && !st.installed) {
+      return `<p class="desk__bad">${esc(st.problem === 'no_node' || st.problem === 'old_node'
+        ? 'The simulator needs Node.js 20 or newer.'
+        : 'The prop-firm simulator is not installed yet.')}</p>
+        <p class="desk__note">${esc(st.fix || 'run ./install.sh --with-prop')}</p>`;
+    }
+    const s = S.sim.stats;
+    const field = (key, label, step) =>
+      `<label class="desk__field"><span>${label}</span>
+         <input type="number" step="${step}" value="${s[key]}" data-simstat="${key}" /></label>`;
+    return `<div class="desk__form">
+        ${field('winrate', 'Win rate %', '0.1')}${field('avg_win', 'Avg win (R)', '0.1')}
+        ${field('avg_loss', 'Avg loss (R)', '0.1')}${field('risk', 'Risk %/trade', '0.1')}
+        ${field('trades_per_day', 'Trades/day', '0.5')}${field('paths', 'Paths', '500')}
+        ${field('seed', 'Seed', '1')}
+      </div>
+      <p class="desk__note">Press <b>▶ Simulate</b> on any challenge below — the engine plays
+        ${esc(String(s.paths))} journeys through that firm's exact ruleset. Every number
+        comes from LuxAlgo's engine; the card carries its assumptions.</p>`;
+  }
+
+  function verdictHtml() {
+    const sim = S.sim;
+    if (sim.err) return `<p class="desk__bad">${esc(sim.err)}</p>`;
+    if (sim.busy) return `<p class="desk__empty">Playing ${esc(String(sim.stats.paths))} journeys through
+      ${esc(sim.target ? sim.target.label : 'the challenge')}… (about a second)</p>`;
+    const r = sim.result && sim.result.result;
+    if (!r) return '';
+    const a = r.perAttempt || {}, j = r.journey || {}, f = r.funded || {}, ev = r.ev || {};
+    const specSteps = (r.assumptions && r.assumptions.spec && r.assumptions.spec.steps) || [];
+    const failsOf = (breakdown) => esc(Object.entries(breakdown || {}).filter(([, n]) => n)
+      .map(([k, n]) => k + ' ' + money0(n)).join(' · ') || '—');
+    const steps = (a.steps || []).map((step) => {
+      const idx = Number(step.index || 0);
+      const meta = specSteps[idx] || {};
+      const name = meta.name || `Step ${idx + 1}`;
+      const target = meta.profitTargetPct != null ? ` · +${meta.profitTargetPct}%` : '';
+      const minDays = meta.minTradingDays != null ? ` · min ${meta.minTradingDays}d` : '';
+      return `<li class="desk__row">
+        <span>${esc(name)}${esc(target)}
+          <small>${money0(step.reached)} reached${esc(minDays)} · fails ${failsOf(step.failureBreakdown)}</small></span>
+        <b>${pct1(step.passProbability)}</b></li>`;
+    }).join('');
+    const fails = Object.entries(a.failureBreakdown || {}).filter(([, n]) => n)
+      .map(([k, n]) => `${esc(k)} ${money0(n)}`).join(' · ') || '—';
+    const t = sim.target || {};
+    return `<div class="desk__verdict">
+        <header class="desk__row"><span><b>${esc(t.label || '')}</b>
+          <small>${esc(r.assumptions && r.assumptions.spec ? (r.assumptions.spec.productType || '') : '')}
+          · engine ${esc(String(r.engineVersion || ''))} · ${esc(String((r.meta || {}).paths || sim.stats.paths))} paths · seed ${esc(String((r.meta || {}).seed ?? sim.stats.seed))}</small></span>
+          <b class="${(a.passProbability || 0) >= 0.5 ? 'is-up' : 'is-down'}">${pct1(a.passProbability)}</b></header>
+        <p class="desk__note">Pass probability per attempt · ${ci(a.passProbabilityCi)} · avg
+          ${Number(a.avgDaysWhenPassed || 0).toFixed(1)} days when passed. Failures: ${fails}.</p>
+        ${steps ? `<ul class="desk__rows">${steps}</ul>` : ''}
+        <ul class="desk__rows">
+          <li class="desk__row"><span>Funded within ${esc(String(j.attemptCap || 25))} attempts <small>mean</small></span>
+            <b>${pct1(j.fundedProbability)}</b></li>
+          <li class="desk__row"><span>Attempts until funded <small>mean ${Number((j.attempts || {}).mean || 0).toFixed(2)} · p90 ${(j.attempts || {}).p90 ?? '—'}</small></span>
+            <b>${(j.attempts || {}).p50 ?? '—'}</b></li>
+          <li class="desk__row"><span>Total cost <small>mean ${money0((j.cost || {}).mean)} · p95 ${money0((j.cost || {}).p95)}</small></span>
+            <b>${money0((j.cost || {}).p50)}</b></li>
+          <li class="desk__row"><span>Days to funded <small>p50</small></span>
+            <b>${(j.daysToFunded || {}).p50 ?? '—'}</b></li>
+          <li class="desk__row"><span>Payout if funded <small>p50 of ${Number(f.horizonTradingDays || 90)} funded days</small></span>
+            <b class="is-up">${money0((f.payoutTotal || {}).p50)}</b></li>
+          <li class="desk__row"><span>Payout probability · blown <small>P(EV &gt; 0) ${pct1(ev.pPositive)}</small></span>
+            <b>${pct1(f.payoutProbability)} · ${pct1(f.blownProbability)}</b></li>
+          <li class="desk__row"><span>EV total <small>± ${money0(ev.evStandardError)} (95% CI)</small></span>
+            <b class="${(ev.evTotal || 0) >= 0 ? 'is-up' : 'is-down'}">${money0(ev.evTotal)}</b></li>
+        </ul>
+        <p class="desk__note">${esc((r.assumptions || {}).disclaimer || '')}</p>
+        ${(r.assumptions && (r.assumptions.flags || []).length)
+          ? `<details class="desk__more"><summary>${r.assumptions.flags.length} simplification flag(s) the engine lists</summary>
+             <ul>${r.assumptions.flags.map((fl) => `<li>${esc(String(fl))}</li>`).join('')}</ul></details>` : ''}
+        <p class="desk__note">Simulated locally in ${esc(String(sim.result.elapsed_ms))} ms${sim.result.cached ? ' (cached)' : ''}.</p>
+      </div>`;
+  }
+
   function propHtml() {
     if (S.propBusy && !S.firms) return '<p class="desk__empty">Reading the directory…</p>';
     if (S.propErr && !S.firms) return `<p class="desk__bad">${esc(S.propErr)}</p><p class="desk__note"><button type="button" class="desk__btn" data-retry>Try again</button></p>`;
@@ -166,9 +257,14 @@
     const rows = firms.length ? firms.map((f) => {
       const chips = (f.challenges || []).slice(0, 6).map((c) => {
         // The size label usually carries its own symbol ("$100,000"); printing the ISO code again reads
-        // as a mistake. Only the labels that do not carry one get the code.
+        // as a mistake. Only the labels that do not carry one get the code. Each chip is also the
+        // Simulate button for that challenge (19 Oct): the engine's verdict is one press away.
         const cur = /[$€£¥]/.test(String(c.sizeLabel || '')) ? '' : (c.currency || '');
-        return `<span class="desk__chip"><b>${esc(c.sizeLabel || c.name || c.id)}</b>${c.price ? ' · ' + esc(cur) + money(c.price) : ''}</span>`;
+        const label = `${f.name} · ${c.sizeLabel || c.name || c.id}`;
+        const off = S.sim.busy && S.sim.target && S.sim.target.challenge === c.id;
+        return `<button type="button" class="desk__chip desk__chip--go${off ? ' is-off' : ''}"${off ? ' disabled' : ''}
+           data-sim="${esc(f.slug)}" data-challenge="${esc(c.id)}" data-label="${esc(label)}"
+           title="Simulate this challenge through the firm's exact ruleset">▶ <b>${esc(c.sizeLabel || c.name || c.id)}</b>${c.price ? ' · ' + esc(cur) + money(c.price) : ''}</button>`;
       }).join('');
       const more = (f.challenges || []).length > 6 ? `<span class="desk__chip">+${f.challenges.length - 6} more</span>` : '';
       const not = (f.notSimulatable || []).length ? ` <small>· ${f.notSimulatable.length} rule set(s) not simulatable</small>` : '';
@@ -185,7 +281,10 @@
           ${o.shortDescription ? `<p>${esc(o.shortDescription)}</p>` : ''}</div>`;
     }).join('') : '<p class="desk__empty">No offers in the feed right now.</p>';
 
-    return `<h3>Directory · ${S.firms.length} firm${S.firms.length === 1 ? '' : 's'}</h3>
+    return `<h3>Simulator</h3>
+      ${simFormHtml()}
+      ${verdictHtml()}
+      <h3>Directory · ${S.firms.length} firm${S.firms.length === 1 ? '' : 's'}</h3>
       ${rows}
       ${S.firms.length > firms.length ? `<p class="desk__note">Showing ${firms.length} of ${S.firms.length}.</p>` : ''}
       <h3>Offers right now · ${offers.length}</h3>
@@ -244,6 +343,46 @@
     }
   }
 
+  /* ── the data card: what actually feeds the chart ─────────────────────────────────────────── */
+  const int = (n) => (Number(n) || 0).toLocaleString('en-US');
+  const size = (b) => {
+    const n = Number(b) || 0;
+    return n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : `${(n / 1e6).toFixed(1)} MB`;
+  };
+
+  function dataHtml() {
+    const d = S.data;
+    if (d.err) return `<p class="desk__bad">${esc(d.err)}</p>`;
+    const st = (d.status && d.status.ticks) || null;
+    if (!st) return '<p class="desk__empty">Reading the tick store…</p>';
+    const rows = Object.entries(st.symbols || {}).sort((a, b) => a[0].localeCompare(b[0]));
+    if (!rows.length) return '<p class="desk__empty">No ticks on disk yet. Run: python3 tools/fx-fetch.py --years 2</p>';
+    return `
+      <p class="desk__note"><b>Dukascopy ticks</b> on disk · ${int(st.hours)} instrument-hours · ${size(st.bytes)} ·
+        mid-price bars with real volume and median spread · <b>Yahoo off</b>, nothing substituted</p>
+      <table class="desk__table">
+        <thead><tr><th scope="col">Symbol</th><th scope="col">Hours</th><th scope="col">From</th>
+          <th scope="col">To</th><th scope="col">Size</th></tr></thead>
+        <tbody>${rows.map(([sym, v]) => `<tr><td>${esc(sym)}</td><td>${int(v.hours)}</td>
+          <td>${esc(v.from)}</td><td>${esc(v.to)}</td><td>${size(v.bytes)}</td></tr>`).join('')}</tbody>
+      </table>`;
+  }
+
+  async function pullData() {
+    if (S.data.busy) return;
+    S.data.busy = true;
+    S.data.err = null;
+    render();
+    try {
+      S.data.status = await call('/api/fx/status');
+    } catch (err) {
+      S.data.err = `The tick store could not be read: ${err.message}`;
+    } finally {
+      S.data.busy = false;
+      render();
+    }
+  }
+
   /* ── the sheet ──────────────────────────────────────────────────────────────────────────────── */
   function renderTabs() {
     tabsEl.innerHTML = TABS.map(([id, label]) => {
@@ -260,6 +399,7 @@
     if (subEl) subEl.textContent = SUB[S.tab] || '';
     let html;
     if (S.tab === 'propfirms') html = propHtml();
+    else if (S.tab === 'data') html = dataHtml();
     else if (!S.account) html = S.accountErr
       ? `<p class="desk__bad">${esc(S.accountErr)}</p><p class="desk__note"><button type="button" class="desk__btn" data-retry>Try again</button></p>`
       : '<p class="desk__empty">Reading the paper account…</p>';
@@ -287,6 +427,13 @@
     S.propBusy = true;
     S.propErr = null;
     render();
+    if (!S.sim.status) {
+      try {
+        S.sim.status = await call('/api/propfirmsim/status');
+      } catch (err) {
+        S.sim.status = { installed: false, problem: 'unreachable', fix: String(err.message || err) };
+      }
+    }
     try {
       const [firms, offers] = await Promise.all([
         call('/api/propfirms'),
@@ -305,10 +452,49 @@
     }
   }
 
+  /* ── the simulator run (19 Oct) ───────────────────────────────────────────────────────────────── */
+  function readSimStats() {
+    const inputs = document.querySelectorAll('[data-simstat]');
+    inputs.forEach((el) => {
+      const key = el.getAttribute('data-simstat');
+      const value = Number(el.value);
+      if (Number.isFinite(value) && el.value !== '') S.sim.stats[key] = value;
+    });
+    return S.sim.stats;
+  }
+
+  async function runSim(firm, challenge, label) {
+    if (S.sim.busy) return;
+    const s = readSimStats();
+    S.sim.busy = true;
+    S.sim.err = null;
+    S.sim.result = null;
+    S.sim.target = { firm, challenge, label };
+    render();
+    const qs = new URLSearchParams({
+      firm, challenge,
+      winrate: String(s.winrate / 100),                  // the form is percent; the engine wants a fraction
+      avg_win: String(s.avg_win), avg_loss: String(s.avg_loss),
+      trades_per_day: String(s.trades_per_day), risk: String(s.risk),
+      paths: String(Math.round(s.paths)), seed: String(s.seed),
+    });
+    try {
+      S.sim.result = await call('/api/propfirmsim/simulate?' + qs.toString());
+    } catch (err) {
+      S.sim.err = String(err.message || err);
+    } finally {
+      S.sim.busy = false;
+      render();
+      const card = document.querySelector('.desk__verdict');
+      if (card && card.scrollIntoView) card.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
   function show(tab) {
     if (TABS.some(([id]) => id === tab)) S.tab = tab;
     render();
     if (S.tab === 'propfirms' && !S.propAsked) { S.propAsked = true; pullPropFirms(); }
+    if (S.tab === 'data' && !S.data.asked) { S.data.asked = true; pullData(); }
   }
 
   function open(tab) {
@@ -363,6 +549,11 @@
   });
 
   body.addEventListener('click', async (ev) => {
+    const simBtn = ev.target.closest('[data-sim]');
+    if (simBtn) {
+      runSim(simBtn.dataset.sim, simBtn.dataset.challenge, simBtn.dataset.label || '');
+      return;
+    }
     if (ev.target.closest('[data-retry]')) {
       if (S.tab === 'propfirms') pullPropFirms(); else pull();
       return;

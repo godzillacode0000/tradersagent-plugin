@@ -20,7 +20,6 @@ CATALOG = os.path.join(ROOT, "docs", "plugin-catalog-entry.yaml")
 MCP_TOOLS_DOC = os.path.join(ROOT, "docs", "MCP-TOOLS.md")
 MANIFEST = os.path.join(ROOT, "traders-desk", "plugin.yaml")
 DESKTOP_ENTRY = os.path.join(ROOT, "traders-desk", "desktop", "plugin.js")
-CONSOLE_SERVER = os.path.join(ROOT, "console", "backend", "server.py")
 
 TABLE_HEADER = "| Tool | What it does |"
 
@@ -148,38 +147,3 @@ class DocDrift(unittest.TestCase):
 
 if __name__ == "__main__":                                        # pragma: no cover
     unittest.main()
-
-
-class OneVersionNumber(unittest.TestCase):
-    """The three places that state a version must state the SAME one.
-
-    They rotted apart exactly as you would expect, each for its own reason: `SERVER_VERSION` was
-    typed once at 1.0.0 and never touched again (nothing reads it back, so nothing complained),
-    while the manifest and the catalog entry are edited by different hands at release time. The
-    console then reported `"version": "1.0.0"` on `/api/health`, in `/api/build` and in its own
-    `Server:` header while the repo shipped 1.3.0 - a number an agent, a bug report and
-    `./install.sh --doctor` all read and believe.
-
-    Deliberately three literals and one test, not one file read at runtime: the console is
-    stdlib-only and must not grow an import-time file read (and a fallback value would be the same
-    lie with extra steps). Bumping a release means editing all three; this fails loudly until you do.
-    """
-
-    def version_of(self, path: str, pattern: str) -> str:
-        found = re.search(pattern, _read(path), re.M)
-        self.assertIsNotNone(found, f"no version found in {os.path.relpath(path, ROOT)}")
-        return found.group(1)
-
-    def test_manifest_catalog_entry_and_console_agree(self):
-        manifest = self.version_of(MANIFEST, r'^version:\s*"?([0-9]+\.[0-9]+\.[0-9]+)"?\s*$')
-        catalog = self.version_of(CATALOG, r'^version:\s*"?([0-9]+\.[0-9]+\.[0-9]+)"?\s*$')
-        console = self.version_of(CONSOLE_SERVER, r'^SERVER_VERSION\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"')
-        self.assertEqual(
-            {"traders-desk/plugin.yaml": manifest,
-             "docs/plugin-catalog-entry.yaml": catalog,
-             "console/backend/server.py": console},
-            {"traders-desk/plugin.yaml": manifest,
-             "docs/plugin-catalog-entry.yaml": manifest,
-             "console/backend/server.py": manifest},
-            "the manifest, the catalog entry and the console must all state one version",
-        )

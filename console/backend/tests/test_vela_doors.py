@@ -119,7 +119,7 @@ class TheViewDoor(unittest.TestCase):
         for setting in ("chart_type", "log", "invert", "scale_mode", "countdown", "timezone", "session",
                         "watermark", "indicator_titles", "indicator_values", "statusline_ohlc",
                         "statusline_name", "statusline_change", "sync_symbol", "sync_timeframe",
-                        "sync_crosshair", "sync_style", "shortcuts", "alerts"):
+                        "sync_crosshair", "sync_style", "shortcuts", "alerts", "grid"):
             self.assertRegex(self.js, rf"\b{setting}\b", f"setting {setting} missing")
 
     def test_chart_types_are_velas_six(self):

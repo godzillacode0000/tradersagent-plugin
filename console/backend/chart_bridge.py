@@ -36,6 +36,7 @@ _LOCK = threading.RLock()
 MAX_SHOTS = 12          # keep the last handful of pictures; this box has a small disk
 MAX_RESULTS = 60        # the agent only ever reads the newest results
 STALE_AFTER = 30.0      # a state older than this means "no chart is open"
+OWNER_WINDOW = 90.0     # how recently a view must have heartbeat to be a candidate to OWN the desk
 MIN_SHOT_BYTES = 256    # a real chart capture is tens of KB; anything this small is a placeholder
 DEFAULT_CANVAS_W = 300  # the browser's default canvas size — the shape a non-painting capture has
 DEFAULT_CANVAS_H = 150
@@ -154,6 +155,11 @@ def _save_state(root: str | Path, payload: dict) -> dict:
                      if isinstance(a, (str, bytes)) and str(a).strip()]
                     if isinstance(payload.get("actions"), (list, tuple)) else []),
         "timeframe_reported": payload.get("timeframe_reported"),
+        # What the page has STORED for its next boot (frontend/chart-bridge.js): the one run the
+        # overlay can bring back. `studies` above is what is live; this is what survives a pane
+        # close. The two disagreeing used to be invisible until the operator reopened the pane and
+        # found nothing (18 Oct), so the page publishes it and it rides the state like the rest.
+        "store": payload.get("store"),
         # The page's own explanation of why it reads what it reads (workspace ready? cells? the error
         # that dropped it to the bare chart?). Passthrough, never interpreted here — a heartbeat that
         # says "—" with a healthy pane is exactly the case this exists to end.
@@ -167,6 +173,31 @@ def _save_state(root: str | Path, payload: dict) -> dict:
             state["note"] = "the picture with this heartbeat was unusable"
     if "shot" not in state and prev.get("shot"):
         state["shot"] = prev["shot"]          # a heartbeat without a usable picture keeps the last one
+    # Per-view freshness (19 Oct): the desk's owner is decided from the last heartbeats (see
+    # _owner_from_views), not from whoever claims a command first. Kept generously (10 min) so a view
+    # throttled while its window was hidden can come back as itself; `owner` is what the claim door
+    # and the page's banner read.
+    views = {}
+    for vid, entry in (prev.get("views") or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        try:
+            if state["at"] - float(entry.get("at") or 0.0) <= 600.0:
+                views[str(vid)] = entry
+        except (TypeError, ValueError):
+            continue
+    if state["viewer"]:
+        entry = {"at": state["at"], "hidden": bool(payload.get("hidden"))}
+        try:
+            if state.get("bars"):
+                entry["bars"] = int(state["bars"])
+        except (TypeError, ValueError):
+            pass
+        if (views.get(state["viewer"]) or {}).get("claimed"):
+            entry["claimed"] = True           # the operator said "use this view" — it stays said
+        views[state["viewer"]] = entry
+    state["views"] = views
+    state["owner"] = _owner_from_views(views, state["at"])
     _write(d / STATE_FILE, state)
     return state
 
@@ -179,9 +210,73 @@ def load_state(root: str | Path, max_age: float = STALE_AFTER) -> dict:
     age = time.time() - float(state.get("at") or 0)
     state["age_s"] = round(age, 1)
     state["open"] = age <= max_age
+    state.setdefault("owner", _owner_from_views(_views_of(state), time.time()))
     if not state["open"]:
-        state["reason"] = f"the last chart heartbeat was {round(age)}s ago — is the chart open?"
+        state["reason"] = (f"the last chart heartbeat was {round(age)}s ago — is the chart open? "
+                           f"(the desktop pane remounts itself after a minute of silence, or click "
+                           f"the Trader's Agent row)")
     return state
+
+
+def _owner_from_views(views: dict, now: float) -> str:
+    """Which view owns the desk, decided from the heartbeats (19 Oct).
+
+    The rule, in order: the NEWEST view that is visible and either reports bars or was explicitly
+    claimed; else the newest with bars; else the newest. A hidden or bar-less view can therefore
+    never take the desk from a working one — the failure this exists for was a second tab (or an
+    occluded frame) consuming a command and answering "the chart did not answer … within 45s" while
+    the operator's pane stood ready.
+    """
+    fresh = []
+    for vid, entry in (views or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        try:
+            at = float(entry.get("at") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if now - at <= OWNER_WINDOW:
+            fresh.append((at, str(vid), entry))
+    if not fresh:
+        return ""
+    claimed = [row for row in fresh if row[2].get("claimed")]           # the operator said so
+    visible = [row for row in fresh if not row[2].get("hidden") and row[2].get("bars")]
+    with_bars = [row for row in fresh if row[2].get("bars")]
+    pool = claimed or visible or with_bars or fresh
+    return max(pool, key=lambda row: row[0])[1]
+
+
+def _views_of(state: dict) -> dict:
+    """The state's per-view map, whatever shape the file is actually in."""
+    views = state.get("views") if isinstance(state, dict) else None
+    return views if isinstance(views, dict) else {}
+
+
+def owner_of(root: str | Path, now: float | None = None) -> str:
+    """The id of the view that owns the desk right now, or '' when no view has reported recently."""
+    state = _read(_chart_dir(root) / STATE_FILE, {}) or {}
+    views = _views_of(state)
+    if not views:
+        return ""                                  # no per-view record: legacy single-view behaviour
+    return _owner_from_views(views, now if now is not None else time.time())
+
+
+def take_ownership(root: str | Path, viewer: str) -> str:
+    """Make one view the owner deliberately (the passive banner's button). Returns the new owner."""
+    who = str(viewer or "").strip()
+    if not who:
+        return ""
+    with _LOCK:
+        d = _chart_dir(root)
+        state = _read(d / STATE_FILE, {}) or {}
+        views = _views_of(state)
+        entry = dict(views.get(who) or {})
+        entry.update({"at": time.time(), "hidden": False, "claimed": True})
+        views[who] = entry
+        state["views"] = views
+        state["owner"] = _owner_from_views(views, time.time())
+        _write(d / STATE_FILE, state)
+        return str(state["owner"])
 
 
 def enqueue(root: str | Path, command: dict) -> dict:

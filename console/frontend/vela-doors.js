@@ -302,6 +302,12 @@
     auto_scale: { bool: true, get: (x) => !!x.chart.renderer.get('autoScale'), set: (x, v) => rset(x, 'autoScale', v) },
     scale_mode: { values: SCALE_MODES, get: (x) => x.chart.renderer.get('scaleMode'), set: (x, v) => rset(x, 'scaleMode', v) },
     countdown: { bool: true, get: (x) => !!x.chart.renderer.get('countdown'), set: (x, v) => rset(x, 'countdown', v) },
+    /* Gridlines (17 Oct): Vela's renderer carries them as `gridlines` (get → scene.showGrid), the
+       same word the settings tab wears. The workspace's own saved rendererConfig does NOT carry it
+       (measured: a reload brought the grid back), so the console keeps the pref itself — the setter
+       writes `luxalgo-web:gridlines`, the boot in workspace.js applies it. */
+    grid: { bool: true, get: (x) => !!x.chart.renderer.get('gridlines'),
+            set: (x, v) => { rset(x, 'gridlines', v); try { localStorage.setItem('luxalgo-web:gridlines', v ? '1' : '0'); } catch (err) { /* private mode */ } } },
     timezone: { free: true, get: (x) => x.ws.timezone, set: (x, v) => x.ws.setTimezone(v) },
     session: {
       values: ['regular', 'extended'],

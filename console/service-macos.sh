@@ -28,6 +28,20 @@ if command -v node >/dev/null 2>&1; then NODE_DIR="$(cd "$(dirname "$(command -v
 SVC_PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"
 [[ -n "$NODE_DIR" ]] && SVC_PATH="$NODE_DIR:$SVC_PATH"
 
+# The preview resizer (backend/library_thumbs.py) is a CLI, and a service PATH can miss it: bake the
+# absolute path found at install time into the plist, or every catalogue thumbnail is served at full
+# size (1600×1000, ~93 KB, ~2.6 s each) and never cached — measured 17 Oct 2026, the live service
+# had no converter on its PATH. A re-install keeps the value written before; the environment wins.
+RESIZER="${TRADERS_AGENT_RESIZER:-}"
+if [[ -z "$RESIZER" && -f "$PLIST" ]]; then
+  RESIZER="$(/usr/libexec/PlistBuddy -c 'Print :EnvironmentVariables:TRADERS_AGENT_RESIZER' "$PLIST" 2>/dev/null || true)"
+fi
+if [[ -z "$RESIZER" ]]; then
+  for cand in vips magick convert ffmpeg; do
+    if command -v "$cand" >/dev/null 2>&1; then RESIZER="$(command -v "$cand")"; break; fi
+  done
+fi
+
 xml_escape() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
 
 resolve_py() {
@@ -92,6 +106,8 @@ cmd_install() {
     <string>$(xml_escape "$PY_RESOLVED")</string>
     <key>TRADERS_AGENT_ALLOWED_HOSTS</key>
     <string>$(xml_escape "$ALLOWED_HOSTS")</string>
+    <key>TRADERS_AGENT_RESIZER</key>
+    <string>$(xml_escape "$RESIZER")</string>
     <key>PATH</key>
     <string>$(xml_escape "$SVC_PATH")</string>
   </dict>

@@ -38,7 +38,7 @@ class TheRunAnnouncesItself(unittest.TestCase):
         # The overlay holds ONE script, so a landed run REPLACES the list (4 Oct) instead of appending to it.
         push = UNIFIED.split("applied.length = 0;\n    applied.push(name);", 1)[1][:300]
         self.assertIn("announce()", push, "a run that landed must announce it")
-        reset = UNIFIED.split("function reset()", 1)[1].split("\n  }", 1)[0]
+        reset = UNIFIED.split("function reset(", 1)[1].split("\n  }", 1)[0]
         self.assertIn("announce()", reset, "a clear must announce it")
 
 

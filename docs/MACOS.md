@@ -72,6 +72,12 @@ can be rebased over upstream updates.
   default** — there is nothing to toggle unless you turn it off.
 - Port 8787 must be free. `PORT=9000 ./console/start.sh` (+ `PORT=9000 ./install.sh`)
   moves everything; set `LUXALGO_CONSOLE=http://127.0.0.1:9000` for the CLIs.
+- Catalogue previews want an image converter — the console ships none, it drives a CLI
+  (`vips`, `magick`, `convert` or `ffmpeg`). `service-macos.sh` resolves one at install time and
+  writes its absolute path into the plist as `TRADERS_AGENT_RESIZER`; with none found, thumbnails
+  are served at full size: correct pictures, just slow (~2.6 s each). Ask a login shell what it
+  has (`command -v magick ffmpeg`), then re-run the service installer — or install one
+  (`brew install imagemagick`).
 
 ## Troubleshooting
 

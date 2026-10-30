@@ -1880,6 +1880,12 @@ async function main() {
   if (window.TraderRun && typeof window.TraderRun.restore === 'function') {
     window.TraderRun.restore().then((r) => {
       if (r && r.ok) noteActivity('restored from last session · ' + window.TraderRun.summarize(r), 'restore');
+      /* An indicator that will not come back is the operator's business, not the console's to
+         swallow: the run stays stored (three strikes before it is dropped), and the line says what
+         stopped it this time. */
+      else if (r && r.reason && r.reason !== 'nothing to restore') {
+        noteActivity('last run did not come back: ' + String(r.reason).slice(0, 120), 'restore');
+      }
     }).catch((err) => console.warn('[restore]', err));
   }
 

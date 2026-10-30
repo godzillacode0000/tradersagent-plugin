@@ -48,7 +48,7 @@ native tools.
 
 Versions: Hermes Desktop 0.21.5, console `SERVER_VERSION = 1.0.0`. CI was red from
 28 Sep (`1f9d340`) to 2 Oct (`8df6e2e` — a stale MCP test only CI could see); green since `ab3708b`, and
-green on every ship below. **about 1,188 backend tests** (skips depend on `fastmcp`, node and a real Edge Stats engine; run the suite for the exact count), 9 plugin contributions across 5 areas.
+green on every ship below. **about 1,236 backend tests** (skips depend on `fastmcp`, node and a real Edge Stats engine; run the suite for the exact count), 9 plugin contributions across 5 areas.
 Shipped since this file was written: the paper broker (Phase 5), replay (6/6b), the top-bar one-door
 consolidation, the drawer as the single Library surface, and Phase 7 — three agent doors into Vela
 (`chart_drawing` 76 types / `chart_view` settings / `chart_marks`), 56 MCP tools (8 of them `edgestats_*`). 4 Oct: Edge Stats — the optional local engine, the sheet behind the `⋯` menu, the eight tools (see CHANGELOG; real Binance / Dukascopy downloads were never run from the build machine). Also 4 Oct: the top row
@@ -377,6 +377,10 @@ req=urllib.request.Request('http://127.0.0.1:8787/api/chart/command',
 print(json.loads(urllib.request.urlopen(req,timeout=30).read()))
 PY
 ```
+
+Commit scope: **design and system upgrades only** — anything that improves the plugin for another
+installer (engines, data feeds, tools, the sheet, the docs that explain them). Personal strategies,
+studies of other apps, scratch captures and experiments that never became a feature stay untracked.
 
 Do **not**: commit Library Pine source; add LuxAlgo branding; add any trade execution/order path (this is
 read/style/draw/compute only); print or commit credentials from `~/.hermes/config.yaml`; hardcode the

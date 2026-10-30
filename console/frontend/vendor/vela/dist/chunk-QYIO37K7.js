@@ -4168,6 +4168,8 @@ var LEGEND_TITLE_STATUS_GAP_PX = 8;
 var LEGEND_ACTION_GAP_PX = 6;
 var LEGEND_CTL_CSS = `cursor:pointer;display:inline-flex;align-items:center;justify-content:center;border:none;line-height:0;padding:0;width:${LEGEND_CTL_PX}px;height:${LEGEND_CTL_PX}px;border-radius:3px;box-sizing:border-box;flex:none;`;
 var LEGEND_ROW_MIN_H = LEGEND_CTL_PX + LEGEND_ROW_PAD_Y * 2;
+var STACK_RAISE = "stack:raise";
+var STACK_LOWER = "stack:lower";
 var EYE_SVG = iconAt("eye", LEGEND_ICON_PX2);
 var EYE_OFF_SVG = iconAt("eye-off", LEGEND_ICON_PX2);
 var GEAR_SVG = iconAt("gear", LEGEND_ICON_PX2);
@@ -4197,6 +4199,10 @@ var InputsUI = class {
     this.mobileLayout = false;
     /** Pane move/merge hook — when set, rows get a "Move to" menu + become drag-to-pane sources. */
     this.moveApi = null;
+    /** Overlay restacking hook — when set, a row's menus offer to step it forward or back. */
+    this.stackApi = null;
+    /** What {@link orderRows} last ordered the rows by (skips unchanged frames). */
+    this.rowOrderKey = "";
     /** Host-contributed legend actions, resolved PER ROW at render time (see setLegendActions). */
     this.legendActions = null;
     /** Host-contributed callout bubbles, resolved PER ROW at render time (see setLegendCallouts). */
@@ -4334,6 +4340,10 @@ var InputsUI = class {
   /** Enable legend-driven move/merge (a "Move to" menu + drag-to-pane). Null disables it. */
   setMoveApi(api) {
     this.moveApi = api;
+  }
+  /** Enable the context menu's "Bring in front of …" entry for overlay indicators. Null disables it. */
+  setStackApi(api) {
+    this.stackApi = api;
   }
   /**
    * Wire the host-contributed row actions. Re-calling replaces the provider and
@@ -4480,16 +4490,20 @@ var InputsUI = class {
     }
     this.moveTargets = items.map((it) => it.target);
     this.moveMenuId = id;
-    const descriptors = items.map((it, i) => ({ id: String(i), label: it.label }));
+    const stack = this.stackItems(id);
+    const moves = items.map((it, i) => ({ id: String(i), label: it.label }));
+    if (moves[0] && stack.length > 0) moves[0].separatorBefore = true;
+    const descriptors = [...stack, ...moves];
     if (!this.moveMenu) {
       this.moveMenu = new Menu({
         host: this.container,
         items: descriptors,
         placement: "bottom-start",
         onSelect: (itemId) => {
-          const target = this.moveTargets[Number(itemId)];
           const rowId = this.moveMenuId;
-          if (target && rowId) api.move(rowId, target);
+          if (!rowId || this.runStackItem(itemId, rowId)) return;
+          const target = this.moveTargets[Number(itemId)];
+          if (target) api.move(rowId, target);
         }
       });
     } else {
@@ -4502,18 +4516,24 @@ var InputsUI = class {
     this.moveMenu?.close();
   }
   // ── legend row context menu (right-click) ───────────────────────────────
-  /** Open the row's action menu at the pointer. One entry today: the values toggle. */
+  /** Open the row's action menu at the pointer: an overlay indicator's restacking steps
+   *  first (where a layer is there to pass), then the values toggle. */
   openRowMenu(id, x, y) {
     this.closeRowMenu();
     this.closeMoveMenu();
     const row2 = this.rows.get(id);
     if (!row2) return;
     this.rowMenuId = id;
-    const items = [{
-      id: "values",
-      label: "Indicator values",
-      checked: this.rowValuesShown(row2)
-    }];
+    const stack = this.stackItems(id);
+    const items = [
+      ...stack,
+      {
+        id: "values",
+        label: "Indicator values",
+        checked: this.rowValuesShown(row2),
+        separatorBefore: stack.length > 0
+      }
+    ];
     if (!this.rowMenu) {
       this.rowMenu = new Menu({
         host: this.container,
@@ -4522,8 +4542,10 @@ var InputsUI = class {
         // Right-click action menu — checked state reads as a leading ✓ (see the kit Menu).
         checkmarks: true,
         onSelect: (itemId) => {
-          if (itemId !== "values" || !this.rowMenuId) return;
-          const target = this.rows.get(this.rowMenuId);
+          const rowId = this.rowMenuId;
+          if (!rowId || this.runStackItem(itemId, rowId)) return;
+          if (itemId !== "values") return;
+          const target = this.rows.get(rowId);
           if (!target) return;
           target.showValues = !this.rowValuesShown(target);
           this.renderRowValues(target);
@@ -4536,6 +4558,55 @@ var InputsUI = class {
   }
   closeRowMenu() {
     this.rowMenu?.close();
+  }
+  /** A row's one-step restacking entries (forward, then back), for whichever neighbor exists. */
+  stackItems(id) {
+    const api = this.stackApi;
+    if (!api) return [];
+    const items = [];
+    const forward = this.stackLabel("Bring in front of", api.above(id), "the indicator in front");
+    if (forward) items.push({ id: STACK_RAISE, label: forward });
+    const back = this.stackLabel("Send behind", api.below(id), "the indicator behind");
+    if (back) items.push({ id: STACK_LOWER, label: back });
+    return items;
+  }
+  stackLabel(verb, neighbor, fallback) {
+    if (neighbor === null) return null;
+    if (neighbor === "price") return `${verb} price`;
+    return `${verb} ${this.rows.get(neighbor.indicator)?.title ?? fallback}`;
+  }
+  /** Run a restacking entry; false when `itemId` is not one. */
+  runStackItem(itemId, rowId) {
+    if (itemId === STACK_RAISE) this.stackApi?.raise(rowId);
+    else if (itemId === STACK_LOWER) this.stackApi?.lower(rowId);
+    else return false;
+    return true;
+  }
+  /**
+   * List each pane's rows front-most first, the way the indicators stack (the object
+   * tree's order). `backToFront` is the paint order; rows it doesn't name keep their
+   * place after the others. Cheap to call every frame: no-op while nothing changed.
+   */
+  orderRows(backToFront) {
+    const key = `${backToFront.join(",")}|${[...this.rows.values()].map((r) => `${r.id}@${r.paneId}`).join(",")}`;
+    if (key === this.rowOrderKey) return;
+    this.rowOrderKey = key;
+    const rank = new Map(backToFront.map((id, i) => [id, i]));
+    for (const lg of this.legends.values()) {
+      const els = [...this.rows.values()].filter((r) => r.el.parentElement === lg).map((r) => r.el);
+      const dom = [...lg.children];
+      const ofEl = new Map([...this.rows.values()].map((r) => [r.el, r.id]));
+      const at = (el) => rank.get(ofEl.get(el)) ?? -1;
+      els.sort((a, b) => {
+        const ra = at(a);
+        const rb = at(b);
+        if (ra >= 0 && rb >= 0) return rb - ra;
+        if (ra >= 0 || rb >= 0) return ra >= 0 ? -1 : 1;
+        return dom.indexOf(a) - dom.indexOf(b);
+      });
+      const anchor = this.foldToggle?.parentElement === lg ? this.foldToggle : null;
+      for (const el of els) lg.insertBefore(el, anchor);
+    }
   }
   /** Move a legend row to another pane (indicator merged/moved), tidying an emptied container. */
   setPane(id, paneId) {
@@ -6227,6 +6298,7 @@ var WebGL2Backend = class {
     const i0 = Math.max(0, Math.floor(vr.from));
     const i1 = Math.min(n - 1, Math.ceil(vr.to));
     if (i1 < i0) return;
+    const s1 = Math.max(i1, Math.ceil(vr.to));
     gl.enable(gl.BLEND);
     gl.enable(gl.SCISSOR_TEST);
     const barColorMap = mergeBarColors(scene.indicators);
@@ -6285,8 +6357,8 @@ var WebGL2Backend = class {
           b.alpha = this.modelAlpha;
           const off = scene.offsetOf(m.id);
           const mp = effPane(m);
-          for (const f of m.fills) if (f.overlay !== true) this.emitFill(b, m, f, mp, coords, i0, i1, off);
-          for (const s of m.series) if (s.overlay !== true) this.emitSeries(b, s, mp, coords, i0, i1, theme, off);
+          for (const f of m.fills) if (f.overlay !== true) this.emitFill(b, m, f, mp, coords, i0, s1, off);
+          for (const s of m.series) if (s.overlay !== true) this.emitSeries(b, s, mp, coords, i0, s1, theme, off);
         }
         if (drawCandles && !candleDrawn) {
           drawSlicesUpTo(scene.candleZ);
@@ -6297,11 +6369,11 @@ var WebGL2Backend = class {
         if (isPrice) {
           for (const m of scene.indicators.values()) {
             const off = scene.offsetOf(m.id);
-            for (const f of m.fills) if (f.overlay === true) this.emitFill(b, m, f, pane, coords, i0, i1, off);
+            for (const f of m.fills) if (f.overlay === true) this.emitFill(b, m, f, pane, coords, i0, s1, off);
           }
           for (const m of scene.indicators.values()) {
             const off = scene.offsetOf(m.id);
-            for (const s of m.series) if (s.overlay === true) this.emitSeries(b, s, pane, coords, i0, i1, theme, off);
+            for (const s of m.series) if (s.overlay === true) this.emitSeries(b, s, pane, coords, i0, s1, theme, off);
           }
         }
         drawSlicesUpTo(Infinity);
@@ -6323,7 +6395,7 @@ var WebGL2Backend = class {
     if (this.glow > 0 && !this.screenProgram && !this.ensureScreenPipeline()) this.glow = 0;
     if (this.glow > 0 && this.screenProgram) {
       this.glowBatch.alpha = this.modelAlpha;
-      this.renderGlow(gl, scene, coords, i0, i1);
+      this.renderGlow(gl, scene, coords, i0, s1);
     }
   }
   /**
@@ -6880,7 +6952,7 @@ var WebGL2Backend = class {
     const tickW = Math.max(1, Math.round(spacing * 0.35));
     for (let i = i0; i <= i1; i += 1) {
       const bar = s.bars[i - off];
-      if (!bar) continue;
+      if (!bar || !Number.isFinite(bar.open + bar.high + bar.low + bar.close)) continue;
       const bc = s.barColors?.[i - off];
       const body = parseColor(bc?.color ?? (bar.close >= bar.open ? up : down));
       const x = Math.round(coords.logicalToX(i));
@@ -7533,6 +7605,8 @@ var InputController = class {
       const tapRelease = this.dragging && !this.moved && (!wasTouch || Math.hypot(x - this.startX, y - this.startY) <= TOUCH_TAP_SLOP);
       if (this.dragging && this.region === "drawing") {
         this.deps.drawingsPointerUp?.(x, y, this.snapMode(e));
+      } else if (this.dragging && this.region === "separator") {
+        this.deps.endPaneResize?.();
       } else if (tapRelease && this.region === "data") {
         this.deps.onClick(x, y);
       } else if (this.dragging && this.region === "data" && wasTouch) {
@@ -7554,6 +7628,7 @@ var InputController = class {
       this.cancelLongPress();
       if (!this.dragging) return;
       if (this.region === "drawing" && !Number.isNaN(this.cursorX)) this.deps.drawingsPointerUp?.(this.cursorX, this.cursorY, this.snapMode(e));
+      if (this.region === "separator") this.deps.endPaneResize?.();
       if (this.region === "crosshair" || e.pointerType === "touch") this.deps.onPointerMove(null, null);
       this.endGesture(e);
     };
@@ -8266,9 +8341,12 @@ var SceneGraph = class {
   setIndicatorZ(id, z) {
     this.seriesZ.set(id, z);
   }
-  /** Snapshot of the current ordering for a UI/read API: `{ id, z }` sorted by z. */
+  /** Snapshot of the current ordering for a UI/read API: `{ id, z }` back to front, in the
+   *  order the indicators paint — on a shared key, mount order (see `orderedIndicatorsForPane`). */
   indicatorZOrder() {
-    return [...this.seriesZ.entries()].map(([id, z]) => ({ id, z })).sort((a, b) => a.z - b.z);
+    const mounted = new Map([...this.indicators.keys()].map((id, i) => [id, i]));
+    const at = (id) => mounted.get(id) ?? Number.MAX_SAFE_INTEGER;
+    return [...this.seriesZ.entries()].map(([id, z]) => ({ id, z })).sort((a, b) => a.z - b.z || at(a.id) - at(b.id));
   }
   /** The pane's series z keys (each indicator, plus the candles on the price pane), sorted
    *  ascending and de-duplicated — the boundaries a user drawing's z is slotted against. */
@@ -8296,16 +8374,19 @@ var SceneGraph = class {
     for (const z of this.seriesZ.values()) if (z < min) min = z;
     return min;
   }
+  /** Create the pane, or update an existing one in place. Without `heightWeight` an existing
+   *  pane keeps its weight (a user resize survives other indicators mounting onto it) and a
+   *  new one gets the default: 3 for the price pane, 1 for a study pane. */
   ensurePane(id, kind, order, heightWeight) {
     this.orderedCache = null;
     const existing = this.panes.get(id);
     if (existing) {
       existing.order = order;
-      existing.heightWeight = heightWeight;
+      if (heightWeight !== void 0) existing.heightWeight = heightWeight;
       existing.kind = kind;
       return existing;
     }
-    const pane = { id, kind, order, heightWeight, bounds: { top: 0, height: 0 }, scale: { min: 0, max: 1 }, scaleTarget: { min: 0, max: 1 }, initialized: false, manualScale: null, collapsed: false, percentBaseline: 0 };
+    const pane = { id, kind, order, heightWeight: heightWeight ?? (kind === "price" ? 3 : 1), bounds: { top: 0, height: 0 }, scale: { min: 0, max: 1 }, scaleTarget: { min: 0, max: 1 }, initialized: false, manualScale: null, collapsed: false, percentBaseline: 0 };
     this.panes.set(id, pane);
     return pane;
   }
@@ -8362,6 +8443,7 @@ var Canvas2dBackend = class {
     const i0 = Math.max(0, Math.floor(vr.from));
     const i1 = Math.min(n - 1, Math.ceil(vr.to));
     if (i1 < i0) return;
+    const s1 = Math.max(i1, Math.ceil(vr.to));
     const barColorMap = mergeBarColors2(scene.indicators);
     const panes = scene.orderedPanes();
     for (const pane of panes) {
@@ -8404,8 +8486,8 @@ var Canvas2dBackend = class {
         ctx.globalAlpha = this.modelAlpha;
         const off = scene.offsetOf(m.id);
         const mp = effPane(m);
-        for (const f of m.fills) if (f.overlay !== true) this.drawFill(ctx, m, f, mp, coords, i0, i1, off);
-        for (const s of m.series) if (s.overlay !== true) this.drawSeries(ctx, s, mp, coords, i0, i1, theme, off);
+        for (const f of m.fills) if (f.overlay !== true) this.drawFill(ctx, m, f, mp, coords, i0, s1, off);
+        for (const s of m.series) if (s.overlay !== true) this.drawSeries(ctx, s, mp, coords, i0, s1, theme, off);
       }
       if (drawCandles && !candleDrawn) {
         drawSlicesUpTo(scene.candleZ);
@@ -8416,11 +8498,11 @@ var Canvas2dBackend = class {
         ctx.globalAlpha = this.modelAlpha;
         for (const m of scene.indicators.values()) {
           const off = scene.offsetOf(m.id);
-          for (const f of m.fills) if (f.overlay === true) this.drawFill(ctx, m, f, pane, coords, i0, i1, off);
+          for (const f of m.fills) if (f.overlay === true) this.drawFill(ctx, m, f, pane, coords, i0, s1, off);
         }
         for (const m of scene.indicators.values()) {
           const off = scene.offsetOf(m.id);
-          for (const s of m.series) if (s.overlay === true) this.drawSeries(ctx, s, pane, coords, i0, i1, theme, off);
+          for (const s of m.series) if (s.overlay === true) this.drawSeries(ctx, s, pane, coords, i0, s1, theme, off);
         }
       }
       drawSlicesUpTo(Infinity);
@@ -8872,7 +8954,7 @@ var Canvas2dBackend = class {
     const tickW = Math.max(1, Math.round(spacing * 0.35));
     for (let i = i0; i <= i1; i += 1) {
       const b = s.bars[i - off];
-      if (!b) continue;
+      if (!b || !Number.isFinite(b.open + b.high + b.low + b.close)) continue;
       const bc = s.barColors?.[i - off];
       const body = bc?.color ?? (b.close >= b.open ? up : down);
       const x = Math.round(coords.logicalToX(i)) + 0.5;
@@ -18994,6 +19076,58 @@ function stackLayers(entries, candleZ) {
   return { below, above };
 }
 
+// src/renderers/native/core/overlayStack.ts
+function priceStack(indicators, candleZ) {
+  const out = [...indicators];
+  const at = out.findIndex((e) => e.z >= candleZ);
+  out.splice(at < 0 ? out.length : at, 0, { id: null, z: candleZ });
+  return out;
+}
+function untie(stack) {
+  const out = [];
+  for (let i = 0; i < stack.length; ) {
+    let j = i + 1;
+    while (j < stack.length && stack[j].z === stack[i].z) j += 1;
+    const run = j - i;
+    if (run > 1) {
+      const base = stack[i].z;
+      const step = ((stack[j]?.z ?? base + 1) - base) / run;
+      for (let k = 1; k < run; k += 1) {
+        const id = stack[i + k].id;
+        if (id !== null) out.push({ id, z: base + k * step });
+      }
+    }
+    i = j;
+  }
+  return out;
+}
+function layerAbove(stack, id) {
+  const i = stack.findIndex((e) => e.id === id);
+  if (i < 0 || i === stack.length - 1) return null;
+  const above = stack[i + 1];
+  return above.id === null ? "price" : { indicator: above.id };
+}
+function layerBelow(stack, id) {
+  const i = stack.findIndex((e) => e.id === id);
+  if (i <= 0) return null;
+  const below = stack[i - 1];
+  return below.id === null ? "price" : { indicator: below.id };
+}
+function raisedZ(stack, id) {
+  const i = stack.findIndex((e) => e.id === id);
+  if (i < 0 || i === stack.length - 1) return null;
+  const above = stack[i + 1];
+  const next = stack[i + 2];
+  return next ? (above.z + next.z) / 2 : above.z + 1;
+}
+function loweredZ(stack, id) {
+  const i = stack.findIndex((e) => e.id === id);
+  if (i <= 0) return null;
+  const below = stack[i - 1];
+  const prev2 = stack[i - 2];
+  return prev2 ? (prev2.z + below.z) / 2 : below.z - 1;
+}
+
 // src/renderers/native/chrome/vela-logos.ts
 var VELA_MARK_SVG = '<svg viewBox="0 -142 161.66 148" aria-hidden="true"><g fill="currentColor"><path d="M0 -140L32.91 -140L77.52 -62.73L61.06 -34.24Z"/><path d="M161.66 -140L128.75 -140L84.14 -62.73L100.59 -34.24Z"/><path d="M80.83 -52.04L95.85 -26.02L80.83 0L65.81 -26.02Z"/></g></svg>';
 var VELA_LETTERS_SVG = '<svg viewBox="161.66 -142 310.57 148" aria-hidden="true"><g fill="currentColor"><path d="M226.3 1.17Q200.81 1.17 186.12 -12.99Q171.42 -27.15 171.42 -51.17Q171.42 -75.2 185.87 -89.6Q200.33 -104 224.25 -104Q247.4 -104 261.7 -90.58Q276.01 -77.15 276.3 -54.59Q276.3 -49.9 275.42 -45.02H200.81V-43.55Q201.2 -32.62 207.75 -26.42Q214.29 -20.21 225.03 -20.21Q233.72 -20.21 239.34 -23.93Q244.95 -27.64 246.81 -34.77H274.64Q272.1 -19.14 259.16 -8.98Q246.22 1.17 226.3 1.17ZM201.5 -63.38H247.88Q246.42 -72.75 240.27 -77.88Q234.12 -83.01 224.45 -83.01Q215.17 -83.01 208.92 -77.73Q202.67 -72.46 201.5 -63.38ZM287.54 0V-140.04H315.76V0ZM429.34 -23.83H432.56V0H418.11Q407.76 0 403.36 -4.44Q398.97 -8.89 399.16 -16.8Q387.83 1.17 365.57 1.17Q348.48 1.17 337.88 -6.74Q327.29 -14.65 327.29 -29Q327.29 -45.41 339.45 -54.3Q351.6 -63.18 374.55 -63.18H394.96V-68.16Q394.96 -75.2 390.08 -79.3Q385.2 -83.4 376.51 -83.4Q368.3 -83.4 363.03 -79.98Q357.76 -76.56 356.88 -70.8H329.73Q331.19 -85.84 344.08 -94.92Q356.97 -104 377.29 -104Q399.06 -104 410.88 -94.43Q422.7 -84.86 422.7 -66.6V-30.18Q422.7 -26.37 424.26 -25.1Q425.82 -23.83 429.34 -23.83ZM394.96 -42.38V-44.43H374.36Q365.47 -44.43 360.59 -40.92Q355.7 -37.4 355.7 -30.96Q355.7 -25.59 359.81 -22.41Q363.91 -19.24 370.94 -19.24Q381.97 -19.24 388.37 -25.54Q394.77 -31.84 394.96 -42.38Z"/><path fill-opacity="0.55" d="M437.44 -124.28H441.96V-113.41H445.34V-124.28H449.87V-127.4H437.44ZM451.43 -113.41H454.7V-123.29L458.97 -113.41H461.62L465.99 -123.29V-113.41H469.21V-127.4H464.53L460.42 -117.68L456.16 -127.4H451.43Z"/></g></svg>';
@@ -19644,6 +19778,8 @@ var NativeRenderer = class {
     // pane just below it
     this.resizeSplitStart = null;
     // the two panes' shared span when the drag began
+    this.resizeStartAboveWeight = 0;
+    // the upper pane's weight when the drag began
     /** The user drawings take part in pointer input (the runtime `drawingsInteractive` feature). */
     this.drawingsInteractive = true;
     this.hoverSeparatorY = null;
@@ -20286,6 +20422,7 @@ var NativeRenderer = class {
     };
     this.scene.candleZ = next.stacking.candles;
     for (const [id, z] of Object.entries(next.stacking.series)) this.scene.setIndicatorZ(id, z);
+    this.syncLegendOrder();
     s.bars = { upColor: next.bars.upColor, downColor: next.bars.downColor };
     s.line = { color: next.line.color, width: next.line.width };
     s.area = { lineColor: next.area.lineColor, width: next.area.width, topColor: next.area.topColor, bottomColor: next.area.bottomColor };
@@ -20331,6 +20468,7 @@ var NativeRenderer = class {
     if (typeof v.z === "number") this.scene.setIndicatorZ(v.id, v.z);
     else if (v.to === "front") this.scene.bringIndicatorToFront(v.id);
     else if (v.to === "back") this.scene.sendIndicatorToBack(v.id);
+    this.syncLegendOrder();
   }
   /** Toggle the in-chart settings gear + dialog (the `settings` feature). The gear
    *  sits above the time axis, clear of the right price-axis strip. */
@@ -20718,7 +20856,7 @@ var NativeRenderer = class {
     this.chrome.mount(this.chromeCanvas);
     this.crosshairLayer.mount(this.cursorCanvas);
     this.coords.setViewport(defaultViewport());
-    this.scene.ensurePane(PRICE_PANE_ID, "price", 0, 3);
+    this.scene.ensurePane(PRICE_PANE_ID, "price", 0);
     this.scheduler = new Scheduler((level) => this.renderFrame(level));
     this.animator = new Animator((dt) => this.animTick(dt));
     this.targetBarSpacing = this.coords.getViewport().barSpacing;
@@ -20731,7 +20869,7 @@ var NativeRenderer = class {
       onClick: (x, y) => {
         if (this.handleMarkClick(x, y)) return;
         this.userDrawings?.deselect();
-        this.handleClick(x);
+        this.handleClick(x, y);
       },
       onAxisLongPress: (axis, x, y) => {
         for (const cb of this.axisLongPressCbs) cb({ axis, x, y });
@@ -20745,6 +20883,7 @@ var NativeRenderer = class {
       paneSeparatorAt: (y) => this.paneSeparatorAt(y),
       beginPaneResize: (y) => this.beginPaneResize(y),
       paneResizeBy: (dy) => this.paneResizeBy(dy),
+      endPaneResize: () => this.endPaneResize(),
       resetPaneSize: (y) => this.resetPaneSize(y),
       resetView: () => this.resetView(),
       // User drawings claim a gesture before pan when armed / over a drawing.
@@ -20869,6 +21008,12 @@ var NativeRenderer = class {
       move: (id, target) => {
         for (const cb of this.moveIndicatorCbs) cb(id, target);
       }
+    });
+    this.inputsUI.setStackApi({
+      above: (id) => layerAbove(this.overlayStack(), id),
+      below: (id) => layerBelow(this.overlayStack(), id),
+      raise: (id) => this.restackOverlay(id, raisedZ),
+      lower: (id) => this.restackOverlay(id, loweredZ)
     });
     this.paneControls = new PaneControls(this.plot, theme, {
       panes: () => this.paneControlViews(),
@@ -21187,7 +21332,7 @@ var NativeRenderer = class {
   }
   // ── panes ──
   ensurePane(pane) {
-    this.scene.ensurePane(pane.id, pane.kind, pane.order, pane.heightWeight ?? (pane.kind === "price" ? 3 : 1));
+    this.scene.ensurePane(pane.id, pane.kind, pane.order, pane.heightWeight);
     this.layoutPanes();
     this.paneControls?.refresh();
     this.scheduler.invalidate(4 /* Full */);
@@ -21209,6 +21354,7 @@ var NativeRenderer = class {
     model.ownScale = opts?.ownScale === true;
     if (!model.ownScale) this.scene.dropIndicatorScale(handle.id);
     this.inputsUI.setPane(handle.id, paneId);
+    this.syncLegendOrder();
     this.refreshAnchorOffset(model);
     this.refreshAxisWidth();
     this.layoutPanes();
@@ -21235,6 +21381,15 @@ var NativeRenderer = class {
     this.layoutPanes();
     this.paneControls?.refresh();
     this.scheduler.invalidate(4 /* Full */);
+  }
+  setPaneHeightWeight(paneId, weight) {
+    const pane = this.scene.panes.get(paneId);
+    if (!pane || !(weight > 0) || pane.heightWeight === weight) return;
+    pane.heightWeight = weight;
+    this.afterPaneLayoutChange();
+  }
+  paneHeightWeight(paneId) {
+    return this.scene.panes.get(paneId)?.heightWeight ?? null;
   }
   onPaneAction(cb) {
     this.paneActionCbs.add(cb);
@@ -21330,6 +21485,7 @@ var NativeRenderer = class {
       this.vpvrHidden = false;
     }
     if (model.ownScale) this.refreshAxisWidth();
+    this.syncLegendOrder();
     this.paneControls?.refresh();
     this.scheduler.invalidate(4 /* Full */);
     return { id: model.id };
@@ -21737,7 +21893,7 @@ var NativeRenderer = class {
       this.setMarkHover(null);
       this.scheduler.invalidate(1 /* Cursor */);
       this.hoverLogical = null;
-      const empty = { time: null, price: null, paneKind: null, values: /* @__PURE__ */ new Map(), ohlc: null };
+      const empty = { time: null, price: null, paneKind: null, paneId: null, values: /* @__PURE__ */ new Map(), ohlc: null };
       for (const cb of this.crosshairCbs) cb(empty);
       return;
     }
@@ -21768,14 +21924,23 @@ var NativeRenderer = class {
     const bar = onBar ? this.bars[logical] : void 0;
     const ohlc = bar ? { time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume } : null;
     this.hoverLogical = onBar ? logical : null;
-    const event = { time, price, paneKind: inData && pane ? pane.kind : null, values, ohlc };
+    const onPane = inData && pane ? pane : null;
+    const event = { time, price, paneKind: onPane?.kind ?? null, paneId: onPane?.id ?? null, values, ohlc };
     for (const cb of this.crosshairCbs) cb(event);
   }
-  handleClick(x) {
+  handleClick(x, y) {
     if (this.coords.barCount === 0) return;
     const logical = Math.round(this.coords.xToLogical(x));
     const onBar = logical >= 0 && logical < this.coords.barCount;
-    for (const cb of this.clickCbs) cb({ time: onBar ? this.coords.logicalToTime(logical) : null, price: null });
+    const inData = x >= 0 && y >= 0 && x <= this.coords.width && y <= this.coords.height;
+    const pane = inData ? this.paneNodeAtY(y) : null;
+    const event = {
+      time: onBar ? this.coords.logicalToTime(logical) : null,
+      price: pane ? this.coords.yToPrice(y, pane.scale, pane.bounds) : null,
+      paneKind: pane?.kind ?? null,
+      paneId: pane?.id ?? null
+    };
+    for (const cb of this.clickCbs) cb(event);
   }
   /**
    * Fan out (or collapse, with null) a multi-group mark stack; repaints the chrome tier when
@@ -22020,6 +22185,7 @@ var NativeRenderer = class {
     const below = panes[i];
     this.resizeAbove = above;
     this.resizeBelow = below;
+    this.resizeStartAboveWeight = above.heightWeight;
     this.resizeSplitStart = {
       combinedTop: above.bounds.top,
       combinedHeight: above.bounds.height + below.bounds.height,
@@ -22040,6 +22206,16 @@ var NativeRenderer = class {
     this.layoutPanes();
     this.scheduler.invalidate(4 /* Full */);
   }
+  /** Release the separator: report the resize once, at the end of the drag, if it changed anything. */
+  endPaneResize() {
+    const above = this.resizeAbove;
+    const below = this.resizeBelow;
+    const startAbove = this.resizeStartAboveWeight;
+    this.resizeAbove = null;
+    this.resizeBelow = null;
+    this.resizeSplitStart = null;
+    if (above && below && above.heightWeight !== startAbove) this.emitPaneAction({ type: "resize", paneIds: [above.id, below.id] });
+  }
   /** Double-click a separator → split the two adjacent panes evenly (each gets half of
    *  their combined weight). A simple, predictable reset that leaves siblings untouched. */
   resetPaneSize(y) {
@@ -22053,6 +22229,7 @@ var NativeRenderer = class {
     below.heightWeight = half;
     this.layoutPanes();
     this.scheduler.invalidate(4 /* Full */);
+    this.emitPaneAction({ type: "resize", paneIds: [above.id, below.id] });
   }
   // ── keyboard navigation / accessibility (item 11) ──
   /** Enable/disable keyboard control: focusability + ARIA + key listeners + live region. */
@@ -22307,6 +22484,7 @@ var NativeRenderer = class {
   /** Paint the below-data (L-1) + geometry (L0) + chrome (L1) layers from the current scene/coords. */
   paintData() {
     this.syncLayerCanvasOrder();
+    this.syncLegendOrder();
     this.stampScaleInvert();
     this.backend.modelAlpha = this.modelAlpha;
     this.backend.candleBodyAlpha = this.candleBodyAlpha;
@@ -22488,6 +22666,7 @@ var NativeRenderer = class {
     const i0 = Math.max(0, Math.floor(vr.from));
     const i1 = Math.min(n - 1, Math.ceil(vr.to));
     if (i1 < i0) return;
+    const s1 = Math.max(i1, Math.ceil(vr.to));
     this.scene.percentBaseline = this.bars[i0]?.close ?? 0;
     const panes = this.scene.orderedPanes();
     const pricePane = panes.find((p) => p.kind === "price") ?? null;
@@ -22505,11 +22684,11 @@ var NativeRenderer = class {
       const masterModels = models.filter((m) => m.ownScale !== true);
       let dr = this.chrome.paneDrawingsRange(masterModels, this.scene, pane === pricePane, vr);
       if (pane === pricePane) {
-        const or = overlaySeriesRange(this.scene.indicators.values(), i0, i1, (id) => this.scene.offsetOf(id));
+        const or = overlaySeriesRange(this.scene.indicators.values(), i0, s1, (id) => this.scene.offsetOf(id));
         if (or) dr = dr ? { min: Math.min(dr.min, or.min), max: Math.max(dr.max, or.max) } : or;
       }
       const includeCandles = pane.kind === "price" && (!this.scene.candlesHidden || this.priceLayersAnchoredToBars(masterModels) || !this.paneHasMeasurableContent(masterModels, dr));
-      pane.scaleTarget = computePaneScale(masterModels, this.bars, includeCandles, i0, i1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id), margins);
+      pane.scaleTarget = computePaneScale(masterModels, this.bars, includeCandles, i0, s1, dr, paneLogScale(this.scene, pane), (id) => this.scene.offsetOf(id), margins);
       pane.percentBaseline = pane.kind === "price" ? this.bars[i0]?.close ?? 0 : this.firstVisibleValue(masterModels, i0);
       pane.axisFormat = void 0;
       pane.axisBands = void 0;
@@ -22549,7 +22728,7 @@ var NativeRenderer = class {
           continue;
         }
         const mdr = this.chrome.paneDrawingsRange([model], this.scene, false, vr);
-        sl.scaleTarget = computePaneScale([model], this.bars, false, i0, i1, mdr, false, (id) => this.scene.offsetOf(id), margins);
+        sl.scaleTarget = computePaneScale([model], this.bars, false, i0, s1, mdr, false, (id) => this.scene.offsetOf(id), margins);
         if (!animating || !sl.initialized) {
           sl.scale = { ...sl.scaleTarget };
           sl.initialized = true;
@@ -22619,6 +22798,30 @@ var NativeRenderer = class {
     const models = this.scene.orderedIndicatorsForPane(paneId);
     const master = models.find((m) => m.ownScale !== true) ?? models[0];
     return master?.title || null;
+  }
+  /**
+   * The price pane's layers back to front, as the legend restacks them: every indicator
+   * with a legend row, in paint order, plus the candles. The same layers and order the
+   * object tree lists (see `indicatorZOrder`).
+   */
+  overlayStack() {
+    const painted = this.scene.orderedIndicatorsForPane(PRICE_PANE_ID).filter((m) => m.legend !== false).map((m) => ({ id: m.id, z: this.scene.zOf(m.id) }));
+    return priceStack(painted, this.scene.candleZ);
+  }
+  /** List the legend rows the way the indicators stack, front-most first (no-op when unchanged). */
+  syncLegendOrder() {
+    this.inputsUI?.orderRows(this.scene.indicatorZOrder().map((e) => e.id));
+  }
+  /** Apply a legend restacking step: shared keys are spread apart first (the order stays),
+   *  so the step lands exactly one layer over. No-op when there is nothing to step over. */
+  restackOverlay(id, step) {
+    for (const fix of untie(this.overlayStack())) this.scene.setIndicatorZ(fix.id, fix.z);
+    const z = step(this.overlayStack(), id);
+    if (z === null) return;
+    this.scene.setIndicatorZ(id, z);
+    this.syncLegendOrder();
+    this.scheduler.invalidate(4 /* Full */);
+    for (const cb of this.configChangedCbs) cb();
   }
   /** The pane a bespoke-layer native indicator (volume/vpvr) currently lives in (null = not mounted). */
   nativeLayerPane(type) {
@@ -23074,16 +23277,34 @@ function leadingPointsBefore(model, headTime) {
   for (const s of model.series) {
     const times = s.kind === "candle" || s.kind === "bar" ? s.bars : isLineLikeSeries(s) ? s.points : null;
     if (!times || times.length === 0) continue;
-    let lo = 0;
-    let hi = times.length;
-    while (lo < hi) {
-      const mid = lo + hi >> 1;
-      if (times[mid].time < headTime) lo = mid + 1;
-      else hi = mid;
-    }
-    return lo;
+    const count = slotsBefore(times, headTime);
+    if (count !== null) return count;
   }
   return null;
+}
+function slotsBefore(times, headTime) {
+  let lo = 0;
+  let hi = times.length;
+  while (lo < hi) {
+    const mid = lo + hi >> 1;
+    const t = times[mid]?.time;
+    if (t === void 0) return slotsBeforeScan(times, headTime);
+    if (t < headTime) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+function slotsBeforeScan(times, headTime) {
+  let lastBefore = -1;
+  let any = false;
+  for (let i = 0; i < times.length; i += 1) {
+    const t = times[i]?.time;
+    if (t === void 0) continue;
+    any = true;
+    if (t >= headTime) return t === headTime ? i : lastBefore + 1;
+    lastBefore = i;
+  }
+  return any ? times.length : null;
 }
 function applyPatch(model, patch) {
   if (patch.kind === "value") {
@@ -23697,6 +23918,8 @@ var EngineOrchestrator = class _EngineOrchestrator {
     this.barTransform = null;
     // ── chart-type data engines (SDK): one lazily-created engine per style id ──
     this.typeEngines = /* @__PURE__ */ new Map();
+    /** Engines suspended by the chart — their host pushes are dropped until they resume. */
+    this.suspendedEngines = /* @__PURE__ */ new WeakSet();
     /** Last-seen chart-type settings per type id (dialog edits + persisted restores) —
      *  replayed into a data engine whenever one is (re)created. */
     this.typeSettings = /* @__PURE__ */ new Map();
@@ -23971,12 +24194,14 @@ var EngineOrchestrator = class _EngineOrchestrator {
           this.mergeHistoryIntoReplay(bars);
           return;
         }
-        this.setBarSeries(bars, painted ? { preserveView: true } : void 0);
+        const repaint = painted;
+        this.setBarSeries(bars, repaint ? { preserveView: true } : void 0);
         if (!painted && bars.length > 0) {
           painted = true;
           if (opts.firstLoad) this.activateBarLayers();
           if (!final) this.historyState = "backfill";
         }
+        if (repaint && !final) this.notifySessionsBars("backfill");
       };
       const abort = new AbortController();
       this.progressiveAbort = abort;
@@ -24179,9 +24404,14 @@ var EngineOrchestrator = class _EngineOrchestrator {
         this.setBarSeries([], { clearing: true });
         this.blankIndicatorVisuals();
         if (this.activeEngineStyle) {
-          this.typeEngines.get(this.activeEngineStyle)?.suspend();
+          this.suspendTypeEngine(this.typeEngines.get(this.activeEngineStyle));
           this.renderer.setNativeData?.(this.activeEngineStyle, void 0);
           this.renderer.setNativeData?.(`${this.activeEngineStyle}-pending`, []);
+        }
+        for (const record of this.registry.all()) {
+          if (!record.native?.started) continue;
+          this.stopNativeInstance(record.native);
+          this.renderer.setNativeData?.(this.nativeChannel(record), void 0);
         }
       }
       if (depthOnly) {
@@ -24209,6 +24439,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
       this.restartChartTypeEngine();
       this.reexecuteIndicators();
     }
+    if (depthOnly) this.releaseHeldNatives();
     if (!replayBack) this.startLive();
     if (identityChanged) {
       this.events.emit("market:changed", { symbol: m.symbol ?? "TEST", timeframe: m.timeframe ?? "60", prev: prev2 });
@@ -24225,9 +24456,8 @@ var EngineOrchestrator = class _EngineOrchestrator {
   restartNativeIndicators() {
     for (const record of this.registry.all()) {
       if (!record.native) continue;
-      if (record.native.started) record.native.instance.stop();
+      this.stopNativeInstance(record.native);
       record.native.instance = record.native.descriptor.create();
-      record.native.started = false;
       record.pendingStructural = true;
       if (record.hidden) {
         record.native.stale = true;
@@ -24243,6 +24473,21 @@ var EngineOrchestrator = class _EngineOrchestrator {
     for (const engine of this.typeEngines.values()) engine.stop();
     this.typeEngines.clear();
     if (this.activeEngineStyle) void this.startChartTypeEngine(this.activeEngineStyle);
+  }
+  /** Suspend a chart-type engine. Its host drops every push until the engine resumes:
+   *  work it left in flight lands in its own state, never on the scene. */
+  suspendTypeEngine(engine) {
+    if (!engine) return;
+    engine.suspend();
+    this.suspendedEngines.add(engine);
+  }
+  /** Stop a running native instance, then revoke its context: the teardown inside `stop()`
+   *  still reaches its layer, but work it left in flight (a fetch resolving later) does not. */
+  stopNativeInstance(native) {
+    if (native.started) native.instance.stop();
+    native.started = false;
+    native.revokeContext?.();
+    native.revokeContext = void 0;
   }
   /**
    * The FIRST candles just painted (the quick preview, or the only load): activate the
@@ -24776,7 +25021,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     const def = chartType(id);
     const want = def?.dataEngine ? id : null;
     if (want === this.activeEngineStyle) return;
-    if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.suspend();
+    if (this.activeEngineStyle) this.suspendTypeEngine(this.typeEngines.get(this.activeEngineStyle));
     this.activeEngineStyle = want;
     if (want) void this.startChartTypeEngine(want);
   }
@@ -24787,6 +25032,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     if (this.activeEngineStyle !== id) return;
     const existing = this.typeEngines.get(id);
     if (existing) {
+      this.suspendedEngines.delete(existing);
       existing.resume();
       return;
     }
@@ -24796,6 +25042,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     this.typeEngines.set(id, engine);
     const stored = this.typeSettings.get(id);
     if (stored) engine.onSettings?.(stored);
+    const reachesScene = () => this.typeEngines.get(id) === engine && !this.suspendedEngines.has(engine);
     engine.start({
       symbol: this.config.market.symbol ?? "TEST",
       timeframe: this.config.market.timeframe ?? "60",
@@ -24803,8 +25050,12 @@ var EngineOrchestrator = class _EngineOrchestrator {
       session: this.config.market.session,
       bars: () => this.bars,
       data: this.dataControl,
-      pushData: (data) => this.renderer.setNativeData?.(id, data),
-      pushPending: (ranges) => this.renderer.setNativeData?.(`${id}-pending`, ranges)
+      pushData: (data) => {
+        if (reachesScene()) this.renderer.setNativeData?.(id, data);
+      },
+      pushPending: (ranges) => {
+        if (reachesScene()) this.renderer.setNativeData?.(`${id}-pending`, ranges);
+      }
     });
   }
   /**
@@ -24812,8 +25063,9 @@ var EngineOrchestrator = class _EngineOrchestrator {
    * a pre-load style change is picked up by init's `setBarSeries`. With bars loaded, the
    * view is rebuilt in place (viewport preserved) and every Pine indicator re-executes:
    * its input data changed wholesale, which a streaming session's incremental context
-   * cannot absorb. Native indicators need nothing — their layers read the renderer's
-   * bars per frame.
+   * cannot absorb. Natives computed from `ctx.bars()` re-run over the new candles (a
+   * synthetic price style is their source too); layer natives that read the renderer's
+   * bars per frame ignore the poke.
    */
   syncBarTransform(style) {
     const transform = barTransformFor(style);
@@ -24823,6 +25075,10 @@ var EngineOrchestrator = class _EngineOrchestrator {
     this.bars = transform ? transform.full(this.rawBars) : this.rawBars;
     this.renderer.setBars(this.bars, { preserveView: true });
     this.reexecuteIndicators();
+    if (this.switchingMarket) return;
+    for (const record of this.registry.all()) {
+      if (record.native?.started && record.renderHandle && !record.hidden) this.pokeNative(record);
+    }
   }
   /**
    * Blank every mounted indicator's painted output — series data, fills, backgrounds,
@@ -24923,9 +25179,38 @@ var EngineOrchestrator = class _EngineOrchestrator {
       if (record.session) {
         record.pendingCause = cause;
         record.session.notifyBars(reason);
-      } else if (record.native) record.native.instance.onBars();
+      } else if (record.native) this.pokeNative(record);
     }
     if (this.activeEngineStyle) this.typeEngines.get(this.activeEngineStyle)?.onBars?.();
+  }
+  /**
+   * Tell a native its bars changed. A `waitsForHistory` native ignores every change while
+   * the history is still loading — a backfill chunk, a deeper snapshot, a tick arriving
+   * meanwhile — and its output stays on its bars through the anchor its emit carried.
+   * Once the history is complete, a held one starts and a running one re-runs.
+   */
+  pokeNative(record) {
+    const native = record.native;
+    if (!native.descriptor.waitsForHistory) {
+      native.instance.onBars();
+      return;
+    }
+    if (this.historyState === "backfill") return;
+    if (native.heldForHistory) {
+      native.heldForHistory = false;
+      const handle = this.handles.get(record.id);
+      if (handle) void this.startNativeIndicator(record.id, handle);
+      return;
+    }
+    if (native.started) native.instance.onBars();
+  }
+  /** Start the natives still held for a history that has completed without poking them
+   *  (a depth-only switch finishes its trim while the switch gates every poke). */
+  releaseHeldNatives() {
+    if (this.historyState === "backfill") return;
+    for (const record of this.registry.all()) {
+      if (record.native?.heldForHistory && !record.hidden) this.pokeNative(record);
+    }
   }
   /** Gap healing needs a ranged feed and a provider-backed series (offline `data` has no source). */
   canHeal() {
@@ -25218,7 +25503,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     if (record?.native?.type === "volume") this.volumeOptedOut = true;
     if (record) this.settleCode(record, { ok: false, error: new Error(`[vela] updateCode("${id}") \u2014 the indicator was removed.`) });
     record?.session?.stop();
-    if (record?.native?.started) record.native.instance.stop();
+    if (record?.native) this.stopNativeInstance(record.native);
     this.handles.delete(id);
     if (record?.renderHandle) this.renderer.removeIndicator(record.renderHandle);
     const paneId = record?.model?.paneId;
@@ -25339,7 +25624,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     for (const record of this.registry.all()) {
       this.settleCode(record, { ok: false, error: new Error("[vela] updateCode \u2014 the chart was destroyed.") });
       record.session?.stop();
-      if (record.native?.started) record.native.instance.stop();
+      if (record.native) this.stopNativeInstance(record.native);
     }
     for (const engine of this.typeEngines.values()) engine.stop();
     this.typeEngines.clear();
@@ -25466,7 +25751,19 @@ var EngineOrchestrator = class _EngineOrchestrator {
       await this.readyPromise;
       const record = this.registry.get(id);
       if (!record?.native || record.hidden) return;
+      const native = record.native;
+      if (native.started) return;
+      if (native.descriptor.waitsForHistory && this.historyState === "backfill") {
+        native.heldForHistory = true;
+        this.mountNativePlaceholder(id, record);
+        return;
+      }
+      native.heldForHistory = false;
       const channel = this.nativeChannel(record);
+      let alive = true;
+      native.revokeContext = () => {
+        alive = false;
+      };
       const ctx = {
         id,
         symbol: this.config.market.symbol ?? "TEST",
@@ -25475,14 +25772,18 @@ var EngineOrchestrator = class _EngineOrchestrator {
         session: this.config.market.session,
         bars: () => this.bars,
         data: this.dataControl,
-        emit: (out) => this.applyModel(id, this.buildNativeModel(record, out)),
-        pushData: (data) => this.renderer.setNativeData?.(channel, data),
+        emit: (out) => {
+          if (alive) this.applyModel(id, this.buildNativeModel(record, out, this.bars[0]?.time));
+        },
+        pushData: (data) => {
+          if (alive) this.renderer.setNativeData?.(channel, data);
+        },
         setStatus: (status) => {
-          if (record.renderHandle && !record.hidden) this.renderer.setIndicatorStatus?.(record.renderHandle, status);
+          if (alive && record.renderHandle && !record.hidden) this.renderer.setIndicatorStatus?.(record.renderHandle, status);
         }
       };
-      record.native.instance.start(ctx, record.inputValues);
-      record.native.started = true;
+      native.instance.start(ctx, record.inputValues);
+      native.started = true;
     } catch (err) {
       this.fail(id, handle, err);
     }
@@ -25495,8 +25796,14 @@ var EngineOrchestrator = class _EngineOrchestrator {
     const { type, descriptor } = record.native;
     return descriptor.multiInstance ? nativeInstanceChannel(type, record.id) : type;
   }
-  /** Wrap a native indicator's emitted visuals into a full IndicatorModel, tagged `native`. */
-  buildNativeModel(record, out) {
+  /**
+   * Wrap a native indicator's emitted visuals into a full IndicatorModel, tagged `native`.
+   * `anchorTime` is the first bar the output is index-aligned to — the chart's first bar
+   * when it emitted. Without it the renderer pins the output's first slot to whatever the
+   * first bar is NOW, so history landing in front of a computed output (or the oldest
+   * bars trimmed under it) would slide the whole plot by that many bars.
+   */
+  buildNativeModel(record, out, anchorTime) {
     const d = record.native.descriptor;
     const type = record.native.type;
     const channel = this.nativeChannel(record);
@@ -25507,6 +25814,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
       overlay: d.overlay,
       paneHint: d.paneHint,
       native: { type, ...channel !== type ? { channel } : {} },
+      ...anchorTime != null ? { anchorTime } : {},
       ...d.legend === false ? { legend: false } : {},
       ...out.paneAxis != null ? { paneAxis: out.paneAxis } : {},
       series: out.series ?? [],
@@ -25561,8 +25869,9 @@ var EngineOrchestrator = class _EngineOrchestrator {
     const paneId = this.routePane(id, model, record.options ?? {});
     this.placeModel(model, id, paneId);
     record.model = model;
-    this.ensurePaneFor(paneId);
+    const paneCreated = this.ensurePaneFor(paneId);
     record.renderHandle = this.renderer.mountIndicator(model);
+    if (paneCreated) this.events.emit("pane:changed", void 0);
     record.pendingStructural = true;
     if (record.hidden) {
       this.renderer.setIndicatorVisible?.(record.renderHandle, false);
@@ -25586,24 +25895,49 @@ var EngineOrchestrator = class _EngineOrchestrator {
     const paneId = this.routePane(id, model, record.options ?? {});
     this.placeModel(model, id, paneId);
     record.model = model;
-    this.ensurePaneFor(paneId);
+    const paneCreated = this.ensurePaneFor(paneId);
     record.renderHandle = this.renderer.mountIndicator(model);
+    if (paneCreated) this.events.emit("pane:changed", void 0);
     record.pendingStructural = true;
     this.renderer.setIndicatorVisible?.(record.renderHandle, false);
     this.announce(record, this.handles.get(id));
+  }
+  /**
+   * The legend row of a native HELD for the history (see `waitsForHistory`): an empty
+   * model with the title and inputs schema, spinning, not announced — exactly a script
+   * indicator's loading placeholder, so `ready`/`indicator:added` and `inspect()` still
+   * mean "it produced output". A record that already has a row (restarted over a new
+   * market, or shown again) keeps it and only spins. The first emit remounts over it.
+   */
+  mountNativePlaceholder(id, record) {
+    record.pendingStructural = true;
+    if (!record.renderHandle) {
+      const model = this.buildNativeModel(record, {});
+      const paneId = this.routePane(id, model, record.options ?? {});
+      this.placeModel(model, id, paneId);
+      record.model = model;
+      const paneCreated = this.ensurePaneFor(paneId);
+      record.renderHandle = this.renderer.mountIndicator(model);
+      if (paneCreated) this.events.emit("pane:changed", void 0);
+    }
+    this.setLoading(record, true);
   }
   /** Flip the record's loading state and reflect it in the legend row (spinner on/off). */
   setLoading(record, loading) {
     record.loading = loading;
     if (record.renderHandle && !record.hidden) this.renderer.setIndicatorStatus?.(record.renderHandle, loading ? "loading" : "idle");
   }
+  /** Make sure the renderer has the pane; true when it is new to the layout (the caller
+   *  emits `pane:changed` once the indicator's model sits on it, so `list()` shows it). */
   ensurePaneFor(paneId) {
-    if (!this.paneOrder.includes(paneId)) this.paneOrder.push(paneId);
+    const created = !this.paneOrder.includes(paneId);
+    if (created) this.paneOrder.push(paneId);
     this.renderer.ensurePane({
       id: paneId,
       kind: paneId === "price" ? "price" : "study",
       order: this.paneOrder.indexOf(paneId)
     });
+    return created;
   }
   /** True when any (still-registered) indicator sits on the given pane. */
   paneStillUsed(paneId) {
@@ -25639,12 +25973,14 @@ var EngineOrchestrator = class _EngineOrchestrator {
     const panes = [];
     for (const paneId of this.paneOrder) {
       if (paneId !== "price" && !byPane.has(paneId)) continue;
+      const heightWeight = this.renderer.paneHeightWeight?.(paneId) ?? null;
       panes.push({
         id: paneId,
         kind: paneId === "price" ? "price" : "study",
         order: panes.length,
         collapsed: this.collapsedPanes.has(paneId),
         maximized: this.maximizedPaneId === paneId,
+        ...heightWeight !== null ? { heightWeight } : {},
         indicators: byPane.get(paneId) ?? []
       });
     }
@@ -25674,6 +26010,22 @@ var EngineOrchestrator = class _EngineOrchestrator {
   maximizePane(paneId) {
     this.maximizedPaneId = paneId;
     this.renderer.setPaneMaximized?.(paneId);
+    this.events.emit("pane:changed", void 0);
+  }
+  setPaneHeightWeight(paneId, weight) {
+    if (!this.renderer.setPaneHeightWeight) {
+      console.warn("[vela] the active renderer does not support pane sizing \u2014 chart.panes.setHeightWeight ignored.");
+      return;
+    }
+    if (typeof weight !== "number" || !Number.isFinite(weight) || weight <= 0) {
+      console.warn(`[vela] chart.panes.setHeightWeight: weight must be a positive number (got ${String(weight)}).`);
+      return;
+    }
+    if (!this.existingPaneIds().includes(paneId)) {
+      console.warn(`[vela] chart.panes.setHeightWeight: no pane "${paneId}".`);
+      return;
+    }
+    this.renderer.setPaneHeightWeight(paneId, weight);
     this.events.emit("pane:changed", void 0);
   }
   /** IndicatorController/PaneController: move (or merge) an indicator to another pane. */
@@ -25773,6 +26125,9 @@ var EngineOrchestrator = class _EngineOrchestrator {
         this.maximizedPaneId = a.maximized ? a.paneId : null;
         this.events.emit("pane:changed", void 0);
         break;
+      case "resize":
+        this.events.emit("pane:changed", void 0);
+        break;
     }
   }
   /** Fire `indicator:added` + the handle's `ready` once, on the first computed model. */
@@ -25803,14 +26158,16 @@ var EngineOrchestrator = class _EngineOrchestrator {
       const paneId2 = this.routePane(id, model, record.options ?? {});
       this.placeModel(model, id, paneId2);
       record.model = model;
-      this.ensurePaneFor(paneId2);
+      const paneCreated = this.ensurePaneFor(paneId2);
       record.renderHandle = this.renderer.mountIndicator(model);
       record.pendingStructural = false;
+      if (paneCreated) this.events.emit("pane:changed", void 0);
       this.announce(record, handle);
       return true;
     }
     let paneId = record.model?.paneId ?? "price";
     const prevOwnScale = record.model?.ownScale === true;
+    let rerouted = false;
     if (record.loading && !record.paneLocked) {
       const routed = this.routePane(id, model, record.options ?? {});
       if (routed !== paneId) {
@@ -25821,6 +26178,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
         this.ensurePaneFor(routed);
         record.pendingStructural = true;
         paneId = routed;
+        rerouted = true;
       }
     }
     this.placeModel(model, id, paneId);
@@ -25833,6 +26191,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
     } else {
       this.renderer.updateIndicator(record.renderHandle, modelToValuePatch(model));
     }
+    if (rerouted) this.events.emit("pane:changed", void 0);
     if (record.loading) this.setLoading(record, false);
     this.announce(record, handle);
     return true;
@@ -25847,13 +26206,16 @@ var EngineOrchestrator = class _EngineOrchestrator {
     const overlay = options.overlay ?? model.overlay;
     return overlay ? "price" : `pane-${id}`;
   }
-  /** Each named value series' last plotted value — the model is the one source every
-   *  engine fills, so this works without an execution context. */
-  static plotsAtLastBar(model) {
+  /** Each named value series' value on the chart's last bar — the model is the one source
+   *  every engine fills, so this works without an execution context. Points past the last
+   *  bar (a series shifted forward) are skipped by time. */
+  static plotsAtLastBar(model, lastBarTime) {
     const out = {};
     for (const spec of model.series) {
       if (!isLineLikeSeries(spec)) continue;
-      out[spec.title] = spec.points[spec.points.length - 1]?.value ?? null;
+      let i = spec.points.length - 1;
+      if (lastBarTime !== void 0) while (i >= 0 && spec.points[i].time > lastBarTime) i -= 1;
+      out[spec.title] = spec.points[i]?.value ?? null;
     }
     return out;
   }
@@ -25909,7 +26271,7 @@ var EngineOrchestrator = class _EngineOrchestrator {
       // whatever produced this run.
       forming: this.config.live && this.bars.length > 0,
       complete: this.historyState !== "backfill",
-      plots: _EngineOrchestrator.plotsAtLastBar(model),
+      plots: _EngineOrchestrator.plotsAtLastBar(model, lastBar?.time),
       vars: snapshot?.variables ?? {},
       ...snapshot?.strategy ? { strategy: snapshot.strategy } : {},
       warnings: snapshot?.warnings ?? [],
@@ -25978,8 +26340,9 @@ function sameInputValue(a, b) {
   return typeof a === "object" && a !== null && typeof b === "object" && b !== null && JSON.stringify(a) === JSON.stringify(b);
 }
 function blankedModel(model) {
+  const { anchorTime: _anchor, ...rest } = model;
   return {
-    ...model,
+    ...rest,
     series: model.series.map((s) => s.kind === "candle" || s.kind === "bar" ? { ...s, bars: [] } : s.kind === "markers" ? { ...s, markers: [] } : { ...s, points: [] }),
     fills: [],
     backgrounds: [],
@@ -26002,12 +26365,14 @@ function modelToValuePatch(model) {
     if (s.kind === "candle" || s.kind === "bar") {
       series.push({ seriesId: s.id, kind: "bars", bars: s.bars, barColors: s.barColors ?? [] });
       for (const b of s.bars) {
+        if (!b) continue;
         if (b.time < from) from = b.time;
         if (b.time > to) to = b.time;
       }
     } else if (isLineLikeSeries(s)) {
       series.push({ seriesId: s.id, kind: "points", points: s.points });
       for (const p of s.points) {
+        if (!p) continue;
         if (p.time < from) from = p.time;
         if (p.time > to) to = p.time;
       }
@@ -26062,6 +26427,17 @@ var PanesControl = class {
   /** Maximize one pane to fill the plot, or restore the split (`null`). */
   maximize(paneId) {
     if (this.guard()) this.controller.maximizePane(paneId);
+    return this;
+  }
+  /**
+   * Set a pane's height weight: the panes share the plot height in proportion to their
+   * weights, so `setHeightWeight('price', 6)` next to two study panes at 1 gives the price
+   * pane three quarters of the height. The weight sticks until the user drags a separator
+   * or it is set again; a collapsed pane applies it when expanded. `weight` must be a
+   * positive number.
+   */
+  setHeightWeight(paneId, weight) {
+    if (this.guard()) this.controller.setPaneHeightWeight(paneId, weight);
     return this;
   }
   /** Move/merge an indicator to a pane — sugar for `handle.moveTo(...)` by id. */
@@ -26388,6 +26764,9 @@ function classicDescriptor(spec) {
     overlay: spec.overlay,
     // Studies stack (a 20 and a 200 moving average side by side) — unlike the layer-backed natives.
     multiInstance: true,
+    // A study's values depend on every bar before them (an EMA's seed, an RSI's
+    // smoothing), so it computes once over the whole history, as script indicators do.
+    waitsForHistory: true,
     inputsSchema: () => spec.inputs,
     defaultInputs: () => Object.fromEntries(spec.inputs.map((i) => [i.key, i.defval])),
     create: () => new ClassicIndicator(spec)
@@ -27223,41 +27602,50 @@ var maEnvelope = {
     return directionalChannel(bars, basis, map(basis, (x) => x * (1 + k)), map(basis, (x) => x * (1 - k)), ink, "envelope");
   }
 };
-var LINREG_CURVE = "Curve";
-var LINREG_SLOPE = "Slope";
-var linearRegression = {
-  type: "linear-regression",
-  title: "Linear Regression Curve",
-  shortTitle: "LinReg",
-  // Slope lives in its own pane; Curve force-overlays itself onto the price candles.
+var leastSquaresMa = {
+  type: "lsma",
+  title: "Least Squares Moving Average",
+  shortTitle: "LSMA",
+  overlay: true,
+  inputs: [
+    sourceInput("Close", "source", "Source", "Price series the regression line is fitted to."),
+    { ...lengthInput(25, "length", "LSMA Length", 5e3, "Number of bars N in each least-squares fit. Every bar fits a straight line to its last N values and plots where that line ends, so the average leads turns that a same-length SMA trails, at the cost of overshooting after sharp moves."), min: 2 },
+    intInput("offset", "Regression Offset", 0, 0, 500, "Bars to step back along each bar's fitted line. 0 plots the line's endpoint at the current bar; larger values read the fit further back, trading lead for smoothness."),
+    ...directionInputs()
+  ],
+  compute: (bars, inputs) => {
+    const src = sourceValues(bars, str3(inputs, "source", "Close"));
+    const values = linreg(src, num3(inputs, "length", 25), Math.trunc(num3(inputs, "offset", 0)));
+    return { plots: [slopeColoredPlot("lsma", "LSMA", values, inputs)] };
+  }
+};
+var linearRegressionSlope = {
+  type: "linear-regression-slope",
+  title: "Linear Regression Slope",
+  shortTitle: "LRS",
   overlay: false,
   inputs: [
-    optionInput("mode", "Mode", LINREG_CURVE, [LINREG_CURVE, LINREG_SLOPE], "Curve plots the regression value on the price chart; Slope plots the per-bar slope of the fit in the pane."),
     { ...lengthInput(100, "length", "Length", 5e3, "Number of bars used to fit the linear regression."), min: 2 },
     sourceInput("Close", "source", "Source", "Price series the regression is fitted to."),
-    colorInput(BULLISH, "Rising", "bullColor", "Color of the regression curve and slope line while the fit slopes upward."),
-    colorInput(BEARISH, "Falling", "bearColor", "Color of the regression curve and slope line while the fit slopes downward."),
-    colorInput(NEUTRAL, "Regression Line", "lineColor", "Color of the regression curve and slope line while the fit is flat.")
+    colorInput(BULLISH, "Rising", "bullColor", "Color of the slope line while the fit slopes upward."),
+    colorInput(BEARISH, "Falling", "bearColor", "Color of the slope line while the fit slopes downward."),
+    colorInput(NEUTRAL, "Slope Line", "lineColor", "Color of the slope line while the fit is flat.")
   ],
   compute: (bars, inputs) => {
     const len = num3(inputs, "length", 100);
     const src = sourceValues(bars, str3(inputs, "source", "Close"));
-    const curve = linreg(src, len, 0);
-    const slope = zip(curve, linreg(src, len, 1), (a, b) => a - b);
+    const slope = zip(linreg(src, len, 0), linreg(src, len, 1), (a, b) => a - b);
     const bull = str3(inputs, "bullColor", BULLISH);
     const bear = str3(inputs, "bearColor", BEARISH);
     const flat = str3(inputs, "lineColor", NEUTRAL);
     const colors = slope.map((s) => Number.isFinite(s) ? s > 0 ? bull : s < 0 ? bear : flat : null);
-    if (str3(inputs, "mode", LINREG_CURVE) === LINREG_SLOPE) {
-      return {
-        plots: [{ key: "slope", title: "Slope", values: slope, color: flat, width: 2, colors }],
-        levels: [{ key: "zero", price: 0, color: transp(NEUTRAL, 50), lineStyle: "dashed" }]
-      };
-    }
-    return { plots: [{ key: "curve", title: "Curve", values: curve, color: flat, width: 2, colors, overlay: true }] };
+    return {
+      plots: [{ key: "slope", title: "Slope", values: slope, color: flat, width: 2, colors }],
+      levels: [{ key: "zero", price: 0, color: transp(NEUTRAL, 50), lineStyle: "dashed" }]
+    };
   }
 };
-var averageSpecs = [simpleMa, exponentialMa, movingAverage, smoothedMa, zlema, vidya, maEnvelope, linearRegression];
+var averageSpecs = [simpleMa, exponentialMa, movingAverage, smoothedMa, zlema, vidya, maEnvelope, leastSquaresMa, linearRegressionSlope];
 
 // src/core/native-indicators/classics/bands.ts
 var JAW_COLOR = "#ab47bc";

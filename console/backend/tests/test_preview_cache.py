@@ -109,6 +109,8 @@ class TheEndpointIsLocalAndCheap(unittest.TestCase):
         self.assertIn("ALLOWED_HOSTS = (", src)
         self.assertIn("luxalgo-images-production.s3.us-east-1.amazonaws.com", src,
                       "the catalogue's older rows live in a second LuxAlgo bucket (spaces in the key)")
+        self.assertIn("luxalgo-images-production.s3.amazonaws.com", src,
+                      "the same bucket in its global form is 104 of the 853 rows (measured 15 Oct)")
         self.assertIn("def _allowed(", src)
         body = src.split("def thumb(", 1)[1]
         self.assertIn("if not _allowed(url):", body, "thumb() must refuse a foreign URL, not fetch it")
@@ -122,11 +124,13 @@ class TheEndpointIsLocalAndCheap(unittest.TestCase):
                     "https://luxalgo-evil.s3.amazonaws.com/a.png",
                     "https://attacker-luxalgo.s3.eu-west-1.amazonaws.com/a.svg",
                     "https://luxalgo.s3-website-us-east-1.amazonaws.com/a",
+                    "https://luxalgo-images-production.s3.amazonaws.com.evil.com/a.png",
                     "https://evil.com/luxalgo-production.s3.amazonaws.com/", "", None):
             self.assertFalse(mod._allowed(url), url)
 
     def test_the_second_bucket_is_actually_fetched(self):
-        """Refusing it was a live bug: four cards on page one had no picture (measured 27 Sep)."""
+        """Refusing it was a live bug: four cards on page one had no picture (measured 27 Sep), and
+        the bucket's global form kept 104 rows picture-less until 15 Oct."""
         import importlib.util
         spec = importlib.util.spec_from_file_location("library_thumbs_probe", THUMBS)
         if spec is None or spec.loader is None:
@@ -135,6 +139,8 @@ class TheEndpointIsLocalAndCheap(unittest.TestCase):
         spec.loader.exec_module(mod)
         self.assertTrue(mod._allowed(
             "https://luxalgo-images-production.s3.us-east-1.amazonaws.com/Screenshot 2026-06-04 at 3.13.58 PM.png"))
+        self.assertTrue(mod._allowed(
+            "https://luxalgo-images-production.s3.amazonaws.com/image_2023-08-21_224816722.png"))
         self.assertTrue(mod._allowed("https://luxalgo-production.s3.amazonaws.com/library/cards/a-b.png"))
         for foreign in ("https://evil.example.com/a.png", "http://luxalgo-production.s3.amazonaws.com/x.png",
                         "https://s3.amazonaws.com/other-bucket/x.png", ""):
@@ -166,6 +172,35 @@ class TheEndpointIsLocalAndCheap(unittest.TestCase):
         self.assertIn('return raw, ("image/"', src,
                       "no converter on a machine must serve the real picture, not a blank tile")
 
+    def test_the_resizer_can_be_named_explicitly(self):
+        """A service starts with a bare PATH: TRADERS_AGENT_RESIZER wins over what PATH answers.
+
+        Measured 17 Oct: the live launchd service had no converter on its PATH, so every thumb was
+        served as the raw 1600×1000 PNG (~93 KB, ~2.6 s) and never cached — the shrink is what writes
+        the file. The override is how a service is told where the converter actually is.
+        """
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("library_thumbs_resizer", THUMBS)
+        if spec is None or spec.loader is None:
+            self.fail("library_thumbs.py must be importable")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        marker = "/tmp/ffmpeg-override-probe"   # asserts naming, not execution
+        old = os.environ.get("TRADERS_AGENT_RESIZER")
+        os.environ["TRADERS_AGENT_RESIZER"] = marker
+        try:
+            got = mod._converter()
+            self.assertIsNotNone(got, "an explicit resizer must be honoured")
+            self.assertEqual(got[0], "ffmpeg")
+            self.assertEqual(got[1][0], marker, "argv[0] must be the path that was named")
+        finally:
+            if old is None:
+                os.environ.pop("TRADERS_AGENT_RESIZER", None)
+            else:
+                os.environ["TRADERS_AGENT_RESIZER"] = old
+        self.assertIn("PROBE_DIRS", read(THUMBS),
+                      "the usual absolute install dirs must be probed when PATH answers nothing")
+
     def test_a_missing_preview_is_a_404_not_a_placeholder(self):
         src = read(SERVER)
         block = src.split("def _library_thumb(", 1)[1].split("def _serve_static", 1)[0]
@@ -190,9 +225,17 @@ class ThePageUsesIt(unittest.TestCase):
         self.assertNotIn(".ind-card__shot", css, "the modal's card pictures went with the modal")
 
     def test_the_warmer_warms_the_width_the_row_paints(self):
-        src = read(SERVER)
-        self.assertIn("WARM_WIDTH = 480", src)
-        self.assertIn("library_thumbs.warm(pairs, WARM_WIDTH)", src)
+        """One number, two files. Warming a width nobody paints fills the disk twice — and leaves the
+        painted width cold: every drawer open paid S3 for its sixty rows (measured 15 Oct, 2.7 s to
+        fill the first screen, while 749 warmed files at 480 sat unread)."""
+        drawer, server = read(DRAWER), read(SERVER)
+        found = re.search(r"thumbUrl\(r\.slug, r\.image_url, (\d+)\)", drawer)
+        if found is None:
+            self.fail("the drawer's row thumb must ask its width explicitly, so this test can read it")
+        width = found.group(1)
+        self.assertIn(f"WARM_WIDTH = {width}", server,
+                      f"WARM_WIDTH must be the width the row paints ({width} px), or the warm cache "
+                      "serves nothing the drawer asks for")
 
     def test_a_row_without_a_picture_loses_its_img_not_its_tile(self):
         drawer = read(DRAWER)

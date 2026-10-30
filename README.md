@@ -47,7 +47,7 @@ MCP server) in one local web app — your chat session is left exactly where it 
 | **Hermes Desktop** | v0.21.3 or newer (the plugin uses the `sidebar.nav` + `routes` contribution areas) |
 | **Python** | 3.11+ with the `mcp` client. `./install.sh --all` (or `./bin/setup-python.sh`) makes a `.venv` with it; or `pip install mcp` yourself and point `PY=` at it |
 | **Network** | for LuxAlgo's MCP endpoint and the Binance data feed; with no market feed the chart stays empty (`chart_state` says `bars None`). The chart engine and Pine runtime are served locally |
-| **Node 20+** *(optional)* | only for [Edge Stats](#edge-stats--how-often-did-it-actually-happen) — `./install.sh --with-edge` installs LuxAlgo's engine (~300 MB with its dependencies) next to the console. Without it everything else works and the sheet explains what is missing |
+| **Node 20+** *(optional)* | for [Edge Stats](#edge-stats--how-often-did-it-actually-happen) (`./install.sh --with-edge`, ~300 MB) and the prop-firm simulator (`./install.sh --with-prop`, ~10 MB) — both LuxAlgo engines, both local. Without them everything else works and each sheet says what is missing |
 | **Preview resizer** *(optional)* | `libvips` (or ImageMagick, or `ffmpeg`) — see [Catalogue previews](#catalogue-previews-are-kept-on-your-machine). With none of them the console still shows every preview, just at the catalogue's original size |
 | **OS** | Linux (built and verified on Omarchy / Arch + Hyprland) or **macOS** — Macs need the one-time venv + the launchd service; see [`docs/MACOS.md`](docs/MACOS.md). Windows is out of scope. |
 
@@ -80,6 +80,9 @@ cd tradersagent-plugin
 ./install.sh              # the plugin -> ~/.hermes/desktop-plugins/traders-desk/
                           #   and the desk skill -> ~/.hermes/skills/trading/trader-desk/
 ```
+
+Optional engines (each is LuxAlgo's own, MIT, fetched once): `./install.sh --with-prop` (prop-firm
+simulator, ~10 MB) and `./install.sh --with-edge` (Edge Stats, ~300 MB) — both need Node 20+.
 
 Then in Hermes Desktop:
 
@@ -135,6 +138,9 @@ After=network-online.target
 ExecStart=%h/tradersagent-plugin/console/start.sh
 Restart=always
 WorkingDirectory=%h/tradersagent-plugin
+# Catalogue previews want an image converter (vips / ImageMagick / ffmpeg) and a service PATH
+# usually lacks one — name it here, or thumbnails are served at full size: slow, not wrong.
+# Environment=TRADERS_AGENT_RESIZER=/usr/bin/magick
 
 [Install]
 WantedBy=default.target
@@ -165,7 +171,7 @@ interpreter itself (details in [`docs/MACOS.md`](docs/MACOS.md)):
 | Chart top bar → **<> Script** | the Pine script pane: write or paste Pine, **Run**, tweak the script's own **Settings**, save and reopen scripts |
 | Chart top bar → **⛶ Full screen** | Gives the chart the whole pane — and the whole display: the console's chrome, panels and statusbar step aside and the page asks the browser for fullscreen. `Esc` (or the floating `✕`, or the same button) comes back. Docked on Vela's own toolbar row beside `<> Script` and `☰ catalogue`; the door is `chart_fullscreen` / `trader-chart fullscreen [--off]` |
 | Chart ⋯ menu → **Edge Stats** | the Edge Stats sheet: ask a question, run one of the 42 catalogue reports, group by weekday / month / year, open any historical session on a chart. [Details below](#edge-stats--how-often-did-it-actually-happen) |
-| Chart ⋯ menu → **Trader's desk** | the desk sheet: **Paper** (equity, cash, realised, open P&L, positions, fills, Reset), **Journal** (net P&L, win rate, profit factor, avg win/loss, the realised-equity curve, the closed trades) and **Prop firms** (the LuxAlgo directory + what is on offer). A read surface — the only write is Reset, and approving an order still happens on its card, never here |
+| Chart ⋯ menu → **Trader's desk** | the desk sheet: **Paper** (equity, cash, realised, open P&L, positions, fills, Reset), **Journal** (net P&L, win rate, profit factor, avg win/loss, the realised-equity curve, the closed trades) and **Prop firms** (the LuxAlgo directory + what is on offer, and **Simulate** on any challenge — LuxAlgo's own Monte-Carlo engine plays 10,000 journeys through that firm's exact ruleset and the card shows its verdict: pass odds with a 95% CI, failures, cost, days, payout odds and EV). A read surface — the only write is Reset, and approving an order still happens on its card, never here |
 | The chart's own bottom bar | Vela's range buttons, timezone clock and settings (not ours) |
 
 ### Chat beside the chart
@@ -192,6 +198,75 @@ copy *inlined* in vela-pinets, without the patches; the console therefore does n
 reports what actually happened rather than pretending. (A heavy script can be run off the page's main
 thread instead with `?engine=worker` on the console URL, or localStorage `luxalgo-web:pine-engine` =
 `worker` — at the cost of running vela-pinets' copy, which does not carry the patches.)
+
+### Strategy backtests — the intrabar broker emulator
+
+LuxAlgo rebuilt Vela's broker emulator on an **intrabar model** (19 Oct): a Pine `strategy()` script's
+fills and exits are resolved *inside* the bar, with commission, slippage, margin, trailing stops and
+TradingView's tick-grid snapping, instead of "the close of the signal bar". This console ships that
+engine (Vela 0.8.5 · vela-pinets 0.2.17 · our PineTS fork of 0.12.0) and reads its ledger:
+
+- **The tester strip** appears at the bottom of the pane when a `strategy()` script runs: net profit,
+  trades, win rate (with its N), max drawdown (money and %), profit factor — plus a curve of the
+  closed-trade P&L and, on **Trades**, the engine's own round trips (side, size, entry/exit fills,
+  commission, P&L, per-trade excursion).
+- **The agent reads the same ledger**: `chart_apply_pine` on a strategy answers with a `ledger:` line
+  (`net −189.55 USD · 11 trades · win 27.3% (n=11) · max DD 194.15 (2.38%) · PF 0.08 · commission
+  21.73 paid · intrabar fills`), so "backtest this on BTC 30m" returns numbers in chat.
+- **Honesty rules**: a rate with no sample prints `—`, a profit factor with no losing trade prints `∞`,
+  and the strip says whether the ratio came from the engine's totals or from the closed trades. When
+  the worker's smaller summary drops the declaration, the commission is reported as what the fills
+  actually paid — never as "none". The curve is labelled as cumulative closed-trade P&L, not an
+  intra-bar equity path.
+
+Bars served to the chart come from this store first (`fxticks.py` → `fxdata._bars`): mid-price OHLC,
+`volume` = ticks in the bar, `spread` = median bid/ask. `/api/fx/bars` labels the answer
+`source: "dukascopy-ticks"` and includes the coverage it used. Yahoo is disabled unless
+`TRADERS_FX_ALLOW_YAHOO=1`.
+
+### Tick data for the seven instruments
+
+`tools/fx-fetch.py` walks Dukascopy's **v1 tick API** and keeps one gzipped JSON per instrument-hour
+under `~/.local/share/traders-agent/fx/ticks-v1/<SYMBOL>/<YYYY-MM-DD>/<HH>.json.gz` (plus a `.empty`
+marker for shut hours, so a resume does not re-ask). It is resumable, retries resets/429s, and reports
+ETA:
+
+```bash
+python3 tools/fx-fetch.py --years 2 --workers 5      # GBPUSD EURUSD GBPJPY XAUUSD XAGUSD NAS100 SP500
+python3 tools/fx-fetch.py --days 3 --instruments GBPUSD,XAUUSD
+python3 tools/fx-fetch.py --report                    # hours, empty hours, MB, coverage per symbol
+```
+
+Two conventions worth knowing before touching it: the v1 API's month is **1-based** (unlike the older
+`/datafeed/` paths, which are 0-based), and `times`/`bids`/`asks` are **cumulative deltas** — decode
+with a running sum (`decode_hour`, pinned by `test_fx_ticks.py`). Codes carry a dash and the class:
+`GBP-USD`, `XAU-USD`, `USATECH.IDX-USD` (Nasdaq-100), `USA500.IDX-USD` (S&P 500).
+
+### Forex pairs — GBPUSD, EURUSD, and the SMT pair
+
+A `strategy()` for forex cannot use the chart's bars (the pane charts Binance crypto), and PineTS
+answers `request.security("EURUSD", …)` with the chart's own series when it has no other source — a
+comparison of a market with itself. Two lines at the top of a script fix that:
+
+```pine
+//@version=5
+//@fx GBPUSD
+//@tf 60
+```
+
+The runner sees `//@fx`, routes the run to the console's FX provider, and `request.security("EURUSD")`
+fetches a **different** symbol — verified: GBPUSD 1.33 vs EURUSD 1.12 in the same run.
+
+Data comes from **Dukascopy's free tick feed** (no key, ~20 KB per instrument-hour, decoded from its
+LZMA `>IIIff` records in `console/backend/fxdata.py`), cached under
+`~/.local/share/traders-agent/fx/`. When Dukascopy throttles (it does: 429s, and its free window lags
+~two weeks) the loader falls back to Yahoo FX and the answer's `source` says `yahoo` — the numbers are
+never relabelled. `GET /api/fx/bars?pair=GBPUSD&timeframe=30&limit=500` is the door; `…/api/fx/status`
+says what is cached.
+
+Your own strategy is the script itself: session filter, SMT via `request.security`, a sweep test, a
+resting limit at the 50% of the leg, and risk-sized `qty` — no plugin code changes. Strategies are
+personal, so none ship in this repository; the directive is the whole integration.
 
 ### Edge Stats — how often did it actually happen?
 
@@ -259,7 +334,7 @@ hermes mcp test traders-chart          # start a new session afterwards
 | `chart_studies` | everything **on** the chart, each row labelled with the reader that saw it — ask this before calling a chart clean |
 | `chart_state` | symbol, timeframe, last price, bars, indicators on the chart |
 | `chart_shot` | one PNG of the chart (returned as an image, plus the path) |
-| `chart_apply_pine` | run Pine over the chart's live bars and paint a matching native; optional `inputs` sets the script's own settings by label (`{"Length": 50}`) |
+| `chart_apply_pine` | run Pine over the chart's live bars and paint a matching native; a `strategy()` script backtests on the intrabar emulator and answers with its ledger; optional `inputs` sets the script's own settings by label (`{"Length": 50}`) |
 | `chart_add_indicator` | add a Vela native (`ema`, `supertrend`, `donchian-channels`, …) |
 | `chart_remove_indicator` | take indicators **off** the chart — one by name, or `all` for every study (reports the chart's before → after list) |
 | `chart_set_market` | switch symbol / timeframe |
@@ -472,6 +547,13 @@ it from `http://127.0.0.1:8787/api/library/thumb`: **~5 ms warm instead of ~2 s*
   nothing else is platform-specific. **Windows is out of scope.**
 
 ## Development
+
+**What belongs in a commit:** design changes and system upgrades that make the plugin better for
+anyone who installs it — engines, data sources, the agent surface, the sheet, the docs that describe
+them. Personal material stays out: a strategy you trade, a study of someone else's app, scratch data,
+experiments that did not become a feature. If a change only makes sense with your own account, your
+own pair or your own opinions in it, it is not a plugin change.
+
 
 ```bash
 node tools/verify-plugin.mjs traders-desk/desktop/plugin.js                                      # plugin harness (same check CI runs)

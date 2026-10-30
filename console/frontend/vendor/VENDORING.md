@@ -17,8 +17,13 @@ so the page boots the same way offline as online.
 | `zag/` | the module closure Vela's ES modules import: `@zag-js/*` 1.44.0 (18 packages), `@floating-ui/{core,dom}` 1.8.0, `@floating-ui/utils` 0.2.12, `proxy-compare` 3.0.1 | all MIT |
 | `pinets/pinets.min.browser.es.js` | **our patch of LuxAlgo's PineTS** (Library path) — not a stock build; see `pinets/PROVENANCE.md` and `THIRD-PARTY.md` | AGPL-3.0-only |
 
-Versions are pinned: **vela 0.8.4, vela-pinets 0.2.16** (whose inlined worker engine is PineTS
-**0.11.0**; see `THIRD-PARTY.md`). The `zag/` closure is not optional — the
+Versions are pinned: **vela 0.8.5, vela-pinets 0.2.17** (whose inlined worker engine is PineTS
+**0.12.0**; see `THIRD-PARTY.md`). The 19 Oct bump is the strategy update: vela 0.8.5 carries the
+host-facing `StrategyTrade` / `StrategyState` types (round trips, fills with commission and per-trade
+excursions) and intrabar replay ticks; vela-pinets 0.2.17 maps the engine's fills onto the price pane;
+PineTS 0.12.0 is the rebuilt **intrabar broker emulator** (`setFillsOnTickGrid`, commission, slippage,
+margin, trailing stops). The tester strip in `frontend/tester.js` is OUR reader for that ledger — the
+open-source build ships the data and the marker painting, not the panel. The `zag/` closure is not optional — the
 browser cannot resolve a bare specifier on its own and Vela's ES modules import these by name; the
 import map in `index.html` carries one entry per specifier (`@floating-ui/utils/dom` is a subpath
 entry, not a typo).
@@ -27,8 +32,8 @@ entry, not a typo).
 
 ```bash
 # the two LuxAlgo packages: registry tarballs, dist/ + licences only
-curl -sL https://registry.npmjs.org/@luxalgo/vela/-/vela-0.8.4.tgz        | tar xz -C vela
-curl -sL https://registry.npmjs.org/@luxalgo/vela-pinets/-/vela-pinets-0.2.16.tgz | tar xz -C vela-pinets
+curl -sL https://registry.npmjs.org/@luxalgo/vela/-/vela-0.8.5.tgz        | tar xz -C vela
+curl -sL https://registry.npmjs.org/@luxalgo/vela-pinets/-/vela-pinets-0.2.17.tgz | tar xz -C vela-pinets
 # the module closure: install the four entry packages, then vendor every package npm pulled in
 npm install --no-audit --no-fund @zag-js/vanilla @zag-js/dialog @zag-js/menu @zag-js/tooltip
 ```

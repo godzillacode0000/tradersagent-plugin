@@ -26,13 +26,13 @@ stated.
   obligations for closed-source and hosted use). This project takes the AGPL path deliberately (free
   distribution, no monetisation); the commercial option is recorded here so a later decision to
   close or charge has a known door. — <https://github.com/LuxAlgo/Vela-pinets> · <https://github.com/LuxAlgo/PineTS>
-- **How it is used:** `@luxalgo/vela-pinets@0.2.16` is **vendored unmodified** at
+- **How it is used:** `@luxalgo/vela-pinets@0.2.17` is **vendored unmodified** at
   `console/frontend/vendor/vela-pinets/dist/` and served from there. Its `PineEngine` imports `pinets`
   as an external module, which the page's import map resolves to the patched build below — so
   "Add to chart" runs the fork's engine. Its `PineWorkerEngine` is the exception: that class's worker
   is an engine copy **inlined into vela-pinets' dist** (unpatched by this project). As of vela-pinets
-  **0.2.16** that inlined copy is PineTS **0.11.0** (upstream's changelog: "Built against pinets
-  0.11.0"), i.e. at or above the 0.10.0 floor this file reasons about below; the earlier vendored
+  **0.2.17** that inlined copy is PineTS **0.12.0** (upstream's changelog: "Built against pinets
+  0.12.0"), i.e. at or above the 0.10.0 floor this file reasons about below; the earlier vendored
   build (0.2.12, read from the v0.2.12 tag's lockfile, audited 2 Oct 2026) inlined 0.9.32, below the
   floor. Either way the worker path is "without this project's patches". The console does not register it
   by default; `?engine=worker` on the console URL (or localStorage `luxalgo-web:pine-engine` = `worker`)
@@ -40,10 +40,10 @@ stated.
   worker also carries the model builder, which is not
   exported for reuse.
   The **`pinets` engine is redistributed in this repository** at
-  `console/frontend/vendor/pinets/pinets.min.browser.es.js` (690 KB / 690,220 bytes, browser-ES build) and is what the
+  `console/frontend/vendor/pinets/pinets.min.browser.es.js` (771 KB / 770,661 bytes, browser-ES build) and is what the
   import map serves; the AGPL text travels with it as `vendor/pinets/LICENSE`.
-  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `f5ec571`
-    (branch `fix/p1-p8-on-0.11`; = upstream `v0.11.0` plus THREE patches — UDT field history reads, a
+  - Built from the fork **<https://github.com/godzillacode0000/PineTS>** at commit `ea8562a`
+    (branch `fix/p1-p8-on-0.12`; = upstream `v0.12.0` plus THREE patches — UDT field history reads, a
     declaration reached by a walker keeping its scope and store, and a split element identified by the
     node the split built rather than by its name; the five other classes the previous build patched
     (`.all` arrays, comparison operand chains, UDT name shadows, implicit-return bases, operand
@@ -54,10 +54,11 @@ stated.
     anyone who receives it can ask for the complete corresponding source, and the fork above is that
     source for the engine. Bundling was a deliberate decision (free distribution, no monetisation) —
     the earlier policy was CDN-only, precisely to keep the combined work out of the AGPL.
-  - The engine CARRIES three patches (2 Oct), all PUBLISHED on the fork's branch
-    `fix/p1-p8-on-0.11` (<https://github.com/godzillacode0000/PineTS/tree/fix/p1-p8-on-0.11>):
-    UDT field history reads (`56f6d3a`), a walker-reached declaration (`2b5ff18`), a split element
-    identified by node rather than name (`e705e12`) — the same name-collision class the audit flagged
+  - The engine CARRIES three patches (2 Oct, rebased onto 0.12.0 on 20 Oct), all PUBLISHED on the
+    fork's branch `fix/p1-p8-on-0.12`
+    (<https://github.com/godzillacode0000/PineTS/tree/fix/p1-p8-on-0.12>):
+    UDT field history reads (`38aef6b`), a walker-reached declaration (`d801007`), a split element
+    identified by node rather than name (`ea8562a`) — the same name-collision class the audit flagged
     as its #26; the earlier eight-patch build's other five classes went upstream as part of 0.11.0.
     The fixes with upstream interest were also submitted as PRs to LuxAlgo/PineTS (`#387`, `#386`,
     open on 2 Oct). The

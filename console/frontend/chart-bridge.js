@@ -25,6 +25,33 @@
      stamp in the heartbeat, "this view runs build X, the server serves Y" is visible from the
      agent's side instead of looking like a broken feature. */
   let BUILD = 'pending';
+  /* The desk's owner routing (19 Oct): this page reports whether it is on screen, and the backend
+     hands the right to execute to the newest VISIBLE view with bars. A page that is not the owner
+     shows the passive banner below and executes nothing — the old race could route a command to a
+     background tab and answer "the chart did not answer … within 45s" while the pane stood ready. */
+  let iOwnTheDesk = true;            // optimistic until the backend says otherwise
+  function setPassive(on) {
+    const wasOn = !iOwnTheDesk;
+    iOwnTheDesk = !on;
+    const el = document.getElementById('passive-view');
+    if (el) el.hidden = !on;
+    const bar = document.querySelector('.statusbar');
+    if (bar) bar.classList.toggle('has-passive', on);   // the bar shows for a banner with something to say
+    if (on && !wasOn) {
+      // say it once, in the activity line's own voice — the banner carries the standing state
+      try { if (window.taToast) window.taToast('Another desk view is driving the chart — this one is passive'); }
+      catch (err) { /* no toast surface */ }
+    }
+  }
+  document.addEventListener('visibilitychange', () => { heartbeat(); }, false);
+  /* "Use this view" on the banner: deliberate ownership, outranking the heartbeat rule. */
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('#passive-view') : null;
+    if (!btn) return;
+    Promise.resolve().then(() => api('/api/chart/owner', { viewer: VIEWER })).then((out) => {
+      if (out && out.owner === VIEWER) setPassive(false);
+    }).catch(() => { /* the next poll retries the read; the banner stays honest until it lands */ });
+  }, false);
   const POLL_FAST = COMMAND_EVERY;   // no push channel: keep asking on the original schedule
   const POLL_SLOW = 15000;           // push channel is live: polling is only a safety net
   let lastCommandId = 0;
@@ -259,6 +286,19 @@
         layout: 'workspace',
         build: BUILD,              // the frontend files this frame loaded (see /api/build)
         viewer: VIEWER,            // which console instance this is — a stale frame says so
+        hidden: (typeof document !== 'undefined' && document.visibilityState === 'hidden'),
+        /* What the page has STORED for the next boot, read the way restore() reads it (18 Oct):
+           `studies` above says what is live; this says what will come back if the pane closes now.
+           The two disagreeing is exactly the state that used to be invisible until the operator
+           reopened the pane and found nothing. Never a mutation — a reader. */
+        store: (() => {
+          try {
+            const raw = localStorage.getItem('luxalgo-web:last-run');
+            if (!raw) return { run: null };
+            const s = JSON.parse(raw) || {};
+            return { run: String(s.name || '').slice(0, 60) || null, at: s.at || null, fails: s.fails || 0 };
+          } catch (err) { return { run: 'unreadable' }; }
+        })(),
         /* Why the heartbeat reads what it reads: after the workspace swap a page can fall back to the
            bare chart and still look healthy (the pane paints, the bridge says "—"), so the reason is
            part of the state instead of a guess. */
@@ -378,6 +418,7 @@
     try {
       const claim = await api('/api/chart/claim', { id: command.id, viewer: VIEWER });
       if (claim && claim.claimed === false) {
+        if (claim.owner && claim.owner !== VIEWER) setPassive(true);   // routed elsewhere: say so, visibly
         return { id: command.id, ok: false, skipped: 'another view is running it' };
       }
     } catch (err) {
@@ -1656,11 +1697,13 @@
         return;
       }
       const data = await api('/api/chart/commands?since=' + lastCommandId);
+      if (data && 'owner' in data) setPassive(Boolean(data.owner) && data.owner !== VIEWER);
       for (const command of data.commands || []) {
         const id = Number(command.id) || 0;
         lastCommandId = Math.max(lastCommandId, id);
         if (seen.has(id)) continue;
         seen.add(id);
+        if (!iOwnTheDesk) continue;      // routed to the owner: skip, but move the cursor past it
         await run(command);
       }
     } catch (err) {

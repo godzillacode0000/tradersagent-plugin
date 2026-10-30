@@ -34,6 +34,21 @@ const state = { ready: null, ws: null, error: null };
    `'1' | '2v' | '4' | '8'` and `g<cols>x<rows>` are the rest. */
 const LAYOUT = '2h';
 
+/* Whether this page had a saved desk, and what the console last saw — both read BEFORE the workspace
+   exists. Vela writes its own state the moment it boots, and this page starts POSTing its own ("—",
+   still starting) within a second, so a read taken later answers "yes" and "—" instead of the
+   previous desk (measured 17 Oct: the fallback compared against its own just-posted blank). */
+let hadLocalState = false;
+try { hadLocalState = Boolean(localStorage.getItem('vela-workspace')); } catch (err) { hadLocalState = false; }
+const consoleState = (async () => {
+  try {
+    const res = await fetch('/api/chart/state');
+    const payload = await res.json().catch(() => null);
+    const data = payload && payload.ok ? payload.data : null;
+    return data && data.symbol && data.symbol !== '—' ? data : null;
+  } catch (err) { return null; }
+})();
+
 window.__wsApp = {
   get ws() { return state.ws; },
   get error() { return state.error; },
@@ -397,6 +412,43 @@ state.ready = (async () => {
     try { ws.on('state:changed', finish); ws.on('cell:created', finish); } catch {}
     setTimeout(finish, 15000);
   });
+
+  /* Persistence's last line (17 Oct): Vela restores from localStorage first, and that is the first
+     source. But a pane can open where that copy is unavailable — a fresh profile, wiped site data, a
+     partitioned iframe — and then the chart used to come back as BTCUSDT while the console's own
+     /api/chart/state still held the operator's last desk (this page POSTs it every four seconds).
+     When this page has nothing local to restore, ask the console instead of showing a default. */
+  try {
+    if (!hadLocalState) {
+      const saved = await consoleState;
+      const cell = window.__wsApp.activeChart();
+      console.log('[workspace] no local state — console says', saved && saved.symbol, saved && saved.timeframe);
+      if (saved && cell && typeof cell.setMarket === 'function') {
+        /* setMarket never settles for a symbol this workspace's provider cannot serve (the bridge
+           guards the same call the same way) — race it, so the boot is never held hostage. */
+        await Promise.race([
+          cell.setMarket({ symbol: saved.symbol, timeframe: saved.timeframe }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('no answer in 6s')), 6000)),
+        ]);
+        console.log('[workspace] restored from the console:', saved.symbol, saved.timeframe);
+      }
+    }
+  } catch (err) {
+    console.warn('[workspace] restore from the console skipped:', err && err.message);
+  }
+
+  /* The gridline preference, applied at boot (the door writes it; Vela's saved rendererConfig does
+     not carry it — measured 17 Oct: a reload brought the grid back). Same shape as readTheme(). */
+  try {
+    if (localStorage.getItem('luxalgo-web:gridlines') === '0') {
+      const chart0 = window.__wsApp.activeChart();
+      if (chart0 && chart0.renderer && typeof chart0.renderer.set === 'function') {
+        chart0.renderer.set('gridlines', false);
+      }
+    }
+  } catch (err) {
+    /* a preference, not a promise */
+  }
 
   window.dispatchEvent(new CustomEvent('ws-ready', { detail: { ws } }));
   return ws;
