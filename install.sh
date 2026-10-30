@@ -3,6 +3,12 @@
 #
 #   ./install.sh                    copy plugin/ -> $HERMES_HOME/desktop-plugins/traders-desk/, the desk
 #                                   skill, and register the chart's MCP server with Hermes (idempotent)
+#   ./install.sh --all              the one-command install: everything above, plus a python with the `mcp`
+#                                   client (uv when present: seconds, else pip), the console as a service
+#                                   (systemd user unit / launchd agent / detached fallback) and a wait until
+#                                   it answers. Afterwards you only reload the plugins in Hermes.
+#   ./install.sh --setup-python     only the python step (same as ./bin/setup-python.sh)
+#   ./install.sh --service          only the service step (./console/service-linux.sh | service-macos.sh)
 #   ./install.sh --no-mcp           skip the MCP registration (register it later: ./bin/register-mcp.sh)
 #   ./install.sh --doctor           check interpreter, console port, service, plugin folder, MCP server
 #   ./install.sh --uninstall        remove the installed plugin and the desk skill (prints what is left to undo)
@@ -21,9 +27,10 @@
 # Flags may be combined in any order. An unknown flag is an error: it never installs by accident.
 # To refresh the vendored Vela / PineTS builds see console/frontend/vendor/VENDORING.md.
 #
-# This script does not start the console: the plugin only frames it, so the console must be
-# listening on http://127.0.0.1:$PORT (see console/start.sh and the README's service section).
+# Without --all / --service this script does not start the console: the plugin only frames it, so the
+# console must be listening on http://127.0.0.1:$PORT (see console/start.sh and the README).
 set -euo pipefail
+START_TS="$(date +%s)"
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
@@ -43,9 +50,9 @@ SKILL_DST="$HERMES_HOME/skills/trading/trader-desk"
 PORT="${PORT:-8787}"
 CONSOLE_URL="${LUXALGO_CONSOLE:-http://127.0.0.1:$PORT}"
 
-usage() { sed -n '2,/^# listening on/p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,/^set -euo pipefail/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 
-DOCTOR=0 UNINSTALL=0 WITH_BT=0 WITH_EDGE=0 WITH_PROP=0 NO_MCP=0
+DOCTOR=0 UNINSTALL=0 WITH_BT=0 WITH_EDGE=0 WITH_PROP=0 NO_MCP=0 ALL=0 SETUP_PY=0 SERVICE=0
 for arg in "$@"; do
   case "$arg" in
     -h|--help)       usage; exit 0 ;;
@@ -55,6 +62,9 @@ for arg in "$@"; do
     --with-edge)     WITH_EDGE=1 ;;
     --with-prop)     WITH_PROP=1 ;;
     --no-mcp)        NO_MCP=1 ;;
+    --all)           ALL=1; SETUP_PY=1; SERVICE=1 ;;
+    --setup-python)  SETUP_PY=1 ;;
+    --service)       SERVICE=1 ;;
     --vendor)        echo "install.sh: --vendor was removed (it rewrote committed files without checking them); see console/frontend/vendor/VENDORING.md" >&2; exit 2 ;;
     *)               echo "install.sh: unknown option '$arg'" >&2; usage >&2; exit 2 ;;
   esac
@@ -88,6 +98,7 @@ if [[ $UNINSTALL -eq 1 ]]; then
   echo "  hermes mcp remove traders-chart            (the MCP registration)"
   echo "  systemctl --user disable --now traders-agent.service   (Linux: if you installed the unit)"
   echo "  ./console/service-macos.sh uninstall                   (macOS: if you installed the LaunchAgent)"
+  echo "  ./console/service-linux.sh uninstall                   (Linux: the unit ./install.sh --all wrote, or the detached console)"
   echo "  ~/.local/state/traders-agent/ (token, paper account)   ~/.local/share/traders-agent/ (caches, Edge Stats, backtest venv)"
   exit 0
 fi
@@ -166,6 +177,13 @@ fi
 mkdir -p "$SKILL_DST"
 cp "$HERE/skills/trader-desk/SKILL.md" "$SKILL_DST/SKILL.md"
 echo "desk skill       -> $SKILL_DST"
+
+# One python with the `mcp` client, made fast (uv if present). Must run before the MCP registration
+# and the service step below: both look for <repo>/.venv first.
+if [[ $SETUP_PY -eq 1 ]]; then
+  echo
+  "$HERE/bin/setup-python.sh" || { echo "install.sh: python setup failed — fix it and run ./bin/setup-python.sh, then ./install.sh --all again" >&2; exit 1; }
+fi
 
 if [[ $WITH_BT -eq 1 ]]; then
   # Optional, and never a default: vectorbt pulls pandas + numba (~840 MB) and needs the network
@@ -273,6 +291,22 @@ if [[ $WITH_PROP -eq 1 ]]; then
   echo "next: open the pane, ⋯ -> Trader's desk -> Prop firms, and press Simulate on a challenge"
 fi
 
+# The console as a service (--all / --service): installs, starts and waits until it answers, so the
+# restart block below must not bounce it a second time.
+SERVICE_DONE=0
+if [[ $SERVICE -eq 1 ]]; then
+  echo
+  case "$(uname -s)" in
+    Darwin) SERVICE_SH="$HERE/console/service-macos.sh" ;;
+    *)      SERVICE_SH="$HERE/console/service-linux.sh" ;;
+  esac
+  if env PORT="$PORT" "$SERVICE_SH" install; then
+    SERVICE_DONE=1
+  else
+    echo "warning: the service step failed — start the console yourself with ./console/start.sh" >&2
+  fi
+fi
+
 # Restart the console if a user unit is running it.
 #
 # A running console keeps its Python in memory: editing chart_bridge.py (or any backend module) and
@@ -288,7 +322,9 @@ elif command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files tr
   UNIT="traders-agent.service"
 fi
 
-if [[ -n "$UNIT" ]] && systemctl --user is-active --quiet "$UNIT"; then
+if [[ $SERVICE_DONE -eq 1 ]]; then
+  :   # just installed and started above
+elif [[ -n "$UNIT" ]] && systemctl --user is-active --quiet "$UNIT"; then
   systemctl --user restart "$UNIT"
   # Wait for it to actually answer before judging it. Measured on this machine: the console needs
   # ~7s to come up (it opens an MCP session with a remote server, then binds the port). An earlier
@@ -307,7 +343,7 @@ if [[ -n "$UNIT" ]] && systemctl --user is-active --quiet "$UNIT"; then
   fi
 elif [[ -n "$UNIT" ]]; then
   echo "console not running -> $UNIT (start it before using the pane)"
-else
+elif [[ $SERVICE_DONE -eq 0 ]]; then
   echo "no user unit found — start the console yourself with ./console/start.sh"
   echo "  macOS: keep it running across logins -> ./console/service-macos.sh install (docs/MACOS.md)"
 fi
@@ -323,6 +359,21 @@ if [[ $NO_MCP -eq 0 ]]; then
     echo "warning: could not register the MCP server yet — run ./bin/register-mcp.sh once the" >&2
     echo "         console's python is set up (./install.sh --no-mcp skips this step)" >&2
   fi
+fi
+
+if [[ $ALL -eq 1 ]]; then
+  READY="not answering yet"
+  curl -fsS --max-time 3 "$CONSOLE_URL/api/health" >/dev/null 2>&1 && READY="answering on $CONSOLE_URL"
+  cat <<EOF_ALL
+
+Done in $(( $(date +%s) - START_TS ))s. The console is $READY.
+Last step, in Hermes Desktop:
+  1. reload the plugins     Cmd/Ctrl+K -> "Reload desktop plugins"
+  2. click the row          left sidebar -> "Trader's Agent"
+  (If the row is missing: Settings -> Plugins -> "Trader's Agent" -> on. New agent sessions get the chart tools.)
+Check everything any time:  ./install.sh --doctor
+EOF_ALL
+  exit 0
 fi
 
 cat <<'EOF'

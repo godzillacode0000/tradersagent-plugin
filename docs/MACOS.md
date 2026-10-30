@@ -5,6 +5,9 @@ Linux README assumes differently: the interpreter and the service.
 
 ## One-time setup
 
+Shortcut: `./install.sh --all` does this setup (with `uv` when installed, else a `python3.11+` venv + pip), the
+LaunchAgent and the MCP registration in one go. The manual steps below are what it does.
+
 The console needs Python 3.11+ with the `mcp` client. macOS's `/usr/bin/python3`
 is 3.9, so give the repo its own venv:
 

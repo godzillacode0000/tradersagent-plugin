@@ -4,6 +4,54 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Changed
+
+- **The replay strip is a glass capsule** (30 Oct), the operator's pick of two designs. One frosted
+  pill, about 430 px: the scrubber is its top edge (white playhead, the range's first and last bar fade
+  in on hover), Play is the one bright control and turns into Pause, back-to-start and next-bar flank
+  it as icons, the cursor time reads as date over clock (still the door to the calendar), a ring beside
+  "N bars left" fills as this replay advances, and the speed is a chip that opens the same menu. The
+  speed menu and the calendar take the same glass. Everything the strip did still works: seek on
+  release, Start bar, the drag handle and its saved spot, the paper broker's replay price. Icon-only
+  buttons carry names for screen readers; focus is visible; the count has a fixed width so the pill
+  does not wobble during playback. In a narrow Hermes pane the words "bars left" drop and the number
+  and ring stay. Verified in Chromium at 1150, 620 and 420 px, dark and light. Eight tests in
+  `test_replay.py`.
+
+### Fixed
+
+- **The chart sprang back to its right edge after a drag, in replay and out** (30 Oct). Two faults in
+  `nudgeChart()` (app.js): its repaint dispatched a window `resize`, and the resize handler called
+  `nudgeChart()` again — an endless loop, measured at 140 view resets in 10 idle seconds; and each
+  reset re-applied `getVisibleRange()`, which Vela caps at the newest bar in whole bars, so the space
+  the operator had dragged in was thrown away and the zoom crept. The handler now ignores synthetic
+  resizes (`isTrusted`), and the repaint is Vela's `panBy(0)`: same zoom, same position, full redraw.
+  Verified in Chromium: 0 resets idle; a drag into empty space or history stays put, in replay too
+  (stepping or playing while looking at older candles leaves the view alone); the canvas still
+  repaints after a panel flip and a window resize.
+- **Long tick-store windows came back short and slow** (30 Oct): `fxticks.bars` grew its window a day
+  per pass from a 0.4x guess, re-reading every hour on every pass and giving up after 60. On a two-year
+  store 500 x 4h returned 404 bars in 12 s and 500 x D returned 186 in 67 s, with no sign anything was
+  missing. The window is now sized once from the timeframe (1.5x the trading time plus a long weekend,
+  one wider pass for holidays, never before the store's first day): 500 and 500, in 0.8 s and 4.9 s.
+  Same bars as before wherever the old walk did reach. Weekends cost one stat instead of 24.
+- **The hour cache held raw ticks**: 4,096 decoded hours of a busy pair ran to gigabytes. Each hour is
+  now packed as at most 60 minute bars (~4 KB), so 20,000 hours stay under ~80 MB. The docstring's
+  promise of an on-disk `fx/bars-v1` cache, which never existed, is gone, along with the unused
+  `TRADERS_FX_BARS`.
+- **One truncated hour sank the whole request**: a download cut off mid-write left a half gzip that
+  raised inside `bars()`, so the provider dropped the store and went to the network. Unreadable hours
+  are now skipped and counted (`unreadable_hours` in the meta). `tools/fx-fetch.py` writes each hour to a
+  `.part` file and renames it, so it no longer leaves them.
+- **`tools/fx-fetch.py` cached hours that were not final**: the walk ended at the current hour (cached
+  half-full for good), and a 404 the feed had simply not published yet became a permanent `.empty` hole.
+  It now stops at the last complete hour and marks a 404 empty only once it is a day old.
+- **The Data tab could read "Reading the tick store…" forever**: `fxdata.status()` returned early when
+  the network cache folder did not exist and dropped the `ticks` block, which is exactly the case for an
+  operator who has only run `fx-fetch.py`. One shape always now, plus a `yahoo` flag. The card's Yahoo
+  line follows the server instead of a constant, and it re-reads the store on every visit.
+- **CI was red on `main`**: an unused `import json` in `tools/fx-fetch.py` failed the ruff gate.
+
 ### Added
 
 - **A Data tab in the desk sheet** (21 Oct), so the source is visible instead of inferred: it reads
@@ -133,10 +181,34 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Fixed
 
+- **`TRADERS_AGENT_ALLOWED_HOSTS` was an undocumented change to who can write.** Measured, not inferred: with a
+  name on the list, a request carrying it from loopback is handed the POST token and `POST /api/broker` answers
+  **200**. That is the intended trade (`tailscale serve` terminates here, so your phone arrives as 127.0.0.1),
+  but it means every device on that tailnet can approve paper orders, drive the chart and run Pine **with
+  `ALLOW_LAN` unset** — and the variable appeared in no document at all, while the README's `ALLOW_LAN` row
+  still promised "LAN peers get a read-only console", which stopped describing this path. The README now carries
+  the variable, says plainly that each name is a full-trust door, and corrects the `ALLOW_LAN` row; three live-socket
+  tests pin the token, the write and the still-refused unknown name (removing the name from the allowlist fails two
+  of them). No behaviour changed — only what the repository admits to.
+- **The package README documented an install that is no longer the short one** (`./console/start.sh` + `./install.sh`,
+  with no mention of `--all`); it now leads with `./install.sh --all`.
+
 - **The README still claimed Linux-only.** macOS support shipped on 13 Oct (`docs/MACOS.md`, the repo venv,
   `console/service-macos.sh` behind launchd), so the OS row, the service section and the platform bullet now
   say Linux + macOS, name the launchd counterpart of the systemd unit, and link the Mac setup. Windows stays
   out of scope, and `docs/HANDOFF.md`'s operator line now names both machines.
+- **`./install.sh --all`, the one-command install**, plus the two pieces it is made of. `bin/setup-python.sh` gives the console and the
+  agent a python with the `mcp` client: `uv` when it is on PATH (5.6 s against 286 s for pip in the same slow sandbox), else
+  `python3.11+ -m venv` + pip; a python you already have that imports `mcp` is left alone. It asks for Python 3.12, then 3.13, then
+  3.11, never "the newest": a bare `>=3.11` once made uv choose a 3.14 release candidate whose pydantic could not import (found by
+  running it, held by a test). `console/service-linux.sh` is the systemd counterpart of `service-macos.sh` (user unit
+  `traders-agent.service`; a detached console where there is no systemd user session, said plainly; an already-running console, or the
+  developer's `luxalgo-web.service`, is left alone). `--setup-python` and `--service` run each step alone. Nothing about what the
+  plugin does changes; a plain `./install.sh` behaves as before. Tests: `test_fast_install`.
+- **DeepSeek Harness adapter** (`adapters/dsh/install-dsh.sh`): installs the desk skill and registers the `traders-chart` MCP server for
+  dsh. `--mcp-file` merges the entry into a JSON file you name (other servers kept, backup made, invalid JSON refused), `--doctor`
+  runs a real MCP handshake (56 tools) and checks the console, `--uninstall` undoes it. The Hermes pane stays Hermes-only. Not yet
+  tried against a real dsh install.
 
 ### Changed
 

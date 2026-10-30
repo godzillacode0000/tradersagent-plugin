@@ -1405,97 +1405,144 @@ pre {
 @keyframes ta-order-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .ta-order { animation: none; } .ta-order__btn { transition: none; } }
 
-/* ── Replay (Phase 6, 3 Oct; restyled 4 Oct to Vela's v0.8.0 Bar-replay release graphic) ─────────
+/* ── Replay (Phase 6, 3 Oct; the "Capsule" redesign, 30 Oct) ──────────────────────────────────────
    The operator's call: the strip lives IN the chart ("jalur kawalan dalam chart"), bottom-centre —
    above the date axis, clear of the order card and the account popover (both in the top band) and
    of the price axis (right). Nothing is on screen until replay is on, so the chart stays whole.
-   The row takes the release graphic's composition (⏮ Start bar · ▶ · ⏭ | 1× ⌄ | time | bars left |
-   ✕) with a scrubber over it; motion is opacity + transform only (a 2016 Pavilion renders those on
-   the GPU). */
+   30 Oct he picked "Capsule" from two designs: one frosted-glass pill. The scrubber is its top edge
+   (the range ends appear on hover), Play is the only bright control, the cursor time reads as date
+   over clock, a ring beside "N bars left" fills as the replay advances, the speed is a chip.
+   Motion is opacity + transform only (a 2016 Pavilion renders those on the GPU). */
 .ta-replay {
-  position: fixed; bottom: 56px; left: 50%; transform: translateX(-50%);
-  z-index: 55; display: flex; flex-direction: column; gap: 3px;
-  padding: 7px 10px 5px; border-radius: var(--lx-radius-xl);
-  background: var(--lx-surface-2); border: 1px solid var(--lx-border-strong);
-  box-shadow: var(--lx-shadow-3); color: var(--lx-fg); font-size: var(--lx-fs-sm);
+  position: fixed; bottom: 58px; left: 50%; transform: translateX(-50%);
+  z-index: 55; display: flex; align-items: center; height: 48px; padding: 0 8px 0 6px;
+  border-radius: var(--lx-radius-pill); color: var(--lx-fg); font-size: var(--lx-fs-sm);
+  font-variant-numeric: tabular-nums;
+  background: var(--lx-surface-2);
+  background: color-mix(in srgb, var(--lx-surface-2) 88%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(150%); backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid color-mix(in srgb, var(--lx-fg) 9%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--lx-fg) 6%, transparent),
+              0 10px 30px rgba(0, 0, 0, .38), 0 2px 6px rgba(0, 0, 0, .22);
   animation: ta-replay-in var(--lx-dur-fast) var(--lx-ease) both;
 }
+:root[data-theme="light"] .ta-replay { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 10px 28px rgba(0, 0, 0, .14), 0 2px 6px rgba(0, 0, 0, .08); }
 .ta-replay[hidden] { display: none; }
-.ta-replay__row { display: flex; align-items: center; gap: 2px; }
-.ta-replay__sep { width: 1px; align-self: stretch; margin: 4px 6px; background: var(--lx-border); }
-.ta-replay__label { font-family: var(--lx-font-mono); color: var(--lx-fg); white-space: nowrap; padding: 0 3px; }
-.ta-replay__left { font-family: var(--lx-font-mono); color: var(--lx-fg-muted); white-space: nowrap; padding: 0 3px; }
+.ta-replay__row { display: flex; align-items: center; gap: 4px; }
+.ta-replay__sep { width: 1px; height: 22px; margin: 0 6px; background: color-mix(in srgb, var(--lx-fg) 12%, transparent); }
 .ta-replay__btn {
-  all: unset; box-sizing: border-box; cursor: pointer; min-width: 26px; text-align: center;
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  padding: 3px 6px; border-radius: var(--lx-radius-md); color: var(--lx-fg);
-  transition: background var(--lx-dur-fast) var(--lx-ease);
+  all: unset; box-sizing: border-box; cursor: pointer; display: inline-grid; place-items: center;
+  color: var(--lx-fg); transition: background var(--lx-dur-fast) var(--lx-ease), transform var(--lx-dur-fast) var(--lx-ease);
 }
-.ta-replay__btn svg { width: 13px; height: 13px; display: block; fill: currentColor; }
-.ta-replay__btn:hover, .ta-replay__btn:focus-visible { background: var(--lx-accent-soft); }
-.ta-replay__btn--start { padding: 3px 8px 3px 5px; }
-.ta-replay__btn--speed { padding: 3px 5px; color: var(--lx-fg-muted); }
-.ta-replay__btn--x { color: var(--lx-fg-muted); }
-/* The scrubber: full width of the pill, the filled part painted from --ta-fill (set in replay.js —
-   a range input's track cannot be styled from its value). */
-.ta-replay__scrub { display: flex; flex-direction: column; gap: 1px; min-width: 340px; }
+.ta-replay__btn svg { width: 14px; height: 14px; display: block; fill: currentColor; }
+.ta-replay__btn:hover { background: color-mix(in srgb, var(--lx-fg) 8%, transparent); }
+.ta-replay__btn:focus-visible, .ta-replay__drag:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--lx-accent); }
+.ta-replay__btn:active { transform: scale(.94); }
+.ta-replay__btn--icon { width: 32px; height: 32px; border-radius: 50%; }
+/* Play: the one bright control */
+.ta-replay__btn--play {
+  width: 36px; height: 36px; border-radius: 50%; color: #fff;
+  background: radial-gradient(120% 120% at 30% 20%, color-mix(in srgb, var(--lx-accent) 70%, #fff), var(--lx-accent) 60%);
+  box-shadow: 0 0 0 4px var(--lx-accent-soft), 0 4px 12px color-mix(in srgb, var(--lx-accent) 45%, transparent);
+}
+.ta-replay__btn--play:hover { background: radial-gradient(120% 120% at 30% 20%, color-mix(in srgb, var(--lx-accent) 60%, #fff), var(--lx-accent) 65%); }
+.ta-replay__btn--play svg { margin-left: 2px; }
+.ta-replay__btn--play.is-playing svg { margin-left: 0; }
+.ta-replay__btn--play:focus-visible { box-shadow: 0 0 0 2px var(--lx-surface-2), 0 0 0 4px var(--lx-accent); }
+/* the cursor time: date over clock — also the door to the calendar */
+.ta-replay__btn--time { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 4px 8px; border-radius: 10px; line-height: 1.1; }
+.ta-replay__label { font-size: 13px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; color: var(--lx-fg); }
+.ta-replay__clock { font-size: 11px; color: var(--lx-fg-muted); white-space: nowrap; }
+/* bars left, with the ring that fills as this replay advances */
+.ta-replay__left { display: inline-flex; align-items: center; gap: 6px; padding: 0 6px; color: var(--lx-fg-muted); white-space: nowrap; }
+.ta-replay__left b { color: var(--lx-fg); font-weight: 600; min-width: 3ch; line-height: 1; text-align: right; } /* fixed width: the pill must not wobble as 100 becomes 99 */
+.ta-replay__left small { font-size: inherit; line-height: 1; margin-left: -2px; }
+.ta-replay__ring { width: 18px; height: 18px; flex: none; transform: rotate(-90deg); }
+.ta-replay__ring circle { fill: none; stroke-width: 2.4; }
+.ta-replay__ring circle:first-child { stroke: color-mix(in srgb, var(--lx-fg) 18%, transparent); }
+.ta-replay__ring [data-ring] { stroke: var(--lx-accent); stroke-linecap: round; stroke-dasharray: 0 44; }
+.ta-replay__btn--speed { height: 26px; padding: 0 9px; border-radius: var(--lx-radius-pill); font-weight: 600; background: color-mix(in srgb, var(--lx-fg) 8%, transparent); }
+.ta-replay__btn--speed:hover { background: color-mix(in srgb, var(--lx-fg) 14%, transparent); }
+.ta-replay__btn--x { width: 28px; height: 28px; border-radius: 50%; color: var(--lx-fg-muted); }
+.ta-replay__btn--x svg { width: 13px; height: 13px; }
+.ta-replay__btn--x:hover { color: var(--lx-fg); }
+/* The scrubber is the pill's top edge: a 3px track, a white playhead ringed in the accent. The filled
+   part is painted from --ta-fill (set in replay.js — a range input's track cannot be styled from its
+   value). The range ends fade in above it on hover, so the pill stays quiet otherwise. */
+.ta-replay__scrub { position: absolute; left: 22px; right: 22px; top: -8px; height: 16px; }
 .ta-replay--flat .ta-replay__scrub { display: none; }
-.ta-replay__range { -webkit-appearance: none; appearance: none; width: 100%; height: 14px; margin: 0; background: transparent; cursor: pointer; }
+.ta-replay__range { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 16px; margin: 0; background: transparent; cursor: pointer; }
+.ta-replay__range:focus-visible { outline: none; }
 .ta-replay__range::-webkit-slider-runnable-track {
-  height: 3px; border-radius: 2px;
-  background: linear-gradient(90deg, var(--lx-accent) var(--ta-fill, 0%), var(--lx-border-strong) var(--ta-fill, 0%));
+  height: 3px; border-radius: 3px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--lx-accent) 55%, transparent), var(--lx-accent) var(--ta-fill, 0%),
+    color-mix(in srgb, var(--lx-fg) 14%, transparent) var(--ta-fill, 0%));
 }
 .ta-replay__range::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none; width: 11px; height: 11px; margin-top: -4px;
-  border-radius: 50%; background: var(--lx-accent); border: none;
+  -webkit-appearance: none; appearance: none; width: 11px; height: 11px; margin-top: -4px; border-radius: 50%;
+  background: #fff; border: none; box-shadow: 0 0 0 3px var(--lx-accent), 0 2px 6px rgba(0, 0, 0, .4);
+  transition: transform var(--lx-dur-fast) var(--lx-ease);
 }
-.ta-replay__ends { display: flex; justify-content: space-between; gap: 12px; }
-.ta-replay__end { font-size: 10px; font-family: var(--lx-font-mono); color: var(--lx-fg-muted); white-space: nowrap; }
-.ta-replay__speeds {
-  position: absolute; bottom: calc(100% + 6px); z-index: 56; display: flex; flex-direction: column;
-  min-width: 64px; padding: 4px; border-radius: var(--lx-radius-md);
-  background: var(--lx-surface-2); border: 1px solid var(--lx-border-strong); box-shadow: var(--lx-shadow-3);
+.ta-replay__range:hover::-webkit-slider-thumb, .ta-replay__range:focus-visible::-webkit-slider-thumb { transform: scale(1.25); }
+.ta-replay__ends {
+  position: absolute; left: 0; right: 0; bottom: calc(100% - 2px); display: flex; justify-content: space-between; gap: 12px;
+  opacity: 0; transform: translateY(3px); pointer-events: none;
+  transition: opacity var(--lx-dur-fast) var(--lx-ease), transform var(--lx-dur-fast) var(--lx-ease);
 }
+.ta-replay__scrub:hover .ta-replay__ends, .ta-replay__scrub:focus-within .ta-replay__ends { opacity: 1; transform: none; }
+.ta-replay__end {
+  font-size: 10.5px; color: var(--lx-fg-muted); white-space: nowrap; padding: 1px 6px; border-radius: 6px;
+  background: color-mix(in srgb, var(--lx-surface-2) 92%, transparent);
+}
+/* the speed menu and the calendar: the same glass, opening upward */
+.ta-replay__speeds, .ta-replay__cal {
+  position: absolute; bottom: calc(100% + 10px); z-index: 56; border-radius: 14px;
+  background: var(--lx-surface-2);
+  background: color-mix(in srgb, var(--lx-surface-2) 94%, transparent);
+  -webkit-backdrop-filter: blur(16px) saturate(150%); backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid color-mix(in srgb, var(--lx-fg) 10%, transparent); box-shadow: var(--lx-shadow-3);
+}
+.ta-replay__speeds { display: flex; flex-direction: column; min-width: 72px; padding: 4px; }
 .ta-replay__speed {
-  all: unset; box-sizing: border-box; cursor: pointer; padding: 3px 10px;
-  border-radius: var(--lx-radius-sm); font-family: var(--lx-font-mono); color: var(--lx-fg); text-align: left;
+  all: unset; box-sizing: border-box; cursor: pointer; padding: 5px 12px;
+  border-radius: 9px; font-weight: 600; color: var(--lx-fg); text-align: left;
 }
-.ta-replay__speed:hover, .ta-replay__speed:focus-visible { background: var(--lx-accent-soft); }
+.ta-replay__speed:hover, .ta-replay__speed:focus-visible { background: color-mix(in srgb, var(--lx-fg) 8%, transparent); }
 .ta-replay__speed.is-on { background: var(--lx-accent-soft); color: var(--lx-accent); }
-/* The drag handle (the graphic's ⠿) and the free spot it drops the strip into. */
-.ta-replay__drag { all: unset; box-sizing: border-box; cursor: grab; display: inline-flex; align-items: center; padding: 3px 3px 3px 1px; color: var(--lx-fg-muted); }
+/* The drag handle (⠿) and the free spot it drops the strip into. */
+.ta-replay__drag { all: unset; box-sizing: border-box; cursor: grab; display: inline-flex; align-items: center; padding: 6px 2px; border-radius: 6px; color: var(--lx-fg-muted); opacity: .6; }
 .ta-replay__drag svg { width: 12px; height: 12px; display: block; fill: currentColor; }
-.ta-replay__drag:hover, .ta-replay__drag:focus-visible { color: var(--lx-fg); }
+.ta-replay__drag:hover { opacity: 1; }
 .ta-replay__drag:active { cursor: grabbing; }
 .ta-replay--free { left: auto; bottom: auto; transform: none; animation-name: ta-replay-in-free; }
-/* The timestamp button and the calendar it opens (the graphic's top panel). */
-.ta-replay__btn--time { padding: 3px 7px; }
-.ta-replay__cal {
-  position: absolute; bottom: calc(100% + 6px); z-index: 56; width: 236px; padding: 8px 9px 9px;
-  border-radius: var(--lx-radius-md); background: var(--lx-surface-2);
-  border: 1px solid var(--lx-border-strong); box-shadow: var(--lx-shadow-3);
-}
-.ta-replay__cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
-.ta-replay__nav { all: unset; box-sizing: border-box; cursor: pointer; padding: 2px 7px; border-radius: var(--lx-radius-sm); color: var(--lx-fg-muted); }
-.ta-replay__nav:hover, .ta-replay__nav:focus-visible { background: var(--lx-accent-soft); color: var(--lx-fg); }
+/* The calendar the timestamp opens. */
+.ta-replay__cal { width: 244px; padding: 10px 10px 10px; }
+.ta-replay__cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.ta-replay__nav { all: unset; box-sizing: border-box; cursor: pointer; padding: 4px 8px; border-radius: 8px; color: var(--lx-fg-muted); }
+.ta-replay__nav:hover, .ta-replay__nav:focus-visible { background: color-mix(in srgb, var(--lx-fg) 8%, transparent); color: var(--lx-fg); }
 .ta-replay__nav svg { width: 11px; height: 11px; display: block; }
 .ta-replay__cal-head [data-cal-title] { font-weight: 600; }
-.ta-replay__cal-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; margin-bottom: 2px; }
+.ta-replay__cal-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-bottom: 2px; }
 .ta-replay__cal-week span { font-size: 10px; color: var(--lx-fg-muted); text-align: center; }
-.ta-replay__cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
-.ta-replay__day { all: unset; box-sizing: border-box; cursor: pointer; text-align: center; font-size: var(--lx-fs-sm); padding: 3px 0; border-radius: var(--lx-radius-sm); color: var(--lx-fg); }
-.ta-replay__day:hover, .ta-replay__day:focus-visible { background: var(--lx-accent-soft); }
-.ta-replay__day.is-on { background: var(--lx-accent-soft); color: var(--lx-accent); font-weight: 600; }
+.ta-replay__cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.ta-replay__day { all: unset; box-sizing: border-box; cursor: pointer; text-align: center; font-size: var(--lx-fs-sm); padding: 4px 0; border-radius: 50%; aspect-ratio: 1; display: grid; place-items: center; color: var(--lx-fg); }
+.ta-replay__day:hover, .ta-replay__day:focus-visible { background: color-mix(in srgb, var(--lx-fg) 8%, transparent); }
+.ta-replay__day.is-on { background: var(--lx-accent); color: #fff; font-weight: 600; }
 .ta-replay__day.is-dim { color: var(--lx-fg-muted); opacity: .4; cursor: default; }
 .ta-replay__day.is-dim:hover { background: none; }
-.ta-replay__cal-foot { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+.ta-replay__cal-foot { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
 .ta-replay__chip {
-  font-family: var(--lx-font-mono); font-size: var(--lx-fs-sm); color: var(--lx-fg);
-  border: 1px solid var(--lx-border-strong); border-radius: var(--lx-radius-sm);
-  padding: 2px 8px; background: transparent;
+  font-size: var(--lx-fs-sm); color: var(--lx-fg); font-variant-numeric: tabular-nums;
+  border: 1px solid color-mix(in srgb, var(--lx-fg) 14%, transparent); border-radius: 8px;
+  padding: 3px 9px; background: transparent;
 }
-.ta-replay__time { width: 84px; text-align: center; padding: 2px 4px; }
+.ta-replay__time { width: 112px; text-align: center; padding: 3px 4px; font-family: inherit; }
 .ta-replay__time::-webkit-calendar-picker-indicator { opacity: .5; cursor: pointer; }
+/* A Hermes pane is ~620px: the words "bars left" go, the number and the ring stay. */
+@media (max-width: 680px) {
+  .ta-replay__left small { display: none; }
+  .ta-replay__sep { margin: 0 3px; }
+}
 @keyframes ta-replay-in { from { opacity: 0; transform: translateX(-50%) translateY(6px); } to { opacity: 1; transform: translateX(-50%); } }
 @keyframes ta-replay-in-free { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .ta-replay { animation: none; } .ta-replay__btn { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .ta-replay { animation: none; } .ta-replay__btn, .ta-replay__range::-webkit-slider-thumb, .ta-replay__ends { transition: none; } }

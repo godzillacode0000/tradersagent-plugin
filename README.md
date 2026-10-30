@@ -45,13 +45,32 @@ MCP server) in one local web app — your chat session is left exactly where it 
 | | |
 |---|---|
 | **Hermes Desktop** | v0.21.3 or newer (the plugin uses the `sidebar.nav` + `routes` contribution areas) |
-| **Python** | 3.11+ with the `mcp` client: `pip install mcp` (a venv is fine — point `PY=` at it) |
+| **Python** | 3.11+ with the `mcp` client. `./install.sh --all` (or `./bin/setup-python.sh`) makes a `.venv` with it; or `pip install mcp` yourself and point `PY=` at it |
 | **Network** | for LuxAlgo's MCP endpoint and the Binance data feed; with no market feed the chart stays empty (`chart_state` says `bars None`). The chart engine and Pine runtime are served locally |
 | **Node 20+** *(optional)* | for [Edge Stats](#edge-stats--how-often-did-it-actually-happen) (`./install.sh --with-edge`, ~300 MB) and the prop-firm simulator (`./install.sh --with-prop`, ~10 MB) — both LuxAlgo engines, both local. Without them everything else works and each sheet says what is missing |
 | **Preview resizer** *(optional)* | `libvips` (or ImageMagick, or `ffmpeg`) — see [Catalogue previews](#catalogue-previews-are-kept-on-your-machine). With none of them the console still shows every preview, just at the catalogue's original size |
 | **OS** | Linux (built and verified on Omarchy / Arch + Hyprland) or **macOS** — Macs need the one-time venv + the launchd service; see [`docs/MACOS.md`](docs/MACOS.md). Windows is out of scope. |
 
 ## Install
+
+**One command** (Linux and macOS; about a minute with [uv](https://docs.astral.sh/uv/), a few without it):
+
+```bash
+git clone --depth 1 https://github.com/godzillacode0000/tradersagent-plugin
+cd tradersagent-plugin
+./install.sh --all
+```
+
+`--all` installs the plugin and the desk skill, makes a python with the `mcp` client (`bin/setup-python.sh`: uv when
+it is on PATH, else `python3.11+ -m venv` + pip; it leaves a python you already have alone), installs the console as a
+service (systemd user unit on Linux, LaunchAgent on macOS, a detached process where neither exists), registers the
+chart's MCP server with Hermes, and waits until the console answers. Then, in Hermes Desktop: reload the plugins and
+click the **Trader's Agent** row. Measured on a clean machine: clone 1.5 s, `./install.sh` 0.25 s, console up in 1.6 s;
+the dependency step is the long one (`uv pip install mcp` 5.6 s against 286 s for pip in the same slow sandbox).
+Optional extras stay separate: `--with-edge` (~300 MB), `--with-backtest` (~840 MB). Add `--no-mcp` to skip the
+registration. Re-running is safe.
+
+The same steps by hand:
 
 ```bash
 git clone https://github.com/godzillacode0000/tradersagent-plugin
@@ -393,6 +412,25 @@ tick — measured 37-156 ms on the wire for `add` / `market` / `apply`, ~65-80 m
 healthy, 2 s if it drops) and the file bridge is untouched, so an older view still works. The bridge
 is still not a headless renderer: with no view attached, commands fail fast and say so.
 
+### Using it from the DeepSeek Harness (dsh)
+
+The chart pane is Hermes-only, but the desk is not: the same MCP server (56 tools) and the same skill work from dsh,
+and the agent drives the console's chart exactly as it does from Hermes. Open `http://127.0.0.1:8787/` in a browser tab
+to watch it.
+
+```bash
+./console/start.sh                                   # the console must be running
+./adapters/dsh/install-dsh.sh --mcp-file PATH        # PATH: the JSON file where your dsh lists MCP servers
+./adapters/dsh/install-dsh.sh --doctor               # skill, launcher, a real MCP handshake, the console
+```
+
+It copies the skill to `~/.agents/skills/trader-desk` (`--skills-dir` or `DSH_SKILLS_DIR` to change it) and writes a
+stdio entry into the file you name (it runs `console/mcp/server.py` with `PY`, the repo's `.venv` or a python that has the `mcp` client, same order as `bin/register-mcp.sh`; else `uvx fastmcp run`; `--venv` forces a private venv),
+keeping your other servers and a `.bak-traders` copy. Without `--mcp-file` it prints the entry for you to paste.
+`PORT=9000` points the entry at a console on another port. It reads nothing from dsh itself and writes nowhere else, so
+check your dsh's own docs for the config path. Not verified against a real dsh install yet: the handshake is tested with
+the MCP client, and dsh's skill and config locations are as reported by third-party dsh plugins.
+
 ## Screenshots
 
 | | |
@@ -447,8 +485,8 @@ bin/               register-mcp.sh (the MCP registration on its own) · is-enabl
 | `LUXALGO_CONSOLE` | `http://127.0.0.1:8787` | where the MCP server, `trader-chart` and `library-indicator` find the console (set it with `hermes mcp add … --env LUXALGO_CONSOLE=http://127.0.0.1:9000` when `PORT` is not 8787) |
 | `TRADER_CONSOLE_TOKEN_FILE` | `~/.local/state/traders-agent/console.token` | the POST token the console mints and the MCP server and CLI read |
 | `TRADERS_AGENT_WORKDIR` | `~/Projects/luxalgo-web` if it exists, else `console/agents` | the folder the in-app study bridge runs the agent CLI in (never taken from a request) |
-| `TRADERS_AGENT_ALLOW_LAN` | unset | with `--host 0.0.0.0`, non-loopback peers may receive the POST token — i.e. they can DRIVE the console, not just read it. Unset, a non-loopback peer can read but every write is refused |
-| `TRADERS_AGENT_ALLOWED_HOSTS` | unset | comma-separated extra hostnames/IPs treated as "this machine" by the Origin check (e.g. a tailscale name, so a page served over it can drive the console). It widens who may act through a browser page — add only names you control |
+| `TRADERS_AGENT_ALLOW_LAN` | unset | with `--host 0.0.0.0`, let peers that reach the console **from their own address** receive the POST token; without it they get a read-only console. It does **not** govern a caller arriving through a local reverse proxy — see the row below |
+| `TRADERS_AGENT_ALLOWED_HOSTS` | unset | comma-separated extra `Host` names this console answers to, for a local reverse proxy that forwards the public name (`tailscale serve` does). **Every name you add here is a full-trust door:** the proxy terminates on this machine, so the caller arrives on loopback, is handed the POST token and can write — approve paper orders, drive the chart, run Pine — with `ALLOW_LAN` unset. Only add names that resolve to this machine inside an access-controlled network, and read it as “everyone on that tailnet is me”. Any other name is still refused |
 | `TRADER_PAPER_FILE` | `~/.local/state/traders-agent/paper.json` | the paper account (use another path for a second test console) |
 | `LUXALGO_AGENTS_DIR` | `console/agents` | runtime state: chart bridge files, study threads, shots |
 | `HERMES_CLI` | `hermes` on `PATH` | CLI the in-app study bridge shells out to |
@@ -492,6 +530,12 @@ it from `http://127.0.0.1:8787/api/library/thumb`: **~5 ms warm instead of ~2 s*
 - **The bridge is not a headless renderer.** `trader-chart` and the MCP tools only take effect while
   a chart view is mounted (the Hermes pane or a browser tab); with none attached they fail fast with
   "no chart view attached" rather than hanging. Commands are pushed, so a view answers in tens of ms.
+- **Reaching the console through a proxy widens who can write.** The trust model is “a loopback caller is
+  the human at this machine”. A local reverse proxy (`tailscale serve`) makes every device on that network a
+  loopback caller, so `TRADERS_AGENT_ALLOWED_HOSTS` turns that network into the trusted set — the approve
+  brake on paper orders is then only as strong as the network's own access control. Pinned by
+  `console/backend/tests/test_allowed_hosts_env.py`, which asserts an allowlisted name both receives the token
+  and writes.
 - **One console per machine** on one port. No real orders and no brokerage account exist: the only trading is a
   **simulated Binance spot paper account** (`broker_*`), where the agent can only propose and you approve. The account
   and the journal its fills keep (win rate, profit factor, the realised curve) are one surface — ⋯ → **Trader's desk**.
@@ -523,7 +567,7 @@ python3 -m compileall console/backend                                           
 
 The suite is stdlib-only on purpose — the study store, the chat bridge, the chart bridge and the push
 channel are covered without a browser, a network, or the app — and the MCP tool layer runs against a
-stub console. about 1,130 tests; the MCP ones skip themselves when `fastmcp` is absent (CI sets
+stub console. about 1,314 tests (81 files, 9 skipped on 30 Oct); the MCP ones skip themselves when `fastmcp` is absent (CI sets
 `TRADER_CHART_REQUIRE_MCP=1` so they cannot silently skip there).
 
 CI (`.github/workflows/ci.yml`) has three jobs: the plugin harness (Node 20 — the real plugin first,

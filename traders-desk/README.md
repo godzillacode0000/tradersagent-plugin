@@ -18,10 +18,21 @@ local Python service that lives in the same repository (`console/`) and is start
 operator:
 
 ```shell
-git clone https://github.com/godzillacode0000/tradersagent-plugin
+git clone --depth 1 https://github.com/godzillacode0000/tradersagent-plugin
 cd tradersagent-plugin
-./console/start.sh          # terminal 1 — the console (macOS: see docs/MACOS.md)
-./install.sh                # the plugin + the desk skill + the MCP registration
+./install.sh --all          # the console's python + the service + the plugin + the skill + the MCP registration
+```
+
+`--all` is the whole install: it makes a python with the `mcp` client (`uv` when it is on PATH,
+else a venv + pip), installs the console as a service (systemd user unit, launchd agent, or a
+detached process where neither exists), registers the `traders-chart` MCP server and waits until
+the console answers. The steps still exist on their own if you would rather drive them:
+
+```shell
+./bin/setup-python.sh       # just the interpreter
+./console/start.sh          # the console in the foreground (macOS notes: docs/MACOS.md)
+./install.sh                # just the plugin + the desk skill + the MCP registration
+./install.sh --doctor       # check all of it
 ```
 
 Without the console the pane says so, in one line, instead of showing a blank page. The agent's

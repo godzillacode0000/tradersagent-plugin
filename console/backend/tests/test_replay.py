@@ -266,6 +266,55 @@ class TheStripWearsVelasBarReplayDesign(unittest.TestCase):
         self.assertIn("--lx-accent", block)
 
 
+class TheStripIsTheCapsule(unittest.TestCase):
+    """30 Oct, the operator picked "Capsule" over "Deck": one frosted-glass pill whose top edge is the
+    scrubber, Play as the one bright control, the time as date over clock, a ring that fills beside
+    the bars-left count, the speed as a chip. Everything the old strip did still works."""
+
+    js = _read(FRONT / "replay.js")
+    css = _read(FRONT / "styles.css")
+
+    def rule(self, sel):
+        m = re.search(re.escape(sel) + r" \{(.*?)\}", self.css, re.S)
+        self.assertIsNotNone(m, f"{sel} has no rule")
+        return m.group(1)
+
+    def test_the_pill_is_frosted_glass(self):
+        rule = self.rule(".ta-replay")
+        self.assertIn("var(--lx-radius-pill)", rule)
+        self.assertIn("backdrop-filter", rule)
+        # a solid background first, for a renderer without color-mix
+        self.assertLess(rule.index("background: var(--lx-surface-2)"), rule.index("color-mix(in srgb, var(--lx-surface-2)"))
+
+    def test_the_scrubber_is_the_top_edge_and_its_ends_show_on_hover(self):
+        self.assertRegex(self.rule(".ta-replay__scrub"), r"position:\s*absolute")
+        self.assertRegex(self.rule(".ta-replay__scrub"), r"top:\s*-\d+px")
+        self.assertIn(".ta-replay__scrub:hover .ta-replay__ends", self.css)
+
+    def test_play_is_the_accented_control_and_says_what_it_does(self):
+        self.assertIn("--lx-accent", self.rule(".ta-replay__btn--play"))
+        self.assertIn("playBtn.setAttribute('aria-label'", self.js)
+
+    def test_icon_only_buttons_have_names(self):
+        for name in ('aria-label="Start bar"', 'aria-label="Next bar"', 'aria-label="Leave replay"'):
+            self.assertIn(name, self.js)
+
+    def test_the_time_reads_as_date_over_clock(self):
+        self.assertIn("data-clock", self.js)
+        self.assertIn("fmtDate(state.cursorTime)", self.js)
+
+    def test_the_ring_fills_from_where_this_replay_began(self):
+        self.assertIn("data-ring", self.js)
+        self.assertIn("(state.cursorTime - origin) / (b.last - origin)", self.js)
+        self.assertIn("stroke-dasharray", self.js)
+
+    def test_a_narrow_pane_keeps_the_count_and_drops_the_words(self):
+        self.assertIn(".ta-replay__left small { display: none; }", self.css)
+
+    def test_keyboard_focus_is_visible(self):
+        self.assertIn(".ta-replay__btn:focus-visible", self.css)
+
+
 class TheAgentDoor(unittest.TestCase):
     bridge = _read(FRONT / "chart-bridge.js")
 
