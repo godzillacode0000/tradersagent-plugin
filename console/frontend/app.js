@@ -73,10 +73,13 @@ function nudgeChart() {
     if (c && typeof c.resize === 'function') {
       try { c.resize(); } catch { /* older Vela build */ }
     }
-    /* resize() alone leaves the canvas blank after the column changes (proved on the live page):
-       re-applying the SAME visible range forces a full redraw without moving the user's view. */
-    if (c && typeof c.getVisibleRange === 'function' && typeof c.setVisibleRange === 'function') {
-      try { c.setVisibleRange(c.getVisibleRange()); } catch { /* older Vela build */ }
+    /* resize() alone leaves the canvas blank after the column changes (proved on the live page), so
+       force a full redraw. A zero pan does it without moving anything: same zoom, same right-hand
+       space. Re-applying getVisibleRange() (the old way) did move it — Vela caps that range at the
+       newest bar in whole bars, so every pass threw away the space the operator had dragged in and
+       crept the zoom, and the chart sprang back to its edge (30 Oct). */
+    if (c && typeof c.panBy === 'function') {
+      try { c.panBy(0); } catch { /* older Vela build */ }
     }
   };
   requestAnimationFrame(() => { kick(); setTimeout(kick, 90); setTimeout(kick, 320); setTimeout(kick, 700); });
@@ -510,7 +513,10 @@ function setBars(text, detail) {
    the pane top, re-fit the bars pill, then nudge Vela exactly as a panel flip does. Debounced
    because a drag fires dozens of times a second and nudgeChart() does repeat passes by design. */
 let resizeTimer = null;
-function onWindowResize() {
+function onWindowResize(ev) {
+  /* Only a real resize. nudgeChart() dispatches a synthetic one for whoever else listens; taking it
+     here re-entered the nudge, forever — 140 view resets in 10 idle seconds, measured 30 Oct. */
+  if (ev && ev.isTrusted === false) return;
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
     setPaneTop();

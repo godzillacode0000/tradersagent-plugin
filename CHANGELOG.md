@@ -6,6 +6,15 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Fixed
 
+- **The chart sprang back to its right edge after a drag, in replay and out** (30 Oct). Two faults in
+  `nudgeChart()` (app.js): its repaint dispatched a window `resize`, and the resize handler called
+  `nudgeChart()` again — an endless loop, measured at 140 view resets in 10 idle seconds; and each
+  reset re-applied `getVisibleRange()`, which Vela caps at the newest bar in whole bars, so the space
+  the operator had dragged in was thrown away and the zoom crept. The handler now ignores synthetic
+  resizes (`isTrusted`), and the repaint is Vela's `panBy(0)`: same zoom, same position, full redraw.
+  Verified in Chromium: 0 resets idle; a drag into empty space or history stays put, in replay too
+  (stepping or playing while looking at older candles leaves the view alone); the canvas still
+  repaints after a panel flip and a window resize.
 - **Long tick-store windows came back short and slow** (30 Oct): `fxticks.bars` grew its window a day
   per pass from a 0.4x guess, re-reading every hour on every pass and giving up after 60. On a two-year
   store 500 x 4h returned 404 bars in 12 s and 500 x D returned 186 in 67 s, with no sign anything was

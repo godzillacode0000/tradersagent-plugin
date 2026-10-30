@@ -60,7 +60,7 @@ class APaneDragRepaintsTheChart(unittest.TestCase):
         app = read(APP)
         self.assertIn("addEventListener('resize', onWindowResize)", app,
                       "a window resize (the app's split being dragged) never nudges Vela")
-        self.assertRegex(app, re.escape("function onWindowResize()"),
+        self.assertRegex(app, r"function onWindowResize\(",
                          "the debounced resize handler does not exist")
 
     def test_the_nudge_debounces_so_a_drag_does_not_thrash_vela(self):
@@ -73,6 +73,36 @@ class APaneDragRepaintsTheChart(unittest.TestCase):
         self.assertRegex(body[:1500], r"(clearTimeout|requestAnimationFrame)",
                          "the resize handler is not debounced — every drag frame would hammer Vela")
         self.assertIn("nudgeChart()", body[:1500], "the resize handler does not nudge the chart")
+
+
+class TheNudgeLeavesTheViewWhereTheOperatorPutIt(unittest.TestCase):
+    """30 Oct — the operator: drag the candles (in replay or not) and the chart springs back to the
+    right edge. Measured in Chromium: 140 setVisibleRange calls in 10 idle seconds. nudgeChart()'s
+    kick dispatched a window 'resize', the resize handler called nudgeChart() again, forever; and each
+    pass re-applied getVisibleRange(), which Vela caps at the newest bar in whole bars — so every pass
+    dropped the right-hand space the operator had dragged in and crept the zoom."""
+
+    def nudge_body(self):
+        app = read(APP)
+        start = app.index("function nudgeChart()")
+        return app[start:app.index("\n}\n", start)]
+
+    def resize_body(self):
+        app = read(APP)
+        start = app.index("function onWindowResize(")
+        return app[start:app.index("\n}\n", start)]
+
+    def test_the_repaint_does_not_reapply_the_capped_visible_range(self):
+        self.assertNotIn("setVisibleRange(", self.nudge_body(),
+                         "the nudge re-applies getVisibleRange(), which snaps the view to the newest bar")
+
+    def test_the_repaint_is_a_zero_pan(self):
+        # Vela's public panBy keeps zoom and position and invalidates the whole plot
+        self.assertIn("panBy(0)", self.nudge_body())
+
+    def test_the_nudges_own_resize_event_does_not_nudge_again(self):
+        self.assertIn("isTrusted", self.resize_body(),
+                      "a synthetic resize from the nudge re-enters the nudge: an endless loop")
 
 
 class TheLibraryIsASheetAtPaneWidths(unittest.TestCase):
