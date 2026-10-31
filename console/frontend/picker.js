@@ -66,8 +66,179 @@
     return out + esc(s.slice(at));
   }
 
+  /* ── A real preview for every built-in (31 Oct: "there must be preview of each indicator").
+     Vela ships no picture for its 77 built-ins, but each one's descriptor carries the calculation the
+     chart itself runs (`create().spec.compute(bars, inputs)`). So the preview IS the indicator: its
+     own maths with its default settings, on the last bars of the chart that is open — overlays drawn
+     over the candles, oscillators in a pane below them. Volume and the volume profile are drawn from
+     the candles' own volume. Nothing is fetched; a failure leaves the tile as it was. */
+  let vela = null;
+  let barsSnap = { at: 0, bars: null };
+  const SHOW = 90;                                    /* bars drawn; the maths sees up to 300 */
+  async function previewBars() {
+    if (barsSnap.bars && Date.now() - barsSnap.at < 20000) return barsSnap.bars;
+    let bars = [];
+    try { bars = typeof window.chartBars === 'function' ? await window.chartBars() : []; } catch { bars = []; }
+    barsSnap = { at: Date.now(), bars: (bars || []).filter((b) => b && Number.isFinite(b.close)).slice(-300) };
+    return barsSnap.bars;
+  }
+  const outputs = new Map();                          /* type -> output, for the current bars snapshot */
+  async function nativeOutput(type) {
+    if (!vela) vela = import('@luxalgo/vela').catch(() => null);
+    const v = await vela;
+    const bars = await previewBars();
+    if (!v || !bars.length) return null;
+    const d = v.getNativeIndicator && v.getNativeIndicator(type);
+    if (!d) return null;
+    const key = type + '@' + barsSnap.at;
+    if (!outputs.has(key)) {
+      let out = null;
+      if (type !== 'volume' && type !== 'vpvr') {
+        try { out = d.create().spec.compute(bars, d.defaultInputs ? d.defaultInputs() : {}); } catch { out = null; }
+      }
+      outputs.set(key, out);
+    }
+    return { bars, out: outputs.get(key), overlay: Boolean(d.overlay), type };
+  }
+
+  const UP = '#26a69a', DOWN = '#ef5350';
+  function render(canvas, r) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth || 112, h = canvas.clientHeight || 72;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    const g = canvas.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    const bars = r.bars.slice(-SHOW);
+    const off = r.bars.length - bars.length;
+    const n = bars.length;
+    const pad = 3;
+    const X = (i) => pad + (i + 0.5) * ((w - 2 * pad) / n);
+    const bw = Math.max(1, ((w - 2 * pad) / n) * 0.6);
+    const tail = (vals) => (Array.isArray(vals) ? vals.slice(off) : []);
+    const out = r.out || {};
+    const plots = (out.plots || []).filter((p) => Array.isArray(p.values));
+    const sub = !r.overlay && r.type !== 'vpvr';     /* oscillators (and volume) get a pane of their own */
+    const priceH = sub ? h * 0.42 : h;
+    // price scale: candles, plus an overlay's own values so a band is never clipped
+    let lo = Infinity, hi = -Infinity;
+    for (const b of bars) { lo = Math.min(lo, b.low); hi = Math.max(hi, b.high); }
+    if (r.overlay) for (const p of plots) for (const v of tail(p.values)) if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    const span = (hi - lo) || 1;
+    const PY = (v) => pad + (1 - (v - lo) / span) * (priceH - 2 * pad);
+    g.globalAlpha = r.overlay || sub ? 0.5 : 0.85;
+    bars.forEach((b, i) => {
+      g.strokeStyle = g.fillStyle = b.close >= b.open ? UP : DOWN;
+      g.beginPath(); g.moveTo(X(i), PY(b.high)); g.lineTo(X(i), PY(b.low)); g.lineWidth = 1; g.stroke();
+      const y1 = PY(Math.max(b.open, b.close)), y2 = PY(Math.min(b.open, b.close));
+      g.fillRect(X(i) - bw / 2, y1, bw, Math.max(1, y2 - y1));
+    });
+    g.globalAlpha = 1;
+    if (r.type === 'vpvr') {                            // volume profile: a histogram of volume by price, on the right
+      const bins = new Array(24).fill(0);
+      for (const b of bars) bins[Math.min(23, Math.floor(((b.close - lo) / span) * 24))] += b.volume || 0;
+      const top = Math.max(...bins) || 1;
+      g.fillStyle = 'rgba(91,156,246,.45)';
+      bins.forEach((v, k) => { const len = (v / top) * w * 0.35; const y = PY(lo + (k + 1) * span / 24); g.fillRect(w - pad - len, y, len, Math.max(1, (priceH - 2 * pad) / 24 - 1)); });
+      return;
+    }
+    // the indicator's own pane (or the price pane, for an overlay)
+    const top = sub ? priceH + 2 : 0, H = sub ? h - priceH - 2 : h;
+    let ylo, yhi;
+    if (r.type === 'volume') {
+      ylo = 0; yhi = Math.max(...bars.map((b) => b.volume || 0)) || 1;
+    } else if (sub) {
+      ylo = Infinity; yhi = -Infinity;
+      if (out.scale && Number.isFinite(out.scale.top) && Number.isFinite(out.scale.bottom)) { ylo = out.scale.bottom; yhi = out.scale.top; }
+      else {
+        for (const p of plots) for (const v of tail(p.values)) if (Number.isFinite(v)) { ylo = Math.min(ylo, v); yhi = Math.max(yhi, v); }
+        for (const l of out.levels || []) if (Number.isFinite(l.price)) { ylo = Math.min(ylo, l.price); yhi = Math.max(yhi, l.price); }
+      }
+      if (!Number.isFinite(ylo)) return;
+      if (yhi === ylo) { yhi += 1; ylo -= 1; }
+    }
+    const Y = sub ? (v) => top + pad + (1 - (v - ylo) / (yhi - ylo)) * (H - 2 * pad) : PY;
+    if (sub) { g.fillStyle = 'rgba(128,128,128,.07)'; g.fillRect(0, top, w, H); }
+    if (r.type === 'volume') {
+      bars.forEach((b, i) => { g.fillStyle = b.close >= b.open ? 'rgba(38,166,154,.75)' : 'rgba(239,83,80,.75)'; const y = Y(b.volume || 0); g.fillRect(X(i) - bw / 2, y, bw, top + H - pad - y); });
+      return;
+    }
+    const byKey = Object.fromEntries(plots.map((p) => [p.key, tail(p.values)]));
+    for (const band of out.bands || []) {                // fills between two plots
+      const a = byKey[band.from], b = byKey[band.to];
+      if (!a || !b) continue;
+      g.fillStyle = band.color || 'rgba(91,156,246,.1)';
+      g.beginPath();
+      let started = false;
+      for (let i = 0; i < n; i++) if (Number.isFinite(a[i])) { started ? g.lineTo(X(i), Y(a[i])) : g.moveTo(X(i), Y(a[i])); started = true; }
+      for (let i = n - 1; i >= 0; i--) if (Number.isFinite(b[i])) g.lineTo(X(i), Y(b[i]));
+      if (started) g.fill();
+    }
+    g.setLineDash([3, 3]); g.lineWidth = 1;
+    for (const l of out.levels || []) {
+      if (!Number.isFinite(l.price) || (sub && (l.price < ylo || l.price > yhi))) continue;
+      g.strokeStyle = 'rgba(140,140,150,.6)';
+      g.beginPath(); g.moveTo(0, Y(l.price)); g.lineTo(w, Y(l.price)); g.stroke();
+    }
+    g.setLineDash([]);
+    for (const p of plots) {
+      const vals = tail(p.values);
+      const kind = p.kind || 'line';
+      const cols = Array.isArray(p.colors) ? tail(p.colors) : null;
+      if (kind === 'columns') {
+        const base = Y(Number.isFinite(p.base) ? p.base : 0);
+        vals.forEach((v, i) => { if (!Number.isFinite(v)) return; g.fillStyle = (cols && cols[i]) || p.color || '#5b9cf6'; const y = Y(v); g.fillRect(X(i) - bw / 2, Math.min(y, base), bw, Math.max(1, Math.abs(base - y))); });
+      } else if (kind === 'circles' || kind === 'cross') {
+        vals.forEach((v, i) => { if (!Number.isFinite(v)) return; g.fillStyle = (cols && cols[i]) || p.color || '#5b9cf6'; g.beginPath(); g.arc(X(i), Y(v), 1.3, 0, 7); g.fill(); });
+      } else {
+        g.strokeStyle = p.color || '#5b9cf6';
+        g.lineWidth = 1.4;
+        g.beginPath();
+        let pen = false;
+        vals.forEach((v, i) => {
+          if (!Number.isFinite(v)) { pen = false; return; }
+          if (!pen) { g.moveTo(X(i), Y(v)); pen = true; }
+          else if (kind === 'step') { g.lineTo(X(i), Y(vals[i - 1])); g.lineTo(X(i), Y(v)); }
+          else g.lineTo(X(i), Y(v));
+        });
+        g.stroke();
+      }
+    }
+    // ZigZag-style segments: points carry a bar time and a price
+    const t0 = bars.length ? bars[0].time : 0;
+    const idx = (t) => { let k = bars.findIndex((b) => b.time >= t); return k < 0 ? n - 1 : k; };
+    for (const pl of out.polylines || []) {
+      const pts = (pl.points || []).filter((pt) => Number.isFinite(pt.price) && pt.x >= t0);
+      if (pts.length < 2) continue;
+      g.strokeStyle = pl.lineColor || '#f23645'; g.lineWidth = 1.4;
+      g.beginPath(); pts.forEach((pt, k) => (k ? g.lineTo(X(idx(pt.x)), Y(pt.price)) : g.moveTo(X(idx(pt.x)), Y(pt.price)))); g.stroke();
+    }
+  }
+
+  /* Draw `type`'s preview into `canvas`. Resolves true when something was drawn. */
+  async function drawNative(canvas, type) {
+    try {
+      const r = await nativeOutput(type);
+      if (!r || !canvas.isConnected) return false;
+      render(canvas, r);
+      canvas.classList.add('is-drawn');
+      return true;
+    } catch { return false; }
+  }
+  /* Every built-in tile still blank inside `root`, a few per frame so a long list never stalls. */
+  function drawNativeTiles(root) {
+    const tiles = Array.from((root || document).querySelectorAll('canvas[data-native-preview]:not(.is-drawn)'));
+    const step = () => {
+      const batch = tiles.splice(0, 6);
+      batch.forEach((c) => drawNative(c, c.dataset.nativePreview));
+      if (tiles.length) requestAnimationFrame(step);
+    };
+    if (tiles.length) requestAnimationFrame(step);
+  }
+
   /* Shared with drawer.js before the dropdown's own DOM exists, so the panel never waits on it. */
-  window.taIndicators = { view, setView, recent, noteRecent, tone, highlight };
+  window.taIndicators = { view, setView, recent, noteRecent, tone, highlight, drawNative, drawNativeTiles };
 
   const ICON = {
     search: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></svg>',
@@ -270,10 +441,11 @@
     if (!x) { prev.innerHTML = ''; return; }
     const p = primary(x);
     const pic = x.native
-      ? '<span class="qp__shot qp__shot--none" aria-hidden="true">ƒ</span>'
+      ? `<canvas class="qp__shot qp__shot--live" data-native-preview="${esc(x.slug)}" role="img"
+           aria-label="${esc(x.name)} on the last bars of this chart"></canvas>`
       : `<img class="qp__shot" src="${esc(thumbUrl(x.slug, x.image_url, 160))}" alt="${esc(x.name)}" decoding="async">`;
     const about = x.native
-      ? 'A built-in study, computed by the chart itself. It stacks with what is already on.'
+      ? 'A built-in study — the preview is its own calculation, default settings, on this chart’s last bars. Add stacks it with what is already on.'
       : (x.description || 'Run it to see it on this chart, or open Details for the write-up and the Pine source.');
     prev.innerHTML = `${pic}
       <b class="qp__name">${esc(x.name)}</b>
@@ -283,6 +455,7 @@
         <button type="button" class="qp-btn qp-btn--pri ${p.cls}" data-act="${p.act}" ${p.off ? 'disabled' : ''}>${p.html}${p.act === 'primary' ? ' on chart' : ''}</button>
         ${x.native ? '' : '<button type="button" class="qp-btn" data-act="details">Details</button>'}
       </div>`;
+    if (x.native) drawNativeTiles(prev);
   }
 
   function setFocus(i, scroll) {

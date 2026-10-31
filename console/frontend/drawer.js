@@ -119,7 +119,7 @@
        test_preview_cache pins the two numbers together. A mismatch is not a smaller picture — it is
        every open paying S3 for all sixty rows (measured 15 Oct: 2.7 s to fill the first screen). */
     return `<li class="drow${running ? ' is-busy' : ''}${isOn ? ' is-on' : ''}" style="--i:${Math.min(i, 18)}" data-slug="${esc(r.slug)}"${r.__native ? ' data-builtin="1"' : ''}>
-      ${r.__native ? '<span class="drow__shot drow__shot--native" aria-hidden="true">ƒ</span>'
+      ${r.__native ? `<canvas class="drow__shot drow__shot--native drow__shot--live" data-native-preview="${esc(r.slug)}" aria-hidden="true"></canvas>`
         : `<img class="drow__shot" src="${esc(thumbUrl(r.slug, r.image_url, 160))}" loading="lazy" decoding="async" alt="">`}
       <button type="button" class="drow__main" ${r.__native ? 'data-native="1" title="Add to the chart"' : 'data-open="1" title="Open the source and write-up"'}>
         <span class="drow__name">${isOn ? '<span class="drawer__dot" aria-hidden="true"></span>' : ''}${mark((r.name || r.slug).trim())}</span>
@@ -172,6 +172,8 @@
         ? `<li class="drawer__more"><button type="button" data-more="1">Show ${Math.min(SLICE, rest.length - shown.length)} more</button></li>` : '')
       : `<li class="drawer__empty">${st.family === '__fav' ? 'No favourites yet — tap ☆ on a script.' : 'Nothing matches “' + esc(st.q) + '”.'}</li>`;
     if (st.focus >= 0) setFocus(st.focus, false);
+    /* Built-ins have no catalogue picture: each tile draws the study itself on this chart (picker.js). */
+    if (ti().drawNativeTiles) ti().drawNativeTiles(list);
   }
 
   /* Keyboard: ↑/↓ move a highlight through the rows, Enter runs it, → opens its write-up. The box keeps

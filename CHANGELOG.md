@@ -26,6 +26,12 @@ All notable changes to this project are documented here. Format: [Keep a Changel
     it stacks.
   - **Shared logic.** The dropdown owns no data and no actions: it reads the drawer's rows and acts through the
     drawer, so a run is the same run from either view, and the agent's `indicators` door still drives the panel.
+  - **Every built-in has a real preview.** Vela ships no picture for its 77 built-ins, so each preview is the study
+    itself: its own descriptor's `compute()` with default settings, on the open chart's last bars. Overlays (moving
+    averages, Bollinger Bands, SuperTrend, ZigZag…) are drawn over the candles; oscillators (RSI, MACD, Stochastic,
+    Aroon…) get a pane under them; Volume and the volume profile come from the candles. The previews show in
+    Quick's preview pane and as each built-in's tile in the Panel. Nothing is fetched. LuxAlgo scripts keep the
+    picture from LuxAlgo's catalogue.
   - Pinned by `test_indicator_views.py`. Verified in Chromium at 1280 and 620 px, dark and light: open, search,
     keyboard run, Recent and On chart filling in, a built-in added, Esc and click-away, and the switch both ways
     surviving a reload.

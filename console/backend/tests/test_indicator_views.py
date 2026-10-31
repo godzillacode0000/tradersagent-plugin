@@ -117,3 +117,32 @@ class ItBehaves(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EveryBuiltInHasARealPreview(unittest.TestCase):
+    """31 Oct, the operator: "there must be preview of each indicator". Vela ships no picture for its
+    built-ins, so each preview is the study itself — its own descriptor's compute(), default inputs, on
+    the open chart's last bars. Nothing is fetched and nothing is drawn by hand."""
+
+    def test_the_preview_runs_the_studys_own_maths(self):
+        self.assertIn("v.getNativeIndicator(type)", PICKER)
+        self.assertIn("d.create().spec.compute(bars, d.defaultInputs ? d.defaultInputs() : {})", PICKER)
+        self.assertIn("window.chartBars()", PICKER)
+
+    def test_overlays_and_oscillators_are_drawn_differently(self):
+        self.assertIn("const sub = !r.overlay", PICKER)
+        for part in ("out.bands", "out.levels", "out.polylines", "'columns'"):
+            self.assertIn(part, PICKER)
+
+    def test_volume_and_the_profile_come_from_the_candles(self):
+        self.assertIn("r.type === 'vpvr'", PICKER)
+        self.assertIn("r.type === 'volume'", PICKER)
+
+    def test_both_views_draw_them(self):
+        self.assertIn('data-native-preview="${esc(x.slug)}"', PICKER)
+        self.assertIn('data-native-preview="${esc(r.slug)}"', DRAWER)
+        self.assertIn("ti().drawNativeTiles(list)", DRAWER)
+
+    def test_a_long_list_is_drawn_a_few_at_a_time(self):
+        self.assertIn("tiles.splice(0, 6)", PICKER)
+        self.assertIn("requestAnimationFrame(step)", PICKER)

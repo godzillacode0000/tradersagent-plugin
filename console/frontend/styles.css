@@ -1426,6 +1426,8 @@ mark { background: color-mix(in srgb, var(--lx-accent) 26%, transparent); color:
   border-left: 1px solid var(--lx-border); background: color-mix(in srgb, var(--lx-fg) 2%, var(--lx-surface-2)); }
 .qp__shot { width: 100%; height: 118px; flex: none; object-fit: cover; border-radius: 9px; border: 1px solid var(--lx-border); background: var(--lx-surface-3); }
 .qp__shot--none { display: grid; place-items: center; font-size: 34px; font-weight: 700; color: var(--lx-fg-muted); box-sizing: border-box; }
+/* A built-in's live preview: its own maths drawn on this chart's bars (picker.js). */
+.qp__shot--live, .drow__shot--live { display: block; padding: 0; background: color-mix(in srgb, var(--lx-fg) 4%, var(--lx-surface-3)); }
 .qp__name { font-size: 14px; line-height: 1.25; }
 .qp__about { margin: 0; font-size: 12px; line-height: 1.45; color: var(--lx-fg-muted);
   display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
