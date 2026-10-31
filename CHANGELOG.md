@@ -6,6 +6,64 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Two indicator views, one button** (31 Oct). The operator picked both mock-ups and kept both, with Quick as the
+  default.
+  - **Quick** (`picker.js`) is a dropdown under the Indicators button:
+    - type straight away, and search covers LuxAlgo scripts and built-ins together; initials count, so "rsi" finds
+      Relative Strength Index first;
+    - categories on the left, yours first (Recent, Favourites, On chart), then the library's families, then the
+      built-ins;
+    - results in the middle, and a preview with the picture and the write-up's first lines on the right;
+    - keyboard: ↑ ↓ move, ↵ runs, → opens Details, Esc closes;
+    - in a narrow Hermes pane the categories become chips and the preview stays, as a strip above the list.
+  - **Panel** (`drawer.js`) is the slide-in panel, reorganised:
+    - "On chart" first, then "Recently used", then all scripts;
+    - two-line names, family as a coloured tag, a ☆ that shows only when it means something;
+    - search matches highlighted, and the same keys as Quick.
+  - **The switch.** Each view has a Quick | Panel switch, and the choice is remembered per browser. The narrow
+    pane's Scripts button follows it too.
+  - **Wording.** A LuxAlgo script says **Run**: one at a time, it replaces the last one. A built-in says **Add**:
+    it stacks.
+  - **Shared logic.** The dropdown owns no data and no actions: it reads the drawer's rows and acts through the
+    drawer, so a run is the same run from either view, and the agent's `indicators` door still drives the panel.
+  - **Every built-in has a real preview.** Vela ships no picture for its 77 built-ins, so each preview is the study
+    itself: its own descriptor's `compute()` with default settings, on the open chart's last bars. Overlays (moving
+    averages, Bollinger Bands, SuperTrend, ZigZag…) are drawn over the candles; oscillators (RSI, MACD, Stochastic,
+    Aroon…) get a pane under them; Volume and the volume profile come from the candles. The previews show in
+    Quick's preview pane and as each built-in's tile in the Panel. Nothing is fetched. LuxAlgo scripts keep the
+    picture from LuxAlgo's catalogue.
+  - **The preview is the focus, and says what the study is for.** The dropdown is larger (up to 880 × 540), the
+    preview column is 300–360 px wide and its picture 236 px tall. Under the name, one plain sentence under
+    "What it's for": each of the 77 built-ins has its own (`PURPOSE` in `picker.js`, e.g. RSI "Measures momentum
+    on a 0–100 scale; above 70 is often read as overbought and below 30 as oversold."), and a LuxAlgo script
+    shows the first sentence of its own write-up. The same lines feed search in both views, so "overbought" finds
+    RSI, Stochastic, Williams %R and Money Flow Index.
+  - Pinned by `test_indicator_views.py`. Verified in Chromium at 1280 and 620 px, dark and light: open, search,
+    keyboard run, Recent and On chart filling in, a built-in added, Esc and click-away, and the switch both ways
+    surviving a reload.
+
+### Fixed
+
+- **The scripts list behind Indicators** (31 Oct). Six faults from a screenshot review:
+  - **A row whose preview picture failed collapsed.** The `<img>` was deleted, the row's grid shifted one
+    column left, and the name landed in the 52 px picture slot ("Indic…"). That is every row without a
+    catalogue picture, and every row offline. The picture is now swapped for a tile with the name's
+    first letter, and each part of a row owns its grid column.
+  - **Built-in rows** had the ƒ in the corner of its tile, and their Run button sat 12 px left of every
+    other Run. Both are aligned now.
+  - **The detail view said only "Failed / No live MCP session".** It now says the LuxAlgo Library isn't
+    connected, what that means, and offers Try again. The server's message stays, smaller.
+  - **The search box always said "Search 800 scripts".** The number is gone.
+  - **The family chips were cut at the edge** with no sign there were more. A fade marks the side that
+    scrolls, and the mouse wheel scrolls them.
+  - **The footer's theme switch** was a tiny dim ◐ that read as a broken glyph. It is now the sun/moon
+    icon the Edge Stats sheet uses, on a 28 px target.
+
+  Pinned by `test_lib_drawer_polish.py`. Verified in Chromium with a third of the previews failing: every
+  name gets the same width and every Run lines up, in dark and light.
+
+### Added
+
 - **`AGENTS.md`: give an agent the repo link and it installs the plugin** (30 Oct). A file written for AI agents
   and signposted at the top of the README ("If you are an AI agent ..."). It covers:
   - telling the user what will happen, before running anything;

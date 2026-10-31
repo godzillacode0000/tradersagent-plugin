@@ -241,7 +241,9 @@ class ThePageUsesIt(unittest.TestCase):
         drawer = read(DRAWER)
         self.assertIn("list.addEventListener('error'", drawer,
                       "a 404 preview must not leave the browser's broken-image glyph behind")
-        self.assertIn("if (img && img.tagName === 'IMG') img.remove();", drawer)
+        # 31 Oct: the <img> is swapped for a placeholder tile, not deleted — deleting it shifted the
+        # row's grid one column left and squeezed the name into the 52 px picture slot ("Indic…")
+        self.assertIn("img.replaceWith(", drawer)
 
 
 if __name__ == "__main__":
