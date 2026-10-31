@@ -110,13 +110,13 @@ class ItBehaves(unittest.TestCase):
         self.assertNotRegex(rule, r"transition:[^;]*\b(width|height|top|left)\b")
         self.assertIn(".qp { transition: none; }", CSS)
 
-    def test_a_narrow_pane_gets_chips_and_no_preview(self):
-        self.assertIn(".qp.is-narrow .qp__prev", CSS)
+    def test_a_narrow_pane_gets_chips_and_keeps_the_preview(self):
+        # 31 Oct, the operator: "make the preview pane larger a bit. That's the focus". The Hermes
+        # pane is narrow, so there the preview stays, as a strip above the list, instead of folding away.
         self.assertIn("el.classList.toggle('is-narrow', narrow)", PICKER)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        rule = re.search(r"\.qp\.is-narrow \.qp__prev \{([^}]*)\}", CSS).group(1)
+        self.assertIn("display: grid", rule)
+        self.assertNotRegex(CSS, r"\.qp\.is-narrow \.qp__prev[^{]*\{[^}]*display: none")
 
 
 class EveryBuiltInHasARealPreview(unittest.TestCase):
@@ -146,3 +146,43 @@ class EveryBuiltInHasARealPreview(unittest.TestCase):
     def test_a_long_list_is_drawn_a_few_at_a_time(self):
         self.assertIn("tiles.splice(0, 6)", PICKER)
         self.assertIn("requestAnimationFrame(step)", PICKER)
+
+
+class ThePreviewIsTheFocus(unittest.TestCase):
+    """31 Oct, the operator: "make the preview pane larger a bit. That's the focus... and then just a
+    simple, minor explanation of what the indicator is for"."""
+
+    PURPOSE = re.search(r"const PURPOSE = \{(.*?)\n  \};", PICKER, re.S).group(1)
+    KEYS = re.findall(r"^    '([a-z0-9-]+)': '", PURPOSE, re.M)
+
+    def test_the_pane_and_the_picture_are_larger(self):
+        self.assertIn("const width = Math.min(880, W - 16);", PICKER)
+        self.assertIn("Math.min(540, H - top - 12)", PICKER)
+        self.assertIn("minmax(300px, 360px)", CSS)
+        self.assertIn(".qp__shot { width: 100%; height: 236px;", CSS)
+
+    def test_every_built_in_says_what_it_is_for(self):
+        # Vela 0.8.3 ships 77 built-ins; each one gets its own sentence, and each key is a real type id.
+        self.assertEqual(len(self.KEYS), 77)
+        self.assertEqual(len(set(self.KEYS)), 77)
+        vela = "".join(p.read_text(encoding="utf-8", errors="replace")
+                       for p in (FRONT / "vendor" / "vela" / "dist").glob("chunk-*.js"))
+        missing = [k for k in self.KEYS if f'"{k}"' not in vela and f"'{k}'" not in vela]
+        self.assertEqual(missing, [], "PURPOSE keys that are not Vela built-in types")
+
+    def test_one_plain_sentence_each(self):
+        for line in re.findall(r"^    '[a-z0-9-]+': '(.*)',$", self.PURPOSE, re.M):
+            self.assertLess(len(line), 140, line)
+            self.assertNotIn("<", line)
+
+    def test_a_luxalgo_script_uses_its_own_write_up(self):
+        self.assertIn("return firstSentence(x.description);", PICKER)
+        self.assertIn("What it’s for", PICKER)
+        self.assertIn("${esc(why)}", PICKER)
+
+    def test_the_panel_finds_built_ins_by_what_they_do(self):
+        self.assertIn("ti().purpose({ native: true, slug: n.type })", DRAWER)
+
+
+if __name__ == "__main__":
+    unittest.main()

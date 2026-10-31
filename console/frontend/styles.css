@@ -1396,7 +1396,7 @@ mark { background: color-mix(in srgb, var(--lx-accent) 26%, transparent); color:
   box-shadow: none; background: none; color: var(--lx-fg); font: inherit; font-size: 13.5px; }
 .qp__search input::placeholder { color: var(--lx-fg-muted); }
 .qp__search input::-webkit-search-cancel-button { display: none; }
-.qp__body { display: grid; grid-template-columns: 168px minmax(0, 1fr) 236px; min-height: 0; }
+.qp__body { display: grid; grid-template-columns: 160px minmax(0, 1fr) minmax(300px, 360px); min-height: 0; }
 .qp__rail { display: flex; flex-direction: column; gap: 1px; padding: 6px; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; border-right: 1px solid var(--lx-border); }
 .qp__rail::-webkit-scrollbar { display: none; }
 .qp-cat__lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -1422,15 +1422,21 @@ mark { background: color-mix(in srgb, var(--lx-accent) 26%, transparent); color:
 .qp-row__act:disabled { opacity: .35 !important; cursor: not-allowed; }
 .qp__empty, .qp__more { list-style: none; padding: 22px 10px; text-align: center; color: var(--lx-fg-muted); font-size: 12.5px; }
 .qp__more { padding: 8px 10px 12px; font-size: 11.5px; }
-.qp__prev { display: flex; flex-direction: column; gap: 9px; padding: 12px; min-height: 0; overflow: hidden;
+.qp__prev { display: flex; flex-direction: column; gap: 10px; padding: 14px; min-height: 0; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin;
   border-left: 1px solid var(--lx-border); background: color-mix(in srgb, var(--lx-fg) 2%, var(--lx-surface-2)); }
-.qp__shot { width: 100%; height: 118px; flex: none; object-fit: cover; border-radius: 9px; border: 1px solid var(--lx-border); background: var(--lx-surface-3); }
+.qp__shot { width: 100%; height: 236px; flex: none; object-fit: cover; border-radius: 9px; border: 1px solid var(--lx-border); background: var(--lx-surface-3); }
 .qp__shot--none { display: grid; place-items: center; font-size: 34px; font-weight: 700; color: var(--lx-fg-muted); box-sizing: border-box; }
 /* A built-in's live preview: its own maths drawn on this chart's bars (picker.js). */
 .qp__shot--live, .drow__shot--live { display: block; padding: 0; background: color-mix(in srgb, var(--lx-fg) 4%, var(--lx-surface-3)); }
-.qp__name { font-size: 14px; line-height: 1.25; }
-.qp__about { margin: 0; font-size: 12px; line-height: 1.45; color: var(--lx-fg-muted);
-  display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+/* The preview is the point of the pane: the picture first and large, then the name, then one plain
+   line on what the study is for (picker.js PURPOSE, or the write-up's first sentence). */
+.qp__fig { margin: 0; display: flex; flex-direction: column; gap: 5px; flex: none; }
+.qp__cap { font-size: 10.5px; color: var(--lx-fg-muted); opacity: .8; }
+.qp__head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.qp__name { font-size: 15px; line-height: 1.25; }
+.qp__why { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--lx-fg); opacity: .86;
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.qp__whylbl { display: block; margin-bottom: 2px; font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--lx-fg-muted); opacity: 1; }
 .qp__acts { margin-top: auto; display: flex; gap: 6px; }
 .qp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; white-space: nowrap;
   cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; color: var(--lx-fg); background: transparent; border: 1px solid var(--lx-border-strong); }
@@ -1442,14 +1448,23 @@ mark { background: color-mix(in srgb, var(--lx-accent) 26%, transparent); color:
 .qp__keys { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
 .qp__foot .ta-viewswitch { margin-left: auto; }
 /* A narrow pane: the categories become a row of chips, the preview folds away. */
-.qp.is-narrow { grid-template-rows: auto auto minmax(0, 1fr) auto; }
+.qp.is-narrow { grid-template-rows: auto auto auto minmax(0, 1fr) auto; }
 .qp.is-narrow .qp__body { display: contents; }
 .qp.is-narrow .qp__rail { flex-direction: row; gap: 6px; padding: 8px 10px; overflow-x: auto; scrollbar-width: none; border-right: 0; border-bottom: 1px solid var(--lx-border); }
 .qp.is-narrow .qp__rail::-webkit-scrollbar { display: none; }
-.qp.is-narrow .qp__rail h6, .qp.is-narrow .qp__prev, .qp.is-narrow .qp__wide { display: none; }
+.qp.is-narrow .qp__rail h6, .qp.is-narrow .qp__wide { display: none; }
+/* A narrow pane keeps the preview, as a strip above the list: picture and the what-it's-for line. */
+.qp.is-narrow .qp__prev { order: 0; display: grid; grid-template-columns: minmax(0, 46%) minmax(0, 1fr); gap: 4px 12px; align-items: start;
+  padding: 10px 12px; overflow: hidden; border-left: 0; border-bottom: 1px solid var(--lx-border); }
+.qp.is-narrow .qp__fig { grid-row: span 2; }
+.qp.is-narrow .qp__shot { height: 112px; }
+.qp.is-narrow .qp__cap, .qp.is-narrow .qp__acts { display: none; }
+.qp.is-narrow .qp__name { font-size: 13.5px; }
+.qp.is-narrow .qp__why { font-size: 12px; -webkit-line-clamp: 4; }
+.qp.is-narrow .qp__top { order: -2; } .qp.is-narrow .qp__rail { order: -1; } .qp.is-narrow .qp__list { order: 1; } .qp.is-narrow .qp__foot { order: 2; }
 .qp.is-narrow .qp-cat { border: 1px solid var(--lx-border); border-radius: var(--lx-radius-pill); height: 28px; }
 .qp.is-narrow .qp-cat i { margin-left: 2px; }
-.qp.is-narrow .qp__list { max-height: 52vh; }
+.qp.is-narrow .qp__list { max-height: 40vh; }
 @media (prefers-reduced-motion: reduce) { .qp { transition: none; } }
 
 .detail__why { font-size: var(--lx-fs-2xs); opacity: .7; }

@@ -15,7 +15,7 @@ All notable changes to this project are documented here. Format: [Keep a Changel
       built-ins;
     - results in the middle, and a preview with the picture and the write-up's first lines on the right;
     - keyboard: ↑ ↓ move, ↵ runs, → opens Details, Esc closes;
-    - in a narrow Hermes pane the categories become chips and the preview folds away.
+    - in a narrow Hermes pane the categories become chips and the preview stays, as a strip above the list.
   - **Panel** (`drawer.js`) is the slide-in panel, reorganised:
     - "On chart" first, then "Recently used", then all scripts;
     - two-line names, family as a coloured tag, a ☆ that shows only when it means something;
@@ -32,6 +32,12 @@ All notable changes to this project are documented here. Format: [Keep a Changel
     Aroon…) get a pane under them; Volume and the volume profile come from the candles. The previews show in
     Quick's preview pane and as each built-in's tile in the Panel. Nothing is fetched. LuxAlgo scripts keep the
     picture from LuxAlgo's catalogue.
+  - **The preview is the focus, and says what the study is for.** The dropdown is larger (up to 880 × 540), the
+    preview column is 300–360 px wide and its picture 236 px tall. Under the name, one plain sentence under
+    "What it's for": each of the 77 built-ins has its own (`PURPOSE` in `picker.js`, e.g. RSI "Measures momentum
+    on a 0–100 scale; above 70 is often read as overbought and below 30 as oversold."), and a LuxAlgo script
+    shows the first sentence of its own write-up. The same lines feed search in both views, so "overbought" finds
+    RSI, Stochastic, Williams %R and Money Flow Index.
   - Pinned by `test_indicator_views.py`. Verified in Chromium at 1280 and 620 px, dark and light: open, search,
     keyboard run, Recent and On chart filling in, a built-in added, Esc and click-away, and the switch both ways
     surviving a reload.

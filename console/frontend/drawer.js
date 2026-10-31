@@ -55,6 +55,8 @@
     return (indState.natives || []).map((n) => ({
       slug: n.type, name: n.title, family: '__builtin', cluster: n.supported === false ? 'not supported here' : (n.present ? 'on chart' : ''),
       __native: true, present: n.present, supported: n.supported !== false,
+      /* what it is for (picker.js), so a search for "overbought" or "trailing stop" finds it */
+      description: ti().purpose ? ti().purpose({ native: true, slug: n.type }) : '',
     }));
   }
 
@@ -473,7 +475,7 @@ function setOpen(on) {
                native: false, supported: true, on: on.includes(name.toLowerCase()), starred: isFavourite('library', r.slug) };
     });
     const nat = nativeRows().map((r) => ({ id: 'builtin:' + r.slug, slug: r.slug, name: r.name, family: '__builtin',
-               famLabel: 'Built-in', cluster: '', description: '', native: true, supported: r.supported,
+               famLabel: 'Built-in', cluster: '', description: r.description || '', native: true, supported: r.supported,
                on: Boolean(r.present), starred: false }));
     return lib.concat(nat);
   }

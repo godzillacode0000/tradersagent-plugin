@@ -237,8 +237,101 @@
     if (tiles.length) requestAnimationFrame(step);
   }
 
+  /* What each built-in is for, in one plain sentence: the line under its preview. Keyed by Vela's own
+     type id. A type Vela adds later and this map lacks falls back to a neutral line, never a guess. */
+  const PURPOSE = {
+    'volume': 'Shows how much traded on each bar, so you can see which moves had real participation behind them.',
+    'vpvr': 'Shows how much traded at each price across the visible bars; the busiest levels often act as support or resistance.',
+    'sma': 'Averages the last N closes equally to smooth out noise and show the direction of the trend.',
+    'ema': 'An average that weights recent closes more, so it turns faster than a simple average when the trend changes.',
+    'moving-average': 'A smoothed line of past prices, used to read trend direction and as dynamic support or resistance.',
+    'rma': 'Wilder’s slow, heavily smoothed average (the one inside RSI and ATR); it filters out short-term noise.',
+    'zlema': 'An exponential average with most of its lag removed, so it follows price turns more closely.',
+    'vidya': 'An average that speeds up when the market trends and slows down when it moves sideways.',
+    'ma-envelope': 'Draws bands a fixed percentage above and below an average to mark when price is stretched from it.',
+    'lsma': 'Fits a straight line through recent closes and plots its end, giving a trend line with little lag.',
+    'bollinger-bands': 'Bands two standard deviations around an average: they widen when volatility rises and tighten when it falls.',
+    'keltner-channels': 'A channel set by ATR around an average; closes outside it often signal a strong move.',
+    'donchian-channels': 'Marks the highest high and lowest low of the last N bars; breaks of either edge are breakout signals.',
+    'chandelier-exit': 'A trailing stop hung an ATR multiple from the recent extreme, used to stay in a trend and exit when it fails.',
+    'chande-kroll-stop': 'Volatility-based stop lines for long and short positions, set from recent highs, lows and ATR.',
+    'supertrend': 'A trend line that flips above or below price; its colour tells you whether the trend is up or down.',
+    'williams-alligator': 'Three shifted averages (jaw, teeth, lips): tangled means no trend, fanned out means a trend is running.',
+    'parabolic-sar': 'Dots that trail price and flip sides when the trend reverses, often used as a trailing stop.',
+    'vwap': 'The average price weighted by volume for the session, a common benchmark for fair value intraday.',
+    'pivot-points': 'Support and resistance levels worked out from the previous period’s high, low and close.',
+    '52-week-high-low': 'Marks the highest and lowest prices of the past year, levels traders watch for breakouts.',
+    'zigzag': 'Joins the significant swing highs and lows and ignores smaller moves, so the market’s structure is easy to see.',
+    'williams-fractal': 'Marks local turning points: a high with two lower highs on each side, or a low with two higher lows.',
+    'linear-regression-slope': 'How steep the best-fit line through recent closes is: above zero the trend is up, below zero it is down.',
+    'percent-b': 'Where price sits inside the Bollinger Bands: 1 is the upper band, 0 the lower, 0.5 the middle.',
+    'bandwidth': 'How wide the Bollinger Bands are; very low readings mark a squeeze that often comes before a big move.',
+    'gator-oscillator': 'Shows how far the Alligator’s lines are apart, to tell when a trend is waking up or going to sleep.',
+    'rsi': 'Measures momentum on a 0–100 scale; above 70 is often read as overbought and below 30 as oversold.',
+    'stochastic': 'Where the close sits in the recent high–low range; above 80 is often overbought and below 20 oversold.',
+    'stochastic-rsi': 'A stochastic applied to RSI: a faster, more sensitive momentum gauge for spotting turns.',
+    'macd': 'The gap between a fast and a slow average; signal-line crosses and the histogram show momentum shifting.',
+    'ppo': 'MACD expressed in percent, so momentum can be compared across markets with different prices.',
+    'awesome-oscillator': 'Compares 5- and 34-bar momentum of the bar midpoints; crossing zero shows momentum changing side.',
+    'commodity-channel-index': 'How far price is from its average compared with normal swings; beyond ±100 is unusually stretched.',
+    'williams-percent-r': 'Where the close sits in the recent range, from 0 to −100; near 0 is overbought, near −100 oversold.',
+    'chande-momentum-oscillator': 'Up-moves minus down-moves over a period, from −100 to +100, to gauge pure momentum.',
+    'connors-rsi': 'Blends a short RSI, the length of the current streak and the size of the last move into one short-term gauge.',
+    'fisher-transform': 'Reshapes price so turning points stand out as sharp peaks and troughs.',
+    'trix': 'The rate of change of a triple-smoothed average; it filters out minor moves and shows the underlying momentum.',
+    'true-strength-index': 'Double-smoothed momentum that shows trend direction and overbought or oversold readings.',
+    'smi-ergodic': 'A smoothed momentum oscillator with a signal line; crosses suggest shifts in trend.',
+    'schaff-trend-cycle': 'MACD run through a stochastic cycle, giving earlier trend signals on a 0–100 scale.',
+    'know-sure-thing': 'Combines four smoothed rates of change into one momentum line to catch major trend turns.',
+    'coppock-curve': 'A long-term momentum line; a turn up from below zero has often marked major bottoms.',
+    'detrended-price-oscillator': 'Removes the trend from price to show its shorter cycles of highs and lows.',
+    'rate-of-change': 'The percentage change from N bars ago: plain momentum, above zero rising and below zero falling.',
+    'ultimate-oscillator': 'Momentum measured over three timeframes at once, which cuts down false signals.',
+    'relative-vigor-index': 'Compares the close with the open: in an uptrend closes tend to land above opens.',
+    'relative-volatility-index': 'RSI built on volatility instead of price, used to confirm other signals.',
+    'balance-of-power': 'Whether buyers or sellers controlled each bar, measured from where it closed against where it opened.',
+    'elder-ray': 'Bull and bear power: how far the highs and lows reach beyond an average.',
+    'ttm-squeeze': 'Flags when Bollinger Bands squeeze inside Keltner Channels, a quiet spell that often comes before a breakout.',
+    'aroon': 'How recently the highest high and the lowest low happened, to tell whether a trend is starting or fading.',
+    'average-directional-index': 'How strong the trend is, whatever its direction; above about 25 is usually read as trending.',
+    'vortex-indicator': 'Two lines for upward and downward movement; when they cross, the trend may be changing.',
+    'average-true-range': 'The average size of each bar’s full range: how much the market typically moves. Used to size stops.',
+    'historical-volatility': 'How much price has been swinging, annualised from the spread of recent returns.',
+    'chaikin-volatility': 'How fast the high–low range is widening or narrowing.',
+    'mass-index': 'Watches the range widen and narrow; a “reversal bulge” can come before a trend turns.',
+    'standard-deviation': 'How far prices spread around their average: a direct measure of volatility.',
+    'ulcer-index': 'How deep and how long recent drawdowns from the high have been: downside risk only.',
+    'choppiness-index': 'Whether the market is trending (low readings) or chopping sideways (high readings).',
+    'on-balance-volume': 'A running total that adds volume on up bars and subtracts it on down bars, to see buying versus selling.',
+    'accumulation-distribution': 'A running total of volume weighted by where each bar closes in its range, to track money flowing in or out.',
+    'chaikin-money-flow': 'Buying versus selling pressure over a period, weighted by volume; above zero leans bullish.',
+    'chaikin-oscillator': 'Momentum of the Accumulation/Distribution line, to catch shifts in money flow early.',
+    'ease-of-movement': 'How easily price moves for the volume traded: high values mean it rises on little volume.',
+    'force-index': 'Price change times volume: the force behind each move.',
+    'klinger-oscillator': 'Compares volume flowing in and out to spot long-term money-flow trends and short-term turns.',
+    'money-flow-index': 'A volume-weighted RSI; above 80 is often overbought and below 20 oversold.',
+    'negative-volume-index': 'Tracks price on quieter days, where “smart money” is said to act.',
+    'positive-volume-index': 'Tracks price on busier days, when the crowd is most active.',
+    'price-volume-trend': 'A running total of volume scaled by each bar’s percentage price change.',
+    'volume-oscillator': 'The gap between a fast and a slow volume average: whether participation is growing or shrinking.',
+    'pvo': 'MACD applied to volume, in percent, to show volume momentum.',
+    'volume-flow-indicator': 'A refined money-flow measure that ignores tiny moves and caps outsized volume.',
+    'intraday-intensity': 'Where each bar closed in its range, weighted by volume, to gauge buying versus selling during the bar.',
+  };
+  /* The first sentence of a write-up, for the LuxAlgo catalogue's longer descriptions. */
+  const firstSentence = (text) => {
+    const t = String(text || '').replace(/\s+/g, ' ').trim();
+    const m = t.match(/^.{20,}?[.!?](?=\s|$)/);
+    return (m ? m[0] : t).slice(0, 220);
+  };
+  function purpose(x) {
+    if (!x) return '';
+    if (x.native) return PURPOSE[x.slug] || 'One of the chart’s built-in studies; add it to see it with its default settings.';
+    return firstSentence(x.description);
+  }
+
   /* Shared with drawer.js before the dropdown's own DOM exists, so the panel never waits on it. */
-  window.taIndicators = { view, setView, recent, noteRecent, tone, highlight, drawNative, drawNativeTiles };
+  window.taIndicators = { view, setView, recent, noteRecent, tone, highlight, drawNative, drawNativeTiles, purpose };
 
   const ICON = {
     search: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></svg>',
@@ -444,13 +537,12 @@
       ? `<canvas class="qp__shot qp__shot--live" data-native-preview="${esc(x.slug)}" role="img"
            aria-label="${esc(x.name)} on the last bars of this chart"></canvas>`
       : `<img class="qp__shot" src="${esc(thumbUrl(x.slug, x.image_url, 160))}" alt="${esc(x.name)}" decoding="async">`;
-    const about = x.native
-      ? 'A built-in study — the preview is its own calculation, default settings, on this chart’s last bars. Add stacks it with what is already on.'
-      : (x.description || 'Run it to see it on this chart, or open Details for the write-up and the Pine source.');
-    prev.innerHTML = `${pic}
-      <b class="qp__name">${esc(x.name)}</b>
-      <div>${x.on ? '<span class="qp-row__on"><span class="ta-dot" aria-hidden="true"></span>on chart</span>' : tag(x)}</div>
-      <p class="qp__about">${esc(about)}</p>
+    const why = purpose(x) || 'Run it to see it on this chart, or open Details for the write-up and the Pine source.';
+    const cap = x.native ? 'Live preview · its own maths on this chart, default settings' : 'LuxAlgo’s picture of the script';
+    prev.innerHTML = `<figure class="qp__fig">${pic}<figcaption class="qp__cap">${cap}</figcaption></figure>
+      <div class="qp__head"><b class="qp__name">${esc(x.name)}</b>
+        ${x.on ? '<span class="qp-row__on"><span class="ta-dot" aria-hidden="true"></span>on chart</span>' : tag(x)}</div>
+      <p class="qp__why"><span class="qp__whylbl">What it’s for</span>${esc(why)}</p>
       <div class="qp__acts">
         <button type="button" class="qp-btn qp-btn--pri ${p.cls}" data-act="${p.act}" ${p.off ? 'disabled' : ''}>${p.html}${p.act === 'primary' ? ' on chart' : ''}</button>
         ${x.native ? '' : '<button type="button" class="qp-btn" data-act="details">Details</button>'}
@@ -502,10 +594,10 @@
       return;
     }
     const r = anchor.getBoundingClientRect();
-    const width = Math.min(700, W - 16);
+    const width = Math.min(880, W - 16);
     const left = Math.max(8, Math.min(W - width - 8, r.left - 12));
     const top = r.bottom + 8;
-    Object.assign(el.style, { left: left + 'px', top: top + 'px', width: width + 'px', height: Math.min(460, H - top - 12) + 'px', maxHeight: '' });
+    Object.assign(el.style, { left: left + 'px', top: top + 'px', width: width + 'px', height: Math.min(540, H - top - 12) + 'px', maxHeight: '' });
   }
 
   const away = (ev) => {
