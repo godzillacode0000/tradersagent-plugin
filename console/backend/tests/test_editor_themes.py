@@ -112,8 +112,10 @@ class Themes(unittest.TestCase):
     def test_console_is_the_editor_as_it_was(self):
         # no attribute, so none of the theme rules apply and the five console colours stand
         self.assertIn("if (theme === 'console') delete el.dataset.codeTheme;", HL)
-        for cls, fallback in (("f", "--lx-syn-builtin"), ("t", "--lx-syn-keyword"), ("l", "--lx-syn-number")):
-            self.assertRegex(CSS, r"\.hl-" + cls + r" \{ color: var\(--syn-\w+, var\(" + fallback + r"\)\); \}")
+        # each finer class falls back to the colour its token had before refine() split it (PR Lens, #15)
+        for cls, fallback in (("f", "--lx-syn-builtin"), ("v", "--lx-syn-builtin"), ("p", "--lx-syn-builtin"),
+                              ("t", "--lx-syn-keyword"), ("l", "--lx-syn-keyword"), ("a", "--lx-fg"), ("o", "--lx-fg")):
+            self.assertRegex(CSS, r"\.hl-" + cls + r" \{ color: var\(--syn-\w+, var\(" + fallback + r"\)\);")
 
     def test_the_line_tint_and_the_selection_are_see_through(self):
         # both are drawn over the text: an opaque one hid the line number and the selected word

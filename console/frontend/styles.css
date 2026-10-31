@@ -892,15 +892,17 @@ pre {
 .hl-n { color: var(--lx-syn-number); }
 .hl-c { color: var(--lx-syn-comment); font-style: italic; }
 .hl-d { font-style: normal; }
-/* The finer classes (refine() in script-highlight.js). Without an editor theme they fall back to the console's
-   own five colours, so the "Console" theme looks as it always did. */
+/* The finer classes (refine() in script-highlight.js). Without an editor theme each falls back to the colour its
+   token had before refine() split it, so the "Console" theme looks as it always did: a call or a built-in series
+   was a built-in (`b`), a constant like color.red too; a type word or a literal (true, na) was a keyword (`k`);
+   a named argument and an operator were plain text. */
 .hl-f { color: var(--syn-fn, var(--lx-syn-builtin)); }
 .hl-t { color: var(--syn-type, var(--lx-syn-keyword)); }
-.hl-l { color: var(--syn-lit, var(--lx-syn-number)); }
+.hl-l { color: var(--syn-lit, var(--lx-syn-keyword)); }
 .hl-v { color: var(--syn-var, var(--lx-syn-builtin)); }
-.hl-p { color: var(--syn-prop, var(--lx-syn-number)); }
+.hl-p { color: var(--syn-prop, var(--lx-syn-builtin)); }
 .hl-a { color: var(--syn-arg, var(--lx-fg)); font-style: var(--syn-arg-style, normal); }
-.hl-o { color: var(--syn-op, var(--lx-fg-muted)); }
+.hl-o { color: var(--syn-op, var(--lx-fg)); }
 .hl-t { font-style: var(--syn-type-style, normal); }
 
 /* ── Editor themes (31 Oct): the three most installed editor themes, each with its light sibling ─────────────
