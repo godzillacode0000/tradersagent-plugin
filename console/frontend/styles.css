@@ -1494,21 +1494,97 @@ mark { background: color-mix(in srgb, var(--lx-accent) 26%, transparent); color:
   .drawer__dot, .spin, .drow--skel span { animation: none; }
 }
 
-/* The `⋯` menu (3 Oct): four rare Vela tools behind one button, so the row fits a narrow pane. */
-.ta-more {
-  position: fixed; z-index: 60; min-width: 168px; padding: var(--lx-space-1);
-  background: var(--lx-surface-2); border: 1px solid var(--lx-border-strong);
-  border-radius: var(--lx-radius-md); box-shadow: var(--lx-shadow-3);
-  display: flex; flex-direction: column;
-  animation: ta-more-in var(--lx-dur-fast) var(--lx-ease) both;
+/* The chart row's glass (31 Oct): the ⋯ menu, the status popover and Vela's own dropdowns share the
+   replay capsule's frosted sheet, so the right-hand corner reads as one family. topmenus.js. */
+.ta-glass {
+  position: fixed; z-index: 60; box-sizing: border-box; overflow-y: auto; overscroll-behavior: contain;
+  color: var(--lx-fg); font-size: var(--lx-fs-sm); border-radius: 14px;
+  background: var(--lx-surface-2);
+  background: color-mix(in srgb, var(--lx-surface-2) 80%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid color-mix(in srgb, var(--lx-fg) 10%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--lx-fg) 7%, transparent),
+              0 18px 44px rgba(0, 0, 0, .42), 0 3px 10px rgba(0, 0, 0, .24);
+  animation: ta-glass-in var(--lx-dur-fast) var(--lx-ease) both; scrollbar-width: thin;
 }
+:root[data-theme="light"] .ta-glass {
+  background: color-mix(in srgb, #fff 74%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8), 0 16px 40px rgba(0, 0, 0, .14), 0 2px 8px rgba(0, 0, 0, .08); }
+@keyframes ta-glass-in { from { opacity: 0; transform: translateY(-4px) scale(.985); } to { opacity: 1; transform: none; } }
+
+/* The ⋯ menu */
+.ta-more { width: 248px; padding: 6px; display: flex; flex-direction: column; }
+.ta-more__grp { padding: 8px 10px 4px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--lx-fg-muted); }
+.ta-more__sep { height: 1px; margin: 6px 4px 2px; background: color-mix(in srgb, var(--lx-fg) 9%, transparent); }
 .ta-more__item {
-  all: unset; box-sizing: border-box; cursor: pointer; padding: var(--lx-space-2) var(--lx-space-3);
-  border-radius: var(--lx-radius-md); color: var(--lx-fg); font-size: var(--lx-fs-sm);
+  all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px 0 6px;
+  border-radius: 9px; cursor: pointer; color: var(--lx-fg); font-size: 13px; transition: background var(--lx-dur-fast) var(--lx-ease);
 }
-.ta-more__item:hover, .ta-more__item:focus-visible { background: var(--lx-accent-soft); }
-@keyframes ta-more-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .ta-more { animation: none; } }
+.ta-more__ic { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 7px; color: var(--lx-fg-muted);
+  background: color-mix(in srgb, var(--lx-fg) 6%, transparent); transition: color var(--lx-dur-fast) var(--lx-ease), background var(--lx-dur-fast) var(--lx-ease); }
+.ta-more__ic svg, .ta-more__chev svg, .ta-more__back svg, .ta-statuspop__retry svg { width: 15px; height: 15px; }
+.ta-more__lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ta-more__item:hover, .ta-more__item:focus-visible, .ta-alert:hover, .ta-alert:focus-visible { background: color-mix(in srgb, var(--lx-fg) 7%, transparent); }
+.ta-more__item:hover .ta-more__ic, .ta-more__item:focus-visible .ta-more__ic { color: var(--lx-accent); background: var(--lx-accent-soft); }
+.ta-more__item:focus-visible, .ta-alert:focus-visible, .ta-more__back:focus-visible, .ta-statuspop__retry:focus-visible { outline: 2px solid var(--lx-accent); outline-offset: -2px; }
+.ta-more__on { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: var(--lx-profit); }
+.ta-more__on i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent); }
+.ta-more__count { min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; display: inline-grid; place-items: center;
+  font-size: 11px; font-weight: 700; color: var(--lx-fg-on-fill); background: var(--lx-accent); font-variant-numeric: tabular-nums; }
+.ta-more__chev { display: inline-grid; color: var(--lx-fg-muted); }
+
+/* ⋯ → Alerts: the same sheet, one level in */
+.ta-more.is-sub { width: 300px; }
+.ta-more__head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 8px; margin-bottom: 4px; border-bottom: 1px solid color-mix(in srgb, var(--lx-fg) 9%, transparent); }
+.ta-more__head b { font-size: 13.5px; }
+.ta-more__back { all: unset; box-sizing: border-box; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; cursor: pointer; color: var(--lx-fg-muted); }
+.ta-more__back:hover { background: color-mix(in srgb, var(--lx-fg) 7%, transparent); color: var(--lx-fg); }
+.ta-more__alerts { display: flex; flex-direction: column; gap: 2px; }
+.ta-alert { all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 9px; cursor: pointer; }
+.ta-alert__top { display: flex; align-items: baseline; gap: 8px; }
+.ta-alert__top b { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ta-alert__top time, .ta-alert__src { font-size: 11px; color: var(--lx-fg-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ta-alert__msg { font-size: 12px; line-height: 1.4; color: var(--lx-fg); opacity: .85; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ta-more__empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 14px 16px; text-align: center; font-size: 12px; line-height: 1.5; color: var(--lx-fg-muted); }
+.ta-more__empty b { font-size: 13px; color: var(--lx-fg); }
+.ta-more__empty code { font-size: 11px; padding: 0 3px; border-radius: 4px; background: color-mix(in srgb, var(--lx-fg) 8%, transparent); }
+.ta-more__emptyic { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; color: var(--lx-accent); background: var(--lx-accent-soft); }
+.ta-more__emptyic svg { width: 18px; height: 18px; }
+
+/* The status popover: the two connections, what still works, and Check again */
+.ta-statuspop { width: 300px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.ta-statuspop__title { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--lx-fg-muted); padding: 0 2px; }
+.ta-conn { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--lx-fg) 5%, transparent); }
+.ta-conn__dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; flex: none; background: #e0b400; box-shadow: 0 0 0 3px color-mix(in srgb, #e0b400 22%, transparent); }
+.ta-conn__dot.is-ok { background: var(--lx-profit); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lx-profit) 22%, transparent); }
+.ta-conn__dot.is-bad { background: var(--lx-loss); box-shadow: 0 0 0 3px color-mix(in srgb, var(--lx-loss) 22%, transparent); }
+.ta-conn__body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ta-conn__body b { font-size: 13px; }
+.ta-conn__body span { font-size: 12px; color: var(--lx-fg-muted); overflow-wrap: anywhere; }
+.ta-statuspop__note { margin: 2px 2px 0; font-size: 12px; line-height: 1.5; color: var(--lx-fg-muted); }
+.ta-statuspop__retry { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px;
+  border-radius: 9px; cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--lx-fg); border: 1px solid var(--lx-border-strong); }
+.ta-statuspop__retry:hover:not(:disabled) { background: color-mix(in srgb, var(--lx-fg) 7%, transparent); }
+.ta-statuspop__retry:disabled { opacity: .6; cursor: progress; }
+
+/* Vela's own dropdowns (timeframe, chart style, the alerts list) wear the same glass. Vela injects its
+   menu style at runtime, after this sheet, so these rules carry one more class to win. */
+:root .vela-menu {
+  border-radius: 12px; padding: 6px;
+  background: color-mix(in srgb, var(--lx-surface-2) 80%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid color-mix(in srgb, var(--lx-fg) 10%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--lx-fg) 7%, transparent), 0 18px 44px rgba(0, 0, 0, .42), 0 3px 10px rgba(0, 0, 0, .24);
+}
+:root[data-theme="light"] .vela-menu { background: color-mix(in srgb, #fff 74%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8), 0 16px 40px rgba(0, 0, 0, .14), 0 2px 8px rgba(0, 0, 0, .08); }
+:root .vela-menu .vela-menu-item { border-radius: 8px; }
+/* The timeframe in use (topmenus.js marks it; Vela does not) */
+:root .vela-menu .vela-menu-item.ta-is-current { background: var(--lx-accent-soft); color: var(--lx-fg); font-weight: 600; }
+:root .vela-menu .vela-menu-item.ta-is-current .vela-menu-label::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 8px;
+  vertical-align: middle; border-radius: 50%; background: var(--lx-accent); }
+
+@media (prefers-reduced-motion: reduce) { .ta-glass { animation: none; } }
 
 /* ── Paper broker (Phase 5): the Approve/Reject card and the account popover ─────────────────────
    Closed by default — `.ta-orders[hidden]` until an order waits. Motion is opacity + transform only. */

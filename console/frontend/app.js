@@ -490,18 +490,22 @@ function paintStatus() {
   const m = statusState.mcp, b = statusState.bars;
   if (!el.dot) return;
   const bad = [];
-  if (m && m.ok === false) bad.push(m.text || 'agent offline');
+  if (m && m.ok === false) bad.push(m.text || 'Library offline');
   if (b && b.ok === false) bad.push(b.text || 'no bars');
+  /* What the row shows when something is wrong: two words, not the reason (that is the tooltip and
+     the popover the dot opens). "Agent" was the old name; it is the LuxAlgo Library link (31 Oct). */
+  const short = [m && m.ok === false ? 'Library offline' : '', b && b.ok === false ? 'No live bars' : ''].filter(Boolean);
   const waiting = !m || !b;
   el.dot.className = 'status-dot ' + (bad.length ? 'is-bad' : waiting ? 'is-wait' : 'is-ok');
   el.dot.textContent = bad.length ? '● ' + bad.join(' · ') : '●';
   el.dot.title = [m && m.text, b && b.text].filter(Boolean).join(' · ')
-    || 'Agent and bars — the two lights this dot replaced';
+    || 'LuxAlgo Library and chart data — waiting for both to answer';
   /* The dot rides Vela's row as a widget action (3 Oct); this statusbar copy is the bare-chart
      fallback. Publish the state once and let the row re-render itself. */
   window.taToast = toast;
   window.taStatus = { state: bad.length ? 'bad' : waiting ? 'wait' : 'ok',
-                      text: bad.join(' · '), title: el.dot.title };
+                      text: bad.join(' · '), short: short.join(' · '), title: el.dot.title,
+                      mcp: m, bars: b };
   window.dispatchEvent(new CustomEvent('ta-status'));
 }
 function setBars(text, detail) {
@@ -1194,7 +1198,8 @@ window.openResult = openResult;
 
 
 /* ------------------------------------------------------------------- wiring */
-async function checkHealth() {
+async function checkHealth(opts) {
+  const quiet = Boolean(opts && opts.quiet);
   try {
     const data = await api('/api/health');
     // Two backend generations answer this endpoint: the MVP shape
@@ -1212,18 +1217,21 @@ async function checkHealth() {
        live in the tooltip; text appears on the dot only when something is wrong. */
     statusState.mcp = {
       ok: ready,
-      text: (ready ? 'Agent: ' + label : 'Agent: offline') + ' · ' + (ready
+      text: (ready ? 'Library: ' + label : 'Library: offline') + ' · ' + (ready
         ? (data.mcp_url || (data.mcp && data.mcp.url) || 'connected')
         : ((data.mcp_error || (data.mcp && data.mcp.last_error)) || 'not connected')),
     };
     paintStatus();
-    if (!ready) toast('LuxAlgo MCP is not connected — see backend log', true);
+    if (!ready && !quiet) toast('LuxAlgo Library is not connected — built-ins and your own Pine still work', true);
   } catch (err) {
-    statusState.mcp = { ok: false, text: 'Agent: offline — ' + err.message };
+    statusState.mcp = { ok: false, text: 'Library: offline — ' + err.message };
     paintStatus();
-    toast('Backend unreachable — start ./console/start.sh (or luxalgo-web.service) first', true);
+    if (!quiet) toast('Backend unreachable — start ./console/start.sh (or luxalgo-web.service) first', true);
   }
 }
+
+
+window.taCheckHealth = checkHealth;     /* the status popover's "Check again" */
 
 
 /* The script pane's control surface (3 Oct): the `<>` toggle is a Vela widget action, so the agent

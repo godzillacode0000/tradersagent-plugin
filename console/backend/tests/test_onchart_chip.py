@@ -30,6 +30,7 @@ def read(name: str) -> str:
 HTML, APP, DRAWER, WS, UNIFIED, CSS, BRIDGE = (
     read("index.html"), read("app.js"), read("drawer.js"), read("workspace.js"),
     read("unified.js"), read("styles.css"), read("chart-bridge.js"))
+MENUS = read("topmenus.js")
 
 
 class TheRunAnnouncesItself(unittest.TestCase):
@@ -154,17 +155,20 @@ class TheRowFitsTheNarrowPane(unittest.TestCase):
         self.assertLess(WS.index("id: 'ta-more'"), WS.index("new VelaWorkspace("))
 
     def test_the_menu_reaches_all_four_through_vela(self):
-        body = WS.split("function openMoreMenu", 1)[1][:2600]
-        self.assertIn("openAlertsMenu", body)
-        self.assertIn("dock.toggle('dataWindow'", body)
-        self.assertIn("dock.toggle('objects'", body)
-        self.assertIn("downloadScreenshot", body)
+        # 31 Oct: the sheet moved to topmenus.js; each row still calls the Vela method its old row did.
+        # Alerts reads the list Vela keeps (ws.alerts) instead of openAlertsMenu(anchor), which threw
+        # in a narrow pane where there is no anchor.
+        self.assertIn("window.taTopMenus.more(anchor, ws, { replayOn })", WS)
+        self.assertIn("ws.alerts", MENUS)
+        self.assertNotIn("ws.openAlertsMenu(", MENUS)
+        self.assertIn("dock.toggle('dataWindow')", MENUS)
+        self.assertIn("dock.toggle('objects')", MENUS)
+        self.assertIn("downloadScreenshot()", MENUS)
 
     def test_the_menu_closes_itself_and_obeys_escape(self):
-        body = WS.split("function openMoreMenu", 1)[1][:2600]
-        self.assertIn("Escape", body)
-        self.assertIn("pointerdown", body)
-        self.assertIn("role", body)
+        self.assertIn("Escape", MENUS)
+        self.assertIn("pointerdown", MENUS)
+        self.assertIn("role", MENUS)
 
     def test_the_more_button_has_a_glyph(self):
         self.assertIn("registerIcon('ta-more'", WS, "Vela ships no 'more' icon, so the button would be blank")
@@ -172,7 +176,7 @@ class TheRowFitsTheNarrowPane(unittest.TestCase):
 
     def test_the_menu_is_styled_with_tokens(self):
         self.assertIn(".ta-more", CSS)
-        self.assertIn("var(--lx-", CSS.split(".ta-more", 1)[1][:900])
+        self.assertIn("var(--lx-", CSS.split(".ta-more__item {", 1)[1][:900])
 
 
 if __name__ == "__main__":

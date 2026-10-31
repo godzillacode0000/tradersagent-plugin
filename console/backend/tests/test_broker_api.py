@@ -183,7 +183,8 @@ class TheCard(unittest.TestCase):
         self.assertIn("toast", self.js.lower())
 
     def test_the_account_is_reachable_from_the_more_menu(self):
-        ws = (self.front / "workspace.js").read_text(encoding="utf-8")
+        # the ⋯ menu's rows live in topmenus.js since 31 Oct
+        ws = (self.front / "topmenus.js").read_text(encoding="utf-8")
         self.assertIn("Trader's desk", ws)
         self.assertIn("taDesk", ws)
 

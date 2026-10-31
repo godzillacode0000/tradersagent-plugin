@@ -6,6 +6,25 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **The chart row's right-hand corner, checked and redone** (31 Oct). The operator asked for every control
+  there to be checked and for the ⋯ menu to look like the replay capsule. `topmenus.js`.
+  - **The ⋯ menu** is one frosted-glass sheet in two groups, Trade (Trader's desk, Edge Stats, Replay) and
+    Chart (Alerts, Data window, Object tree, Download screenshot). Every row has an icon. A row says **On**
+    while its panel is open or replay runs, and Alerts shows its count. ↑ ↓ Home End move, → opens Alerts,
+    ← goes back, Esc closes and gives focus back. Every row still calls the Vela method it called before.
+  - **Alerts** is a list inside the menu, drawn from the alerts Vela keeps: title, message, the script and
+    the time, newest first. A row focuses the chart that fired it. The empty state says where alerts come
+    from.
+  - **The status dot** says **Library offline** in two words instead of "Agent: offline · not connected". A
+    click opens a popover: chart data (Live · BTCUSDT 1h), the LuxAlgo Library (Connected / Not connected),
+    what still works without the Library, and **Check again**. It used to flash a toast.
+  - **The script button** is `</>`; the pencil read as a drawing tool.
+  - **Vela's dropdowns** (timeframe, chart style) wear the same glass, and the timeframe list marks the one
+    in use.
+  - Pinned by `test_top_menus.py`. Verified in Chromium at 1280 px (dark and light) and 620 px: every row
+    opens what it names, keyboard paths, Data window "On", alerts focusing their chart (alerts injected for
+    the check), Check again, and no console errors.
+
 - **Two indicator views, one button** (31 Oct). The operator picked both mock-ups and kept both, with Quick as the
   default.
   - **Quick** (`picker.js`) is a dropdown under the Indicators button:
@@ -43,6 +62,12 @@ All notable changes to this project are documented here. Format: [Keep a Changel
     surviving a reload.
 
 ### Fixed
+
+- **Alerts did nothing in a narrow pane** (31 Oct). Vela's `openAlertsMenu(anchor)` reads the anchor's box with
+  no guard. In the Hermes pane (620 px) the ⋯ menu is reached from Vela's bottom sheet, so there is no
+  anchor, and the call threw. The list is now drawn by the menu itself.
+- **The status pill called the LuxAlgo Library link "Agent"** (31 Oct). It is now "Library", and a failed
+  check from the popover no longer adds a toast on top.
 
 - **The scripts list behind Indicators** (31 Oct). Six faults from a screenshot review:
   - **A row whose preview picture failed collapsed.** The `<img>` was deleted, the row's grid shifted one

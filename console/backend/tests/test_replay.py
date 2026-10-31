@@ -163,8 +163,9 @@ class TheControlStrip(unittest.TestCase):
         self.assertNotIn("43200", _read(FRONT / "chart-bridge.js"))
 
     def test_the_menu_starts_and_exits_replay(self):
-        self.assertIn("taReplay", self.ws)
-        self.assertIn("'Replay'", self.ws)
+        menus = (FRONT / "topmenus.js").read_text(encoding="utf-8")   # the ⋯ menu's rows (31 Oct)
+        self.assertIn("taReplay", menus)
+        self.assertIn("replayOn ? 'Exit replay' : 'Replay'", menus)
 
     def test_the_topbar_carries_a_replay_button_with_velas_own_glyph(self):
         self.assertIn("id: 'ta-replay'", self.ws)

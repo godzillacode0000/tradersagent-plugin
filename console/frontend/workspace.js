@@ -189,59 +189,23 @@ state.ready = (async () => {
        the screenshot and Edge Stats had no door. A hidden anchor is no anchor: the null path below
        places the menu top-right, where it can be seen. */
     if (anchor && anchor.getBoundingClientRect().width === 0) anchor = null;
-    const old = document.querySelector('.ta-more');
-    if (old) { old.remove(); return; }
-    const items = [
-      ['Edge Stats', () => { if (window.edgeSheet) window.edgeSheet.open(); }],
-      [replayOn() ? 'Exit replay' : 'Replay', () => {
-        if (!window.taReplay) return;
-        const p = replayOn() ? window.taReplay.stop() : window.taReplay.start();
-        if (p && p.catch) p.catch((err) => { if (window.taToast) window.taToast(String(err.message || err), true); });
-      }],
-      ['Alerts', () => ws.openAlertsMenu(anchor)],
-      ["Trader's desk", () => { if (window.taDesk) window.taDesk.open('paper'); else if (window.taBroker) window.taBroker.open(); }],
-      ['Data window', () => ws.dock.toggle('dataWindow')],
-      ['Object tree', () => ws.dock.toggle('objects')],
-      ['Download screenshot', () => ws.downloadScreenshot()],
-    ];
-    const menu = document.createElement('div');
-    menu.className = 'ta-more';
-    menu.setAttribute('role', 'menu');
-    const opener = document.activeElement;
-    const close = (restore) => {
-      const inside = menu.contains(document.activeElement);
-      menu.remove();
-      document.removeEventListener('pointerdown', away, true);
-      document.removeEventListener('keydown', key, true);
-      /* Esc used to drop focus on <body>: a keyboard user lost their place in the toolbar (audit 8 Oct, G6). */
-      if (restore && inside) {
-        const back = (opener && opener !== document.body && document.contains(opener)) ? opener : anchor;
-        try { if (back && back.focus) back.focus({ preventScroll: true }); } catch (err) { /* nothing to focus */ }
-      }
-    };
-    const away = (ev) => { if (!menu.contains(ev.target) && !(anchor && anchor.contains(ev.target))) close(); };
-    const key = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); close(true); } };
-    for (const [label, go] of items) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'ta-more__item';
-      b.setAttribute('role', 'menuitem');
-      b.textContent = label;
-      b.addEventListener('click', () => {
-        close();
-        try { go(); } catch (err) { console.warn('[workspace] menu item failed:', label, err); }
-      });
-      menu.appendChild(b);
-    }
-    document.body.appendChild(menu);
-    const r = anchor ? anchor.getBoundingClientRect() : { right: innerWidth - 8, bottom: 40 };
-    menu.style.top = Math.round(r.bottom + 6) + 'px';
-    menu.style.right = Math.max(8, Math.round(innerWidth - r.right)) + 'px';
-    document.addEventListener('pointerdown', away, true);
-    document.addEventListener('keydown', key, true);
-    const first = menu.querySelector('button');
-    if (first) first.focus();
+    /* The sheet itself (31 Oct, glass, grouped, keyboard, its own Alerts list) is topmenus.js. Each
+       row still calls the Vela method its old row called: dock.toggle('dataWindow'),
+       dock.toggle('objects'), downloadScreenshot(), and the alerts Vela keeps in ws.alerts. */
+    if (window.taTopMenus) window.taTopMenus.more(anchor, ws, { replayOn });
   }
+
+  /* Which row button was pressed: Vela's run() gets a context, not the event, and the popovers
+     anchor to the button. Keyboard presses focus it; clicks are caught on the way down. */
+  let lastPress = null;
+  document.addEventListener('pointerdown', (ev) => {
+    const b = ev.target && ev.target.closest && ev.target.closest('.vela-widget-actions button');
+    if (b) lastPress = b;
+  }, true);
+  const pressed = () => {
+    const a = document.activeElement;
+    return (a && a.closest && a.closest('.vela-widget-actions button')) || lastPress;
+  };
 
   // Vela's own "Indicators" button is the door to the drawer. `registerWidgetAction` is Vela's official
   // override for exactly two slots ("indicators", "screenshot"), and Vela reads it in the VelaWorkspace
@@ -251,6 +215,9 @@ state.ready = (async () => {
   try {
     const { registerWidgetAction, registerIcon } = await import('@luxalgo/vela/plugin');
     if (typeof registerWidgetAction === 'function') {
+      if (typeof registerIcon === 'function') {
+        registerIcon('ta-code', '<svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5M9 3 7 13"/></svg>');
+      }
       registerWidgetAction({
         id: 'indicators', target: 'topbar', label: 'Indicators', icon: 'indicators',
         /* The button opens the view the operator chose (31 Oct): the quick-add dropdown by default
@@ -265,7 +232,8 @@ state.ready = (async () => {
          and nothing to jump between rows. Both are icon-only (the labels are the tooltips) — the row
          is 868 px wide, and full labels push Vela's own camera off its edge. */
       registerWidgetAction({
-        id: 'ta-script', target: 'topbar', icon: 'pen', iconOnly: true, order: 20,
+        /* `</>`, not a pencil (31 Oct): beside the drawing tools a pencil read as "draw". */
+        id: 'ta-script', target: 'topbar', icon: 'ta-code', iconOnly: true, order: 20,
         label: 'Script — write or paste Pine, then Run it on this chart',
         run: () => { if (window.scriptPane) window.scriptPane.toggle(); },
       });
@@ -309,8 +277,12 @@ state.ready = (async () => {
       }
       const status = {
         id: 'ta-status', target: 'topbar', order: 25,
-        icon: 'ta-dot-wait', iconOnly: true, label: 'Agent and bars — waiting for both to answer',
-        run: () => { if (window.taToast) window.taToast((window.taStatus && window.taStatus.title) || 'Agent and bars'); },
+        icon: 'ta-dot-wait', iconOnly: true, label: 'LuxAlgo Library and chart data — waiting for both to answer',
+        /* A popover with both connections and "Check again" (topmenus.js); it used to flash a toast. */
+        run: () => {
+          if (window.taTopMenus) window.taTopMenus.status(pressed());
+          else if (window.taToast) window.taToast((window.taStatus && window.taStatus.title) || 'Connections');
+        },
       };
       registerWidgetAction(status);
 
@@ -346,7 +318,8 @@ state.ready = (async () => {
           const statusIcon = 'ta-dot-' + (bad ? 'bad' : s.state === 'ok' ? 'ok' : 'wait');
           /* Fine = a bare dot with a tooltip; wrong = the words, because that is when they matter. */
           const statusIconOnly = !bad;
-          const statusLabel = bad ? (s.text || 'something is wrong') : (s.title || 'Agent and bars');
+          /* Two words in the row ("Library offline"); the reason is the tooltip and the popover. */
+          const statusLabel = bad ? (s.short || s.text || 'something is wrong') : (s.title || 'Connections');
           /* ONLY a change the operator can SEE earns a rebuild. Vela's renderActions()
              replaceChildren()s the row — every call destroys and rebuilds each button — and a click
              whose mousedown→mouseup straddles one never fires `click` at all. A replay tick used to
@@ -373,8 +346,8 @@ state.ready = (async () => {
 
       registerWidgetAction({
         id: 'ta-more', target: 'topbar', icon: 'ta-more', iconOnly: true, order: 40,
-        label: 'More — alerts, data window, object tree, screenshot',
-        run: () => openMoreMenu(document.querySelector('.vela-topbar-right button[aria-label^="More"]')),
+        label: 'More — desk, Edge Stats, replay, alerts, data window, screenshot',
+        run: () => openMoreMenu(pressed() || document.querySelector('.vela-topbar-right button[aria-label^="More"]')),
       });
       registerWidgetAction({
         id: 'ta-fullscreen', target: 'topbar', icon: 'maximize', iconOnly: true, order: 30,

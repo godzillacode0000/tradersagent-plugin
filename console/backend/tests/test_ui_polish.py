@@ -270,8 +270,10 @@ class TheChromeShowsVerbsNotTelemetry(unittest.TestCase):
         # appears only when something is wrong and the numbers stay in the tooltip.
         app = read(APP)
         self.assertIn("statusState.mcp", app)
-        self.assertIn("'Agent: ' + label", app)
-        self.assertIn("'Agent: offline'", app)
+        # 31 Oct: it was never the agent — it is the console's link to the LuxAlgo Library.
+        self.assertIn("'Library: ' + label", app)
+        self.assertIn("'Library: offline'", app)
+        self.assertNotIn("'Agent: offline'", app)
         self.assertNotIn("`MCP: ${label}`", app)          # the old visible shape
 
     def test_the_activity_line_is_wired_to_mutations(self):
