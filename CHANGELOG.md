@@ -4,6 +4,26 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Fixed
+
+- **The scripts list behind Indicators** (31 Oct). Six faults from a screenshot review:
+  - **A row whose preview picture failed collapsed.** The `<img>` was deleted, the row's grid shifted one
+    column left, and the name landed in the 52 px picture slot ("Indic…"). That is every row without a
+    catalogue picture, and every row offline. The picture is now swapped for a tile with the name's
+    first letter, and each part of a row owns its grid column.
+  - **Built-in rows** had the ƒ in the corner of its tile, and their Run button sat 12 px left of every
+    other Run. Both are aligned now.
+  - **The detail view said only "Failed / No live MCP session".** It now says the LuxAlgo Library isn't
+    connected, what that means, and offers Try again. The server's message stays, smaller.
+  - **The search box always said "Search 800 scripts".** The number is gone.
+  - **The family chips were cut at the edge** with no sign there were more. A fade marks the side that
+    scrolls, and the mouse wheel scrolls them.
+  - **The footer's theme switch** was a tiny dim ◐ that read as a broken glyph. It is now the sun/moon
+    icon the Edge Stats sheet uses, on a 28 px target.
+
+  Pinned by `test_lib_drawer_polish.py`. Verified in Chromium with a third of the previews failing: every
+  name gets the same width and every Run lines up, in dark and light.
+
 ### Added
 
 - **`AGENTS.md`: give an agent the repo link and it installs the plugin** (30 Oct). A file written for AI agents

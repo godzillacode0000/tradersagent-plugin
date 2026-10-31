@@ -370,7 +370,11 @@ async function api(path, params = {}) {
   Object.entries(params).forEach(([k, v]) => { if (v !== '' && v != null) url.searchParams.set(k, v); });
   const res = await fetch(url);
   const payload = await res.json().catch(() => ({ ok: false, error: `bad JSON (HTTP ${res.status})` }));
-  if (!payload.ok) throw new Error(payload.error || `HTTP ${res.status}`);
+  if (!payload.ok) {
+    const err = new Error(payload.error || `HTTP ${res.status}`);
+    err.code = payload.code;      // e.g. mcp_unavailable — the detail view says it in words
+    throw err;
+  }
   return payload.data;
 }
 
@@ -1012,8 +1016,18 @@ async function openResult(row, button) {
     checkHealth();   // the concept fetch moved the counter — refresh the pill
   } catch (err) {
     if (mySeq !== openSeq) return;
-    el.detail.innerHTML = `<h2 class="detail__title">Failed</h2><p class="muted">${esc(err.message)}</p>`;
-    toast('Could not load detail: ' + err.message, true);
+    /* What went wrong, in words, and a way to try again (31 Oct: it said only "Failed / No live MCP
+       session"). The server's own message stays, smaller, for whoever reads the logs. */
+    const offline = err.code === 'mcp_unavailable';
+    el.detail.innerHTML = `
+      <h2 class="detail__title">${offline ? "The LuxAlgo Library isn't connected" : "This script didn't load"}</h2>
+      <p class="muted">${offline
+        ? "The console can't reach LuxAlgo's server right now, so this script's write-up and Pine source can't be fetched. Check the network — the console reconnects on its own."
+        : 'Something went wrong fetching it. Try again in a moment.'}</p>
+      <p class="muted detail__why">${esc(err.message)}</p>
+      <p><button type="button" class="btn btn--ghost" data-detail-retry>Try again</button></p>`;
+    el.detail.querySelector('[data-detail-retry]')?.addEventListener('click', () => openResult(row, button));
+    toast(offline ? 'LuxAlgo Library not connected — try again in a moment' : 'Could not load detail: ' + err.message, true);
   }
 }
 

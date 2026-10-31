@@ -41,7 +41,7 @@
       <button type="button" class="drawer__x" id="drawer-close" aria-label="Close the drawer">✕</button>
     </div>
     <label class="drawer__search">
-      <input id="drawer-q" type="search" placeholder="Search 800 scripts — order block, FVG, RSI…"
+      <input id="drawer-q" type="search" placeholder="Search scripts — order block, FVG, RSI…"
              autocomplete="off" aria-label="Search LuxAlgo scripts" />
     </label>
     <div class="drawer__fams" id="drawer-fams" role="toolbar" aria-label="Families"></div>
@@ -60,7 +60,10 @@
          cost the chart nothing. -->
     <div class="drawer__foot">
       <span class="drawer__brand" title="tools by luxalgo-mcp-server · chart by Vela · Pine engine vela-pinets">▲ LuxAlgo Library × Vela</span>
-      <button type="button" class="drawer__theme" id="theme-toggle" title="Switch light / dark" aria-label="Switch theme">◐</button>
+      <button type="button" class="drawer__theme" id="theme-toggle" title="Switch light / dark" aria-label="Switch theme">
+        <svg class="i-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="2.9"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M3.5 12.5l1.1-1.1M11.4 4.6l1.1-1.1"/></svg>
+        <svg class="i-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8Z"/></svg>
+      </button>
     </div>
     <p class="drawer__note muted">▶ Run paints the script on this chart · one at a time · it stays after a restart</p>
   </aside>

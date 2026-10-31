@@ -91,6 +91,7 @@
       + chip('__fav', '★ Favourites', favN)
       + groups.filter((g) => !q || n(g.key) > 0 || st.family === g.key)
         .map((g) => chip(g.key, g.name, q ? n(g.key) : g.count)).join('');
+    markMore();
   }
 
   /* What is on the chart, by name — the landasan's own list. The row that matches says so and its
@@ -265,14 +266,35 @@ function setOpen(on) {
     }
   }
 
-  /* A row whose picture the catalogue does not carry answers 404. Drop the <img> instead of leaving
-     the browser's broken-image glyph in the row: no picture is a fact, a broken icon looks like a bug
-     (the ⌗ modal's lesson, 26 Sep — the drawer inherits the rows). Capture phase: `error` from an
-     <img> does not bubble. */
+  /* A row whose picture the catalogue does not carry answers 404 (and offline, every row does). The
+     <img> becomes a tile with the name's first letter: no picture is a fact, a broken icon looks like a
+     bug (the ⌗ modal's lesson, 26 Sep). It is swapped, never deleted: deleting it shifted the row's
+     grid and squeezed the name into the 52 px picture slot ("Indic…", 31 Oct). Capture phase: `error`
+     from an <img> does not bubble. */
   list.addEventListener('error', (ev) => {
     const img = ev.target;
-    if (img && img.tagName === 'IMG') img.remove();
+    if (!img || img.tagName !== 'IMG') return;
+    const tile = document.createElement('span');
+    tile.className = 'drow__shot drow__shot--none';
+    tile.setAttribute('aria-hidden', 'true');
+    const name = img.closest('.drow')?.querySelector('.drow__name');
+    tile.textContent = ((name && name.textContent.trim()) || '·').charAt(0).toUpperCase();
+    img.replaceWith(tile);
   }, true);
+
+  /* The family chips scroll sideways; a fade on the side that has more says so (31 Oct: they were cut
+     at the edge, "Mom", with nothing to show there was more). A mouse wheel scrolls them too. */
+  function markMore() {
+    const max = fams.scrollWidth - fams.clientWidth;
+    fams.dataset.more = max <= 1 ? '' : fams.scrollLeft <= 1 ? 'right' : fams.scrollLeft >= max - 1 ? 'left' : 'both';
+  }
+  fams.addEventListener('scroll', markMore, { passive: true });
+  fams.addEventListener('wheel', (ev) => {
+    if (fams.scrollWidth <= fams.clientWidth || Math.abs(ev.deltaX) >= Math.abs(ev.deltaY)) return;
+    fams.scrollLeft += ev.deltaY;
+    ev.preventDefault();
+  }, { passive: false });
+  window.addEventListener('resize', markMore);
 
   if (fallback) fallback.addEventListener('click', () => setOpen(!st.open));
   scrim.addEventListener('click', () => setOpen(false));

@@ -1205,6 +1205,12 @@ pre {
 
 .drawer__fams { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
 .drawer__fams::-webkit-scrollbar { display: none; }
+.drawer__fams[data-more="right"] { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); }
+.drawer__fams[data-more="left"] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px);
+  mask-image: linear-gradient(90deg, transparent, #000 40px); }
+.drawer__fams[data-more="both"] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
 .dchip {
   flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
   height: 26px; padding: 0 10px; border-radius: var(--lx-radius-pill);
@@ -1256,8 +1262,17 @@ pre {
   transition: background var(--lx-dur-120) var(--lx-ease);
 }
 .drow:hover { background: var(--lx-surface-3); }
+/* Each part owns its column (31 Oct): a row with no picture tile or no ☆ (built-ins) must not shift the
+   rest — a deleted tile once put the name in the 52 px slot, and built-ins' Run sat 12 px off. */
+.drow > .drow__shot { grid-column: 1; }
+.drow > .drow__main { grid-column: 2; }
+.drow > .drow__star { grid-column: 3; }
+.drow > .drow__run { grid-column: 4; }
 .drow__shot { width: 52px; height: 34px; object-fit: cover; border-radius: var(--lx-radius-sm);
   background: var(--lx-surface-3); border: 1px solid var(--lx-border-soft); }
+.drow__shot--native,
+.drow__shot--none { display: grid; place-items: center; font-size: 15px; font-weight: 600; line-height: 1;
+  color: var(--lx-fg-muted); box-sizing: border-box; }
 .drow__main { min-width: 0; display: flex; flex-direction: column; gap: 1px; padding: 0;
   border: 0; background: transparent; text-align: left; color: inherit; cursor: pointer; font: inherit; }
 .drow__name { font-size: 13px; color: var(--lx-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1314,11 +1329,17 @@ pre {
 }
 .drawer__brand { color: var(--lx-fg-muted); font-size: var(--lx-fs-2xs); }
 .drawer__theme {
-  background: none; border: 0; cursor: pointer; font-size: 13px; padding: 2px 6px;
+  display: grid; place-items: center; width: 28px; height: 28px; padding: 0; flex: none;
+  background: none; border: 0; cursor: pointer;
   color: var(--lx-fg-muted); border-radius: var(--lx-radius-md);
 }
+.drawer__theme svg { width: 15px; height: 15px; }
+.drawer__theme .i-moon { display: none; }
+:root[data-theme="light"] .drawer__theme .i-moon { display: block; }
+:root[data-theme="light"] .drawer__theme .i-sun { display: none; }
 .drawer__theme:hover { color: var(--lx-fg-bright); background: var(--lx-bg-hover); }
 .drawer__note { margin: 0; font-size: var(--lx-fs-2xs); text-align: center; }
+.detail__why { font-size: var(--lx-fs-2xs); opacity: .7; }
 
 /* ── The bare-chart fallback strip (3 Oct) ───────────────────────────────────────────────────────
    With no Vela row the drawer / script / full-screen controls have no home; these appear over the
