@@ -253,7 +253,12 @@ state.ready = (async () => {
     if (typeof registerWidgetAction === 'function') {
       registerWidgetAction({
         id: 'indicators', target: 'topbar', label: 'Indicators', icon: 'indicators',
-        run: () => { if (window.libDrawer) window.libDrawer.toggle(); },
+        /* The button opens the view the operator chose (31 Oct): the quick-add dropdown by default
+           (picker.js), or the slide-in panel. Without picker.js it falls back to the panel. */
+        run: () => {
+          if (window.taIndicators && window.taIndicators.toggle) window.taIndicators.toggle();
+          else if (window.libDrawer) window.libDrawer.toggle();
+        },
       });
       /* `<>` Script and full screen ride Vela's own row as REAL widget actions (3 Oct) instead of the
          old DOM docking: Vela renders, styles and maintains them itself, so there is no re-dock timer

@@ -4,6 +4,32 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ## [Unreleased]
 
+### Added
+
+- **Two indicator views, one button** (31 Oct). The operator picked both mock-ups and kept both, with Quick as the
+  default.
+  - **Quick** (`picker.js`) is a dropdown under the Indicators button:
+    - type straight away, and search covers LuxAlgo scripts and built-ins together; initials count, so "rsi" finds
+      Relative Strength Index first;
+    - categories on the left, yours first (Recent, Favourites, On chart), then the library's families, then the
+      built-ins;
+    - results in the middle, and a preview with the picture and the write-up's first lines on the right;
+    - keyboard: ↑ ↓ move, ↵ runs, → opens Details, Esc closes;
+    - in a narrow Hermes pane the categories become chips and the preview folds away.
+  - **Panel** (`drawer.js`) is the slide-in panel, reorganised:
+    - "On chart" first, then "Recently used", then all scripts;
+    - two-line names, family as a coloured tag, a ☆ that shows only when it means something;
+    - search matches highlighted, and the same keys as Quick.
+  - **The switch.** Each view has a Quick | Panel switch, and the choice is remembered per browser. The narrow
+    pane's Scripts button follows it too.
+  - **Wording.** A LuxAlgo script says **Run**: one at a time, it replaces the last one. A built-in says **Add**:
+    it stacks.
+  - **Shared logic.** The dropdown owns no data and no actions: it reads the drawer's rows and acts through the
+    drawer, so a run is the same run from either view, and the agent's `indicators` door still drives the panel.
+  - Pinned by `test_indicator_views.py`. Verified in Chromium at 1280 and 620 px, dark and light: open, search,
+    keyboard run, Recent and On chart filling in, a built-in added, Esc and click-away, and the switch both ways
+    surviving a reload.
+
 ### Fixed
 
 - **The scripts list behind Indicators** (31 Oct). Six faults from a screenshot review:

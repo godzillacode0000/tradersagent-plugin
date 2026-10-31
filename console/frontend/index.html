@@ -32,10 +32,10 @@
 
   <!-- The drawer slides over the chart from the left; the scrim catches the click-away. -->
   <div class="drawer-scrim" id="drawer-scrim" aria-hidden="true"></div>
-  <aside class="lib-drawer" id="lib-drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-label="LuxAlgo scripts">
+  <aside class="lib-drawer" id="lib-drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-label="Indicators">
     <div class="drawer__head">
       <div class="drawer__title">
-        <strong>LuxAlgo scripts</strong>
+        <strong>Indicators</strong>
         <span class="muted" id="drawer-count"></span>
       </div>
       <button type="button" class="drawer__x" id="drawer-close" aria-label="Close the drawer">✕</button>
@@ -60,12 +60,17 @@
          cost the chart nothing. -->
     <div class="drawer__foot">
       <span class="drawer__brand" title="tools by luxalgo-mcp-server · chart by Vela · Pine engine vela-pinets">▲ LuxAlgo Library × Vela</span>
+      <!-- Which view the Indicators button opens (31 Oct): Quick (the dropdown, picker.js) or this Panel. -->
+      <div class="ta-viewswitch" role="group" aria-label="Indicators view">
+        <button type="button" data-view="quick" aria-pressed="false" title="The quick-add dropdown under the Indicators button">Quick</button>
+        <button type="button" data-view="panel" aria-pressed="true">Panel</button>
+      </div>
       <button type="button" class="drawer__theme" id="theme-toggle" title="Switch light / dark" aria-label="Switch theme">
         <svg class="i-sun" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="2.9"/><path d="M8 1.6v1.6M8 12.8v1.6M1.6 8h1.6M12.8 8h1.6M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M3.5 12.5l1.1-1.1M11.4 4.6l1.1-1.1"/></svg>
         <svg class="i-moon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.2 9.6A5.6 5.6 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8Z"/></svg>
       </button>
     </div>
-    <p class="drawer__note muted">▶ Run paints the script on this chart · one at a time · it stays after a restart</p>
+    <p class="drawer__note muted"><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>↵</kbd> run · <kbd>→</kbd> details — ▶ Run paints one LuxAlgo script at a time; + Add puts a built-in beside it</p>
   </aside>
 
   <!-- Edge Stats (4 Oct): LuxAlgo's open-source engine — "how often did this setup actually work?", with
@@ -491,6 +496,7 @@
 <script src="./script-library.js"></script>
 <script src="./script-highlight.js"></script>
 <script src="./drawer.js"></script>
+<script src="./picker.js"></script>
 <script src="./broker.js"></script>
 <script src="./desk.js"></script>
 <!-- The replay control strip (Phase 6, 3 Oct): started from the ⋯ menu, hidden until replay is on.

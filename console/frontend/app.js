@@ -1250,7 +1250,8 @@ window.scriptPane = {
    skipping then meant Escape no longer closed the pane (measured 5 Oct, caught by an A/B run). */
 function escapeKeydown(ev) {
   if (ev.key !== 'Escape') return;
-  const closed = (typeof window.closeDrawerIfOpen === 'function' && window.closeDrawerIfOpen())
+  const closed = (typeof window.closePickerIfOpen === 'function' && window.closePickerIfOpen())
+    || (typeof window.closeDrawerIfOpen === 'function' && window.closeDrawerIfOpen())
     || (typeof window.closeScriptLayerIfOpen === 'function' && window.closeScriptLayerIfOpen());
   if (closed) { ev.preventDefault(); return; }
   if (el.main && el.main.dataset.detail === 'on') {
