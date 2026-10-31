@@ -46,7 +46,7 @@ class TheSheetIsOnThePage(unittest.TestCase):
             self.assertIn(label, JS)
 
     def test_it_opens_from_the_more_menu_on_the_paper_view(self):
-        ws = (FRONT / "workspace.js").read_text(encoding="utf-8")
+        ws = (FRONT / "topmenus.js").read_text(encoding="utf-8")   # the ⋯ menu's rows (31 Oct)
         self.assertIn("taDesk", ws)
         self.assertIn("open('paper')", ws)
 

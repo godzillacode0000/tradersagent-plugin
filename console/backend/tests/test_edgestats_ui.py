@@ -136,8 +136,9 @@ class Motion(unittest.TestCase):
 
 class Doors(unittest.TestCase):
     def test_the_more_menu_opens_it(self):
-        ws = (FRONT / "workspace.js").read_text(encoding="utf-8")
-        self.assertRegex(ws, r"\['Edge Stats', \(\) => \{ if \(window\.edgeSheet\) window\.edgeSheet\.open\(\); \}\]")
+        ws = (FRONT / "topmenus.js").read_text(encoding="utf-8")   # the ⋯ menu's rows (31 Oct)
+        self.assertIn("label: 'Edge Stats'", ws)
+        self.assertIn("go: () => { if (window.edgeSheet) window.edgeSheet.open(); }", ws)
 
     def test_escape_closes_one_layer_and_app_js_skips_a_handled_press(self):
         self.assertIn("window.closeEdgeIfOpen", JS)
