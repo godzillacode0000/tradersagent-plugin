@@ -171,8 +171,10 @@ class TheScriptControlIsAVelaWidgetAction(unittest.TestCase):
         """The Library panel proved the connection live (health: connected true, calls
         moved 0->1) while the pill still read boot's number — checkHealth ran exactly
         once, at boot. Every door that moves the backend's MCP counter refreshes it."""
-        # the definition plus every call (it takes {quiet} since 31 Oct, so count the open paren)
-        self.assertGreaterEqual(APP.count("checkHealth("), 4)
+        # every call, not the definition: boot and the two Library details (the status popover calls it through
+        # window.taCheckHealth). It takes {quiet} since 31 Oct, so count the open paren.
+        calls = APP.count("checkHealth(") - APP.count("function checkHealth(")
+        self.assertGreaterEqual(calls, 3)
 
     def test_where_the_control_lives_is_stated_honestly(self):
         self.assertIn("Indicators button opens the drawer", BRIDGE)   # mode() tells the one-door story

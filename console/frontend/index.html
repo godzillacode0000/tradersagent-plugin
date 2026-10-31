@@ -182,6 +182,24 @@
                       placeholder="// Paste Pine here, then press ▶ Run.&#10;// Plots become Vela series; boxes, lines and labels go on the chart."></textarea>
           </div>
         </div>
+        <!-- The editor's status bar (31 Oct): the Pine version, the caret's line and column, the code size and the
+             editor theme (script-highlight.js). Hidden with the editor while Settings or Saved scripts are open. -->
+        <div class="script__foot" id="script-foot">
+          <span class="script__lang" id="script-lang">Pine</span>
+          <span class="script__pos" id="script-pos">Ln 1, Col 1</span>
+          <span class="script__zoom" role="group" aria-label="Code size">
+            <button type="button" id="script-zoom-out" aria-label="Smaller code" title="Smaller code (Ctrl+−)">A−</button>
+            <label class="script__size"><input type="number" id="script-size" min="6" max="24" step="0.25" value="8"
+                   inputmode="decimal" aria-label="Code size in pixels"><span aria-hidden="true">px</span></label>
+            <button type="button" id="script-zoom-in" aria-label="Larger code" title="Larger code (Ctrl+=)">A+</button>
+          </span>
+          <select class="script__themesel" id="script-theme" aria-label="Editor theme" title="Editor theme">
+            <option value="onedark">One Dark Pro</option>
+            <option value="dracula">Dracula</option>
+            <option value="github">GitHub</option>
+            <option value="console">Console</option>
+          </select>
+        </div>
         <!-- Settings (the script's input.*() values): a view that takes the editor's place while it is open.
              A change applies at once — no Save — so the status line below is where the result shows. -->
         <section class="script__settings" id="script-settings" aria-label="Script inputs" hidden>

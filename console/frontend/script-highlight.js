@@ -97,6 +97,49 @@
     return out;
   }
 
+  /* Finer colours for the editor themes (31 Oct): an editor theme (One Dark Pro, Dracula, GitHub) colours a call,
+     a type, a constant and an operator apart, the way the operator's other editors do. refine() takes tokenize()'s
+     classes and splits them further. It only re-labels tokens and cuts plain runs into pieces, so the texts still
+     join back to the line. tokenize() is unchanged, and its own table in test_script_highlight.py still holds.
+       t type word (int float bool string color series simple const)   l literal (true false na)
+       f a call: a name or a built-in followed by `(` (or `<` for a typed one like array.new<float>)
+       v a built-in series (close, high, bar_index…)                    p a built-in constant (color.red, size.small)
+       a a named argument (`title =` after `(` or `,`)                  o an operator */
+  const TYPES = set('int float bool string color series simple const');
+  const LITERALS = set('true false na');
+  const OPS = /(:=|=>|==|!=|<=|>=|\+=|-=|\*=|\/=|[-+*/%<>?:=])/;
+
+  function refine(toks) {
+    const out = [];
+    for (let i = 0; i < toks.length; i++) {
+      let [cls, t] = toks[i];
+      const next = i + 1 < toks.length ? toks[i + 1][1] : '';
+      const prev = out.length ? out[out.length - 1][1] : '';
+      const word = /^[A-Za-z_]/.test(t);
+      const dotted = t.indexOf('.') > 0;
+      /* a typed call, `array.new<float>(`: `<`, a type word, then `>` (so `syminfo.mintick < x` stays a comparison) */
+      const typed = dotted && next === '<' && i + 3 < toks.length && /^[A-Za-z_]/.test(toks[i + 2][1]) && /^>/.test(toks[i + 3][1]);
+      const call = /^\s*\(/.test(next) || typed;
+      if (cls === 'k') {
+        if (TYPES.has(t) && !call) cls = 't';
+        else if (LITERALS.has(t) && !call) cls = 'l';
+      } else if (cls === 'b') {
+        if (call) cls = 'f';
+        else if (dotted) cls = 'p';
+        else if (!NS_CORE.has(t)) cls = 'v';
+      } else if (cls === '' && word) {
+        if (call) cls = 'f';
+        else if (/^\s*=(?![=>])/.test(next) && /[(,]\s*$/.test(prev)) cls = 'a';
+      } else if (cls === '' && t) {
+        /* a plain run between tokens: cut out the operators */
+        for (const piece of t.split(OPS)) if (piece) out.push([OPS.test(piece) && piece.length <= 2 && /^[-+*/%<>?:=!]+$/.test(piece) ? 'o' : '', piece]);
+        continue;
+      }
+      out.push([cls, t]);
+    }
+    return out;
+  }
+
   /** Which lines to draw: [first, last], the lines on screen plus a margin. `prev` is the window drawn now
    *  ({ first, last } or null); it is kept while the view stays clear of its edges, so scrolling is not a rebuild
    *  per frame. Pure, so the one promise that matters — every line in view is inside the window, because the
@@ -139,7 +182,7 @@
     function build(from, to) {
       const frag = document.createDocumentFragment();
       for (let i = from; i <= to; i++) {
-        for (const [cls, s] of tokenize(lines[i])) {
+        for (const [cls, s] of refine(tokenize(lines[i]))) {
           if (!cls) { frag.appendChild(document.createTextNode(s)); continue; }
           const span = document.createElement('span');
           span.className = 'hl-' + cls;
@@ -206,7 +249,7 @@
     return { paint, off: () => off };
   }
 
-  return { tokenize, classify, windowFor, attach, MAX_CHARS, MAX_LINE, MARGIN, HYSTERESIS, KEYWORDS, NS_CORE, NS_DOTTED, BUILTIN };
+  return { tokenize, refine, classify, windowFor, attach, MAX_CHARS, MAX_LINE, MARGIN, HYSTERESIS, KEYWORDS, NS_CORE, NS_DOTTED, BUILTIN };
 }));
 
 /* Wire it to the pane's editor once the page has it. */
@@ -219,6 +262,98 @@
     const layer = document.getElementById('script-hl');
     const edit = wrap && wrap.parentElement;
     if (ta && wrap && layer && edit) window.ScriptHighlight.attach(ta, wrap, layer, edit);
+    if (ta && edit) footer(ta, edit);
   };
+
+  /* The editor's footer (31 Oct): theme, code size, caret position, Pine version. Both choices are this viewer's
+     own, kept in this browser (and harmless when storage is off). The code size shows as a number you can read
+     and type into (the operator's ask: "changeable / inspectable"), A− / A+ step it by 1px, and Ctrl+= / Ctrl+−
+     / Ctrl+0 do the same from the editor. 8px is the default (31 Oct); 6.25px (the 6 Oct size) is still in reach.
+     "Console" is the editor as it was before themes. */
+  const THEMES = ['onedark', 'dracula', 'github', 'console'];
+  const SIZE_DEFAULT = 8, SIZE_MIN = 6, SIZE_MAX = 24;
+  /* Any typed value, kept to the range and to quarter pixels; a value that is not a number is the default. */
+  const clampSize = (v) => {
+    const n = Number(v);
+    if (!isFinite(n) || n <= 0) return SIZE_DEFAULT;
+    return Math.round(Math.max(SIZE_MIN, Math.min(SIZE_MAX, n)) * 4) / 4;
+  };
+  const read = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (err) { return d; } };
+  const write = (k, v) => { try { localStorage.setItem(k, String(v)); } catch (err) { /* private mode */ } };
+
+  function footer(ta, edit) {
+    const foot = document.getElementById('script-foot');
+    const sel = document.getElementById('script-theme');
+    const pos = document.getElementById('script-pos');
+    const lang = document.getElementById('script-lang');
+    const zin = document.getElementById('script-zoom-in');
+    const zout = document.getElementById('script-zoom-out');
+    const sizeBox = document.getElementById('script-size');
+    const repaint = () => {
+      ta.dispatchEvent(new Event('scroll'));                       // the gutter and the line tints re-measure
+      window.dispatchEvent(new Event('scriptpane:painted'));       // the coloured copy re-places itself
+    };
+    const setTheme = (t) => {
+      const theme = THEMES.indexOf(t) >= 0 ? t : 'onedark';
+      for (const el of [edit, foot]) {
+        if (!el) continue;
+        if (theme === 'console') delete el.dataset.codeTheme; else el.dataset.codeTheme = theme;
+      }
+      if (sel) sel.value = theme;
+      write('ta-code-theme', theme);
+    };
+    let size = clampSize(read('ta-code-size', SIZE_DEFAULT));
+    const setSize = (px) => {
+      size = clampSize(px);
+      edit.style.setProperty('--code-size', size + 'px');
+      if (sizeBox && document.activeElement !== sizeBox) sizeBox.value = String(size);
+      if (sizeBox) sizeBox.title = `Code size: ${size}px (type a size from ${SIZE_MIN} to ${SIZE_MAX})`;
+      if (zout) zout.disabled = size <= SIZE_MIN;
+      if (zin) zin.disabled = size >= SIZE_MAX;
+      write('ta-code-size', size);
+      repaint();
+    };
+    /* A− / A+ land on whole pixels: 6.25 + 1 is 7, not 7.25. */
+    const step = (d) => setSize(d > 0 ? Math.floor(size) + 1 : Math.ceil(size) - 1);
+    const where = () => {
+      if (!pos) return;
+      const v = ta.value, at = ta.selectionStart || 0;
+      const before = v.slice(0, at);
+      const line = before.split('\n').length;
+      const col = at - before.lastIndexOf('\n');
+      const n = Math.abs((ta.selectionEnd || 0) - at);
+      pos.textContent = `Ln ${line}, Col ${col}` + (n ? ` (${n} selected)` : '');
+    };
+    const version = () => {
+      if (!lang) return;
+      const m = /^[ \t]*\/\/[ \t]*@version[ \t]*=[ \t]*(\d+)/m.exec(ta.value.slice(0, 4000));
+      lang.textContent = m ? 'Pine v' + m[1] : 'Pine';
+    };
+    if (sel) sel.addEventListener('change', () => setTheme(sel.value));
+    if (zin) zin.addEventListener('click', () => step(1));
+    if (zout) zout.addEventListener('click', () => step(-1));
+    if (sizeBox) {
+      sizeBox.addEventListener('change', () => { setSize(sizeBox.value); sizeBox.value = String(size); });
+      sizeBox.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); setSize(sizeBox.value); sizeBox.value = String(size); ta.focus(); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); sizeBox.value = String(size); ta.focus(); }
+      });
+      sizeBox.addEventListener('blur', () => { sizeBox.value = String(size); });
+    }
+    /* From the editor itself, like any code editor: Ctrl/Cmd with = or + bigger, - smaller, 0 back to the default. */
+    ta.addEventListener('keydown', (ev) => {
+      if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
+      if (ev.key === '=' || ev.key === '+') { ev.preventDefault(); step(1); }
+      else if (ev.key === '-' || ev.key === '_') { ev.preventDefault(); step(-1); }
+      else if (ev.key === '0') { ev.preventDefault(); setSize(SIZE_DEFAULT); }
+    });
+    for (const ev of ['keyup', 'click', 'select', 'input', 'focus']) ta.addEventListener(ev, where);
+    ta.addEventListener('input', version);
+    window.addEventListener('scriptpane:painted', () => { version(); where(); });
+    setTheme(read('ta-code-theme', 'onedark'));
+    setSize(size);
+    version();
+    where();
+  }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go); else go();
 }());

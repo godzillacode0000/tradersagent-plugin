@@ -6,6 +6,33 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **The Pine editor wears a real editor theme** (31 Oct). The operator asked for the script editor to look like a
+  code editor, in the most popular style. The three themes that top the lists of most-installed VS Code themes:
+  - **One Dark Pro** (the default), **Dracula** and **GitHub**, each with its own light sibling when the console
+    is light (One Light, Alucard, GitHub Light). **Console** keeps the editor as it was.
+  - The colours are each theme's published palette. Each theme re-defines the editor's own tokens, so the caret,
+    gutter, current-line tint and selection follow it.
+  - **Finer colours.** `refine()` in `script-highlight.js` adds a second pass over the tokenizer and colours
+    these apart:
+    - calls (`ta.rsi(`, `plot(`, your own `f(`);
+    - types (`float`, `int`);
+    - literals (`true`, `na`);
+    - built-in series (`close`, `bar_index`);
+    - constants (`color.red`, `label.style_none`);
+    - named arguments (`title =`);
+    - operators.
+
+    The texts still join back to every line, so no character can go missing.
+  - **A status bar under the code**: the Pine version (`Pine v6`, read from `//@version`), `Ln 13, Col 11` with
+    the selection size, the code size and the theme picker. Both choices are kept per browser.
+  - **The code size is a number you can read and change** (the operator's ask: "changeable / inspectable…
+    default at 8px"). It shows as **A− 8px A+**. You can type any size from 6 to 24px (quarter pixels; out-of-range
+    values are pulled into range). A− / A+ step by 1px. From the editor, Ctrl+= / Ctrl+− change it and Ctrl+0
+    goes back to 8px. The gutter and the coloured copy follow it, so the line numbers stay on their lines.
+  - The line tint and the selection are see-through, because they are drawn over the text.
+  - Pinned by `test_editor_themes.py`. Verified in Chromium in each theme, dark and light, at 6.25px and 11px:
+    alignment, selection, line numbers and no console errors.
+
 - **The chart row's right-hand corner, checked and redone** (31 Oct). The operator asked for every control
   there to be checked and for the ⋯ menu to look like the replay capsule. `topmenus.js`.
   - **The ⋯ menu** is one frosted-glass sheet in two groups, Trade (Trader's desk, Edge Stats, Replay) and
