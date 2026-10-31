@@ -129,12 +129,24 @@ class Footer(unittest.TestCase):
             self.assertIn(part, HTML)
         self.assertIn(".script.is-settings .script__foot, .script.is-scripts .script__foot { display: none; }", CSS)
 
-    def test_the_operators_size_is_the_first_step(self):
-        self.assertIn("const SIZES = [6.25, 8, 9.5, 11, 12.5, 14];", HL)
-        self.assertIn("font-size: 6.25px; font-size: var(--code-size, 6.25px);", CSS)
+    def test_the_size_is_8px_by_default_and_shown_as_a_number(self):
+        # 31 Oct, the operator: "make it changeable / inspectable for its size... for now default at 8px"
+        self.assertIn("const SIZE_DEFAULT = 8, SIZE_MIN = 6, SIZE_MAX = 24;", HL)
+        self.assertIn('<input type="number" id="script-size" min="6" max="24" step="0.25" value="8"', HTML)
+        self.assertIn('aria-label="Code size in pixels"', HTML)
+        self.assertIn("font-size: 8px; font-size: var(--code-size, 8px);", CSS)
         # the gutter scales with the code, so the numbers stay on their lines
         gutter = re.search(r"\.script__gutter \{([^}]*)\}", CSS).group(1)
-        self.assertIn("var(--code-size, 6.25px)", gutter)
+        self.assertIn("var(--code-size, 8px)", gutter)
+
+    def test_a_typed_size_is_kept_in_range(self):
+        self.assertIn("if (!isFinite(n) || n <= 0) return SIZE_DEFAULT;", HL)
+        self.assertIn("Math.round(Math.max(SIZE_MIN, Math.min(SIZE_MAX, n)) * 4) / 4", HL)
+
+    def test_keys_from_the_editor(self):
+        for key in ("ev.key === '='", "ev.key === '-'", "ev.key === '0'"):
+            self.assertIn(key, HL)
+        self.assertIn("setSize(SIZE_DEFAULT)", HL)
 
     def test_a_size_change_repaints_the_gutter_and_the_colours(self):
         self.assertIn("ta.dispatchEvent(new Event('scroll'));", HL)

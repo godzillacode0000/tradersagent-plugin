@@ -266,10 +266,18 @@
   };
 
   /* The editor's footer (31 Oct): theme, code size, caret position, Pine version. Both choices are this viewer's
-     own, kept in this browser (and harmless when storage is off). The code size keeps the operator's 6.25px
-     (6 Oct) as its first step; A+ walks up from there. "Console" is the editor as it was before themes. */
+     own, kept in this browser (and harmless when storage is off). The code size shows as a number you can read
+     and type into (the operator's ask: "changeable / inspectable"), A− / A+ step it by 1px, and Ctrl+= / Ctrl+−
+     / Ctrl+0 do the same from the editor. 8px is the default (31 Oct); 6.25px (the 6 Oct size) is still in reach.
+     "Console" is the editor as it was before themes. */
   const THEMES = ['onedark', 'dracula', 'github', 'console'];
-  const SIZES = [6.25, 8, 9.5, 11, 12.5, 14];
+  const SIZE_DEFAULT = 8, SIZE_MIN = 6, SIZE_MAX = 24;
+  /* Any typed value, kept to the range and to quarter pixels; a value that is not a number is the default. */
+  const clampSize = (v) => {
+    const n = Number(v);
+    if (!isFinite(n) || n <= 0) return SIZE_DEFAULT;
+    return Math.round(Math.max(SIZE_MIN, Math.min(SIZE_MAX, n)) * 4) / 4;
+  };
   const read = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (err) { return d; } };
   const write = (k, v) => { try { localStorage.setItem(k, String(v)); } catch (err) { /* private mode */ } };
 
@@ -280,6 +288,7 @@
     const lang = document.getElementById('script-lang');
     const zin = document.getElementById('script-zoom-in');
     const zout = document.getElementById('script-zoom-out');
+    const sizeBox = document.getElementById('script-size');
     const repaint = () => {
       ta.dispatchEvent(new Event('scroll'));                       // the gutter and the line tints re-measure
       window.dispatchEvent(new Event('scriptpane:painted'));       // the coloured copy re-places itself
@@ -293,16 +302,19 @@
       if (sel) sel.value = theme;
       write('ta-code-theme', theme);
     };
-    let size = Number(read('ta-code-size', SIZES[0]));
+    let size = clampSize(read('ta-code-size', SIZE_DEFAULT));
     const setSize = (px) => {
-      size = SIZES.indexOf(px) >= 0 ? px : SIZES[0];
+      size = clampSize(px);
       edit.style.setProperty('--code-size', size + 'px');
-      if (zout) zout.disabled = size === SIZES[0];
-      if (zin) zin.disabled = size === SIZES[SIZES.length - 1];
+      if (sizeBox && document.activeElement !== sizeBox) sizeBox.value = String(size);
+      if (sizeBox) sizeBox.title = `Code size: ${size}px (type a size from ${SIZE_MIN} to ${SIZE_MAX})`;
+      if (zout) zout.disabled = size <= SIZE_MIN;
+      if (zin) zin.disabled = size >= SIZE_MAX;
       write('ta-code-size', size);
       repaint();
     };
-    const step = (d) => setSize(SIZES[Math.max(0, Math.min(SIZES.length - 1, SIZES.indexOf(size) + d))]);
+    /* A− / A+ land on whole pixels: 6.25 + 1 is 7, not 7.25. */
+    const step = (d) => setSize(d > 0 ? Math.floor(size) + 1 : Math.ceil(size) - 1);
     const where = () => {
       if (!pos) return;
       const v = ta.value, at = ta.selectionStart || 0;
@@ -320,6 +332,21 @@
     if (sel) sel.addEventListener('change', () => setTheme(sel.value));
     if (zin) zin.addEventListener('click', () => step(1));
     if (zout) zout.addEventListener('click', () => step(-1));
+    if (sizeBox) {
+      sizeBox.addEventListener('change', () => { setSize(sizeBox.value); sizeBox.value = String(size); });
+      sizeBox.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); setSize(sizeBox.value); sizeBox.value = String(size); ta.focus(); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); sizeBox.value = String(size); ta.focus(); }
+      });
+      sizeBox.addEventListener('blur', () => { sizeBox.value = String(size); });
+    }
+    /* From the editor itself, like any code editor: Ctrl/Cmd with = or + bigger, - smaller, 0 back to the default. */
+    ta.addEventListener('keydown', (ev) => {
+      if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
+      if (ev.key === '=' || ev.key === '+') { ev.preventDefault(); step(1); }
+      else if (ev.key === '-' || ev.key === '_') { ev.preventDefault(); step(-1); }
+      else if (ev.key === '0') { ev.preventDefault(); setSize(SIZE_DEFAULT); }
+    });
     for (const ev of ['keyup', 'click', 'select', 'input', 'focus']) ta.addEventListener(ev, where);
     ta.addEventListener('input', version);
     window.addEventListener('scriptpane:painted', () => { version(); where(); });

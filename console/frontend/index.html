@@ -188,8 +188,10 @@
           <span class="script__lang" id="script-lang">Pine</span>
           <span class="script__pos" id="script-pos">Ln 1, Col 1</span>
           <span class="script__zoom" role="group" aria-label="Code size">
-            <button type="button" id="script-zoom-out" aria-label="Smaller code" title="Smaller code">A−</button>
-            <button type="button" id="script-zoom-in" aria-label="Larger code" title="Larger code">A+</button>
+            <button type="button" id="script-zoom-out" aria-label="Smaller code" title="Smaller code (Ctrl+−)">A−</button>
+            <label class="script__size"><input type="number" id="script-size" min="6" max="24" step="0.25" value="8"
+                   inputmode="decimal" aria-label="Code size in pixels"><span aria-hidden="true">px</span></label>
+            <button type="button" id="script-zoom-in" aria-label="Larger code" title="Larger code (Ctrl+=)">A+</button>
           </span>
           <select class="script__themesel" id="script-theme" aria-label="Editor theme" title="Editor theme">
             <option value="onedark">One Dark Pro</option>

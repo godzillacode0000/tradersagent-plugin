@@ -24,8 +24,11 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
     The texts still join back to every line, so no character can go missing.
   - **A status bar under the code**: the Pine version (`Pine v6`, read from `//@version`), `Ln 13, Col 11` with
-    the selection size, **A− / A+** for the code size, and the theme picker. The size starts at the operator's
-    6.25px (6 Oct); A+ goes up to 14px. Both choices are kept per browser.
+    the selection size, the code size and the theme picker. Both choices are kept per browser.
+  - **The code size is a number you can read and change** (the operator's ask: "changeable / inspectable…
+    default at 8px"). It shows as **A− 8px A+**. You can type any size from 6 to 24px (quarter pixels; out-of-range
+    values are pulled into range). A− / A+ step by 1px. From the editor, Ctrl+= / Ctrl+− change it and Ctrl+0
+    goes back to 8px. The gutter and the coloured copy follow it, so the line numbers stay on their lines.
   - The line tint and the selection are see-through, because they are drawn over the text.
   - Pinned by `test_editor_themes.py`. Verified in Chromium in each theme, dark and light, at 6.25px and 11px:
     alignment, selection, line numbers and no console errors.
