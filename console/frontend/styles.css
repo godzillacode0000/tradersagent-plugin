@@ -250,6 +250,49 @@
   --lx-dur-fast:        120ms;
 }
 
+/* ── Editor theme palettes (31 Oct) ───────────────────────────────────────────────────────────────────────
+   The Pine editor's themes are tokens too: each one re-defines the console's own tokens inside the editor and
+   its footer (rules in the script pane section). One Dark Pro / One Light, Dracula / Alucard, GitHub Dark /
+   GitHub Light: each theme's published palette. */
+[data-code-theme="onedark"] {
+  --code-bg: #282c34; --code-gutter-bg: #282c34; --code-sel: rgba(97, 175, 239, .26); --code-gutter-cur: #abb2bf;
+  --lx-fg: #abb2bf; --lx-fg-muted: #7f848e; --lx-fg-faint: #495162; --lx-border: #21252b; --lx-accent: #528bff;
+  --lx-syn-keyword: #c678dd; --lx-syn-builtin: #e5c07b; --lx-syn-string: #98c379; --lx-syn-number: #d19a66; --lx-syn-comment: #7f848e;
+  --syn-fn: #61afef; --syn-type: #e5c07b; --syn-lit: #d19a66; --syn-var: #e06c75; --syn-prop: #d19a66; --syn-arg: #d19a66; --syn-op: #56b6c2;
+}
+:root[data-theme="light"] [data-code-theme="onedark"] {           /* One Light */
+  --code-bg: #fafafa; --code-gutter-bg: #fafafa; --code-sel: rgba(64, 120, 242, .2); --code-gutter-cur: #383a42;
+  --lx-fg: #383a42; --lx-fg-muted: #696c77; --lx-fg-faint: #9d9d9f; --lx-border: #e5e5e6; --lx-accent: #526fff;
+  --lx-syn-keyword: #a626a4; --lx-syn-builtin: #c18401; --lx-syn-string: #50a14f; --lx-syn-number: #986801; --lx-syn-comment: #a0a1a7;
+  --syn-fn: #4078f2; --syn-type: #c18401; --syn-lit: #986801; --syn-var: #e45649; --syn-prop: #986801; --syn-arg: #986801; --syn-op: #0184bc;
+}
+[data-code-theme="dracula"] {
+  --code-bg: #282a36; --code-gutter-bg: #282a36; --code-sel: rgba(189, 147, 249, .3); --code-gutter-cur: #f8f8f2;
+  --lx-fg: #f8f8f2; --lx-fg-muted: #9ea8c7; --lx-fg-faint: #6272a4; --lx-border: #191a21; --lx-accent: #bd93f9;
+  --lx-syn-keyword: #ff79c6; --lx-syn-builtin: #8be9fd; --lx-syn-string: #f1fa8c; --lx-syn-number: #bd93f9; --lx-syn-comment: #6272a4;
+  --syn-fn: #50fa7b; --syn-type: #8be9fd; --syn-type-style: italic; --syn-lit: #bd93f9; --syn-var: #bd93f9; --syn-prop: #bd93f9;
+  --syn-arg: #ffb86c; --syn-arg-style: italic; --syn-op: #ff79c6;
+}
+:root[data-theme="light"] [data-code-theme="dracula"] {            /* Alucard, Dracula's own light theme */
+  --code-bg: #fffbeb; --code-gutter-bg: #fffbeb; --code-sel: rgba(100, 74, 201, .2); --code-gutter-cur: #1f1f1f;
+  --lx-fg: #1f1f1f; --lx-fg-muted: #635d43; --lx-fg-faint: #8f8a6f; --lx-border: #e8e2c5; --lx-accent: #644ac9;
+  --lx-syn-keyword: #a3144d; --lx-syn-builtin: #036a96; --lx-syn-string: #846e15; --lx-syn-number: #644ac9; --lx-syn-comment: #6c664b;
+  --syn-fn: #14710a; --syn-type: #036a96; --syn-type-style: italic; --syn-lit: #644ac9; --syn-var: #644ac9; --syn-prop: #644ac9;
+  --syn-arg: #a34d14; --syn-arg-style: italic; --syn-op: #a3144d;
+}
+[data-code-theme="github"] {                                      /* GitHub Dark Default */
+  --code-bg: #0d1117; --code-gutter-bg: #0d1117; --code-sel: rgba(56, 139, 253, .32); --code-gutter-cur: #e6edf3;
+  --lx-fg: #e6edf3; --lx-fg-muted: #8b949e; --lx-fg-faint: #6e7681; --lx-border: #21262d; --lx-accent: #2f81f7;
+  --lx-syn-keyword: #ff7b72; --lx-syn-builtin: #ffa657; --lx-syn-string: #a5d6ff; --lx-syn-number: #79c0ff; --lx-syn-comment: #8b949e;
+  --syn-fn: #d2a8ff; --syn-type: #ffa657; --syn-lit: #79c0ff; --syn-var: #79c0ff; --syn-prop: #79c0ff; --syn-arg: #ffa657; --syn-op: #ff7b72;
+}
+:root[data-theme="light"] [data-code-theme="github"] {            /* GitHub Light Default */
+  --code-bg: #ffffff; --code-gutter-bg: #ffffff; --code-sel: rgba(9, 105, 218, .2); --code-gutter-cur: #1f2328;
+  --lx-fg: #1f2328; --lx-fg-muted: #656d76; --lx-fg-faint: #8c959f; --lx-border: #d0d7de; --lx-accent: #0969da;
+  --lx-syn-keyword: #cf222e; --lx-syn-builtin: #953800; --lx-syn-string: #0a3069; --lx-syn-number: #0550ae; --lx-syn-comment: #6e7781;
+  --syn-fn: #8250df; --syn-type: #953800; --syn-lit: #0550ae; --syn-var: #0550ae; --syn-prop: #0550ae; --syn-arg: #953800; --syn-op: #cf222e;
+}
+
 /* ── Layer 3 — VELA MAPPING (on the chart region, not :root) ─────────────── */
 .chart {
   --vela-bg:               var(--lx-canvas);
@@ -797,7 +840,7 @@ pre {
   text-align: right; color: var(--lx-fg-faint);
   font-family: var(--lx-font-mono);
   /* Operator override (6 Oct): half the doc's 12.5px — code + gutter only. */
-  font-size: 6.25px; line-height: 1.55;
+  font-size: 6.25px; font-size: var(--code-size, 6.25px); line-height: 1.55;
   border-right: 1px solid var(--lx-border);
   scrollbar-width: none;
 }
@@ -818,7 +861,7 @@ pre {
    render): if the script is huge, or anything fails, the plain text simply shows. */
 .script__code { position: relative; flex: 1; min-width: 0; overflow: hidden; }
 .script__hl, .script__src {
-  font-family: var(--lx-font-mono); font-size: 6.25px; line-height: 1.55; tab-size: 2;
+  font-family: var(--lx-font-mono); font-size: 6.25px; font-size: var(--code-size, 6.25px); line-height: 1.55; tab-size: 2;
   font-variant-ligatures: none; font-kerning: none; letter-spacing: 0; white-space: pre; overflow-wrap: normal;
   text-rendering: geometricPrecision;      /* fractional advances on both, so a run split into spans lands where one run does */
 }
@@ -849,6 +892,50 @@ pre {
 .hl-n { color: var(--lx-syn-number); }
 .hl-c { color: var(--lx-syn-comment); font-style: italic; }
 .hl-d { font-style: normal; }
+/* The finer classes (refine() in script-highlight.js). Without an editor theme they fall back to the console's
+   own five colours, so the "Console" theme looks as it always did. */
+.hl-f { color: var(--syn-fn, var(--lx-syn-builtin)); }
+.hl-t { color: var(--syn-type, var(--lx-syn-keyword)); }
+.hl-l { color: var(--syn-lit, var(--lx-syn-number)); }
+.hl-v { color: var(--syn-var, var(--lx-syn-builtin)); }
+.hl-p { color: var(--syn-prop, var(--lx-syn-number)); }
+.hl-a { color: var(--syn-arg, var(--lx-fg)); font-style: var(--syn-arg-style, normal); }
+.hl-o { color: var(--syn-op, var(--lx-fg-muted)); }
+.hl-t { font-style: var(--syn-type-style, normal); }
+
+/* ── Editor themes (31 Oct): the three most installed editor themes, each with its light sibling ─────────────
+   The operator asked for the Pine editor to look like a real editor. One Dark Pro, Dracula and GitHub top
+   every list of the most installed VS Code themes. A theme re-defines the editor's own tokens inside
+   .script__edit and its footer, so the caret, the gutter, the line tint and the selection follow it. The
+   colours are each theme's published palette. In the console's light mode a theme uses its light
+   sibling: One Light, Alucard, GitHub Light. */
+.script__edit[data-code-theme], .script__foot[data-code-theme] { background: var(--code-bg); color: var(--lx-fg); }
+.script__edit[data-code-theme] .script__gutter { background: var(--code-gutter-bg, var(--code-bg)); }
+.script__edit[data-code-theme] .script__gutter .is-cur { color: var(--code-gutter-cur); }
+/* The line tint and the selection are drawn OVER the text (the textarea sits above its coloured copy), so both are
+   see-through: an opaque one hid the line number and the selected word. */
+.script__edit[data-code-theme] .script__mark--cur { background: color-mix(in srgb, var(--lx-fg) 6%, transparent); }
+.script__edit.is-hl[data-code-theme] .script__src::selection { background: var(--code-sel); }
+
+
+/* The editor's footer, like an editor's status bar: the Pine version, where the caret is, the code size, the theme. */
+.script__foot { display: flex; align-items: center; gap: 8px; flex: none; height: 28px; padding: 0 6px 0 10px;
+  font-family: var(--lx-font-mono); font-size: 11px; color: var(--lx-fg-muted); border-top: 1px solid var(--lx-border);
+  font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
+.script__lang { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.script__lang::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--syn-fn, var(--lx-accent)); }
+.script__pos { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.script__zoom { display: inline-flex; flex: none; border: 1px solid var(--lx-border); border-radius: 6px; overflow: hidden; }
+.script__zoom button { all: unset; box-sizing: border-box; height: 20px; padding: 0 6px; cursor: pointer; font: inherit; font-size: 11px; color: var(--lx-fg-muted); }
+.script__zoom button + button { border-left: 1px solid var(--lx-border); }
+.script__zoom button:hover { color: var(--lx-fg); background: color-mix(in srgb, var(--lx-fg) 8%, transparent); }
+.script__zoom button:disabled { opacity: .35; cursor: default; }
+.script__zoom button:focus-visible, .script__themesel:focus-visible { outline: 2px solid var(--lx-accent); outline-offset: -2px; }
+.script__themesel { flex: none; max-width: 120px; appearance: none; -webkit-appearance: none; height: 20px; padding: 0 20px 0 8px; border-radius: 6px; cursor: pointer;
+  font: inherit; font-size: 11px; color: var(--lx-fg); border: 1px solid var(--lx-border);
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5 5 6.5 8 3.5' fill='none' stroke='%23888' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 6px center / 9px; }
+.script__themesel option { color: initial; background: initial; }
+.script.is-settings .script__foot, .script.is-scripts .script__foot { display: none; }
 @media (forced-colors: active) {
   .script__hl { display: none; }
   .script__edit.is-hl .script__src { color: CanvasText; -webkit-text-fill-color: CanvasText; }
