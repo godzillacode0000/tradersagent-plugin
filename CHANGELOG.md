@@ -90,6 +90,29 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Fixed
 
+- **UI polish pass** (1 Nov). Every surface was swept in Chromium at 1280 px and in the 620 px Hermes pane, dark
+  and light: screenshots, plus checks for clipped text, things off screen and tiny targets. Nothing was broken;
+  these were the rough edges.
+  - **Hermes pane:** the floating "Scripts / <> Script / Full screen" strip sat over the second chart's symbol and
+    price scale. Vela's compact bar already has all three, so the strip now appears only when neither bar is on
+    screen.
+  - **Replay:** in the narrow pane the capsule covered the time axis. It now sits above it. Its drag handle is a
+    24 px target, up from 16 px.
+  - **Script pane, stacked under the chart:** a dead 30 px band under the run list is gone, because the chart's
+    row now takes what the pane leaves.
+  - **Editor footer:** "Ln 31, C…" was cut off at desktop width. The theme picker and size control are slightly
+    narrower, so the caret position fits.
+  - **Trader's desk:**
+    - Prop firms said "The directory could not be read: No live MCP session" in red. It now says, in a card, that
+      the directory comes from the LuxAlgo Library, which isn't connected, and that the paper account, journal
+      and chart don't need it.
+    - Data was one sentence with a command in it. It is now a setup card: what the tick data is for, the command
+      with a Copy button, and that crypto needs nothing.
+    - Journal no longer prints "Best — · worst — · 0 fills kept" before there are trades.
+  - **Indicators panel:** the footer hint wrapped onto two lines. It is one line now, and the Run-vs-Add rule is in
+    the buttons' tooltips.
+  - Pinned by `test_ui_polish_1nov.py`.
+
 - **Alerts did nothing in a narrow pane** (31 Oct). Vela's `openAlertsMenu(anchor)` reads the anchor's box with
   no guard. In the Hermes pane (620 px) the ⋯ menu is reached from Vela's bottom sheet, so there is no
   anchor, and the call threw. The list is now drawn by the menu itself.

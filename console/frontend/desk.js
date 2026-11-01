@@ -155,10 +155,13 @@
             <td>${money(t.exit)}</td><td class="${cls(t.pnl)}">${signed(t.pnl)}</td></tr>`).join('')}</tbody></table>`
       : '<p class="desk__empty">No closed trades yet. A trade closes when a sell fills — until then there is no win rate to show, only a position.</p>';
 
+    /* Best / worst / fills kept only once there is something to report: with no trades the line read
+       "Best — · worst — · 0 fills kept", a row of dashes (1 Nov). */
+    const extremes = trades.length
+      ? ` Best ${st.best == null ? '—' : signed(st.best)} · worst ${st.worst == null ? '—' : signed(st.worst)} ·
+      ${st.fills_kept || 0} fills kept (old ones are trimmed).` : '';
     const foot = `<p class="desk__note">Per-trade P&amp;L carries both legs' fees. The curve is realised equity
-      and moves only when a trade closes — an open position's P&amp;L is on the Paper view, not here.
-      Best ${st.best == null ? '—' : signed(st.best)} · worst ${st.worst == null ? '—' : signed(st.worst)} ·
-      ${st.fills_kept || 0} fills kept (old ones are trimmed).</p>`;
+      and moves only when a trade closes — an open position's P&amp;L is on the Paper view, not here.${extremes}</p>`;
 
     return `${kpis}${curve}<h3>Trades</h3>${table}${foot}`;
   }
@@ -250,7 +253,8 @@
 
   function propHtml() {
     if (S.propBusy && !S.firms) return '<p class="desk__empty">Reading the directory…</p>';
-    if (S.propErr && !S.firms) return `<p class="desk__bad">${esc(S.propErr)}</p><p class="desk__note"><button type="button" class="desk__btn" data-retry>Try again</button></p>`;
+    if (S.propErr && !S.firms) return `<div class="desk__setup"><b>Prop firms aren't available right now</b>
+      <p>${esc(S.propErr)}</p><p><button type="button" class="desk__btn" data-retry>Try again</button></p></div>`;
     if (!S.firms) return '<p class="desk__empty">Reading the directory…</p>';
 
     const firms = S.firms.slice(0, FIRMS_SHOWN);
@@ -350,13 +354,23 @@
     return n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : `${(n / 1e6).toFixed(1)} MB`;
   };
 
+  const FX_FETCH = 'python3 tools/fx-fetch.py --years 2';
   function dataHtml() {
     const d = S.data;
     if (d.err) return `<p class="desk__bad">${esc(d.err)}</p>`;
     const st = (d.status && d.status.ticks) || null;
     if (!st) return '<p class="desk__empty">Reading the tick store…</p>';
     const rows = Object.entries(st.symbols || {}).sort((a, b) => a[0].localeCompare(b[0]));
-    if (!rows.length) return '<p class="desk__empty">No ticks on disk yet. Run: python3 tools/fx-fetch.py --years 2</p>';
+    /* An empty store is a setup step, not an error (1 Nov): say what the data is for, give the command as
+       something to copy, and say what works without it. */
+    if (!rows.length) return `<div class="desk__setup">
+        <b>No forex tick data on this machine yet</b>
+        <p>Forex and metals bars are built from Dukascopy ticks kept on this machine. Download two years once, from the
+          plugin folder (it needs the network):</p>
+        <div class="desk__cmd"><code>${esc(FX_FETCH)}</code>
+          <button type="button" class="desk__btn" data-copy="${esc(FX_FETCH)}">Copy</button></div>
+        <p class="desk__note">Crypto bars come straight from Binance and need nothing here.</p>
+      </div>`;
     return `
       <p class="desk__note"><b>Dukascopy ticks</b> on disk · ${int(st.hours)} instrument-hours · ${size(st.bytes)} ·
         mid-price bars with real volume and median spread · ${d.status.yahoo
@@ -447,7 +461,10 @@
       S.firmsNote = (firms && firms.note) || '';
       S.offers = (offers && offers.offers) || [];
     } catch (err) {
-      S.propErr = `The directory could not be read: ${err.message}`;
+      /* "No live MCP session" is the Library being offline: say that in plain words (1 Nov). */
+      S.propErr = /MCP|mcp_unavailable|not connected/i.test(String(err.message))
+        ? 'The prop-firm directory comes from the LuxAlgo Library, which isn\'t connected right now. Your paper account, the journal and the chart don\'t need it.'
+        : `The directory could not be read: ${err.message}`;
     } finally {
       S.propBusy = false;
       render();
@@ -554,6 +571,13 @@
     const simBtn = ev.target.closest('[data-sim]');
     if (simBtn) {
       runSim(simBtn.dataset.sim, simBtn.dataset.challenge, simBtn.dataset.label || '');
+      return;
+    }
+    const copyBtn = ev.target.closest('[data-copy]');
+    if (copyBtn) {
+      try { await navigator.clipboard.writeText(copyBtn.dataset.copy); copyBtn.textContent = 'Copied'; }
+      catch (err) { say('Copy did not work here: select the command and copy it', true); }
+      setTimeout(() => { if (copyBtn.isConnected) copyBtn.textContent = 'Copy'; }, 1600);
       return;
     }
     if (ev.target.closest('[data-retry]')) {

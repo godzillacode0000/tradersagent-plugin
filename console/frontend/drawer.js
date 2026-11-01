@@ -133,7 +133,8 @@
       ${isOn
         ? `<button type="button" class="drow__run is-remove" data-remove="1" aria-label="Take it off the chart">✕<span>Remove</span></button>`
         : `<button type="button" class="drow__run" data-run="1" ${running || (r.__native && !r.supported) ? 'disabled' : ''}
-              aria-label="${r.__native ? 'Add to the chart' : 'Run on the chart'}">${running ? '<span class="spin" aria-hidden="true"></span>' : (r.__native ? '+' : '▶')}<span>${r.__native ? 'Add' : 'Run'}</span></button>`}
+              aria-label="${r.__native ? 'Add to the chart' : 'Run on the chart'}"
+              title="${r.__native ? 'Add: built-ins stack beside what is on the chart' : 'Run: one LuxAlgo script at a time, it replaces the last'}">${running ? '<span class="spin" aria-hidden="true"></span>' : (r.__native ? '+' : '▶')}<span>${r.__native ? 'Add' : 'Run'}</span></button>`}
     </li>`;
   }
 
@@ -441,8 +442,9 @@ function setOpen(on) {
      unreachable. */
   function showFallbackIfNeeded() {
     /* A 0-width row is Vela's compact mode — the desktop row is hidden, so the door is gone with it. */
-    const row = document.querySelector('.vela-widget-topbar');
-    const usable = !!(row && row.getBoundingClientRect().width > 0);
+    /* …and the compact bar's own Indicators icon is a door again (it opens the picker), so the strip stays off there. */
+    const shown = (sel) => { const e = document.querySelector(sel); return !!(e && e.getBoundingClientRect().width > 0); };
+    const usable = shown('.vela-widget-topbar') || shown('.vela-mb-indicators');
     if (fallback) fallback.hidden = usable;
   }
   window.addEventListener('ws-failed', showFallbackIfNeeded);

@@ -1282,9 +1282,12 @@ async function main() {
   /* The door is unreachable in Vela's compact mode too: under ~640px Vela hides its desktop row
      (0-width), so "no row" must mean "no USABLE row", not "no element" — else a narrow pane has no
      toolbar and no way in (the doc's compact-mode check). */
+  /* 1 Nov: Vela's compact bar is a usable door too. Under ~640 px (the Hermes pane) its Indicators icon opens
+     the picker and its ⋮ sheet lists Script and Full screen, so the floating strip only repeated them, and it
+     sat over the second chart's symbol and price scale. It now shows only when neither bar is on screen. */
+  const shownOnScreen = (sel) => { const e = document.querySelector(sel); return !!(e && e.getBoundingClientRect().width > 0); };
   const showFallbacks = () => {
-    const row = document.querySelector('.vela-widget-topbar');
-    const usable = !!(row && row.getBoundingClientRect().width > 0);
+    const usable = shownOnScreen('.vela-widget-topbar') || shownOnScreen('.vela-mb-more');
     for (const b of [el.scriptFallback, el.fullFallback]) if (b) b.hidden = usable;
     setPaneTop();
     /* The status dot is a widget action in Vela's row; the statusbar copy is the fallback only. */

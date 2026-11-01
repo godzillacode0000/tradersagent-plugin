@@ -86,6 +86,15 @@
 .desk__body h3:first-child { margin-top: 0; }
 .desk__note { margin: 10px 0 0; color: var(--lx-fg-faint); font-size: var(--d-small); }
 .desk__empty { margin: 4px 0 0; color: var(--lx-fg-faint); font-size: var(--d-small); }
+/* A setup step or an offline source, said as a card (1 Nov): what it is, what to do, what still works. */
+.desk__setup { margin: 2px 0 0; padding: 16px 16px 14px; border: 1px solid var(--lx-border-soft); border-radius: var(--lx-radius-lg);
+  background: var(--lx-surface-2); }
+.desk__setup > b { display: block; font-size: var(--d-body); color: var(--lx-fg-bright); font-weight: var(--lx-fw-semibold); }
+.desk__setup p { margin: 6px 0 0; color: var(--lx-fg-muted); font-size: var(--d-small); line-height: 1.5; }
+.desk__setup .desk__note { margin-top: 10px; }
+.desk__cmd { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 6px 6px 6px 12px; border-radius: var(--lx-radius-md);
+  background: var(--lx-canvas); border: 1px solid var(--lx-border-soft); }
+.desk__cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: var(--lx-font-mono); font-size: var(--d-small); color: var(--lx-fg); }
 
 /* KPI cards — the only raised things on the page, like the edge sheet's hero/ask cards */
 .desk__kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 0 0 6px; }
