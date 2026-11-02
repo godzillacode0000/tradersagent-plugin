@@ -274,6 +274,21 @@ function setOpen(on) {
     try {
       const data = await api('/api/source', { slug });
       if (!data.source) throw new Error('no Pine source for this script');
+      /* A preview is not a script: LuxAlgo answers 40 lines to anonymous callers (`complete:false`,
+         `reason:'sign-in-for-full-source'`), and running the fragment dies at the cut as
+         SYNTAX_ERROR at line 40 (measured 2 Nov 2026 — 7 of the first 59 Library scripts "failed"
+         this way). Refuse honestly, leave the chart and the stored run untouched, and say where the
+         whole source lives. */
+      if (data.complete === false) {
+        const shown = data.shown_lines || data.lines || 0;
+        const total = data.total_lines || '?';
+        st.busy = null;
+        st.result[slug] = { ok: false, text: `Preview only — ${shown} of ${total} lines without a LuxAlgo sign-in.` };
+        toast(`“${label}”: preview only — LuxAlgo shares ${shown} of ${total} lines without a sign-in`
+          + (data.chart_url ? ' · ' + data.chart_url : ''), true);
+        paint();
+        return;
+      }
       await chartReady;
       /* One study at a time: take OUR previous run off before this one lands — the CANVAS, that is.
          The stored run keeps until the new one actually lands (unified.js reset { keep: true }): a

@@ -952,6 +952,17 @@ def ep_source(params: dict) -> dict:
         "source": source,
         "lines": source.count("\n") + 1 if source else 0,
         "bytes": len(source),
+        # The hosted Library answers the FIRST 40 LINES to anonymous callers and says so in its own
+        # payload: complete:false, reason:'sign-in-for-full-source', shown_lines / total_lines and a
+        # chart_url. Dropping those made a preview look like a script — the drawer ran the fragment
+        # and the engine answered SYNTAX_ERROR at line 40, which was the cut, not the code (measured
+        # 2 Nov 2026: 7 of the first 59 Library scripts "failed" this way). Pass them through; the UI
+        # refuses to run an incomplete source and says where the whole one lives.
+        "complete": payload.get("complete", True) is not False,
+        "shown_lines": payload.get("shown_lines"),
+        "total_lines": payload.get("total_lines"),
+        "reason": payload.get("reason"),
+        "chart_url": payload.get("chart_url"),
         "cached": cached,
     }
 

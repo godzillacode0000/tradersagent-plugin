@@ -904,6 +904,7 @@ async function openResult(row, button) {
           <div class="detail__meta">
             <span class="badge badge--ok">source: public</span>
             <span class="badge">${source.length.toLocaleString()} chars</span>
+            ${data.complete === false ? `<span class="badge badge--lic">preview · ${(data.shown_lines || source.split('\n').length)} of ${data.total_lines || '?'} lines</span>` : ''}
             ${lic ? `<span class="badge badge--lic">${esc(lic)}</span>` : '<span class="badge badge--lic">no licence header</span>'}
             <a class="badge" href="${esc(safeHref(row.url))}" target="_blank" rel="noreferrer">Library page ↗</a>
           </div>
@@ -965,6 +966,14 @@ async function openResult(row, button) {
         const label = data.name || row.slug;
         const button = $('#run-pinets');
         const headline = $('#pine-headline');
+        /* Same rule as the drawer's Run: a 40-line preview is not runnable (the cut reads as a
+           syntax error at line 40). Say it plainly, with where the full source lives. */
+        if (data.complete === false) {
+          headline.textContent = `Preview only — LuxAlgo shares ${data.shown_lines || '?'} of ${data.total_lines || '?'} lines without a sign-in`
+            + (data.chart_url ? ' · full source: ' + data.chart_url : '');
+          toast('Preview only — the full source needs a LuxAlgo sign-in', true);
+          return;
+        }
         setActionState(button, 'busy');
         headline.textContent = `Running “${label}” through PineTS… (loading the runtime on first use)`;
         try {

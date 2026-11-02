@@ -99,6 +99,17 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Fixed
 
+- **The Library's 40-line preview is refused, not run** (2 Nov): LuxAlgo answers anonymous callers with
+  the first 40 lines of a script and says so (`complete:false`, `reason:"sign-in-for-full-source"`,
+  `shown_lines`/`total_lines`, `chart_url`) — and the console dropped those fields, so a preview looked
+  exactly like a script. Clicking Run on anything longer than 40 lines ran the fragment and died at the
+  cut as `SYNTAX_ERROR … Unexpected token EOF at 40:81`: the "broken" indicator was a truncated request.
+  `ep_source` now passes the completeness through; the drawer and the detail panel refuse to run an
+  incomplete source (before touching the canvas or the stored run), the detail header carries a
+  `preview · N of M lines` badge, and the message names the `chart_url` where the whole source lives.
+  Found while sweeping the catalogue — 7 of the first 59 scripts "failed" exactly this way. Pinned by
+  `test_source_preview.py`.
+
 - **A run that paints through Vela's native layer is remembered too** (2 Nov): `TraderRun.run()` wrote
   the restore slot only in the overlay branch, so a script that landed as a Vela native (no boxes, no
   polylines — scripts like 'D-Shape Breakout Signals' were the observed case) was visible on the chart but
