@@ -35,6 +35,80 @@ script fails with a write error and reads as an "API error" that is not one.
 | **whale-options** | MIT | options flow engine (sweeps/blocks/splits, scored with the work shown) | A new vertical: needs options data and a UI. Heaviest item on the list |
 | **pinets-cli** | AGPL-3.0 | terminal runner for `.pine` files | Marginal: we run Pine in-page. Possible dev/CI use to execute scripts headlessly |
 
+### prop-firm-sim, measured (the engine's contract)
+
+Probed on this Mac; start a simulator task from this block instead of re-probing the package.
+
+- **Install:** `npm install @luxalgo/prop-firm-sim-cli` into its own directory — the live one is
+  `~/.local/share/traders-agent/propfirmsim` (~10 MB, CLI 1.2.0 + core engine 1.3.0; Node 20+, no key,
+  no build step). Binary: `node_modules/.bin/prop-firm-sim`.
+- **Subcommands:** `firms`, `rules <firm> <challengeId>`, `simulate`, `optimal-risk`, `compare`
+  (refs like `ftmo/<challengeId>`), `overlap` (2–5 trade logs).
+- **`simulate`** reads the live directory (`--firm --challenge`) or an offline `--spec <file>`. Inputs:
+  parametric (`--winrate --avg-win --avg-loss --trades-per-day --risk [--risk-mode]`), a raw R series
+  (`--r-series "1.6,-1,0.8"` / `--r-series-file`, `--block-length`), or imported exports
+  (`--trade-log <file>` up to 5 to merge a portfolio; `--import-risk` for files carrying P&L but no
+  risk). Options: `--paths --seed --attempt-cap --funded-horizon --no-funded --json`.
+- **`--json` is the contract to parse.** Top-level: `schemaVersion, engineVersion, perAttempt,
+  journey, funded, ev, drawdown, assumptions, meta`. Inside: `perAttempt.passProbability` with
+  `passProbabilityCi` (Wilson), `failureBreakdown`, `steps`, `avgDaysWhenPassed/Failed`,
+  `stagnationDays`; `journey.{fundedProbability, attempts, cost, daysToFunded}`;
+  `funded.{payoutProbability, blownProbability, avgPayoutEvents, daysToFirstPayout}`;
+  `ev.{evTotal, evStandardError, pPositive}`; `drawdown.maxDrawdownPct`;
+  `assumptions.{spec, profile, options, flags, disclaimer}` — the spec carries the rules' provenance
+  and `flags` every simplification. Quote seed + paths + engineVersion with any result.
+- **Challenge ids in the vendor README are stale** (`ftmo/100k-2step` is refused). Take the real id
+  from the refusal's own "Known challenges" list or from `prop-firm-sim firms`; our `/api/propfirms`
+  parses ids in the same shape.
+- **Journal-fed runs need a stated risk denominator.** The engine computes R-multiples and refuses
+  P&L-only data; the paper account has no stops, so feed a risk (`--import-risk`) or the R-series
+  mode rather than inventing one — otherwise use parametric mode.
+
+### prop-firm-sim, integrated (what shipped, and what is left)
+
+The bridge and the sheet shipped — do not re-plan them. `console/backend/propfirmsim.py` is the
+`edgestats.py` pattern again: `build_args()` validates with sentences (win rate as a fraction, `--risk 1%`
+in the engine's own percent form), the CLI runs with `--json`, the answer is cached by identical question
+(the seed is pinned, so a repeat is byte-identical), and the engine's own failure text is relayed
+(`SimError` → 409 when the engine is missing — the fix command IS the message — 400 for bad input). Doors:
+GET `/api/propfirmsim/status` and `/api/propfirmsim/simulate` with query params (reads are GETs; no token).
+`./install.sh --with-prop` installs the engine at `TRADERS_SIM_HOME` (default
+`~/.local/share/traders-agent/propfirmsim`). In the sheet, every challenge chip is the Simulate button and
+the card carries the engine's answer verbatim. `test_propfirmsim.py` pins the bridge and the sheet wiring
+against a fake CLI, so the suite runs with no engine installed. Deterministic smoke run: ftmo 100k 2-step,
+48% / 1.6R / 1% risk / 4 trades per day → 93.2% pass per attempt (CI 92.7–93.7), mean 1.07 attempts,
+EV +$66,755, seed 42.
+
+Left for a later pass (phase 2 in `docs/PLAN-desk-surfaces.md`): journal-fed runs (`--trade-log` plus
+`--import-risk` — state the risk basis, never invent one) and agent-facing MCP tools so "what are my odds
+on this challenge?" is one prompt.
+
+### broker-sdk, measured (what it is, and what it is NOT)
+
+Probed on npm + the repo README (v0.5.1); start a real-accounts answer from this block.
+
+- **Shape:** `connect({broker, credentials})` → `fetchSnapshot()` returns accounts in ONE normalized
+  schema — `{ id, name, currency, equity, cash?, environment: live|paper, positions[], trades[] }` —
+  and `createPortfolio()/fetchAll()` sweeps many brokers at once (a failing broker comes back in
+  `failures`, never kills the sweep). `computeStats()` does FIFO round-trip matching (win rate, avg
+  win/loss); a sell with no recorded buy is IGNORED, never guessed.
+- **Read-only by design:** every broker's credential is the read-scoped kind (read-only API key,
+  auditor role, read-scope OAuth app, Flex token, wallet address). There is no order path in the
+  README — if the operator ever wants one, that is trade-relay's territory and a product decision,
+  not a flag here.
+- **Extras:** statement CSV import for ANY institution (`/csv`: tolerant headers, skipped rows
+  counted); `fetchBars` on Alpaca + Tradier ONLY (others reject with `UnsupportedCapabilityError`);
+  IBKR Flex needs the statement's timezone passed.
+- **The broker list is the README's own table** (which broker takes which credential shape, and which
+  carry trade history) — read it there; do not quote a count from memory (npm says 22, the repo has
+  said 22 and 23 at different times).
+- **The prop-firm simulator consumes this exact trade-history JSON** — a live broker pull drops
+  straight into a sim run, so the natural build order is simulator first, read-only accounts second
+  (real history → real odds).
+- **Our plan shape (item 4 in `docs/PLAN-desk-surfaces.md`):** a Node bridge mirroring
+  `edgestats.py`, keys stored locally and never in the repo, a read-only Accounts view in the desk
+  sheet, and NO order path — the propose → approve brake stays on the paper side.
+
 ## Rules that apply to all of them
 
 - **Licence hygiene:** MIT and CC0 projects can be vendored or ported freely. AGPL (PineTS,

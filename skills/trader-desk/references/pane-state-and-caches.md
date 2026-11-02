@@ -40,15 +40,24 @@ Consequences before answering a "why did it reset?" question:
    `vela-workspace` value must match what was set.
 
 LevelDB values are Snappy-compressed: `strings` finds key fragments, a raw regex over the `.ldb`/`.log`
-will not find `vela-workspace` values. Use the store only to prove the ORIGIN is persisted; use the browser
-for the round-trip.
+will not find `vela-workspace` values, and a name seen only in the MANIFEST is an INDEX entry — a file scan
+can neither prove a key exists nor that it was deleted, and hand-parsing the WAL does not settle it either.
+The right reader for a slot is the page that owns it (the heartbeat's `store` for the run, `studies` /
+`drawings` for the live chart); the LevelDB is only for proving the ORIGIN persisted. (The app keeps three
+LevelDB stores — the default plus `Partitions/hermes-preview` and `Partitions/hermes-embed`; the console
+origin's keys live in the default one.)
 
 ### When the operator says the pane resets, take a tape — do not re-run the tab test
 
 A tab proves the console; the pane is its own environment (its iframe, its storage partition, its remount
 cycle), so measure THEIR pane from outside — the console's own endpoints carry everything. Run
 `scripts/pane_state_tape.py` (read-only; polls `/api/chart/state` and `/api/chart/stream/status` every
-~2 s, logs transitions) and ask for one close → wait → reopen. How to read a tape:
+~2 s, logs transitions) and ask for one close → wait → reopen.
+
+Poll with the packaged script or a BOUNDED inline loop (`for i in $(seq 1 N)`) — an ad-hoc `while true`
+one-liner gets flagged by the command-approval layer and can sit until it times out unanswered, and a
+`nohup`/`&` wrapper is refused outright; launch anything longer with the terminal's background flag.
+How to read a tape:
 
 - `views` 1 → 2 → 1 with TWO new viewer ids = the pane loads the page twice per reopen (it remounts
   while docking). One of the two dies — do not double-count its reports.
@@ -60,6 +69,11 @@ cycle), so measure THEIR pane from outside — the console's own endpoints carry
 - `natives: []` / `studies: []` / `drawings: null` at the moment of the complaint means there was
   nothing of that kind in the saved state — check `console/agents/_chart/commands.json` for an agent
   `clear` / `remove all` before blaming persistence.
+- **The heartbeat is ONE slot, last writer wins.** Any other view you have open overwrites the operator's
+  report — and whatever you ran in it appears in `studies` / `store` exactly like their chart. Before
+  diagnosing their pane, close your own tabs or confirm `views` is 1; across samples, a changed `viewer`
+  id is a NEW page (a toggle), not the same page mutating, and a probe script should carry an obvious
+  name so a stray report is unmistakable.
 
 ### Why an indicator vanished on reopen: the run store, and what may delete it
 
@@ -83,6 +97,29 @@ on the activity line and in `store.lastFail.reason`. Prove the rules end to end 
 then the key vanish; plant a good run and watch it restore with `fails` back to 0; run the drawer's pre-run
 sequence (`ChartOverlay.clear()` → `PineTSPaint.clear()` → `reset({keep:true})` → `run(bad pine)`) and confirm
 the store still names the previous run.
+
+When the operator says it is STILL vanishing, read the pair before theorizing: `store.run` null PLUS
+`studies: []` at rest = nothing is on the chart and nothing is saved (often the slot was emptied earlier and
+he has not re-applied); `studies` non-empty with `store.run` null = the run IS landing but not saving (hunt a
+thrown `setItem` — quota — or a path that never reached `remember`); `store.run` non-empty with `studies: []`
+right after a toggle = the restore failed this boot — read `store.fails` / `store.lastFail.reason`. One apply
+with the pane left OPEN, read again, splits "never saved" from "lost on reopen" with no second toggle.
+
+A plot-only script is NOT a save-path gap: its plots become overlay `polylines` (`drew.polylines`), riding
+the exact `remember()` a box script uses — `paint.added: null` in the run report only means no Vela native
+matched, not that nothing was drawn. Before blaming the save path, run the suspect script in a browser page
+and read `localStorage['luxalgo-web:last-run']` directly.
+
+**`source: "study"` is the signature of the landing path that never saves.** `paneStudies()` labels each
+row with the reader that saw it: `overlay` = `TraderRun`'s overlay list, `study` = Vela's own studies
+(`inspect().indicators`), `paint` = `PineTSPaint.added`, `native` = `presentNativeIndicators()`, `cell` =
+the workspace's on-chart row. A run whose series are painted through `PineTSPaint` (a Vela native/study)
+registers as `source: "study"` and is VISIBLE, while `store.run` stays null — `remember()` sits only
+inside the overlay branch of `run()` (`if (containers || hasPaths) → spec.ok`), and the paint branch
+never calls it. So: a live study with no store entry is not a thrown `setItem`; it is the paint-surface
+path. Fix shape: remember once at the END of `run()` for whichever surface landed (`drew` OR
+`paint.added`), keep `record()`/chip semantics as designed, and prove it by running the script, reading
+`store.run`, reloading, and reading `studies` again.
 
 Browser note (this Mac): Chrome-for-Testing wedges — CDP `Runtime.evaluate` never returns, the renderer parked
 — when the monitor is off and the page starts a render loop; `about:blank` still answers, which makes it look

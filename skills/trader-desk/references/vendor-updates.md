@@ -16,7 +16,39 @@ which files, the post-upgrade preload regen). This file adds the checks that cau
   the tree (only `vela.global.min.js`, never `vela.global.js`).
 - `vendor/pinets/` is THIS repo's patched fork (AGPL) and is NOT refreshed by a Vela bump. The
   paired-runtime check: after moving `vela-pinets`, read which PineTS range it inlines
-  (`package.json`) — an unchanged range means the patch stays valid.
+  (`npm view @luxalgo/vela-pinets@<v> dependencies peerDependencies`, and grep the dist for the
+  version string) — an unchanged range means the patch stays valid and the fork only matters for the
+  main-thread path. An unchanged range is the common case; a bumped one forces the rebase below.
+
+### Rebasing the PineTS fork onto a new upstream tag
+
+When the pair moves (e.g. vela-pinets starts building against a new PineTS minor), the patches must
+be re-expressed on the new tag — do not drop them and do not ship a stock build silently.
+
+```bash
+cd /tmp && git clone https://github.com/godzillacode0000/PineTS.git pinets-fork && cd pinets-fork
+git tag | grep -E '^v0\.1[0-9]'          # the fork's origin LAGS upstream: its newest tag may be old
+git remote add upstream https://github.com/LuxAlgo/PineTS.git
+git fetch upstream --tags               # the new tag only appears after this
+git checkout -b fix/p1-p8-on-<minor> v<minor>
+git cherry-pick -x <patch1> <patch2> <patch3>
+```
+
+- **A conflict shaped "upstream deleted the block our patch edited" is upstream EXTRACTING it.**
+  The real case: the declaration-init walk had been pulled out of the transformer into
+  `walkInitExpression()`, so the patch's hand-written `walk.recursive(...)` no longer existed. Take
+  upstream's side, then re-express the patch where the code went (a `VariableDeclaration(node, state, c)`
+  visitor inside the extracted walker: route a split declaration to `transformVariableDeclaration`,
+  otherwise descend only the declarator INITS — walking the id as an Identifier emits
+  `let $.get(e, 0) = …`). Grep the new tag for the function name before resolving by hand.
+- **Separate upstream's failures from yours before blaming the rebase.** Same suite on the stock tag:
+  `git worktree add /tmp/pinets-clean v<minor>` then `ln -sfn <patched>/node_modules node_modules`
+  (reuses the install) and run the suite there. Identical failure count/list = pre-existing upstream.
+  This session: 16 failures in one file on BOTH branches — nothing to fix, but verify it, never assume.
+- **Push the branch before the bundle ships.** AGPL asks that the changes be visible to whoever
+  receives the distribution; `PROVENANCE.md` and `THIRD-PARTY.md` name the branch and commit ids, so a
+  local-only commit makes the docs false. Then build and record the size + sha256 in `PROVENANCE.md`
+  (version line, built-from line, file line, patch paragraph — four edits, all easy to miss).
 
 ## 1. Read the release before swapping
 

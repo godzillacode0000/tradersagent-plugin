@@ -14,78 +14,180 @@ Two independent failures, both silent:
 
 So an FX strategy needs (a) bars for its own symbol and (b) the SAME provider serving the secondary one.
 
-## The loader: `console/backend/fxdata.py` (stdlib only)
+## Data-source policy: Dukascopy, and only Dukascopy
 
-Dukascopy publishes its bank feed openly, one LZMA file per instrument-hour, no key:
+The operator ruled Yahoo out. `TRADERS_FX_ALLOW_YAHOO=1` is the only way it answers, and unset (the
+normal state) a call with no local ticks and an unreachable feed **fails with the reason**
+(`no_local_ticks`) instead of substituting a series. Do not re-offer Yahoo as "just a fallback": the
+measured limits are why it cannot serve a backtest.
+
+| Yahoo limit | Measured (GBPUSD=X, Oct 2026) | Consequence |
+|---|---|---|
+| Coverage | 1m 7d · 5/15/30m **83 days** · 60m 1,021d · 1d 10y | a 2-year 30m study is impossible; 30m + `range=2y` is HTTP **422** |
+| Volume | **0 on every FX bar** | no VWAP, no volume filter, no volume profile |
+| Bid/ask | absent (mid only) | cannot model spread or fills from the data |
+| Symbols | `GBPUSD=X` fine; **`XAUUSD=X` / `XAGUSD=X` are 404** | metals only as futures (`GC=F`, `SI=F`) with basis and roll gaps |
+| Contract | unofficial, no SLA | 422/429 under load, no redistribution rights |
+
+Two Yahoo habits that are correct when it IS enabled: no Saturday bars, and UTC epoch seconds. The last
+bar is live/incomplete (one off-grid minute) — drop it.
+
+## Two Dukascopy doors, two month conventions
+
+| Door | URL | Month | Format |
+|---|---|---|---|
+| legacy `/datafeed/` | `…/datafeed/<PAIR>/<Y>/<M>/<D>/<HH>h_ticks.bi5` | **0-based** (Sept = `/08/`) | LZMA alone, `>IIIff` records, ~20 KB/h |
+| modern v1 | `https://jetta.dukascopy.com/v1/ticks/<CODE>/<Y>/<M>/<D>/<H>` | **1-based** (Sept = `/9/`) | JSON with delta-encoded ticks, 50–210 KB/h |
+
+**The two conventions are opposite.** Wiring the 0-based rule into the v1 URL (or the reverse) shifts
+the whole series by a month and still returns data. Determine which door you are on before writing a URL.
+
+### The v1 tick API
+
+- **Instrument codes carry a dash and a class:** `GBP-USD`, `EUR-USD`, `GBP-JPY`, `XAU-USD`, `XAG-USD`,
+  `USA500.IDX-USD` (S&P 500), and **`USATECH.IDX-USD` for Nasdaq-100** — `USA100.IDX-USD` answers
+  `400 {"error":"Unknown instrument"}`. FX pairs are plain; indices/metals are not.
+- **Send a browser UA and a `Referer: https://www.dukascopy.com/`.** Without them the CDN answers `202`
+  with a 0-byte body (a challenge, not data). With them, bad shapes are honest: `400` unknown instrument,
+  `422` malformed path.
+- **The payload is delta-encoded**, not a price list:
+
+```json
+{"timestamp": 1787565600000, "multiplier": 0.00001, "ask": 1.36345, "bid": 1.36338,
+ "times": [104, 156, …], "asks": [0, -2, …], "bids": [0, 1, …],
+ "askVolumes": [...], "bidVolumes": [...]}
+```
+
+  `times` are **ms since the previous tick**; `asks`/`bids` are **tick-count deltas** since the previous
+  price. Recover with a running sum, then `price = base + cumsum(delta) * multiplier`. Treating them as
+  absolute values yields plausible-looking prices that drift — the worst failure mode here, because
+  nothing downstream looks wrong.
+- **Hours the market was shut can answer 200 with `"bid": null, "ask": null`.** Guard the decoder: a
+  null base means zero ticks, not a crash.
+- **It holds today's data** — no publication lag (verified: 4,547 GBPUSD ticks for an hour 90 minutes
+  old, monotonic over exactly 60.0 minutes, 0.4-pip spread).
+
+## Bulk download: `tools/fx-fetch.py`
+
+Walks instrument-hours, resumable, one gzipped JSON per hour:
 
 ```
-https://datafeed.dukascopy.com/datafeed/<PAIR>/<YYYY>/<MM>/<DD>/<HH>h_ticks.bi5      (~20 KB/hour)
+~/.local/share/traders-agent/fx/ticks-v1/<SYMBOL>/<YYYY-MM-DD>/<HH>.json.gz   (~15 KB/h)
+~/.local/share/traders-agent/fx/ticks-v1/<SYMBOL>/<YYYY-MM-DD>/<HH>.empty     (shut hour: never re-asked)
 ```
 
-- **Format:** LZMA alone-format, then 20-byte big-endian records: `>IIIff` = ms into the hour, ask, bid,
-  ask volume, bid volume. Prices are integers scaled by 10^digits — **5 decimals for most pairs, 3 for
-  JPY quotes**. Volumes are millions of units. A truncated tail record is dropped, never guessed.
-- **There is no M1 endpoint** (`…/HHh_1min.bi5` = 404). Build M1 from ticks on the mid `(bid+ask)/2`, then
-  resample to 1/5/15/30/60/120/240/D; a bar's `closeTime` is `openTime + step`.
-- **Cache the hour files** (`~/.local/share/traders-agent/fx/<PAIR>/<date>/<HH>.bi5`). They are immutable and
-  the network is the only slow part; a week of 30m bars decodes in well under a second once cached.
-- **The feed rate-limits bursts.** 8 parallel workers produce `Errno 54` resets and 429s; 3–4 workers with a
-  backoff retry works. A 429 must NOT be cached as an empty hour, and a 404 IS an answer (market shut, or the
-  date is past the feed's window).
-- **THE MONTH IN THE URL IS 0-BASED.** `…/2026/09/24/` is **October**; September is `/08/`, January is
-  `/00/`, December `/11/`. Python's `datetime.month` is 1-based, so the URL needs `(month - 1):02d`.
-  Measured 20 Oct 2026: `09/24` → 404 while `08/24` → 27,285 bytes. A 1-based URL does not fail — it reads
-  the NEXT month, and the decoder stamps those prices with the *requested* timestamps: a plausible,
-  silently wrong backtest. This is the feed's most expensive gotcha.
-- **There is no publication lag.** Hours that answer 404 are weekends, holidays, future dates, or hours not
-  yet published — not a two-week delay. An earlier version of this file claimed a "free window lags ~two
-  weeks"; that was this month bug asking for a month that does not exist yet. Probe COARSE anyway for a
-  future `end` (one request per candidate day at midday, walking back), then refine that day.
-
-## The fallback, and the honesty rule that goes with it
-
-When Dukascopy throttles or has no data, fall back to Yahoo's public chart endpoint (no key):
-
-```
-https://query1.finance.yahoo.com/v8/finance/chart/GBPUSD=X?interval=30m&range=60d
+```bash
+python3 tools/fx-fetch.py --years 2 --workers 6
+python3 tools/fx-fetch.py --days 3 --instruments GBPUSD,XAUUSD
+python3 tools/fx-fetch.py --report          # hours, empty hours, MB, coverage per symbol
 ```
 
-- Coverage: 1m ≈ 7d, 5/15/30m ≈ 60d, 60m ≈ 730d, 1d ≈ 10y. Unofficial — fine for research, not a product.
-- **The response must say which source produced the numbers.** Hard-coding `"source": "dukascopy"` in the
-  endpoint while the loader had fallen back to Yahoo is exactly the kind of quiet lie this repo's readers
-  exist to prevent (it happened on the first live call). Coverage must travel WITH the call:
-  `bars_with_meta()` returns `{"bars", "coverage"}` (pair, timeframe, count, from, to, source,
-  requested_end, feed_end, lag_hours) and the endpoint reads that dict — never a module global. Two
-  concurrent requests are routine (`request.security` fetches the secondary pair alongside the main one),
-  and with a shared global each answer can wear the other's source/lag.
+- **Throughput, measured end to end:** 122,720 instrument-hours in **199 min** at 5–6 workers
+  (≈10.3/s sustained, brief 15–18/s bursts), **2.3 GB** on disk; 9 shut hours, zero failures. Sizes are
+  not uniform — 2 years of 30m-ish ticks ran 179 MB (SP500) to 650 MB (NAS100) and 500 MB (XAUUSD), so a
+  "~1.8 GB" estimate derived from FX alone under-counts the metals and indices by ~25%.
+- **A multi-hour download is a PERSISTED background job** (`persist_on_release=true`), not a session
+  child: closing the pane or the chat must not kill it. Start it, verify one `--report` reading, and
+  report progress on request — do not babysit it per 200 files.
+- **Order is instrument-major**, so an early `--report` showing one symbol at 100% and another at 2% is
+  normal, not a stall.
+- A job killed and restarted resumes from disk (cached hours skip in milliseconds) — so replacing the
+  process is cheap; do it rather than tolerate a session-bound one.
+
+## Bars from the store: `console/backend/fxticks.py`
+
+`fxdata._bars` asks the store FIRST, then the network, then (only if allowed) Yahoo. A chart request is
+then a disk read instead of ~250 HTTP calls.
+
+What a tick bar carries that a vendor OHLC bar cannot:
+
+- price is the **mid** `(bid+ask)/2` at each tick — what a chart draws;
+- `volume` is the **tick count** in the bar (a real activity measure, not a placeholder);
+- `spread` is the **median** bid/ask of each minute inside the bar. A MEAN lets one bad print widen the
+  whole bar (measured: 4.4 pips averaged vs 0.45 median on the same 30m bar).
+
+Pitfalls that produce bars rather than errors:
+
+- **Minutes vs milliseconds.** Bucket on epoch MINUTES (`ms // 60000`) and multiply by 60,000 only when
+  writing `openTime`. An extra `* 60` still yields bars, at quarter-hour-ish offsets; only an exact-OHLC
+  test catches it.
+- **Shut hours** come back with null quotes (see above) — return `[]`, do not divide by a null base.
+- `coverage()`/`has()` are the cheap gates; the decoder is cached per `(path, mtime_ns)` so a resumed
+  download is read fresh while repeat requests are instant.
+- Label the answer: `source: "dukascopy-ticks"` plus a `store` block (from/to/hours). `/api/fx/status`
+  reports the store per symbol; `/api/fx/bars` carries the coverage it actually used.
+
+### Metals and index CFDs are symbols, not pairs
+
+The store holds `XAUUSD`, `XAGUSD`, `NAS100`, `SP500` beside the FX pairs, but `fxdata._clean_pair` was
+written when only six-letter FX pairs existed: it answers `bad_pair` ("not a six-letter FX pair") for
+`NAS100`, so a **fully downloaded** instrument still looked missing from the API while `fxticks.bars`
+served it fine. Keep a `NON_FX` table beside `PAIRS`:
+
+| Symbol | kind | digits | syminfo |
+|---|---|---|---|
+| `XAUUSD`, `XAGUSD` | commodity | 3 (measured) | `type: commodity`, `FX:` prefix |
+| `NAS100`, `SP500` | index | 3 (measured) | `type: index`, **`IDX:` prefix** (`IDX:NAS100`) |
+
+- Widen the cleaner by ALLOWLIST (`p in NON_FX` before the six-letter rule), never by relaxing the regex
+  to "anything alphanumeric" — the door is public and the tick store's directory name is the symbol.
+- Precision comes from the feed, not from a default: every one of the four quotes to 3 decimals.
+- Do not print a spread as `spread * 1e4` and call it pips everywhere: that is right for a 5-digit pair,
+  but a GBPJPY spread of 0.0168 renders as "168 pips" and gold/index spreads are in points. Convert by
+  the instrument's own precision (`10 ** (digits - 1)`) or quote price units.
+
+## The legacy network loader (`fxdata.py`, `/datafeed`)
+
+Still the second source when the store is thin, and still the only way to backfill an hour the walk has
+not reached.
+
+- **Format:** LZMA alone-format, then 20-byte big-endian records `>IIIff` (ms into hour, ask, bid, ask
+  vol, bid vol); prices are integers scaled by 10^digits — 5 decimals for most pairs, 3 for JPY quotes.
+  A truncated tail record is dropped, never guessed. There is no M1 endpoint; build M1 from ticks on the
+  mid, then resample.
+- **THE MONTH IN THE URL IS 0-BASED** — see the table above. Measured: `/2026/09/24/` 404 while
+  `/2026/08/24/` 27,285 bytes. A 1-based URL reads the NEXT month and stamps it with the requested
+  timestamps: a plausible, silently wrong backtest.
+- **Cache the hour files** (`…/fx/v2/<PAIR>/<date>/<HH>.bi5`) and **version the cache root whenever the
+  ADDRESSING changes**: markers written under the old scheme still shadow the real hours. Delete the old
+  root; a schema-versioned marker is the alternative.
+- **Rate limits:** 8 workers → `Errno 54`; bursts → 429. Use 3–4 workers with backoff. A 429 must never be
+  cached as an empty hour; a 404 IS an answer.
+- **No publication lag exists.** 404s are weekends/holidays/future dates. Probe coarse (one request per
+  candidate day at midday) when `end` is near the present.
 
 ## Doors and the browser provider
 
 | Piece | What it does |
 |---|---|
-| `GET /api/fx/bars?pair=GBPUSD&timeframe=30&limit=500` | rows in PineTS shape (`openTime/closeTime/open/high/low/close/volume`) + `symbol` + `source` + `coverage` |
-| `GET /api/fx/status` | cache home, hours/bytes per pair, pairs supported, never fetches |
-| `console/frontend/fx-provider.js` | `window.TraderFXProvider` — `getMarketData` → the endpoint (cached per URL), `getSymbolInfo` with the pair's own `mintick` (1e-5, or 1e-3 for JPY) |
+| `GET /api/fx/bars?pair=GBPUSD&timeframe=30&limit=500` | rows in PineTS shape + `symbol` + `source` + `coverage` (+ `spread_mean`, `store`) |
+| `GET /api/fx/status` | cache home, hours/bytes per pair, **tick store per symbol**, never fetches |
+| `console/frontend/fx-provider.js` | `window.TraderFXProvider` — `getMarketData` → the endpoint (cached per URL), `getSymbolInfo` with the instrument's own `mintick` (1e-5 FX, 1e-3 JPY, metals and indices) |
 | `//@fx GBPUSD` + `//@tf 60` | `pinets-runner.js` routes the run to `new PineTS(TraderFXProvider, pair, tf, …)`, `ctor: 'fx-provider'` |
 
 The same provider object serves the main symbol AND `request.security`'s secondary symbol, which is the
 whole point. A run with the directive must be proved by its `ctor` field: `worker` means the directive was
 not seen and the cross-symbol data is the chart's own.
 
-## Testing a network loader without a network
+**Metadata ABOUT a response travels in that response.** Never a module-level "last result": two
+concurrent requests are routine (`request.security` fetches the secondary symbol beside the main one) and
+a shared global lets each answer wear the other's source/lag. `bars_with_meta()` returns
+`{"bars", "coverage"}`; a test with two sources keeps them apart.
 
-A loader that talks to a feed is still testable, and the suite must not depend on the feed being up:
+## Testing a loader without a network
 
-- **Synthesise the wire format.** Build the payload the vendor publishes (`struct.pack` the records,
-  `lzma.compress(..., format=lzma.FORMAT_ALONE)`) and assert the decode: scale, timestamps, volumes, and
-  a truncated tail record dropped rather than guessed. This is the only way to pin the format.
-- **Fake `urllib.request.urlopen`** with a small class exposing `read` and the context manager, and
-  count calls: the second `_download` for the same hour must not fetch again.
-- **Pin the failure semantics separately:** 404 → empty bytes and cached; 429 → retried, then a
-  `feed_unreachable` error, and the hour NOT written to disk; `ConnectionResetError` → retried once and
-  succeeds. Those three cases are where a loader silently corrupts its cache.
-- Coverage is a RETURN VALUE (`bars_with_meta`), not a global: pin that with a concurrency test (two
-  calls, different sources, each keeps its own) and assert the module has no `LAST`.
+- **Synthesise the wire format you decode.** For bi5: `struct.pack` the records + `lzma.compress(...)`.
+  For v1: build the delta JSON (base price + `times`/`bids`/`asks` deltas) and assert exact OHLC, tick
+  count, median spread and that two adjacent hours do not bleed into each other.
+- **Fake `urllib.request.urlopen`** with a class exposing `read` + context manager; count calls: a second
+  request for the same hour must not fetch again.
+- **Pin the failure semantics separately:** 404 → empty marker cached; 429 → retried, then
+  `feed_unreachable`, nothing cached; `ConnectionResetError` → retried once and succeeds.
+- **Prove the preference, not just the path:** patch `latest_available`/`_download` to `self.fail(...)`
+  and assert a tick-store call still answers `source: "dukascopy-ticks"`. That is the test that keeps a
+  future refactor from quietly going back to the network.
+- Override the store with module attributes (`fxticks.TICKS = tmpdir`), not env vars read at import, and
+  clear the `lru_cache` between tests — otherwise one test's hours leak into the next.
 
 ## Sizing an FX strategy
 
@@ -98,7 +200,9 @@ A loader that talks to a feed is still testable, and the suite must not depend o
 
 ## Measured behaviour of the NY-AM/SMT/sweep skeleton on GBPUSD
 
-GBPUSD 1h, 17,258 bars (~2 years, Yahoo), 1.5% risk, `margin_long=0`:
+GBPUSD 1h, 17,258 bars, 1.5% risk, `margin_long=0` — **these numbers were produced on Yahoo bars**, i.e.
+the source the operator has since ruled out. Keep them as a historical baseline, never as a current
+result: rerun on tick bars (above) before quoting any of it.
 
 | Variant | Trades | Net | Win% | PF |
 |---|---|---|---|---|

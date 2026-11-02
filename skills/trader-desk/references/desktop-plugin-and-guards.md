@@ -73,6 +73,27 @@ A new visible state deserves a needle there, or a rename fails nothing until a h
   (CI runs Node 20). Do not "fix" them inside an unrelated change; verify against `HEAD` before
   believing a red selftest is yours.
 
+## What a fresh user gets — the two doors
+
+Answer the recurring "how do other users get this / what will they get?" from here.
+
+- **Door 1 — the Hermes plugin catalog** (entry pinned to a 40-hex SHA): the catalog does a SPARSE
+  CHECKOUT OF THE SUBDIR ONLY (`subdir: traders-desk`), so it lands the plugin — row, pane, chip,
+  palette, the ⋯ desk surface, the desk chat hook — and NOTHING ELSE: no `console/`, no tools
+  (`provides_tools` stays empty by design; the 56 chart tools are the separate `traders-chart` MCP
+  server). A catalog user must still clone the repo for the console — the pane says so in one line,
+  and the entry declares it as its known limitation. Catalog users see the pinned snapshot until the
+  entry is re-pinned.
+- **Door 2 — the repo install** (the README's flow): clone → `./console/start.sh` (or the launchd /
+  systemd helper) → `./install.sh` (copies the plugin AND the desk skill, registers the MCP server) →
+  in the app: reload plugins, then ENABLE.
+- **Enabling is mandatory and is the step that gets skipped:** desktop plugins ship disabled, so a
+  correct install inventories but contributes nothing — no row, no pane, no error at all.
+  `bin/is-enabled.sh` and `install.sh --doctor` answer "installed but silent?"; `docs/INSTALL-ENABLE.md`
+  carries both failure modes side by side.
+- Say the limitation plainly instead of implying a one-click install: the pane frames a local service
+  the catalog package does not include or start.
+
 ## Pitfalls
 
 - **A row that switches sessions unconditionally steals the user out of their chat** — that is why the
