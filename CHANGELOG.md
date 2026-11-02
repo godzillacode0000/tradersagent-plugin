@@ -99,6 +99,20 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Fixed
 
+- **A read on an empty array returns `na`, not a crash** (2 Nov): the vendored PineTS threw
+  `Cannot call \`pop()\` if array is empty.` for `array.pop` / `last` / `first` / `shift`, while Pine's
+  reference says each returns `na` on an empty array — so a script that runs on TradingView (a pop in a
+  branch that is empty on the first bars, a `last()` on a buffer that is not full yet) died as a
+  RUNTIME_CRASH. The four accessors return `na` now (patch 4 on the engine fork, built `fbe18df`,
+  upstream PR #490); `array.get`/`set`/`insert`/`remove` still throw on an out-of-range index, which is
+  Pine behaviour. Found by the 854-script sweep: **D-Shape Breakout Signals** and **Session Streaks**
+  crashed before and run after, with no change on 20 control scripts. The sweep's report is
+  `docs/studies/indicator-sweep-2026-11-02.md`: of 854 scripts **340 paint**, **464 are preview-only**
+  (LuxAlgo sign-in), **26 run but land nothing** (conditions never fire on this data) and **22 still
+  crash** — 4 on a chart requirement (BTCUSD-only / daily-only / a lower timeframe), the rest on
+  distinct engine gaps (`i.size`, `i.min`, `fill.set_color`, `set_x2`, two undeclared identifiers,
+  `Assigning to rvalue`, `dynamic computed member access`, three out-of-range reads Pine would also
+  reject, and four deep `Cannot read properties of undefined`.)
 - **The Library's 40-line preview is refused, not run** (2 Nov): LuxAlgo answers anonymous callers with
   the first 40 lines of a script and says so (`complete:false`, `reason:"sign-in-for-full-source"`,
   `shown_lines`/`total_lines`, `chart_url`) — and the console dropped those fields, so a preview looked

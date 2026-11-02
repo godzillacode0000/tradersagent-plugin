@@ -54,14 +54,16 @@ stated.
     anyone who receives it can ask for the complete corresponding source, and the fork above is that
     source for the engine. Bundling was a deliberate decision (free distribution, no monetisation) —
     the earlier policy was CDN-only, precisely to keep the combined work out of the AGPL.
-  - The engine CARRIES three patches (2 Oct, rebased onto 0.12.0 on 20 Oct), all PUBLISHED on the
-    fork's branch `fix/p1-p8-on-0.12`
-    (<https://github.com/godzillacode0000/PineTS/tree/fix/p1-p8-on-0.12>):
+  - The engine CARRIES four patches (2 Oct, rebased onto 0.12.0 on 20 Oct; the fourth on 2 Nov), all
+    PUBLISHED on the fork's branches `fix/p1-p8-on-0.12` and `fix/array-empty-na`
+    (<https://github.com/godzillacode0000/PineTS>):
     UDT field history reads (`38aef6b`), a walker-reached declaration (`d801007`), a split element
     identified by node rather than name (`ea8562a`) — the same name-collision class the audit flagged
-    as its #26; the earlier eight-patch build's other five classes went upstream as part of 0.11.0.
+    as its #26 — and a read on an empty array returning `na` rather than throwing (`fbe18df`, Pine
+    parity for `array.pop`/`last`/`first`/`shift`); the earlier eight-patch build's other five classes
+    went upstream as part of 0.11.0.
     The fixes with upstream interest were also submitted as PRs to LuxAlgo/PineTS (`#387`, `#386`,
-    open on 2 Oct). The
+    open on 2 Oct, and `#490` on 2 Nov). The
     AGPL's "make the changes visible" condition is met by that public branch — push any future patch
     BEFORE shipping a bundle that carries it.
 - **Why the `pinets` pin is a floor, not a preference (27 Sep):** `pinets@0.10.0` is the floor: 0.9.33 evaluates *both* sides of a
