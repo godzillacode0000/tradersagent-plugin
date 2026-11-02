@@ -203,7 +203,7 @@ class WiringIsInPlace(unittest.TestCase):
         self.assertIn("if (runBars) return runBars;", ov)
         self.assertIn("const ref = runBars || barsCache.bars;", ov)
         self.assertIn("Object.assign({}, opts || {}, { bars })", un)
-        remember = re.search(r"if \(!\(opts && opts\.restoring\)\) remember\(([^)]*)\)", un)
+        remember = re.search(r"if \(landed && !\(opts && opts\.restoring\)\) remember\(([^)]*)\)", un)
         self.assertTrue(remember and "bars" not in remember.group(1),
                         "the run's 5000 bars must never be written to localStorage")
 

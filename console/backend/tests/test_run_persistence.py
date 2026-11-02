@@ -55,6 +55,16 @@ class RunPersistence(unittest.TestCase):
         self.assertIn("store: (() => {", bridge)
         self.assertIn("luxalgo-web:last-run", bridge)
 
+    def test_a_native_surface_run_is_remembered_too(self):
+        """The store follows whichever surface painted, not just the overlay (measured 18 Oct:
+        'D-Shape Breakout Signals' was live on the chart as a Vela-native study, the store was
+        empty, and the next pane toggle left nothing to restore)."""
+        body = UNIFIED.split("async function run(", 1)[1].split("\n  /* The honest detail line", 1)[0]
+        self.assertIn("let landed = false", body)
+        self.assertIn("if (paint && paint.added) landed = true", body)
+        # exactly one save point, after BOTH surfaces, guarded by the restore flag
+        self.assertIn("if (landed && !(opts && opts.restoring)) remember(pine, name, opts)", body)
+
     def test_runner_exposes_restore(self):
         self.assertIn("async function restore(", UNIFIED)
         self.assertIn("restore,", UNIFIED.split("return { run, summarize", 1)[1])

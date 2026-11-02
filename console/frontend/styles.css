@@ -1793,6 +1793,8 @@ mark { background: color-mix(in srgb, var(--lx-accent) 26%, transparent); color:
 .ta-replay__btn--x { width: 28px; height: 28px; border-radius: 50%; color: var(--lx-fg-muted); }
 .ta-replay__btn--x svg { width: 13px; height: 13px; }
 .ta-replay__btn--x:hover { color: var(--lx-fg); }
+.ta-replay__btn--follow { color: var(--lx-fg-muted); }
+.ta-replay__btn--follow.is-on { color: var(--lx-accent); background: color-mix(in srgb, var(--lx-accent) 16%, transparent); }
 /* The scrubber is the pill's top edge: a 3px track, a white playhead ringed in the accent. The filled
    part is painted from --ta-fill (set in replay.js — a range input's track cannot be styled from its
    value). The range ends fade in above it on hover, so the pill stays quiet otherwise. */

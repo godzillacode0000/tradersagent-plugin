@@ -398,6 +398,12 @@ window.TraderRun = (function () {
       warnings.push('nothing was plotted: ' + shown + (empties.length === 1 ? ' has' : ' have') + ' no value on any of these ' + bars.length
         + ' bars \u2014 a lookback longer than the history (an input set higher than the bars allow), or a condition that never held');
     }
+    /* A run lands through one of two surfaces: our overlay canvas (geometry, series paths) or the
+       Vela-native paint layer. Either way the script was on the chart, so either way it is the run
+       that has to come back at the next boot — 18 Oct: only the overlay branch called remember(),
+       and a native-surface run (D-Shape Breakout Signals) was visible, absent from the store, and
+       gone on the next pane toggle; 29 Oct repeats it no more. */
+    let landed = false;
     if (containers || hasPaths) {
       if (!window.ChartOverlay) {
         drawFail = 'no overlay on this page — reload the console';
@@ -414,7 +420,7 @@ window.TraderRun = (function () {
           };
           verified = window.ChartOverlay.state ? window.ChartOverlay.state() : null;
           record(label, drew, warnings);
-          if (!(opts && opts.restoring)) remember(pine, name, opts);
+          landed = true;
         } else {
           drawFail = (spec && spec.reason) || 'overlay refused';
         }
@@ -429,7 +435,13 @@ window.TraderRun = (function () {
       /* `containers` and the series count go with the source: a script that draws its own dashboard,
          or plots a family of series, is not expressed by one Vela native (see pinets-layer.js). */
       paint = await window.PineTSPaint.paintNative(String(pine), { containers, series: res.series.length });
+      if (paint && paint.added) landed = true;
     }
+
+    /* One run, one store: whichever surface painted, THIS script is what a later boot restores. A
+       restore never re-saves itself (it would overwrite the operator's last run with its own copy
+       forever), and a run that landed nowhere is not stored at all. */
+    if (landed && !(opts && opts.restoring)) remember(pine, name, opts);
 
     return {
       ok: true, name, bars: bars.length, ms: res.ms,

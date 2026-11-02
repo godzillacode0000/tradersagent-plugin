@@ -145,6 +145,18 @@ class TheControlStrip(unittest.TestCase):
             self.assertIn(act, self.js)
         self.assertIn("SPEEDS", self.js)
 
+    def test_the_strip_can_stop_following_the_cursor(self):
+        """Free panning in replay (2 Nov): the engine's viewport is anchored to the END of the bars, so
+        every revealed bar shifts the window forward — the operator's own drag was undone by the next
+        step ("it automatically went back to its default position"). Follow off holds their time range
+        through every step and tick."""
+        self.assertIn('data-act="follow"', self.js)
+        self.assertIn("luxalgo-web:replay-follow", self.js)   # the choice persists
+        self.assertIn("getVisibleRange", self.js)
+        self.assertIn("setVisibleRange", self.js)
+        self.assertIn(".ta-replay__btn--follow", self.css)
+        self.assertIn(".ta-replay__btn--follow.is-on", self.css)
+
     def test_the_strip_pushes_the_replay_price_to_the_page_only_endpoint(self):
         self.assertIn("/api/broker/replay", self.js)
         self.assertIn("X-Trader-Token", self.js)

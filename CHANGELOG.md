@@ -6,6 +6,15 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Added
 
+- **Replay can be panned freely** (2 Nov): the strip grows a **Follow** toggle (◎, remembered in
+  `luxalgo-web:replay-follow`). On, the view rides the replay cursor exactly as before; off, the strip
+  holds the operator's own time range through every step and play tick — inspecting an older stretch of
+  the replay no longer snaps back to the cursor ("it automatically went back to its default position").
+  Vela's viewport is anchored to the END of the bars, so each revealed bar moved the whole window; the
+  strip now re-applies the operator's `getVisibleRange()` after every `replay:step`/`tick` and yields to
+  the hand while a pointer is down or a wheel is settling. Verified in a browser: a forced shift is undone
+  within ~300 ms with Follow off, and stays put with it on. Pinned by `test_replay.py`.
+
 - **The Pine editor wears a real editor theme** (31 Oct). The operator asked for the script editor to look like a
   code editor, in the most popular style. The three themes that top the lists of most-installed VS Code themes:
   - **One Dark Pro** (the default), **Dracula** and **GitHub**, each with its own light sibling when the console
@@ -89,6 +98,12 @@ All notable changes to this project are documented here. Format: [Keep a Changel
     surviving a reload.
 
 ### Fixed
+
+- **A run that paints through Vela's native layer is remembered too** (2 Nov): `TraderRun.run()` wrote
+  the restore slot only in the overlay branch, so a script that landed as a Vela native (no boxes, no
+  polylines — scripts like 'D-Shape Breakout Signals' were the observed case) was visible on the chart but
+  absent from `luxalgo-web:last-run`; the next pane toggle had nothing to bring back. The store now
+  follows whichever surface painted, and the heartbeat's `store` reports it beside `studies`.
 
 - **UI polish pass** (1 Nov). Every surface was swept in Chromium at 1280 px and in the 620 px Hermes pane, dark
   and light: screenshots, plus checks for clipped text, things off screen and tiny targets. Nothing was broken;

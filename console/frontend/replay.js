@@ -38,6 +38,19 @@
   let lastPush = '';
   let queued = false;
 
+  /* Free panning while replay runs (29 Oct): the engine's viewport is anchored to the END of the
+     bars, so every revealed bar shifts the visible window forward — the operator's drag was undone
+     by the next step ("it automatically went back to its default position"). Follow keeps that
+     behaviour; off, this strip holds the operator's own time range through every step and tick. */
+  const FOLLOW_KEY = 'luxalgo-web:replay-follow';
+  let follow = true;
+  try { follow = localStorage.getItem(FOLLOW_KEY) !== '0'; } catch (err) { follow = true; }
+  let followBtn = null;
+  let keep = null;                 // the operator's visible range, held while follow is off
+  let holdTimer = null;
+  let pointerDown = false;
+  let gestureUntil = 0;
+
   const money = (n) => (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtTime = (ms) => (ms ? new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
   const fmtDay = (ms) => new Date(ms).toLocaleString([], { month: 'short', day: 'numeric' });
@@ -54,6 +67,7 @@
     play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.6 3.1v9.8a.7.7 0 0 0 1.05.6l7.8-4.9a.7.7 0 0 0 0-1.2L5.65 2.5a.7.7 0 0 0-1.05.6z"/></svg>',
     pause: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="3" width="2.8" height="10" rx=".8"/><rect x="9.2" y="3" width="2.8" height="10" rx=".8"/></svg>',
     step: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11.2 3h1.6v10h-1.6zM3 3.6v8.8a.6.6 0 0 0 .9.5l6-4.4a.6.6 0 0 0 0-1l-6-4.4a.6.6 0 0 0-.9.5z"/></svg>',
+    follow: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.1" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="1.5"/></svg>',
     prev: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.8 3.8 5.6 8l4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     next: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.2 3.8 10.4 8l-4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     close: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.3 4.3l7.4 7.4M11.7 4.3l-7.4 7.4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
@@ -152,6 +166,9 @@
         <span class="ta-replay__left">${GLYPH.ring}<b data-left>—</b><small data-left-word> bars left</small></span>
         <button type="button" class="ta-replay__btn ta-replay__btn--speed" data-act="speed"
           title="Playback speed" aria-haspopup="menu"><span data-speed>1×</span></button>
+        <button type="button" class="ta-replay__btn ta-replay__btn--icon ta-replay__btn--follow" data-act="follow"
+          title="Follow the replay cursor — turn off to keep your own chart position"
+          aria-label="Follow the replay cursor" aria-pressed="true">${GLYPH.follow}</button>
         <button type="button" class="ta-replay__btn ta-replay__btn--x" data-act="exit" title="Leave replay"
           aria-label="Leave replay">${GLYPH.close}</button>
       </div>`;
@@ -168,6 +185,8 @@
     ring = el.querySelector('[data-ring]');
     playBtn = el.querySelector('[data-act="play"]');
     speedBtn = el.querySelector('[data-act="speed"]');
+    followBtn = el.querySelector('[data-act="follow"]');
+    setFollow(follow, false);
     speedText = el.querySelector('[data-speed]');
     timeBtn = el.querySelector('[data-act="time"]');
     startLabel = el.querySelector('[data-start-time]');
@@ -210,12 +229,16 @@
     if (!state.active) {
       el.hidden = true;
       origin = null;
+      keep = null;
+      armHold(false);
       closeSpeeds();
       closeCal();
       await push(null);
       return;
     }
     el.hidden = false;
+    /* Follow off: hold the operator's view through this reveal — sync runs on every replay event. */
+    if (follow) armHold(false); else { armHold(true); holdView(); }
     /* The earliest cursor this replay has shown is where it began — "Start bar" seeks back to it
        (`start({from})` again; the changelog's own rule: calling start() while replaying jumps). */
     if (state.cursorTime != null && (origin === null || state.cursorTime < origin)) origin = state.cursorTime;
@@ -250,6 +273,59 @@
     if (queued) return;
     queued = true;
     setTimeout(async () => { queued = false; await sync(); }, 120);
+  }
+
+  /* ── Free panning: while Follow is off, the strip holds the operator's own view ──────────────── */
+  function chartApi() {
+    try { return (window.__wsApp && window.__wsApp.activeChart) ? (window.__wsApp.activeChart() || null) : null; } catch (err) { return null; }
+  }
+  function grabView() {
+    if (!state.active || follow) return;
+    const c = chartApi();
+    if (!c || typeof c.getVisibleRange !== 'function') return;
+    try {
+      const r = c.getVisibleRange();
+      if (r && isFinite(r.from) && isFinite(r.to) && r.to > r.from) keep = { from: r.from, to: r.to };
+    } catch (err) { /* no view to hold */ }
+  }
+  function holdView() {
+    if (!state.active || follow || !keep || pointerDown || Date.now() < gestureUntil) return;
+    const c = chartApi();
+    if (!c || typeof c.setVisibleRange !== 'function') return;
+    try {
+      const now = c.getVisibleRange();
+      if (now && Math.abs(now.from - keep.from) < 1000 && Math.abs(now.to - keep.to) < 1000) return;
+      c.setVisibleRange(keep);
+    } catch (err) { /* the engine refused a range it cannot honour — never a crash */ }
+  }
+  function armHold(on) {
+    if (holdTimer) { clearInterval(holdTimer); holdTimer = null; }
+    if (on) holdTimer = setInterval(holdView, 300);
+  }
+  function setFollow(v, announce) {
+    follow = !!v;
+    try { localStorage.setItem(FOLLOW_KEY, follow ? '1' : '0'); } catch (err) { /* private mode */ }
+    if (followBtn) { followBtn.classList.toggle('is-on', follow); followBtn.setAttribute('aria-pressed', follow ? 'true' : 'false'); }
+    if (follow) keep = null; else grabView();
+    armHold(state.active && !follow);
+    if (announce && typeof window.taToast === 'function') {
+      window.taToast(follow ? 'Replay follows the cursor' : 'Replay: the chart stays where you put it');
+    }
+  }
+  /* The operator's gestures are the source of truth for `keep`: a drag ends on pointerup, a wheel
+     settles 140 ms later. While a pointer is down (or a gesture just settled) nothing fights the
+     hand — holdView waits it out. */
+  function watchGestures() {
+    document.addEventListener('pointerdown', () => { pointerDown = true; }, true);
+    document.addEventListener('pointerup', () => {
+      pointerDown = false;
+      gestureUntil = Date.now() + 800;
+      if (state.active && !follow) setTimeout(grabView, 60);
+    }, true);
+    document.addEventListener('wheel', () => {
+      gestureUntil = Date.now() + 400;
+      if (state.active && !follow) setTimeout(grabView, 140);
+    }, { capture: true, passive: true });
   }
 
   /* The scrubber seeks on RELEASE (change), not on every input event: a drag fires dozens of inputs
@@ -452,8 +528,9 @@
     const act = b.dataset.act;
     if (act === 'speed') { toggleSpeeds(); return; }
     if (act === 'time') { toggleCal(); return; }
+    if (act === 'follow') { setFollow(!follow, true); return; }
     try {
-      if (act === 'start') { if (origin != null) await r.start({ from: origin }); }
+      if (act === 'start') { keep = null; if (origin != null) await r.start({ from: origin }); }
       else if (act === 'play') { if (state.playing) r.pause(); else r.play(Math.round(1000 / speed)); }
       else if (act === 'step') { r.step(); }
       else if (act === 'exit') { r.stop(); }
@@ -502,6 +579,7 @@
   window.addEventListener('ta-replay', schedule);
   window.addEventListener('ws-ready', () => { hook(); schedule(); });
   window.taReplay = { start, stop, sync, state: () => Object.assign({}, state), el: () => ensure() };
+  watchGestures();
   hook();
   schedule();
 })();
