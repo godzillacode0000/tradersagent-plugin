@@ -117,10 +117,12 @@ class FxDataPrefersTheStore(unittest.TestCase):
         for hour in range(0, 12):                       # 24 half-hour bars, enough for limit=10
             write_hour(self.root, "GBPUSD", day.replace(hour=hour),
                        [(1_000, 1.30000, 1.30020), (2_000, 1.30010, 1.30030)])
-        self._old = fxticks.TICKS
+        self._old = fxticks.TICKS, fxticks.BARS
         fxticks.TICKS = self.root
+        fxticks.BARS = self.root / "bars"          # never read or write the operator's real cache
         fxticks._hour.cache_clear()
-        self.addCleanup(setattr, fxticks, "TICKS", self._old)
+        self.addCleanup(setattr, fxticks, "TICKS", self._old[0])
+        self.addCleanup(setattr, fxticks, "BARS", self._old[1])
         self.addCleanup(fxticks._hour.cache_clear)
 
     def test_fxdata_returns_ticks_before_touching_the_network(self):
@@ -168,10 +170,12 @@ class LongWindows(unittest.TestCase):
         cls.tmp.cleanup()
 
     def setUp(self):
-        self._old = fxticks.TICKS
+        self._old = fxticks.TICKS, fxticks.BARS
         fxticks.TICKS = self.root
+        fxticks.BARS = self.root / "bars"          # never read or write the operator's real cache
         fxticks._hour.cache_clear()
-        self.addCleanup(setattr, fxticks, "TICKS", self._old)
+        self.addCleanup(setattr, fxticks, "TICKS", self._old[0])
+        self.addCleanup(setattr, fxticks, "BARS", self._old[1])
         self.addCleanup(fxticks._hour.cache_clear)
         self.passes = 0
         real = fxticks._minute_bars
@@ -211,10 +215,12 @@ class TheHourCache(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        self._old = fxticks.TICKS
+        self._old = fxticks.TICKS, fxticks.BARS
         fxticks.TICKS = self.root
+        fxticks.BARS = self.root / "bars"          # never read or write the operator's real cache
         fxticks._hour.cache_clear()
-        self.addCleanup(setattr, fxticks, "TICKS", self._old)
+        self.addCleanup(setattr, fxticks, "TICKS", self._old[0])
+        self.addCleanup(setattr, fxticks, "BARS", self._old[1])
         self.addCleanup(fxticks._hour.cache_clear)
 
     def test_an_hour_is_cached_as_at_most_sixty_minute_bars(self):

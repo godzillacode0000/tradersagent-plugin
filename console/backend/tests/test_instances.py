@@ -41,8 +41,8 @@ def probe(code: str, home: str, **env) -> dict:
 
 PATHS = ("import server, edgestats; b = server.get_broker(); "
          "print(json.dumps({'agents': server.AGENTS_ROOT, 'token': str(server.TOKEN_PATH), "
-         "'paper': str(b.path), 'chat': server.CHAT_CLI, 'edge': str(edgestats.home()), "
-         "'workdir': server._agent_workdir(), 'instance': server.instance.label()}))")
+         "'paper': str(b.path), 'edge': str(edgestats.home()), "
+         "'instance': server.instance.label(), 'has_chat': hasattr(server, 'CHAT_CLI')}))")
 
 
 class WhereADeskKeepsItsState(unittest.TestCase):
@@ -59,7 +59,6 @@ class WhereADeskKeepsItsState(unittest.TestCase):
         self.assertEqual(p["token"], str(state / "console.token"))
         self.assertEqual(p["paper"], str(state / "paper.json"))
         self.assertEqual(Path(p["agents"]), (BACKEND.parent / "agents").resolve())
-        self.assertTrue(p["chat"].endswith("hermes"), "the default desk still talks to Hermes")
         self.assertEqual(p["edge"], str(Path(self.home) / ".local/share/traders-agent/edge"))
 
     def test_a_named_desk_keeps_everything_of_its_own(self):
@@ -70,18 +69,18 @@ class WhereADeskKeepsItsState(unittest.TestCase):
         self.assertEqual(p["token"], str(mine / "console.token"))
         self.assertEqual(p["paper"], str(mine / "paper.json"))
         self.assertEqual(p["agents"], str(mine / "agents"))
-        self.assertEqual(p["workdir"], str(mine / "agents"))
         self.assertEqual(p["edge"], str(Path(self.home) / ".local/share/traders-agent/instances/dsh/edge"))
 
-    def test_a_named_desk_does_not_call_hermes(self):
-        p = probe(PATHS, self.home, TRADERS_AGENT_INSTANCE="dsh")
-        self.assertEqual(p["chat"], "", "the dsh desk must not shell out to the Hermes CLI")
+    def test_no_desk_can_spawn_an_agent(self):
+        """The console has no agent bridge on ANY desk — not the Hermes one, not a named instance.
 
-    def test_an_explicit_cli_or_path_still_wins(self):
-        p = probe(PATHS, self.home, TRADERS_AGENT_INSTANCE="dsh", HERMES_CLI="/opt/x/agent",
-                  TRADER_PAPER_FILE=self.home + "/p.json")
-        self.assertEqual(p["chat"], "/opt/x/agent")
-        self.assertEqual(p["paper"], self.home + "/p.json")
+        `CHAT_CLI`/`/api/chat` spawned `hermes -z` with approvals bypassed. It was removed on the
+        catalogue review's finding; this pins that an instance name cannot resurrect it.
+        """
+        for env in ({}, {"TRADERS_AGENT_INSTANCE": "dsh"}):
+            p = probe(PATHS, self.home, **env)
+            self.assertNotIn("_err", p, p.get("_err"))
+            self.assertFalse(p["has_chat"], f"{env}: the console still exposes a chat CLI")
 
     def test_a_bad_name_stops_the_console_with_a_sentence(self):
         for bad in ("../hermes", "Has Space", "x" * 40, "-lead"):
@@ -195,19 +194,27 @@ class TwoDesksOnOneMachine(unittest.TestCase):
         self.assertEqual((root / "console.token").read_text().strip(), a)
         self.assertEqual((root / "instances/dsh/console.token").read_text().strip(), b)
 
-    def test_the_dsh_desk_refuses_the_hermes_study_chat(self):
+    def test_no_desk_has_an_agent_chat_door(self):
+        """The `/api/chat → hermes -z` bridge is gone from the console, not just from the DSH desk.
+
+        It spawned `hermes -z`, which runs with approvals bypassed and the default toolsets, and the
+        token is handed to any local non-browser caller by `GET /api/session` — so the desk that
+        frames the console would have carried terminal access nobody approved. Nothing shipped calls
+        it, which is why removing it was safe. This pins the absence on BOTH desks: a 404, never a 503
+        (a 503 would mean the route still exists and merely refuses).
+        """
         sys.path.insert(0, str(BACKEND))
         import agents_store                        # noqa: PLC0415
         agents_store.upsert(str(Path(self.tmp.name) / ".local/state/traders-agent/instances/dsh/agents"),
                             {"id": "trend-study", "name": "Trend study", "instruction": "Read the trend."})
-        req = urllib.request.Request(f"http://127.0.0.1:{self.ports['dsh']}/api/chat",
-                                     data=json.dumps({"agent_id": "trend-study", "message": "hi"}).encode(),
-                                     headers={"Content-Type": "application/json", "X-Trader-Token": self.token("dsh")})
-        with self.assertRaises(urllib.error.HTTPError) as ctx:
-            urllib.request.urlopen(req, timeout=5)
-        self.assertEqual(ctx.exception.code, 503)
-        body = json.loads(ctx.exception.read())
-        self.assertEqual(body.get("code") or (body.get("error") or {}).get("code"), "chat_unavailable", body)
+        for port, desk in ((self.ports["dsh"], "dsh"), (self.ports["default"], "default")):
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/api/chat",
+                                         data=json.dumps({"agent_id": "trend-study", "message": "hi"}).encode(),
+                                         headers={"Content-Type": "application/json",
+                                                  "X-Trader-Token": self.token(desk)})
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(req, timeout=5)
+            self.assertEqual(ctx.exception.code, 404, f"{desk}: /api/chat must not exist")
 
 if __name__ == "__main__":
     unittest.main()

@@ -35,6 +35,9 @@ from pathlib import Path
 TICKS = Path(os.environ.get("TRADERS_FX_TICKS")
              or Path.home() / ".local/share/traders-agent/fx/ticks-v1")
 
+BARS = Path(os.environ.get("TRADERS_FX_BARS")
+            or Path.home() / ".local/share/traders-agent/fx/bars-v1")
+
 SYMBOLS = ("GBPUSD", "EURUSD", "GBPJPY", "XAUUSD", "XAGUSD", "NAS100", "SP500")
 TIMEFRAMES = {"1": 1, "5": 5, "15": 15, "30": 30, "60": 60, "120": 120, "240": 240, "D": 1440}
 
@@ -185,51 +188,102 @@ def _resample(m1: dict[int, tuple], minutes: int) -> list[dict]:
     return rows
 
 
+def _bar_path(symbol: str, tf: str) -> Path:
+    return BARS / symbol / f"{tf}.json.gz"
+
+
+def _hour_files(symbol: str):
+    root = TICKS / symbol
+    for day in sorted(p for p in root.iterdir() if p.is_dir()):
+        for f in sorted(day.glob("*.json.gz")):
+            yield f
+
+
+def build(pair: str, timeframe: str = "60", progress=None) -> dict:
+    """Aggregate the whole store into one bar series and cache it on disk.
+
+    One pass, direct into the target bucket — no M1 intermediate, no re-scanning. A 2-year hour
+    series costs one decode of every hour file (~17.5k files) and lands as a single gzipped JSON.
+    """
+    symbol = clean_pair(pair)
+    tf = str(timeframe).upper()
+    if tf not in TIMEFRAMES:
+        raise TickError(f"{timeframe!r} is not one of {', '.join(TIMEFRAMES)}")
+    width = TIMEFRAMES[tf]                              # bucket width in MINUTES
+    buckets: dict[int, list] = {}
+    n_hours = 0
+    unreadable = 0
+    for path in _hour_files(symbol):
+        n_hours += 1
+        if progress and n_hours % 2000 == 0:
+            progress(n_hours)
+        packed = _hour(str(path), path.stat().st_mtime_ns)
+        if not packed:
+            unreadable += 1        # a half-written gzip: counted, skipped, never fatal
+            continue
+        for i in range(0, len(packed), _FIELDS):
+            minute, o, h, low, c, v, spread = packed[i:i + _FIELDS]
+            slot = int(minute) // width * width
+            bar = buckets.get(slot)
+            if bar is None:
+                buckets[slot] = [o, h, low, c, int(v), spread]
+            else:
+                bar[1] = max(bar[1], h)
+                bar[2] = min(bar[2], low)
+                bar[3] = c
+                prior = bar[4]
+                bar[4] = prior + int(v)
+                # volume-weighted mean of the minute medians, so a busy minute counts more
+                if bar[4]:
+                    bar[5] = (bar[5] * prior + spread * int(v)) / bar[4]
+    rows = []
+    for slot in sorted(buckets):
+        o, h, low, c, v, sp = buckets[slot]
+        rows.append({"openTime": slot * 60000, "open": o, "high": h, "low": low, "close": c,
+                     "volume": v, "spread": round(sp, 8)})
+    out = _bar_path(symbol, tf)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"symbol": symbol, "timeframe": tf, "hours": n_hours, "unreadable": unreadable,
+               "built": int(__import__("time").time()), "bars": rows}
+    with gzip.open(out, "wt", encoding="utf-8") as fh:
+        json.dump(payload, fh, separators=(",", ":"))
+    return {"bars": len(rows), "hours": n_hours, "unreadable": unreadable, "path": str(out)}
+
+
+def _series(symbol: str, tf: str) -> dict:
+    path = _bar_path(symbol, tf)
+    if not path.exists():
+        build(symbol, tf)          # writes the file; the caller always reads it back, never the summary
+    with gzip.open(path, "rt", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
 def bars(pair: str, timeframe: str = "30", limit: int = 500,
          end: dt.datetime | None = None) -> tuple[list[dict], dict]:
-    """`(rows, coverage)` for the last `limit` bars built from local ticks.
-
-    Raises `TickError` (never returns a substitute) when the symbol is not on disk or the window the
-    request needs is not covered — the caller decides whether another source may answer, and must label
-    it if so.
-    """
+    """`(rows, coverage)` sliced from the cached series built from local ticks."""
     symbol = clean_pair(pair)
     tf = str(timeframe or "30").upper()
     if tf not in TIMEFRAMES:
         raise TickError(f"{timeframe!r} is not one of {', '.join(TIMEFRAMES)}")
-    minutes = TIMEFRAMES[tf]
-    wanted_end = (end or dt.datetime.now(dt.timezone.utc)).astimezone(dt.timezone.utc)
-    wanted_end = wanted_end.replace(minute=0, second=0, microsecond=0)
-    cov = coverage(symbol)
-    if not cov:
+    if not has(symbol):
         raise TickError(f"no local ticks for {symbol}")
-    first_day = dt.datetime.strptime(cov["from"], "%Y-%m-%d").replace(tzinfo=dt.timezone.utc)
-
-    want = max(1, min(int(limit), 20000))
-    # Size the window from the timeframe once: markets trade about 5 days in 7, so read 1.5x the trading
-    # time plus a long weekend. A holiday or a gap in the store gets one wider pass. Never read before
-    # the store's first day — there is nothing there, and a short store answers with what it holds.
-    span = dt.timedelta(minutes=want * minutes) * 1.5 + dt.timedelta(days=4)
-    rows: list[dict] = []
-    unreadable = 0
-    for _ in range(2):
-        start = max(first_day, wanted_end - span)
-        m1, unreadable = _minute_bars(symbol, start, wanted_end)
-        rows = _resample(m1, minutes)
-        if len(rows) >= want or start == first_day:
-            break
-        span *= 3
-    rows = rows[-want:]
+    series = _series(symbol, tf)
+    rows = series["bars"]
     if not rows:
-        raise TickError(f"the tick store has no bars for {symbol} in that window")
+        raise TickError(f"the tick store has no bars for {symbol}")
+    want = max(1, min(int(limit), 20000))
+    if end is not None:
+        cut = int(end.timestamp() * 1000)
+        rows = [r for r in rows if r["openTime"] <= cut]
+    rows = rows[-want:]
+    cov = coverage(symbol) or {}
     meta = {"pair": symbol, "timeframe": tf, "count": len(rows), "source": "dukascopy-ticks",
             "from": rows[0]["openTime"], "to": rows[-1]["openTime"],
-            "requested_end": int(wanted_end.timestamp() * 1000),
-            "feed_end": rows[-1]["openTime"],
-            "lag_hours": round((wanted_end - dt.datetime.fromtimestamp(
-                rows[-1]["openTime"] / 1000, dt.timezone.utc)).total_seconds() / 3600.0, 1),
+            "requested_end": int((end or dt.datetime.now(dt.timezone.utc)).timestamp() * 1000),
+            "feed_end": rows[-1]["openTime"], "lag_hours": 0,
             "store": {"from": cov.get("from"), "to": cov.get("to"), "hours": cov.get("hours")},
-            "unreadable_hours": unreadable,
+            "series": {"bars": len(series["bars"]), "hours": series["hours"]},
+            "unreadable_hours": series.get("unreadable", 0),
             "spread_mean": round(sum(r["spread"] for r in rows) / len(rows), 8)}
     return rows, meta
 

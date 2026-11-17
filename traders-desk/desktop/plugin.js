@@ -284,6 +284,10 @@ function startChartWatchdog() {
   if (startChartWatchdog.started) return
   startChartWatchdog.started = true
   setInterval(async () => {
+    // Poll only while there is a pane to heal, and only while the app is on screen. The mount check
+    // used to sit AFTER the fetch, so a closed pane still hit the console every 20 s from load.
+    if (!paneReloaders.size) return          // pane closed: nothing to heal, so ask nothing
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
     try {
       const res = await fetch(CONSOLE_ORIGIN + 'api/chart/state', { cache: 'no-store' })
       if (!res.ok) return                      // console down: the overlay's own message owns that
@@ -293,7 +297,6 @@ function startChartWatchdog() {
       if (!at) return                          // nothing ever painted: not ours to fix
       const age = Date.now() / 1000 - at
       if (age <= WATCHDOG_DEAD_S) return
-      if (!paneReloaders.size) return          // nothing mounted here: a closed pane, not a dead frame
       if (Date.now() - watchdogLastBump < 60000) return
       watchdogLastBump = Date.now()
       console.warn('[traders-desk] chart frame silent for ' + Math.round(age) + 's — remounting the pane')

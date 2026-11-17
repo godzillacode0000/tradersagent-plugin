@@ -126,7 +126,7 @@ class TestTheDoorIsInThePath(unittest.TestCase):
         for check in ("self._host_ok()", "self._origin_ok()", "self._token_ok()"):
             self.assertIn(check, post)
         first_check = min(post.index(c) for c in ("self._host_ok()", "self._origin_ok()", "self._token_ok()"))
-        first_route = min(post.index(r) for r in ('if path == "/api/agents"', 'if path == "/api/chat"'))
+        first_route = min(post.index(r) for r in ('if path == "/api/agents"', 'if path == "/api/chart/state"'))
         self.assertLess(first_check, first_route)
 
     def test_session_route_exists_and_is_host_checked(self):

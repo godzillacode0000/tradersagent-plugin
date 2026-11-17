@@ -94,8 +94,7 @@ DEFAULT_MCP_URL = "https://mcp.luxalgo.com/mcp"
 # --------------------------------------------------------------------------
 from agents_store import (list_studies, load as load_study, upsert as upsert_study,
                           delete as delete_study, set_session, record_run,
-                          append_learning, learnings_tail, save_shot)
-from chat import run_agent
+                          append_learning, learnings_tail)
 from chart_bridge import (save_state as save_chart_state, load_state as load_chart_state,
                           enqueue as enqueue_chart_command,
                           commands_since as chart_commands_since,
@@ -116,8 +115,6 @@ AGENTS_ROOT = os.path.abspath(os.environ.get(
     "LUXALGO_AGENTS_DIR",
     str(instance.state_dir() / "agents") if instance.name()
     else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agents")))
-CHAT_CLI = os.environ.get("HERMES_CLI") or ("" if instance.name() else os.path.expanduser(
-    "~/.hermes/hermes-agent/venv/bin/hermes"))
 DEFAULT_PORT = 8787
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_FRONTEND = "../frontend"
@@ -2058,8 +2055,8 @@ def cors_origin(origin: str | None, host: str | None) -> str | None:
 
 # ── the POST door ───────────────────────────────────────────────────────────────────────────────
 # A cross-site page can POST `text/plain` to 127.0.0.1 without a preflight (CORS never runs), and
-# this handler parses any body as JSON — so without a check, any page you visit can drive /api/chat
-# (which runs the Hermes CLI), forge the chart state and resolve waiting commands. Every POST now
+# this handler parses any body as JSON — so without a check, any page you visit can forge the chart
+# state, resolve waiting commands and drive the broker. Every POST now
 # needs:
 #   * an Origin that is absent (CLI, MCP, curl) or local, and
 #   * the console token — by `X-Trader-Token`, or by the SameSite=Strict cookie this server sets
@@ -2368,9 +2365,6 @@ class Handler(BaseHTTPRequestHandler):
                 from_page = bool(self.headers.get("Origin"))
                 self._ok(broker_action(path[len("/api/broker"):].strip("/") or "state", payload, from_page))
                 return
-            if path == "/api/chat":
-                self._chat(payload)
-                return
             if path == "/api/chart/state":
                 self._ok({"state": save_chart_state(AGENTS_ROOT, payload)})
                 return
@@ -2443,64 +2437,6 @@ class Handler(BaseHTTPRequestHandler):
             log("unhandled POST error:\n" + traceback.format_exc())
             self._fail(f"{type(exc).__name__}: {exc}", HTTPStatus.INTERNAL_SERVER_ERROR,
                        "internal_error")
-
-    def _chat(self, payload: dict):
-        """One prompt for one study. Bidirectional: the chart state (and optionally its picture)
-        goes in; the reply's Pine block and CHART: directives come back for the dock to act on."""
-        message = str(payload.get("message", "")).strip()
-        if not message:
-            self._fail("message must not be empty", HTTPStatus.BAD_REQUEST, "empty_message")
-            return
-        ids = [s["id"] for s in list_studies(AGENTS_ROOT)]
-        agent_id = str(payload.get("agent_id", "")).strip()
-        if agent_id not in ids:
-            self._fail(f"unknown study '{agent_id}'", HTTPStatus.BAD_REQUEST, "unknown_agent",
-                       detail={"available": ids})
-            return
-        agent = load_study(AGENTS_ROOT, agent_id)
-        if not CHAT_CLI:
-            self._fail(f"the study chat is off on the '{instance.label()}' desk: it would run through the Hermes CLI, "
-                       "and this desk is kept apart from Hermes. Talk to this desk's agent through its MCP tools, "
-                       "or set HERMES_CLI to a CLI on purpose.", HTTPStatus.SERVICE_UNAVAILABLE, "chat_unavailable")
-            return
-
-        # `fresh` starts the study over: the CLI is called WITHOUT --resume, and the new session id
-        # replaces the stored one (the reply path below already persists a changed session).
-        fresh = bool(payload.get("fresh"))
-        context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
-        shot_note = None
-        shot = payload.get("screenshot")
-        if isinstance(shot, str) and shot.startswith("data:image/png;base64,"):
-            try:
-                path = save_shot(AGENTS_ROOT, agent_id, shot)
-                context["chart_screenshot"] = path
-                shot_note = ("The attached picture is the live chart: analyse it with your vision "
-                             "tool before answering.")
-            except ValueError as exc:
-                self._fail(f"screenshot rejected: {exc}", HTTPStatus.BAD_REQUEST, "bad_screenshot")
-                return
-
-        result = run_agent(
-            cli=CHAT_CLI,
-            agent=agent,
-            message=message,
-            context=context,
-            timeout=_clamped_int(payload.get("timeout"), 180, 10, 600),
-            workdir=_agent_workdir(),
-            resume=None if fresh else agent.get("session_id"),
-            learnings=learnings_tail(AGENTS_ROOT, agent_id),
-            extra_args=[],
-        )
-        if shot_note:
-            result["screenshot_note"] = shot_note
-        if not result.get("ok"):
-            self._fail(result.get("reason", "agent failed"), HTTPStatus.BAD_GATEWAY, "agent_failed",
-                       detail={"elapsed_ms": result.get("elapsed_ms")})
-            return
-        if result.get("session_id") and result["session_id"] != agent.get("session_id"):
-            set_session(AGENTS_ROOT, agent_id, result["session_id"])
-        record_run(AGENTS_ROOT, agent_id, "run")
-        self._ok({"agent": agent_id, "resumed": bool(agent.get("session_id")), **result})
 
     def _chart_stream(self):
         """Hold one response open and push queued commands down it (SSE).
@@ -2881,18 +2817,6 @@ def _int_param(params: dict, name: str, default: int = 0) -> int:
         return int(raw)
     except (TypeError, ValueError, OverflowError):
         raise ApiError(f"{name} must be a whole number", 400, "bad_request") from None
-
-
-def _agent_workdir() -> str:
-    """Where the agent CLI runs. It is the OPERATOR's setting, never the request's: a token holder used to choose any
-    folder (audit SEC-2)."""
-    env = os.environ.get("TRADERS_AGENT_WORKDIR")
-    if env:
-        return env
-    if instance.name():
-        return str(AGENTS_ROOT)
-    legacy = os.path.expanduser("~/Projects/luxalgo-web")
-    return legacy if os.path.isdir(legacy) else str(AGENTS_ROOT)
 
 
 def _env_int(name: str, default: int) -> int:

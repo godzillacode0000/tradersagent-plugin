@@ -9,7 +9,7 @@ Harness "should stay in DeepSeek Harness only, not linked or connected":
 * its token, paper account and chart/study files under ~/.local/state/traders-agent/instances/<name>/
 * its Edge Stats workspace under ~/.local/share/traders-agent/instances/<name>/edge, and its engine on
   the console's port + 2 (8788 -> 8790), so two consoles never fight over one sidecar;
-* no Hermes study chat unless HERMES_CLI names a CLI on purpose.
+* no Hermes study chat at all: the console cannot spawn an agent (removed 21 Oct).
 
 The browser keeps layout, theme and saved scripts per origin, and a named desk runs on its own port,
 so those are separate too. Market data and installed tools stay shared on purpose — the tick store,

@@ -32,7 +32,6 @@ sys.path.insert(0, str(BACKEND))
 
 import agents_store  # noqa: E402
 import chart_bridge as cb  # noqa: E402
-import chat  # noqa: E402
 import library_thumbs  # noqa: E402
 import server as srv  # noqa: E402
 from broker import BrokerError, PaperBroker  # noqa: E402
@@ -255,21 +254,14 @@ class LiveConsole(unittest.TestCase):
             self.assertFalse(got["ok"], bad)
             self.assertNotIn("secret", json.dumps(got))
 
-    # SEC-2 ----------------------------------------------------------------------------------------------
-    def test_chat_ignores_a_client_workdir_and_clamps_the_timeout(self):
-        seen = {}
-
-        def fake_run(**kw):
-            seen.update(kw)
-            return {"ok": True, "reply": "hi", "pine": None, "actions": [], "elapsed_ms": 1, "usage": None, "session_id": None}
-
-        agents_store.ensure_seed(self.tmp.name)
-        with mock.patch.object(srv, "run_agent", fake_run):
-            self.post("/api/chat", {"agent_id": "desk", "message": "hi", "workdir": "/etc", "timeout": 99999})
-        self.assertTrue(seen, "the chat call must have reached run_agent")
-        self.assertNotEqual(seen["workdir"], "/etc")
-        self.assertLessEqual(seen["timeout"], 600)
-        self.assertEqual(self.post("/api/chat", {"agent_id": "desk", "message": "hi", "timeout": "abc"})[0], 400)
+    # SEC-2 — the bridge was removed outright (21 Oct review), so the argument surface is gone too
+    def test_the_console_cannot_spawn_a_hermes_agent(self):
+        src = (BACKEND / "server.py").read_text(encoding="utf-8")
+        self.assertNotIn("/api/chat", src)
+        self.assertNotIn("run_agent", src)
+        self.assertFalse((BACKEND / "chat.py").exists(),
+                         "chat.py spawned `hermes -z` (approvals bypassed); it must not ship")
+        self.assertEqual(self.post("/api/chat", {"agent_id": "desk", "message": "hi"})[0], 404)
 
     # SEC-10 ---------------------------------------------------------------------------------------------
     def test_a_silent_socket_is_dropped_rather_than_held_for_ever(self):
@@ -487,34 +479,6 @@ class AgentDefinitions(unittest.TestCase):
         out = agents_store.validate({**self.BASE, "skills": ["trader-desk", "trading/trader-desk"], "toolsets": ["terminal"],
                                      "session_id": "20260508_101314_ab12cd"})
         self.assertEqual(out["skills"], ["trader-desk", "trading/trader-desk"])
-
-
-class ChatParsing(unittest.TestCase):
-    def test_a_reply_of_blank_lines_does_not_stall_the_server(self):
-        for reply in ("\n" * 20000, "CHART: a" + " " * 19980 + "x", " \t" * 10000 + "\nCHART: add rsi"):
-            t0 = time.time()
-            chat.parse_actions(reply)
-            self.assertLess(time.time() - t0, 0.3)
-        self.assertEqual(chat.parse_actions("hello\n  CHART: add supertrend  \nbye"), [{"kind": "add", "type": "supertrend"}])
-
-    def test_the_usage_file_lives_in_a_private_directory_that_is_removed(self):
-        seen = {}
-
-        def fake_run(cmd, **kw):
-            usage = cmd[cmd.index("--usage-file") + 1]
-            seen["dir"] = os.path.dirname(usage)
-            seen["mode"] = os.stat(seen["dir"]).st_mode & 0o777
-            return mock.Mock(returncode=0, stdout="hi", stderr="")
-        with mock.patch.object(chat.subprocess, "run", fake_run):
-            out = chat.run_agent("hermes", {"skills": [], "toolsets": [], "instruction": "x"}, "hi", workdir=None)
-        self.assertTrue(out["ok"])
-        self.assertEqual(seen["mode"], 0o700)
-        self.assertFalse(os.path.exists(seen["dir"]))
-
-    def test_a_missing_workdir_is_said_plainly(self):
-        out = chat.run_agent("hermes", {"skills": [], "toolsets": [], "instruction": "x"}, "hi", workdir="/no/such/folder")
-        self.assertFalse(out["ok"])
-        self.assertIn("working folder does not exist", out["reason"])
 
 
 class Thumbnails(unittest.TestCase):

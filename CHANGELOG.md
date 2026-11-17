@@ -542,6 +542,17 @@ All notable changes to this project are documented here. Format: [Keep a Changel
 
 ### Removed
 
+- **The console's agent bridge is gone** (catalogue review, 5 Nov): `/api/chat` spawned
+  `hermes -z <message>` — which runs with **every approval bypassed** and the default toolsets — and the
+  console hands its write token to any local non-browser caller via `GET /api/session`. Anything
+  holding that token therefore had terminal and file access nobody approved. Nothing shipped called the
+  route (it was a leftover from the removed composer), so it is deleted outright rather than gated:
+  `chat.py`, the route, `_chat`, `CHAT_CLI` and `_agent_workdir`. The tests that used to clamp its
+  arguments now pin its **absence** — a 404 on both desks, and no `CHAT_CLI` attribute to arm.
+  The reviewer's second point is fixed too: the pane's watchdog polled `/api/chart/state` every 20 s from
+  load, even with the pane closed; it now returns before the fetch when no pane is mounted or the app
+  is hidden.
+
 - `docs/studies/luxalgo-reference/smart-money-concepts-smc.pine`: LuxAlgo's CC BY-NC-SA 4.0 script was committed in this (public)
   repository. It remains in git history; rewriting history is the maintainer's call.
 - `./install.sh --vendor` (it rewrote committed files without checking them). See `console/frontend/vendor/VENDORING.md`.
